@@ -44,7 +44,7 @@ So that 后续所有 Story 可以在类型安全的基础上开发.
 ## Tasks / Subtasks
 
 - [x] Task 1: 创建 Package.swift 和目录结构 (AC: #1)
-  - [x] 1.1 创建 `Package.swift`（swift-tools-version: 5.9，macOS .v13，三个 target，三个依赖）
+  - [x] 1.1 创建 `Package.swift`（swift-tools-version: 6.1，macOS .v14，三个 target，三个依赖）
   - [x] 1.2 创建 Sources/AxionCore/ 目录及子目录 Models/、Protocols/、Errors/、Constants/
   - [x] 1.3 创建 Sources/AxionCLI/ 目录及子目录（Commands/、Planner/、Executor/、Verifier/、Engine/、Config/、Helper/、Trace/、Output/）
   - [x] 1.4 创建 Sources/AxionHelper/ 目录及子目录（MCP/、Services/、Models/）
@@ -103,7 +103,7 @@ So that 后续所有 Story 可以在类型安全的基础上开发.
    - `.executableTarget(name: "AxionHelper", dependencies: ["AxionCore", .product(name: "MCP", package: "mcp-swift-sdk")])`
    - `.target(name: "AxionCore")` — 无外部依赖，纯 Swift
 
-6. **platforms** — `.macOS(.v13)` 是最低要求。
+6. **platforms** — `.macOS(.v14)` 是最低要求。
 
 ### 数据模型精确定义
 

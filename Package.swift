@@ -1,11 +1,11 @@
-// swift-tools-version: 5.9
+// swift-tools-version: 6.1
 
 import PackageDescription
 
 let package = Package(
     name: "axion",
     platforms: [
-        .macOS(.v13),
+        .macOS(.v14),
     ],
     products: [
         .executable(name: "AxionCLI", targets: ["AxionCLI"]),
@@ -15,8 +15,8 @@ let package = Package(
     dependencies: [
         .package(path: "../open-agent-sdk-swift"),
         .package(
-            url: "https://github.com/DePasqualeOrg/mcp-swift-sdk.git",
-            from: "0.1.0"
+            url: "https://github.com/terryso/swift-mcp.git",
+            from: "0.1.5"
         ),
         .package(
             url: "https://github.com/apple/swift-argument-parser",
@@ -37,8 +37,8 @@ let package = Package(
             name: "AxionHelper",
             dependencies: [
                 "AxionCore",
-                .product(name: "MCP", package: "mcp-swift-sdk"),
-                .product(name: "MCPTool", package: "mcp-swift-sdk"),
+                .product(name: "MCP", package: "swift-mcp"),
+                .product(name: "MCPTool", package: "swift-mcp"),
             ],
             path: "Sources/AxionHelper"
         ),
@@ -60,8 +60,8 @@ let package = Package(
             name: "AxionHelperTests",
             dependencies: [
                 "AxionHelper",
-                .product(name: "MCP", package: "mcp-swift-sdk"),
-                .product(name: "MCPTool", package: "mcp-swift-sdk"),
+                .product(name: "MCP", package: "swift-mcp"),
+                .product(name: "MCPTool", package: "swift-mcp"),
                 "AxionCore",
             ],
             path: "Tests/AxionHelperTests"

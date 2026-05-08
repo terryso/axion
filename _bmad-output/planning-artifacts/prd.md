@@ -257,7 +257,7 @@ curl -X POST http://localhost:4242/v1/runs \
 
 | 要求 | 说明 |
 |------|------|
-| macOS 版本 | 13+（Ventura 及以上） |
+| macOS 版本 | 14+（Sonoma 及以上） |
 | Accessibility 权限 | AxionHelper 需要用户手动授权 |
 | 屏幕录制权限 | 截图和视觉验证需要 |
 | Apple Developer 签名 | AxionHelper 必须签名，否则权限授权不持久 |
@@ -446,7 +446,7 @@ curl -X POST http://localhost:4242/v1/runs \
 
 ### 兼容性
 
-- NFR21: 支持 macOS 13（Ventura）及以上版本
+- NFR21: 支持 macOS 14（Sonoma）及以上版本
 - NFR22: 不依赖 Xcode Command Line Tools 以外的系统级软件
 - NFR23: 支持 Apple Silicon（arm64）和 Intel（x86_64）
 

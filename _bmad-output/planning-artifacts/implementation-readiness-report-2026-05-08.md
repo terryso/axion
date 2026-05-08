@@ -95,7 +95,7 @@ documentInventory:
 | NFR18 | Helper 工具集可独立扩展，新增工具无需修改 CLI 核心逻辑 | 可维护性 |
 | NFR19 | Planner 的 system prompt 可独立修改，不硬编码在代码中 | 可维护性 |
 | NFR20 | 每次运行生成 trace 文件（`~/.axion/runs/{runId}/trace.json`），用于调试和回溯 | 可维护性 |
-| NFR21 | 支持 macOS 13（Ventura）及以上版本 | 兼容性 |
+| NFR21 | 支持 macOS 14（Sonoma）及以上版本 | 兼容性 |
 | NFR22 | 不依赖 Xcode Command Line Tools 以外的系统级软件 | 兼容性 |
 | NFR23 | 支持 Apple Silicon（arm64）和 Intel（x86_64） | 兼容性 |
 
