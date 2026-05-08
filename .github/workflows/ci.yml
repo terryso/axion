@@ -1,0 +1,30 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+    branches: [main]
+
+jobs:
+  test-macos:
+    name: Test (macOS)
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          path: axion
+      - name: Checkout open-agent-sdk-swift
+        uses: actions/checkout@v4
+        with:
+          repository: terryso/open-agent-sdk-swift
+          ref: main
+          path: open-agent-sdk-swift
+      - name: Cache Swift build
+        uses: actions/cache@v4
+        with:
+          path: axion/.build
+          key: swift-${{ runner.os }}-${{ hashFiles('axion/Package.resolved') }}
+          restore-keys: swift-${{ runner.os }}-
+      - name: Run tests
+        working-directory: axion
+        run: swift test
