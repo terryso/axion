@@ -69,7 +69,8 @@ final class WindowManagementToolTests: XCTestCase {
         let restore = ServiceContainerFixture.apply(
             accessibilityEngine: MockAccessibilityEngine(
                 listWindowsHandler: { _ in [window] },
-                getWindowStateHandler: { _ in fatalError("should not be called") }
+                getWindowStateHandler: { _ in fatalError("should not be called") },
+                getAXTreeHandler: { _, _ in fatalError("should not be called") }
             )
         )
         defer { restore() }
@@ -99,7 +100,8 @@ final class WindowManagementToolTests: XCTestCase {
                         bounds: WindowBounds(x: 0, y: 0, width: 100, height: 100)
                     )]
                 },
-                getWindowStateHandler: { _ in fatalError("should not be called") }
+                getWindowStateHandler: { _ in fatalError("should not be called") },
+                getAXTreeHandler: { _, _ in fatalError("should not be called") }
             )
         )
         defer { restore() }
@@ -117,7 +119,8 @@ final class WindowManagementToolTests: XCTestCase {
         let restore = ServiceContainerFixture.apply(
             accessibilityEngine: MockAccessibilityEngine(
                 listWindowsHandler: { _ in [window] },
-                getWindowStateHandler: { _ in fatalError("should not be called") }
+                getWindowStateHandler: { _ in fatalError("should not be called") },
+                getAXTreeHandler: { _, _ in fatalError("should not be called") }
             )
         )
         defer { restore() }
@@ -149,7 +152,8 @@ final class WindowManagementToolTests: XCTestCase {
                 getWindowStateHandler: { windowId in
                     guard windowId == 42 else { throw AccessibilityEngineError.windowNotFound(windowId: windowId) }
                     return state
-                }
+                },
+                getAXTreeHandler: { _, _ in fatalError("should not be called") }
             )
         )
         defer { restore() }
@@ -176,7 +180,8 @@ final class WindowManagementToolTests: XCTestCase {
                 listWindowsHandler: { _ in [] },
                 getWindowStateHandler: { windowId in
                     throw AccessibilityEngineError.windowNotFound(windowId: windowId)
-                }
+                },
+                getAXTreeHandler: { _, _ in fatalError("should not be called") }
             )
         )
         defer { restore() }
@@ -200,7 +205,8 @@ final class WindowManagementToolTests: XCTestCase {
         let restore = ServiceContainerFixture.apply(
             accessibilityEngine: MockAccessibilityEngine(
                 listWindowsHandler: { _ in [] },
-                getWindowStateHandler: { _ in state }
+                getWindowStateHandler: { _ in state },
+                getAXTreeHandler: { _, _ in fatalError("should not be called") }
             )
         )
         defer { restore() }

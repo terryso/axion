@@ -59,6 +59,23 @@ private struct ScrollActionResult: Codable {
     let amount: Int
 }
 
+private struct ScreenshotActionResult: Codable {
+    let success: Bool
+    let action: String
+    let imageData: String
+
+    enum CodingKeys: String, CodingKey {
+        case success, action
+        case imageData = "image_data"
+    }
+}
+
+private struct OpenURLActionResult: Codable {
+    let success: Bool
+    let action: String
+    let url: String
+}
+
 /// Centralized registration of all AxionHelper MCP tools.
 ///
 /// Story 1.3 tools (launch_app, list_apps, list_windows, get_window_state)
@@ -462,7 +479,29 @@ struct ScreenshotTool {
     var windowId: Int?
 
     func perform() async throws -> String {
-        "Not yet implemented: screenshot"
+        do {
+            let base64: String
+            if let windowId {
+                base64 = try ServiceContainer.shared.screenshotCapture.captureWindow(windowId: windowId)
+            } else {
+                base64 = try ServiceContainer.shared.screenshotCapture.captureFullScreen()
+            }
+            let result = ScreenshotActionResult(success: true, action: "screenshot", imageData: base64)
+            let encoder = JSONEncoder()
+            encoder.outputFormatting = [.sortedKeys]
+            let data = try encoder.encode(result)
+            return String(data: data, encoding: .utf8) ?? "{}"
+        } catch let error as ScreenshotError {
+            let payload = ToolErrorPayload(
+                error: error.errorCode,
+                message: error.localizedDescription,
+                suggestion: error.suggestion
+            )
+            let encoder = JSONEncoder()
+            encoder.outputFormatting = [.sortedKeys]
+            let data = try encoder.encode(payload)
+            return String(data: data, encoding: .utf8) ?? "{}"
+        }
     }
 }
 
@@ -474,8 +513,28 @@ struct GetAccessibilityTreeTool {
     @Parameter(key: "window_id", description: "Window identifier")
     var windowId: Int
 
+    @Parameter(key: "max_nodes", description: "Maximum number of nodes to return (default: 500)")
+    var maxNodes: Int?
+
     func perform() async throws -> String {
-        "Not yet implemented: get_accessibility_tree"
+        do {
+            let nodes = maxNodes ?? 500
+            let axTree = try ServiceContainer.shared.accessibilityEngine.getAXTree(windowId: windowId, maxNodes: nodes)
+            let encoder = JSONEncoder()
+            encoder.outputFormatting = [.sortedKeys]
+            let data = try encoder.encode(axTree)
+            return String(data: data, encoding: .utf8) ?? "{}"
+        } catch let error as AccessibilityEngineError {
+            let payload = ToolErrorPayload(
+                error: error.errorCode,
+                message: error.localizedDescription,
+                suggestion: error.suggestion
+            )
+            let encoder = JSONEncoder()
+            encoder.outputFormatting = [.sortedKeys]
+            let data = try encoder.encode(payload)
+            return String(data: data, encoding: .utf8) ?? "{}"
+        }
     }
 }
 
@@ -490,6 +549,23 @@ struct OpenUrlTool {
     var url: String
 
     func perform() async throws -> String {
-        "Not yet implemented: open_url"
+        do {
+            try ServiceContainer.shared.urlOpener.openURL(url)
+            let result = OpenURLActionResult(success: true, action: "open_url", url: url)
+            let encoder = JSONEncoder()
+            encoder.outputFormatting = [.sortedKeys]
+            let data = try encoder.encode(result)
+            return String(data: data, encoding: .utf8) ?? "{}"
+        } catch let error as URLOpenerError {
+            let payload = ToolErrorPayload(
+                error: error.errorCode,
+                message: error.localizedDescription,
+                suggestion: error.suggestion
+            )
+            let encoder = JSONEncoder()
+            encoder.outputFormatting = [.sortedKeys]
+            let data = try encoder.encode(payload)
+            return String(data: data, encoding: .utf8) ?? "{}"
+        }
     }
 }

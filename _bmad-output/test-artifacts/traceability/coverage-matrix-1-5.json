@@ -1,0 +1,301 @@
+{
+  "phase": "PHASE_1_COMPLETE",
+  "generated_at": "2026-05-08T22:26:00Z",
+  "trace_target": {
+    "type": "story",
+    "id": "1.5",
+    "label": "screenshot-ax-tree-url-open"
+  },
+  "collection_mode": "contract_static",
+  "allow_gate": true,
+  "coverage_basis": "acceptance_criteria",
+  "summary_confidence": "high",
+  "oracle": {
+    "resolution_mode": "formal_requirements",
+    "confidence": "high",
+    "sources": [
+      "_bmad-output/implementation-artifacts/1-5-screenshot-ax-tree-url-open.md"
+    ],
+    "external_pointer_status": "not_used",
+    "synthetic": false
+  },
+  "requirements": [
+    {
+      "id": "1.5-AC1",
+      "title": "screenshot 窗口截图",
+      "description": "Given 指定窗口 window_id, When 调用 screenshot, Then 返回该窗口截图的 base64 编码，大小不超过 5MB",
+      "priority": "P0",
+      "coverage": "FULL",
+      "tests": [
+        {
+          "id": "ScreenshotUrlToolTests:test_screenshot_withWindowId_returnsBase64Json",
+          "title": "test_screenshot_withWindowId_returnsBase64Json",
+          "file": "Tests/AxionHelperTests/Tools/ScreenshotUrlToolTests.swift",
+          "line": 72,
+          "level": "unit",
+          "status": "active",
+          "path_type": "happy"
+        },
+        {
+          "id": "ScreenshotUrlToolTests:test_screenshot_withWindowId_passesCorrectWindowId",
+          "title": "test_screenshot_withWindowId_passesCorrectWindowId",
+          "file": "Tests/AxionHelperTests/Tools/ScreenshotUrlToolTests.swift",
+          "line": 95,
+          "level": "unit",
+          "status": "active",
+          "path_type": "happy"
+        },
+        {
+          "id": "ScreenshotUrlToolTests:test_screenshot_invalidWindowId_returnsErrorJson",
+          "title": "test_screenshot_invalidWindowId_returnsErrorJson",
+          "file": "Tests/AxionHelperTests/Tools/ScreenshotUrlToolTests.swift",
+          "line": 122,
+          "level": "unit",
+          "status": "active",
+          "path_type": "error"
+        },
+        {
+          "id": "ScreenshotUrlToolTests:test_screenshot_doesNotReturnStubText",
+          "title": "test_screenshot_doesNotReturnStubText",
+          "file": "Tests/AxionHelperTests/Tools/ScreenshotUrlToolTests.swift",
+          "line": 547,
+          "level": "unit",
+          "status": "active",
+          "path_type": "cross-cutting"
+        }
+      ]
+    },
+    {
+      "id": "1.5-AC2",
+      "title": "screenshot 全屏截图",
+      "description": "Given 未指定 window_id, When 调用 screenshot, Then 返回全屏截图的 base64 编码",
+      "priority": "P0",
+      "coverage": "FULL",
+      "tests": [
+        {
+          "id": "ScreenshotUrlToolTests:test_screenshot_noWindowId_returnsFullScreenBase64Json",
+          "title": "test_screenshot_noWindowId_returnsFullScreenBase64Json",
+          "file": "Tests/AxionHelperTests/Tools/ScreenshotUrlToolTests.swift",
+          "line": 154,
+          "level": "unit",
+          "status": "active",
+          "path_type": "happy"
+        },
+        {
+          "id": "ScreenshotUrlToolTests:test_screenshot_noWindowId_callsCaptureFullScreen",
+          "title": "test_screenshot_noWindowId_callsCaptureFullScreen",
+          "file": "Tests/AxionHelperTests/Tools/ScreenshotUrlToolTests.swift",
+          "line": 177,
+          "level": "unit",
+          "status": "active",
+          "path_type": "happy"
+        },
+        {
+          "id": "ScreenshotUrlToolTests:test_screenshot_fullScreenFailure_returnsErrorJson",
+          "title": "test_screenshot_fullScreenFailure_returnsErrorJson",
+          "file": "Tests/AxionHelperTests/Tools/ScreenshotUrlToolTests.swift",
+          "line": 204,
+          "level": "unit",
+          "status": "active",
+          "path_type": "error"
+        }
+      ]
+    },
+    {
+      "id": "1.5-AC3",
+      "title": "get_accessibility_tree 完整树",
+      "description": "Given 窗口存在, When 调用 get_accessibility_tree, Then 返回该窗口的完整 Accessibility tree，节点包含 role/title/value/bounds/children",
+      "priority": "P0",
+      "coverage": "FULL",
+      "tests": [
+        {
+          "id": "ScreenshotUrlToolTests:test_getAccessibilityTree_validWindowId_returnsAXTreeJson",
+          "title": "test_getAccessibilityTree_validWindowId_returnsAXTreeJson",
+          "file": "Tests/AxionHelperTests/Tools/ScreenshotUrlToolTests.swift",
+          "line": 236,
+          "level": "unit",
+          "status": "active",
+          "path_type": "happy"
+        },
+        {
+          "id": "ScreenshotUrlToolTests:test_getAccessibilityTree_passesCorrectWindowId",
+          "title": "test_getAccessibilityTree_passesCorrectWindowId",
+          "file": "Tests/AxionHelperTests/Tools/ScreenshotUrlToolTests.swift",
+          "line": 287,
+          "level": "unit",
+          "status": "active",
+          "path_type": "happy"
+        },
+        {
+          "id": "ScreenshotUrlToolTests:test_getAccessibilityTree_windowNotFound_returnsErrorJson",
+          "title": "test_getAccessibilityTree_windowNotFound_returnsErrorJson",
+          "file": "Tests/AxionHelperTests/Tools/ScreenshotUrlToolTests.swift",
+          "line": 319,
+          "level": "unit",
+          "status": "active",
+          "path_type": "error"
+        },
+        {
+          "id": "ScreenshotUrlToolTests:test_getAccessibilityTree_doesNotReturnStubText",
+          "title": "test_getAccessibilityTree_doesNotReturnStubText",
+          "file": "Tests/AxionHelperTests/Tools/ScreenshotUrlToolTests.swift",
+          "line": 566,
+          "level": "unit",
+          "status": "active",
+          "path_type": "cross-cutting"
+        }
+      ]
+    },
+    {
+      "id": "1.5-AC4",
+      "title": "get_accessibility_tree 截断",
+      "description": "Given AX tree 节点数超过阈值（maxNodes=500）, When 调用 get_accessibility_tree, Then 按层级截断，返回有限大小的树",
+      "priority": "P0",
+      "coverage": "FULL",
+      "tests": [
+        {
+          "id": "ScreenshotUrlToolTests:test_getAccessibilityTree_withMaxNodes_passesMaxNodesToService",
+          "title": "test_getAccessibilityTree_withMaxNodes_passesMaxNodesToService",
+          "file": "Tests/AxionHelperTests/Tools/ScreenshotUrlToolTests.swift",
+          "line": 356,
+          "level": "unit",
+          "status": "active",
+          "path_type": "happy"
+        },
+        {
+          "id": "ScreenshotUrlToolTests:test_getAccessibilityTree_defaultMaxNodes_is500",
+          "title": "test_getAccessibilityTree_defaultMaxNodes_is500",
+          "file": "Tests/AxionHelperTests/Tools/ScreenshotUrlToolTests.swift",
+          "line": 388,
+          "level": "unit",
+          "status": "active",
+          "path_type": "happy"
+        }
+      ]
+    },
+    {
+      "id": "1.5-AC5",
+      "title": "open_url URL 打开",
+      "description": "Given URL 'https://example.com', When 调用 open_url, Then 在默认浏览器中打开该 URL，返回成功",
+      "priority": "P0",
+      "coverage": "FULL",
+      "tests": [
+        {
+          "id": "ScreenshotUrlToolTests:test_openUrl_validHttpsUrl_returnsSuccessJson",
+          "title": "test_openUrl_validHttpsUrl_returnsSuccessJson",
+          "file": "Tests/AxionHelperTests/Tools/ScreenshotUrlToolTests.swift",
+          "line": 422,
+          "level": "unit",
+          "status": "active",
+          "path_type": "happy"
+        },
+        {
+          "id": "ScreenshotUrlToolTests:test_openUrl_passesCorrectUrl",
+          "title": "test_openUrl_passesCorrectUrl",
+          "file": "Tests/AxionHelperTests/Tools/ScreenshotUrlToolTests.swift",
+          "line": 445,
+          "level": "unit",
+          "status": "active",
+          "path_type": "happy"
+        },
+        {
+          "id": "ScreenshotUrlToolTests:test_openUrl_invalidUrl_returnsErrorJson",
+          "title": "test_openUrl_invalidUrl_returnsErrorJson",
+          "file": "Tests/AxionHelperTests/Tools/ScreenshotUrlToolTests.swift",
+          "line": 467,
+          "level": "unit",
+          "status": "active",
+          "path_type": "error"
+        },
+        {
+          "id": "ScreenshotUrlToolTests:test_openUrl_unsupportedScheme_returnsErrorJson",
+          "title": "test_openUrl_unsupportedScheme_returnsErrorJson",
+          "file": "Tests/AxionHelperTests/Tools/ScreenshotUrlToolTests.swift",
+          "line": 493,
+          "level": "unit",
+          "status": "active",
+          "path_type": "error"
+        },
+        {
+          "id": "ScreenshotUrlToolTests:test_openUrl_failedToOpen_returnsErrorJson",
+          "title": "test_openUrl_failedToOpen_returnsErrorJson",
+          "file": "Tests/AxionHelperTests/Tools/ScreenshotUrlToolTests.swift",
+          "line": 519,
+          "level": "unit",
+          "status": "active",
+          "path_type": "error"
+        },
+        {
+          "id": "ScreenshotUrlToolTests:test_openUrl_doesNotReturnStubText",
+          "title": "test_openUrl_doesNotReturnStubText",
+          "file": "Tests/AxionHelperTests/Tools/ScreenshotUrlToolTests.swift",
+          "line": 597,
+          "level": "unit",
+          "status": "active",
+          "path_type": "cross-cutting"
+        }
+      ]
+    }
+  ],
+  "coverage_statistics": {
+    "total_requirements": 5,
+    "fully_covered": 5,
+    "partially_covered": 0,
+    "uncovered": 0,
+    "overall_coverage_percentage": 100,
+    "priority_breakdown": {
+      "P0": { "total": 5, "covered": 5, "percentage": 100 },
+      "P1": { "total": 0, "covered": 0, "percentage": 100 },
+      "P2": { "total": 0, "covered": 0, "percentage": 100 },
+      "P3": { "total": 0, "covered": 0, "percentage": 100 }
+    }
+  },
+  "gap_analysis": {
+    "critical_gaps": [],
+    "high_gaps": [],
+    "medium_gaps": [],
+    "low_gaps": [],
+    "partial_coverage_items": [],
+    "unit_only_items": []
+  },
+  "coverage_heuristics": {
+    "endpoint_gaps": [],
+    "auth_negative_path_gaps": [],
+    "happy_path_only_gaps": [],
+    "ui_journey_gaps": [],
+    "ui_state_gaps": [],
+    "counts": {
+      "endpoints_without_tests": 0,
+      "auth_missing_negative_paths": 0,
+      "happy_path_only_criteria": 0,
+      "ui_journeys_without_e2e": 0,
+      "ui_states_missing_coverage": 0
+    }
+  },
+  "test_inventory": {
+    "summary": {
+      "files": 3,
+      "cases": 39,
+      "skipped_cases": 0,
+      "fixme_cases": 0,
+      "pending_cases": 0,
+      "by_level": {
+        "e2e": { "tests": 0, "criteria_covered": 0 },
+        "api": { "tests": 0, "criteria_covered": 0 },
+        "component": { "tests": 0, "criteria_covered": 0 },
+        "unit": { "tests": 39, "criteria_covered": 5 },
+        "other": { "tests": 0, "criteria_covered": 0 }
+      }
+    },
+    "tests": [],
+    "blockers": []
+  },
+  "blockers": [],
+  "recommendations": [
+    {
+      "priority": "LOW",
+      "action": "Run /bmad:tea:test-review to assess test quality against Definition of Done",
+      "requirements": []
+    }
+  ]
+}

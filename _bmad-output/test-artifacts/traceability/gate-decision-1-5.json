@@ -1,0 +1,24 @@
+{
+  "schema_version": "0.1.0",
+  "evaluated_at": "2026-05-08T22:26:00Z",
+  "repo": "axion",
+  "target": {
+    "type": "story",
+    "id": "1.5",
+    "label": "screenshot-ax-tree-url-open"
+  },
+  "collection_status": "COLLECTED",
+  "gate_basis": "priority_thresholds",
+  "gate_status": "PASS",
+  "rationale": "P0 coverage is 100% and overall coverage is 100% (minimum: 80%). All 5 acceptance criteria are fully covered by 39 passing tests (0 skipped, 0 failures). Every tool has both success-path and error-path tests. No critical, high, medium, or low gaps detected.",
+  "p0_status": "MET",
+  "p1_status": "MET",
+  "overall_status": "MET",
+  "critical_open": 0,
+  "links": {
+    "trace_report_path": "_bmad-output/test-artifacts/traceability-matrix-1-5.md",
+    "trace_report_url": "",
+    "artifact_url": "",
+    "journey_evidence_url": ""
+  }
+}

@@ -158,28 +158,40 @@ final class HelperMCPServerTests: XCTestCase {
         XCTAssertTrue(toolNames.contains(ToolNames.listWindows))
     }
 
-    // [P1] Story 1.3 + 1.4 工具已有真实实现，不再返回 "Not yet implemented"
-    // 测试一个 Story 1.5 的 stub 工具（screenshot）验证 stub 机制仍然存在
-    func test_stubTool_perform_returnsNotYetImplemented() async throws {
-        // Given: screenshot 工具已注册（stub 实现，Story 1.5 实现）
+    // [P1] Story 1.5 实现后，screenshot 工具不再返回 stub 文本
+    // 验证所有 Story 1.5 工具（screenshot, get_accessibility_tree, open_url）已实现
+    func test_story15_tools_doNotReturnStubText() async throws {
+        // Given: 所有工具已注册（Story 1.5 已实现）
         let server = try await makeRegisteredServer()
 
-        // When: 执行 screenshot 工具
+        // Setup mocks so the tools can execute
+        let mockScreenshot = MockScreenshotCapture(
+            captureWindowHandler: { _ in "mockBase64" },
+            captureFullScreenHandler: { "mockBase64" }
+        )
+        let mockUrlOpener = MockURLOpener(openURLHandler: { _ in })
+        let restore = ServiceContainerFixture.apply(
+            screenshotCapture: mockScreenshot,
+            urlOpener: mockUrlOpener
+        )
+        defer { restore() }
+
+        // When: 执行 screenshot 工具（不再有 stub）
         let result = try await server.toolRegistry.execute(
             "screenshot",
             arguments: [:],
             context: makeTestContext()
         )
 
-        // Then: 返回包含 "not yet implemented" 的文本
-        let textContent = result.content.compactMap { content -> String? in
-            if case let .text(text, _, _) = content { return text }
+        let text = result.content.compactMap { content -> String? in
+            if case let .text(t, _, _) = content { return t }
             return nil
         }.joined()
 
-        XCTAssertTrue(
-            textContent.lowercased().contains("not yet implemented"),
-            "Stub tool should return 'Not yet Implemented', got: \(textContent)"
+        // Then: 不应返回 "Not yet implemented"
+        XCTAssertFalse(
+            text.lowercased().contains("not yet implemented"),
+            "screenshot tool should not return stub text after Story 1.5 implementation"
         )
     }
 

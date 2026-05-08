@@ -19,6 +19,7 @@ struct MockAppLauncher: @unchecked Sendable, AppLaunching {
 struct MockAccessibilityEngine: @unchecked Sendable, WindowManaging {
     var listWindowsHandler: @Sendable (Int32?) -> [WindowInfo]
     var getWindowStateHandler: @Sendable (Int) throws -> WindowState
+    var getAXTreeHandler: @Sendable (Int, Int) throws -> AXElement
 
     func listWindows(pid: Int32?) -> [WindowInfo] {
         listWindowsHandler(pid)
@@ -26,6 +27,33 @@ struct MockAccessibilityEngine: @unchecked Sendable, WindowManaging {
 
     func getWindowState(windowId: Int) throws -> WindowState {
         try getWindowStateHandler(windowId)
+    }
+
+    func getAXTree(windowId: Int, maxNodes: Int) throws -> AXElement {
+        try getAXTreeHandler(windowId, maxNodes)
+    }
+}
+
+/// Mock implementation of `ScreenshotCapturing` for unit testing.
+struct MockScreenshotCapture: @unchecked Sendable, ScreenshotCapturing {
+    var captureWindowHandler: @Sendable (Int) throws -> String
+    var captureFullScreenHandler: @Sendable () throws -> String
+
+    func captureWindow(windowId: Int) throws -> String {
+        try captureWindowHandler(windowId)
+    }
+
+    func captureFullScreen() throws -> String {
+        try captureFullScreenHandler()
+    }
+}
+
+/// Mock implementation of `URLOpening` for unit testing.
+struct MockURLOpener: @unchecked Sendable, URLOpening {
+    var openURLHandler: @Sendable (String) throws -> Void
+
+    func openURL(_ urlString: String) throws {
+        try openURLHandler(urlString)
     }
 }
 
@@ -81,13 +109,17 @@ enum ServiceContainerFixture {
     static func apply(
         appLauncher: (any AppLaunching)? = nil,
         accessibilityEngine: (any WindowManaging)? = nil,
-        inputSimulation: (any InputSimulating)? = nil
+        inputSimulation: (any InputSimulating)? = nil,
+        screenshotCapture: (any ScreenshotCapturing)? = nil,
+        urlOpener: (any URLOpening)? = nil
     ) -> @Sendable () -> Void {
         let original = ServiceContainer.shared
         ServiceContainer.shared = ServiceContainer(
             appLauncher: appLauncher ?? original.appLauncher,
             accessibilityEngine: accessibilityEngine ?? original.accessibilityEngine,
-            inputSimulation: inputSimulation ?? original.inputSimulation
+            inputSimulation: inputSimulation ?? original.inputSimulation,
+            screenshotCapture: screenshotCapture ?? original.screenshotCapture,
+            urlOpener: urlOpener ?? original.urlOpener
         )
         return { ServiceContainer.shared = original }
     }

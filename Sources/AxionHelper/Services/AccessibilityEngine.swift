@@ -130,6 +130,39 @@ struct AccessibilityEngineService: WindowManaging {
 
     // MARK: - Private Helpers
 
+    func getAXTree(windowId: Int, maxNodes: Int = 500) throws -> AXElement {
+        let windowList = CGWindowListCopyWindowInfo(.optionAll, kCGNullWindowID) as? [[String: Any]] ?? []
+
+        guard let cgWindow = windowList.first(where: {
+            $0[kCGWindowNumber as String] as? Int == windowId
+        }) else {
+            throw AccessibilityEngineError.windowNotFound(windowId: windowId)
+        }
+
+        guard let ownerPID = cgWindow[kCGWindowOwnerPID as String] as? Int32 else {
+            throw AccessibilityEngineError.windowNotFound(windowId: windowId)
+        }
+
+        let title = cgWindow[kCGWindowName as String] as? String
+
+        let axApp = AXUIElementCreateApplication(ownerPID)
+
+        var windowsRef: AnyObject?
+        let axResult = AXUIElementCopyAttributeValue(axApp, kAXWindowsAttribute as CFString, &windowsRef)
+
+        guard axResult == .success, let axWindows = windowsRef as? [AXUIElement], !axWindows.isEmpty else {
+            throw AccessibilityEngineError.axTreeBuildFailed(reason: "No AX windows found for pid \(ownerPID)")
+        }
+
+        let matchedWindow = matchAXWindow(axWindows: axWindows, title: title)
+
+        guard let matchedWindow else {
+            throw AccessibilityEngineError.axTreeBuildFailed(reason: "Cannot match AX window for window_id \(windowId)")
+        }
+
+        return buildAXTree(element: matchedWindow, maxDepth: 8, maxNodes: maxNodes)
+    }
+
     private func parseCGBounds(_ dict: [String: Any]?) -> WindowBounds {
         guard let dict else {
             return WindowBounds(x: 0, y: 0, width: 0, height: 0)
@@ -158,38 +191,7 @@ struct AccessibilityEngineService: WindowManaging {
             return nil
         }
 
-        var matchedWindow: AXUIElement?
-
-        for axWindow in axWindows {
-            var axTitleRef: AnyObject?
-            AXUIElementCopyAttributeValue(axWindow, kAXTitleAttribute as CFString, &axTitleRef)
-            let axTitle = axTitleRef as? String
-
-            if let title, let axTitle, axTitle == title {
-                matchedWindow = axWindow
-                break
-            }
-        }
-
-        if matchedWindow == nil {
-            for axWindow in axWindows {
-                var axTitleRef: AnyObject?
-                AXUIElementCopyAttributeValue(axWindow, kAXTitleAttribute as CFString, &axTitleRef)
-                let axTitle = axTitleRef as? String
-
-                if let title, let axTitle,
-                   axTitle.lowercased().contains(title.lowercased()) || title.lowercased().contains(axTitle.lowercased()) {
-                    matchedWindow = axWindow
-                    break
-                }
-            }
-        }
-
-        if matchedWindow == nil, let first = axWindows.first {
-            matchedWindow = first
-        }
-
-        guard let matchedWindow else {
+        guard let matchedWindow = matchAXWindow(axWindows: axWindows, title: title) else {
             return nil
         }
 
@@ -204,6 +206,36 @@ struct AccessibilityEngineService: WindowManaging {
         let axTree = buildAXTree(element: matchedWindow, maxDepth: 8, maxNodes: 300)
 
         return AXWindowState(isFocused: isFocused, isMinimized: isMinimized, axTree: axTree)
+    }
+
+    /// Matches an AXUIElement window from a list of AX windows by title.
+    /// Uses exact match, then fuzzy match, then first-window fallback.
+    private func matchAXWindow(axWindows: [AXUIElement], title: String?) -> AXUIElement? {
+        // Exact title match
+        for axWindow in axWindows {
+            var axTitleRef: AnyObject?
+            AXUIElementCopyAttributeValue(axWindow, kAXTitleAttribute as CFString, &axTitleRef)
+            let axTitle = axTitleRef as? String
+
+            if let title, let axTitle, axTitle == title {
+                return axWindow
+            }
+        }
+
+        // Fuzzy title match
+        for axWindow in axWindows {
+            var axTitleRef: AnyObject?
+            AXUIElementCopyAttributeValue(axWindow, kAXTitleAttribute as CFString, &axTitleRef)
+            let axTitle = axTitleRef as? String
+
+            if let title, let axTitle,
+               axTitle.lowercased().contains(title.lowercased()) || title.lowercased().contains(axTitle.lowercased()) {
+                return axWindow
+            }
+        }
+
+        // Fallback: first window
+        return axWindows.first
     }
 
     func buildAXTree(element: AXUIElement, maxDepth: Int = 8, maxNodes: Int = 300) -> AXElement {
