@@ -1,0 +1,35 @@
+# Swift
+.build/
+.swiftpm/
+Packages/
+*.xcodeproj/
+*.xcworkspace/
+xcuserdata/
+DerivedData/
+
+# macOS
+.DS_Store
+*.dSYM
+*.dSYM.zip
+
+# Build artifacts
+build/
+*.o
+*.swiftdoc
+*.swiftsourceinfo
+*.swiftmodule
+*.abi.json
+
+# Secrets
+.env
+*.env.local
+
+# IDE
+.idea/
+*.swp
+*~
+
+# Axion runtime
+.axion/
+
+# BMad (project management, not source)

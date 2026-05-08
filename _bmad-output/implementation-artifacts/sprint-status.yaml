@@ -1,0 +1,74 @@
+# generated: 2026-05-08
+# last_updated: 2026-05-08
+# project: axion
+# project_key: NOKEY
+# tracking_system: file-system
+# story_location: _bmad-output/implementation-artifacts
+
+# STATUS DEFINITIONS:
+# ==================
+# Epic Status:
+#   - backlog: Epic not yet started
+#   - in-progress: Epic actively being worked on
+#   - done: All stories in epic completed
+#
+# Epic Status Transitions:
+#   - backlog → in-progress: Automatically when first story is created (via create-story)
+#   - in-progress → done: Manually when all stories reach 'done' status
+#
+# Story Status:
+#   - backlog: Story only exists in epic file
+#   - ready-for-dev: Story file created in stories folder
+#   - in-progress: Developer actively working on implementation
+#   - review: Ready for code review (via Dev's code-review workflow)
+#   - done: Story completed
+#
+# Retrospective Status:
+#   - optional: Can be completed but not required
+#   - done: Retrospective has been completed
+#
+# WORKFLOW NOTES:
+# ===============
+# - Epic transitions to 'in-progress' automatically when first story is created
+# - Stories can be worked in parallel if team capacity allows
+# - Developer typically creates next story after previous one is 'done' to incorporate learnings
+# - Dev moves story to 'review', then runs code-review (fresh context, different LLM recommended)
+
+generated: 2026-05-08
+last_updated: 2026-05-08
+project: axion
+project_key: NOKEY
+tracking_system: file-system
+story_location: _bmad-output/implementation-artifacts
+
+development_status:
+  # Epic 1: AxionHelper — macOS 桌面自动化引擎
+  epic-1: backlog
+  1-1-spm-scaffolding-axioncore-models: backlog
+  1-2-helper-mcp-server-foundation: backlog
+  1-3-app-launch-window-management: backlog
+  1-4-mouse-keyboard-operations: backlog
+  1-5-screenshot-ax-tree-url-open: backlog
+  1-6-helper-integration-app-packaging: backlog
+  epic-1-retrospective: optional
+
+  # Epic 2: CLI 安装配置与首次运行体验
+  epic-2: backlog
+  2-1-cli-entry-argumentparser-skeleton: backlog
+  2-2-config-system-keychain-storage: backlog
+  2-3-axion-setup-first-time-config: backlog
+  2-4-axion-doctor-environment-check: backlog
+  2-5-homebrew-tap-distribution-packaging: backlog
+  epic-2-retrospective: optional
+
+  # Epic 3: 自然语言任务执行
+  epic-3: backlog
+  3-1-helper-process-manager-mcp-client: backlog
+  3-2-prompt-management-planning-engine: backlog
+  3-3-step-execution-placeholder-resolution: backlog
+  3-4-task-verification-stop-condition: backlog
+  3-5-output-trace-progress-display: backlog
+  3-6-run-engine-state-machine: backlog
+  3-7-sdk-integration-run-command: backlog
+  3-8-sdk-boundary-doc-e2e-verification: backlog
+  epic-3-retrospective: optional
