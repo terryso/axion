@@ -44,7 +44,7 @@ development_status:
   # Epic 1: AxionHelper — macOS 桌面自动化引擎
   epic-1: in-progress
   1-1-spm-scaffolding-axioncore-models: done
-  1-2-helper-mcp-server-foundation: backlog
+  1-2-helper-mcp-server-foundation: done
   1-3-app-launch-window-management: backlog
   1-4-mouse-keyboard-operations: backlog
   1-5-screenshot-ax-tree-url-open: backlog

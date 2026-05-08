@@ -38,6 +38,7 @@ let package = Package(
             dependencies: [
                 "AxionCore",
                 .product(name: "MCP", package: "mcp-swift-sdk"),
+                .product(name: "MCPTool", package: "mcp-swift-sdk"),
             ],
             path: "Sources/AxionHelper"
         ),
@@ -57,7 +58,12 @@ let package = Package(
         ),
         .testTarget(
             name: "AxionHelperTests",
-            dependencies: ["AxionHelper"],
+            dependencies: [
+                "AxionHelper",
+                .product(name: "MCP", package: "mcp-swift-sdk"),
+                .product(name: "MCPTool", package: "mcp-swift-sdk"),
+                "AxionCore",
+            ],
             path: "Tests/AxionHelperTests"
         ),
     ]

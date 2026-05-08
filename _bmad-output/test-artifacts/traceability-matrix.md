@@ -7,43 +7,44 @@ stepsCompleted:
   - step-05-gate-decision
 lastStep: step-05-gate-decision
 lastSaved: '2026-05-08'
-storyId: '1.1'
-storyKey: 1-1-spm-scaffolding-axioncore-models
+storyId: '1.2'
+storyKey: 1-2-helper-mcp-server-foundation
 coverageBasis: acceptance_criteria
 oracleConfidence: high
 oracleResolutionMode: formal_requirements
 oracleSources:
-  - _bmad-output/implementation-artifacts/1-1-spm-scaffolding-axioncore-models.md
-  - _bmad-output/test-artifacts/atdd-checklist-1-1-spm-scaffolding-axioncore-models.md
+  - _bmad-output/implementation-artifacts/1-2-helper-mcp-server-foundation.md
+  - _bmad-output/test-artifacts/atdd-checklist-1-2-helper-mcp-server-foundation.md
+  - _bmad-output/planning-artifacts/epics.md
 externalPointerStatus: not_used
 tempCoverageMatrixPath: _bmad-output/test-artifacts/traceability/coverage-matrix.json
 gateDecision: PASS
 ---
 
-# Traceability Report: Story 1.1 - SPM 项目脚手架与 AxionCore 共享模型
+# Traceability Report: Story 1.2 - Helper MCP Server Foundation
 
 ## Gate Decision: PASS
 
-**Rationale:** P0 coverage is 100%, P1 coverage is 100% (target: 90%), and overall coverage is 100% (minimum: 80%). All 6 acceptance criteria fully covered. All 34 tests passing (GREEN phase).
+**Rationale:** P0 coverage is 100%, P1 coverage is 100% (target: 90%), and overall coverage is 100% (minimum: 80%). All 4 acceptance criteria fully covered. All 20 Story 1.2 tests active and passing (54 total including Story 1.1).
 
 ## Coverage Summary
 
 | Metric | Value |
 |--------|-------|
-| Total Requirements | 6 |
-| Fully Covered | 6 (100%) |
+| Total Requirements | 4 |
+| Fully Covered | 4 (100%) |
 | Partially Covered | 0 |
 | Uncovered | 0 |
-| Total Test Files | 5 |
-| Total Test Cases | 34 |
-| Active Tests | 34 |
+| Total Test Files | 3 |
+| Total Test Cases | 20 |
+| Active Tests | 20 |
 | Skipped/Fixme/Pending | 0 |
 
 ## Priority Coverage
 
 | Priority | Total | Covered | Percentage |
 |----------|-------|---------|------------|
-| P0 | 6 | 6 | 100% |
+| P0 | 4 | 4 | 100% |
 | P1 | 0 | 0 | N/A (100%) |
 | P2 | 0 | 0 | N/A (100%) |
 | P3 | 0 | 0 | N/A (100%) |
@@ -52,106 +53,88 @@ gateDecision: PASS
 
 | AC | Description | Priority | Test File | Test Count | Coverage | Execution Status |
 |----|-------------|----------|-----------|------------|----------|------------------|
-| AC1 | SPM 编译成功 | P0 | SPMScaffoldTests.swift | 1 | FULL | GREEN (passing) |
-| AC2 | Plan 模型 Codable round-trip | P0 | PlanTests.swift | 7 | FULL | GREEN (passing) |
-| AC3 | RunState 枚举完整性 | P0 | RunStateTests.swift | 5 | FULL | GREEN (passing) |
-| AC4 | AxionConfig Codable camelCase 输出 | P0 | AxionConfigTests.swift | 4 | FULL | GREEN (passing) |
-| AC5 | AxionError MCP ToolResult 格式 | P0 | AxionErrorTests.swift | 8 | FULL | GREEN (passing) |
-| AC6 | Protocol 文件位置 | P0 | SPMScaffoldTests.swift | 5 | FULL | GREEN (passing) |
+| AC1 | MCP initialize 响应 | P0 | HelperMCPServerTests.swift, HelperProcessSmokeTests.swift, HelperScaffoldTests.swift | 7 | FULL | GREEN (passing) |
+| AC2 | tools/list 响应 | P0 | HelperMCPServerTests.swift | 7 | FULL | GREEN (passing) |
+| AC3 | 未知工具调用错误 | P0 | HelperMCPServerTests.swift | 2 | FULL | GREEN (passing) |
+| AC4 | EOF 优雅退出 | P0 | HelperMCPServerTests.swift, HelperProcessSmokeTests.swift | 2 | FULL | GREEN (passing) |
 
 ## Detailed Requirement-to-Test Mapping
 
-### AC1: SPM 编译成功 (P0)
+### AC1: MCP initialize 响应 (P0)
 
-- Given 一个新的空目录
-- When 运行 swift build
-- Then 项目编译成功，生成 AxionCLI 和 AxionHelper 两个可执行目标，AxionCore 作为 library target 存在
-
-| Test | Level | Status |
-|------|-------|--------|
-| test_axionCore_module_compiles | Integration | PASS |
-
-### AC2: Plan 模型 Codable round-trip (P0)
-
-- Given Plan 模型包含 steps 和 stopWhen
-- When 用 JSON 初始化并编码后解码
-- Then 数据完整 round-trip，Value 枚举的 placeholder case 正确保留
+- Given AxionHelper 启动
+- When 通过 stdin 发送 MCP initialize 请求
+- Then 返回正确的 initialize 响应，包含服务端能力声明
 
 | Test | Level | Status |
 |------|-------|--------|
-| test_plan_codable_roundTrip_preservesAllFields | Unit | PASS |
-| test_value_string_roundTrip | Unit | PASS |
-| test_value_int_roundTrip | Unit | PASS |
-| test_value_bool_roundTrip | Unit | PASS |
-| test_value_placeholder_roundTrip | Unit | PASS |
-| test_value_placeholder_preservesDollarSign | Unit | PASS |
-| test_step_codable_roundTrip | Unit | PASS |
+| test_mcpServer_creation_hasCorrectNameAndVersion | Unit | PASS |
+| test_mcpServer_initialize_includesToolsCapability | Unit | PASS |
+| test_helperProcess_initializeResponds | Integration | PASS |
+| test_mcpModule_importsSuccessfully | Unit | PASS |
+| test_mcpToolModule_importsSuccessfully | Unit | PASS |
+| test_axionHelper_target_compiles | Unit | PASS |
+| test_toolRegistrar_existsInAxionHelper | Unit | PASS |
 
-### AC3: RunState 枚举完整性 (P0)
+**Coverage Notes:** AC1 has the broadest coverage with 7 tests spanning unit-level MCPServer API verification, process-level integration (stdin/stdout JSON-RPC), and build/dependency scaffolding. Both "方案 A" (unit) and "方案 B" (process integration) strategies are represented.
 
-- Given RunState 枚举定义
-- When 检查所有 case
-- Then 包含全部 9 个状态
+### AC2: tools/list 响应 (P0)
 
-| Test | Level | Status |
-|------|-------|--------|
-| test_runState_containsAllNineCases | Unit | PASS |
-| test_runState_allExpectedCasesExist | Unit | PASS |
-| test_runState_rawValues_matchCamelCase | Unit | PASS |
-| test_runState_codable_roundTrip | Unit | PASS |
-| test_runState_jsonEncoding_producesStringValue | Unit | PASS |
-
-### AC4: AxionConfig Codable camelCase 输出 (P0)
-
-- Given AxionConfig 使用 Codable 默认策略
-- When 编码为 JSON
-- Then 输出 camelCase 格式，apiKey 不出现在输出中
+- Given MCP 连接已建立
+- When 发送 tools/list 请求
+- Then 返回所有已注册工具的列表，每个工具包含 name、description 和 inputSchema
 
 | Test | Level | Status |
 |------|-------|--------|
-| test_config_codable_outputIsCamelCase | Unit | PASS |
-| test_config_codable_roundTrip | Unit | PASS |
-| test_config_defaultValues | Unit | PASS |
-| test_config_apiKeyNil_notEncoded | Unit | PASS |
+| test_toolsList_returnsAllRegisteredTools | Unit | PASS |
+| test_toolsList_eachToolHasNameDescriptionAndSchema | Unit | PASS |
+| test_toolsList_containsAllExpectedToolNames | Unit | PASS |
+| test_toolsList_matchesToolNamesConstants | Unit | PASS |
+| test_toolRegistrar_registerAll_isCallable | Unit | PASS |
+| test_toolRegistrar_noDuplicateToolNames | Unit | PASS |
+| test_toolRegistrar_allToolsUseSnakeCase | Unit | PASS |
 
-### AC5: AxionError MCP ToolResult 格式 (P0)
+**Coverage Notes:** 7 tests thoroughly verify tool registration. Includes quantitative checks (15+ tools), per-tool attribute validation (name, description, inputSchema), cross-reference with AxionCore constants (ToolNames.swift), and naming convention enforcement (snake_case).
 
-- Given AxionError 枚举
-- When 转换为 MCP ToolResult 错误格式
-- Then 输出包含 error/message/suggestion 字段的 JSON
+### AC3: 未知工具调用错误 (P0)
 
-| Test | Level | Status |
-|------|-------|--------|
-| test_error_toToolResultJSON_containsRequiredFields | Unit | PASS |
-| test_error_planningFailed_format | Unit | PASS |
-| test_error_executionFailed_format | Unit | PASS |
-| test_error_helperNotRunning_format | Unit | PASS |
-| test_error_mcpError_format | Unit | PASS |
-| test_error_maxRetriesExceeded_format | Unit | PASS |
-| test_error_toToolResultJSON_validJSON | Unit | PASS |
-| test_error_equality | Unit | PASS |
-
-### AC6: Protocol 文件位置 (P0)
-
-- Given 所有 Protocol 定义
-- When 检查文件位置
-- Then 位于 AxionCore/Protocols/ 目录
+- Given Helper 收到未知工具名调用
+- When 执行 tool_call
+- Then 返回 isError=true 的 ToolResult，message 说明工具不存在
 
 | Test | Level | Status |
 |------|-------|--------|
-| test_plannerProtocol_existsInAxionCore | Integration | PASS |
-| test_executorProtocol_existsInAxionCore | Integration | PASS |
-| test_verifierProtocol_existsInAxionCore | Integration | PASS |
-| test_mcpClientProtocol_existsInAxionCore | Integration | PASS |
-| test_outputProtocol_existsInAxionCore | Integration | PASS |
+| test_unknownTool_returnsError | Unit | PASS |
+| test_unknownTool_variousNames_returnErrors | Unit | PASS |
+
+**Coverage Notes:** Both positive error detection and edge case coverage (case sensitivity, hyphen variants, partial name matches) are tested. The second test verifies that "foo_bar", "launch_application", "Click", "TYPE_TEXT", "get-window-state" all correctly return errors.
+
+### AC4: EOF 优雅退出 (P0)
+
+- Given Helper 进程的 stdin 收到 EOF
+- When 管道关闭
+- Then Helper 优雅退出，无崩溃日志
+
+| Test | Level | Status |
+|------|-------|--------|
+| test_mcpServer_runStdio_exitsOnEOF | Unit | PASS |
+| test_helperProcess_gracefulExitOnEOF | Integration | PASS |
+
+**Coverage Notes:** Unit test verifies API contract (session/transport creation, tool registration). Integration test verifies actual process behavior: exit code 0, termination reason .exit (not .uncaughtSignal), no "Fatal error" or "Segmentation fault" in stderr.
 
 ## Test Level Distribution
 
 | Level | Count | Percentage |
 |-------|-------|------------|
-| Unit | 24 | 71% |
-| Integration | 10 | 29% |
+| Unit | 17 | 85% |
+| Integration | 3 | 15% |
 | E2E | 0 | 0% |
+
+## NFR Coverage
+
+| NFR | Description | Test | Status |
+|-----|-------------|------|--------|
+| NFR2 | AxionHelper startup to MCP ready < 500ms | test_helperProcess_startupTime_meetsNFR2 | PASS |
 
 ## Coverage Heuristics
 
@@ -163,13 +146,13 @@ gateDecision: PASS
 | UI journey gaps | N/A | 0 |
 | UI state gaps | N/A | 0 |
 
-Note: This is a backend-only Swift/SPM project with no API endpoints, no auth flows, and no UI. Heuristics marked N/A are not applicable to this project type.
+Note: This is a backend Swift/SPM project with no API endpoints, no auth flows, and no UI. Heuristics marked N/A are not applicable.
 
 ## Gaps & Recommendations
 
 ### Gaps Identified
 
-**None.** All 6 acceptance criteria are fully covered by 34 passing tests. No critical, high, medium, or low gaps detected.
+**None.** All 4 acceptance criteria are fully covered by 20 passing tests. No critical, high, medium, or low gaps detected. The NFR2 (startup time) is also covered by a dedicated integration test.
 
 ### Recommendations
 

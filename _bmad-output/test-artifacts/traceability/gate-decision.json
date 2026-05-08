@@ -1,16 +1,16 @@
 {
   "schema_version": "0.1.0",
-  "evaluated_at": "2026-05-08T05:31:52Z",
+  "evaluated_at": "2026-05-08T16:03:30.000Z",
   "repo": "axion",
   "target": {
     "type": "story",
-    "id": "1.1",
-    "label": "SPM 项目脚手架与 AxionCore 共享模型"
+    "id": "1.2",
+    "label": "Helper MCP Server Foundation"
   },
   "collection_status": "COLLECTED",
   "gate_basis": "priority_thresholds",
   "gate_status": "PASS",
-  "rationale": "P0 coverage is 100%, P1 coverage is 100% (target: 90%), and overall coverage is 100% (minimum: 80%). No P1 requirements detected.",
+  "rationale": "P0 coverage is 100%, P1 coverage is 100% (target: 90%), and overall coverage is 100% (minimum: 80%). All 4 acceptance criteria fully covered. All 20 tests active and passing (54 total including Story 1.1 tests).",
   "p0_status": "MET",
   "p1_status": "MET",
   "overall_status": "MET",
