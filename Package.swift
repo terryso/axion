@@ -64,7 +64,18 @@ let package = Package(
                 .product(name: "MCPTool", package: "swift-mcp"),
                 "AxionCore",
             ],
-            path: "Tests/AxionHelperTests"
+            path: "Tests/AxionHelperTests",
+            exclude: ["Integration"]
+        ),
+        .testTarget(
+            name: "AxionHelperIntegrationTests",
+            dependencies: [
+                "AxionHelper",
+                .product(name: "MCP", package: "swift-mcp"),
+                .product(name: "MCPTool", package: "swift-mcp"),
+                "AxionCore",
+            ],
+            path: "Tests/AxionHelperTests/Integration"
         ),
     ]
 )

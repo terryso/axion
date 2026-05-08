@@ -27,6 +27,6 @@ jobs:
           path: axion/.build
           key: swift-${{ runner.os }}-${{ hashFiles('axion/Package.resolved') }}
           restore-keys: swift-${{ runner.os }}-
-      - name: Run tests
+      - name: Run unit tests
         working-directory: axion
-        run: swift test
+        run: make test

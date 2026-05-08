@@ -158,15 +158,16 @@ final class HelperMCPServerTests: XCTestCase {
         XCTAssertTrue(toolNames.contains(ToolNames.listWindows))
     }
 
-    // [P1] stub 工具的 perform() 返回 "Not yet implemented" 占位结果
+    // [P1] Story 1.3 工具已有真实实现，不再返回 "Not yet implemented"
+    // 测试一个 Story 1.4/1.5 的 stub 工具（click）验证 stub 机制仍然存在
     func test_stubTool_perform_returnsNotYetImplemented() async throws {
-        // Given: launch_app 工具已注册（stub 实现）
+        // Given: click 工具已注册（stub 实现，Story 1.4 实现）
         let server = try await makeRegisteredServer()
 
-        // When: 执行 launch_app 工具
+        // When: 执行 click 工具
         let result = try await server.toolRegistry.execute(
-            "launch_app",
-            arguments: ["app_name": .string("Calculator")],
+            "click",
+            arguments: ["x": .int(100), "y": .int(200)],
             context: makeTestContext()
         )
 

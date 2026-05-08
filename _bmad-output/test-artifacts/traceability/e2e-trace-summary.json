@@ -1,6 +1,6 @@
 {
   "schema_version": "0.1.0",
-  "snapshot_at": "2026-05-08T16:03:30.000Z",
+  "snapshot_at": "2026-05-08T19:00:00Z",
   "repo": "axion",
   "collection_mode": "contract_static",
   "collection_status": "COLLECTED",
@@ -8,48 +8,51 @@
   "gate_basis": "priority_thresholds",
   "source_sha": "",
   "target": {
-    "type": "story",
-    "id": "1.2",
-    "label": "Helper MCP Server Foundation"
+    "type": "stories",
+    "id": "1.1-1.3",
+    "label": "Stories 1.1 through 1.3"
   },
-  "decision_mode": "yolo",
+  "decision_mode": "autonomous",
   "evaluator": "Nick",
   "confidence": "high",
   "oracle": {
     "resolution_mode": "formal_requirements",
     "confidence": "high",
     "sources": [
+      "_bmad-output/implementation-artifacts/1-1-spm-scaffolding-axioncore-models.md",
       "_bmad-output/implementation-artifacts/1-2-helper-mcp-server-foundation.md",
+      "_bmad-output/implementation-artifacts/1-3-app-launch-window-management.md",
+      "_bmad-output/test-artifacts/atdd-checklist-1-1-spm-scaffolding-axioncore-models.md",
       "_bmad-output/test-artifacts/atdd-checklist-1-2-helper-mcp-server-foundation.md",
-      "_bmad-output/planning-artifacts/epics.md"
+      "_bmad-output/test-artifacts/atdd-checklist-1-3-app-launch-window-management.md"
     ],
     "external_pointer_status": "not_used",
     "synthetic": false
   },
   "coverage": {
     "inventory": {
-      "covered": 4,
-      "total": 4,
+      "covered": 15,
+      "total": 15,
       "pct": 100
     },
     "priority_breakdown": {
-      "P0": { "total": 4, "covered": 4, "pct": 100 },
-      "P1": { "total": 0, "covered": 0, "pct": 100 },
-      "P2": { "total": 0, "covered": 0, "pct": 100 },
-      "P3": { "total": 0, "covered": 0, "pct": 100 }
+      "P0": {"total": 15, "covered": 15, "pct": 100},
+      "P1": {"total": 0, "covered": 0, "pct": 100},
+      "P2": {"total": 0, "covered": 0, "pct": 100},
+      "P3": {"total": 0, "covered": 0, "pct": 100}
     },
     "by_level": {
-      "unit": { "tests": 17, "criteria_covered": 4 },
-      "integration": { "tests": 3, "criteria_covered": 2 },
-      "e2e": { "tests": 0, "criteria_covered": 0 },
-      "api": { "tests": 0, "criteria_covered": 0 },
-      "component": { "tests": 0, "criteria_covered": 0 },
-      "other": { "tests": 0, "criteria_covered": 0 }
+      "unit": {"tests": 76, "criteria_covered": 15},
+      "integration": {"tests": 5, "criteria_covered": 2},
+      "e2e": {"tests": 0, "criteria_covered": 0},
+      "api": {"tests": 0, "criteria_covered": 0},
+      "component": {"tests": 0, "criteria_covered": 0},
+      "other": {"tests": 1, "criteria_covered": 1}
     }
   },
   "tests": {
-    "files": 3,
-    "cases": 20,
+    "files": 14,
+    "cases": 82,
     "skipped_cases": 0,
     "fixme_cases": 0,
     "pending_cases": 0

@@ -1,12 +1,21 @@
+import AppKit
 import Foundation
 import MCP
 import MCPTool
 
+/// Mirrors `ToolErrorPayload` — kept private because AxionError
+/// is internal to AxionCore. If AxionError becomes public, replace with
+/// `ToolErrorPayload` directly.
+private struct ToolErrorPayload: Codable {
+    let error: String
+    let message: String
+    let suggestion: String
+}
+
 /// Centralized registration of all AxionHelper MCP tools.
 ///
-/// Each tool is registered as a stub in Story 1.2 — the `perform()` method
-/// returns a "not yet implemented" placeholder. Actual implementations are
-/// added in Stories 1.3–1.5.
+/// Story 1.3 tools (launch_app, list_apps, list_windows, get_window_state)
+/// have real implementations. Other tools remain stubs for Stories 1.4–1.5.
 enum ToolRegistrar {
 
     /// Registers all AxionHelper tools on the given MCP server.
@@ -45,7 +54,23 @@ struct LaunchAppTool {
     var appName: String
 
     func perform() async throws -> String {
-        "Not yet implemented: launch_app"
+        do {
+            let appInfo = try await ServiceContainer.shared.appLauncher.launchApp(name: appName)
+            let encoder = JSONEncoder()
+            encoder.outputFormatting = [.sortedKeys]
+            let data = try encoder.encode(appInfo)
+            return String(data: data, encoding: .utf8) ?? "{}"
+        } catch let error as AppLauncherError {
+            let payload = ToolErrorPayload(
+                error: error.errorCode,
+                message: error.localizedDescription,
+                suggestion: error.suggestion
+            )
+            let encoder = JSONEncoder()
+            encoder.outputFormatting = [.sortedKeys]
+            let data = try encoder.encode(payload)
+            return String(data: data, encoding: .utf8) ?? "{}"
+        }
     }
 }
 
@@ -55,7 +80,11 @@ struct ListAppsTool {
     static let description = "List all running macOS applications"
 
     func perform() async throws -> String {
-        "Not yet implemented: list_apps"
+        let apps = ServiceContainer.shared.appLauncher.listRunningApps()
+        let encoder = JSONEncoder()
+        encoder.outputFormatting = [.sortedKeys]
+        let data = try encoder.encode(apps)
+        return String(data: data, encoding: .utf8) ?? "[]"
     }
 }
 
@@ -70,7 +99,12 @@ struct ListWindowsTool {
     var pid: Int?
 
     func perform() async throws -> String {
-        "Not yet implemented: list_windows"
+        let pidValue = pid.map { Int32($0) }
+        let windows = ServiceContainer.shared.accessibilityEngine.listWindows(pid: pidValue)
+        let encoder = JSONEncoder()
+        encoder.outputFormatting = [.sortedKeys]
+        let data = try encoder.encode(windows)
+        return String(data: data, encoding: .utf8) ?? "[]"
     }
 }
 
@@ -83,7 +117,23 @@ struct GetWindowStateTool {
     var windowId: Int
 
     func perform() async throws -> String {
-        "Not yet implemented: get_window_state"
+        do {
+            let state = try ServiceContainer.shared.accessibilityEngine.getWindowState(windowId: windowId)
+            let encoder = JSONEncoder()
+            encoder.outputFormatting = [.sortedKeys]
+            let data = try encoder.encode(state)
+            return String(data: data, encoding: .utf8) ?? "{}"
+        } catch let error as AccessibilityEngineError {
+            let payload = ToolErrorPayload(
+                error: error.errorCode,
+                message: error.localizedDescription,
+                suggestion: error.suggestion
+            )
+            let encoder = JSONEncoder()
+            encoder.outputFormatting = [.sortedKeys]
+            let data = try encoder.encode(payload)
+            return String(data: data, encoding: .utf8) ?? "{}"
+        }
     }
 }
 

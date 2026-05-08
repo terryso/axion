@@ -1,10 +1,10 @@
 {
   "phase": "PHASE_1_COMPLETE",
-  "generated_at": "2026-05-08T16:03:30.000Z",
+  "generated_at": "2026-05-08T19:00:00Z",
   "trace_target": {
-    "type": "story",
-    "id": "1.2",
-    "label": "Helper MCP Server Foundation"
+    "type": "stories",
+    "id": "1.1-1.3",
+    "label": "Stories 1.1 through 1.3: SPM Scaffolding, Helper MCP Server, App Launch & Window Management"
   },
   "collection_mode": "contract_static",
   "allow_gate": true,
@@ -14,206 +14,201 @@
     "resolution_mode": "formal_requirements",
     "confidence": "high",
     "sources": [
+      "_bmad-output/implementation-artifacts/1-1-spm-scaffolding-axioncore-models.md",
       "_bmad-output/implementation-artifacts/1-2-helper-mcp-server-foundation.md",
+      "_bmad-output/implementation-artifacts/1-3-app-launch-window-management.md",
+      "_bmad-output/test-artifacts/atdd-checklist-1-1-spm-scaffolding-axioncore-models.md",
       "_bmad-output/test-artifacts/atdd-checklist-1-2-helper-mcp-server-foundation.md",
-      "_bmad-output/planning-artifacts/epics.md"
+      "_bmad-output/test-artifacts/atdd-checklist-1-3-app-launch-window-management.md"
     ],
     "external_pointer_status": "not_used",
     "synthetic": false
   },
   "requirements": [
     {
-      "id": "AC1",
-      "title": "MCP initialize 响应",
-      "description": "Given AxionHelper 启动, When 通过 stdin 发送 MCP initialize 请求, Then 返回正确的 initialize 响应，包含服务端能力声明",
-      "priority": "P0",
-      "coverage": "FULL",
+      "id": "1.1-AC1", "story": "1.1",
+      "description": "SPM 编译成功，生成 AxionCLI/AxionHelper/AxionCore 三个目标",
+      "priority": "P0", "coverage": "FULL",
       "tests": [
-        {
-          "id": "HelperMCPServerTests:test_mcpServer_creation_hasCorrectNameAndVersion",
-          "title": "test_mcpServer_creation_hasCorrectNameAndVersion",
-          "file": "Tests/AxionHelperTests/MCP/HelperMCPServerTests.swift",
-          "line": 50,
-          "level": "unit",
-          "status": "active"
-        },
-        {
-          "id": "HelperMCPServerTests:test_mcpServer_initialize_includesToolsCapability",
-          "title": "test_mcpServer_initialize_includesToolsCapability",
-          "file": "Tests/AxionHelperTests/MCP/HelperMCPServerTests.swift",
-          "line": 66,
-          "level": "unit",
-          "status": "active"
-        },
-        {
-          "id": "HelperProcessSmokeTests:test_helperProcess_initializeResponds",
-          "title": "test_helperProcess_initializeResponds",
-          "file": "Tests/AxionHelperTests/MCP/HelperProcessSmokeTests.swift",
-          "line": 52,
-          "level": "integration",
-          "status": "active"
-        },
-        {
-          "id": "HelperScaffoldTests:test_mcpModule_importsSuccessfully",
-          "title": "test_mcpModule_importsSuccessfully",
-          "file": "Tests/AxionHelperTests/MCP/HelperScaffoldTests.swift",
-          "line": 17,
-          "level": "unit",
-          "status": "active"
-        },
-        {
-          "id": "HelperScaffoldTests:test_mcpToolModule_importsSuccessfully",
-          "title": "test_mcpToolModule_importsSuccessfully",
-          "file": "Tests/AxionHelperTests/MCP/HelperScaffoldTests.swift",
-          "line": 27,
-          "level": "unit",
-          "status": "active"
-        },
-        {
-          "id": "HelperScaffoldTests:test_axionHelper_target_compiles",
-          "title": "test_axionHelper_target_compiles",
-          "file": "Tests/AxionHelperTests/MCP/HelperScaffoldTests.swift",
-          "line": 36,
-          "level": "unit",
-          "status": "active"
-        },
-        {
-          "id": "HelperScaffoldTests:test_toolRegistrar_existsInAxionHelper",
-          "title": "test_toolRegistrar_existsInAxionHelper",
-          "file": "Tests/AxionHelperTests/MCP/HelperScaffoldTests.swift",
-          "line": 45,
-          "level": "unit",
-          "status": "active"
-        }
+        {"title": "test_axionCore_module_compiles", "file": "Tests/AxionCoreTests/SPMScaffoldTests.swift", "level": "unit", "status": "active"},
+        {"title": "test_axionHelper_target_compiles", "file": "Tests/AxionHelperTests/MCP/HelperScaffoldTests.swift", "level": "unit", "status": "active"},
+        {"title": "test_mcpModule_importsSuccessfully", "file": "Tests/AxionHelperTests/MCP/HelperScaffoldTests.swift", "level": "unit", "status": "active"}
       ]
     },
     {
-      "id": "AC2",
-      "title": "tools/list 响应",
-      "description": "Given MCP 连接已建立, When 发送 tools/list 请求, Then 返回所有已注册工具的列表，每个工具包含 name、description 和 inputSchema",
-      "priority": "P0",
-      "coverage": "FULL",
+      "id": "1.1-AC2", "story": "1.1",
+      "description": "Plan 模型 Codable round-trip，Value 枚举 placeholder case 正确保留",
+      "priority": "P0", "coverage": "FULL",
       "tests": [
-        {
-          "id": "HelperMCPServerTests:test_toolsList_returnsAllRegisteredTools",
-          "title": "test_toolsList_returnsAllRegisteredTools",
-          "file": "Tests/AxionHelperTests/MCP/HelperMCPServerTests.swift",
-          "line": 84,
-          "level": "unit",
-          "status": "active"
-        },
-        {
-          "id": "HelperMCPServerTests:test_toolsList_eachToolHasNameDescriptionAndSchema",
-          "title": "test_toolsList_eachToolHasNameDescriptionAndSchema",
-          "file": "Tests/AxionHelperTests/MCP/HelperMCPServerTests.swift",
-          "line": 96,
-          "level": "unit",
-          "status": "active"
-        },
-        {
-          "id": "HelperMCPServerTests:test_toolsList_containsAllExpectedToolNames",
-          "title": "test_toolsList_containsAllExpectedToolNames",
-          "file": "Tests/AxionHelperTests/MCP/HelperMCPServerTests.swift",
-          "line": 110,
-          "level": "unit",
-          "status": "active"
-        },
-        {
-          "id": "HelperMCPServerTests:test_toolsList_matchesToolNamesConstants",
-          "title": "test_toolsList_matchesToolNamesConstants",
-          "file": "Tests/AxionHelperTests/MCP/HelperMCPServerTests.swift",
-          "line": 144,
-          "level": "unit",
-          "status": "active"
-        },
-        {
-          "id": "HelperMCPServerTests:test_toolRegistrar_registerAll_isCallable",
-          "title": "test_toolRegistrar_registerAll_isCallable",
-          "file": "Tests/AxionHelperTests/MCP/HelperMCPServerTests.swift",
-          "line": 263,
-          "level": "unit",
-          "status": "active"
-        },
-        {
-          "id": "HelperMCPServerTests:test_toolRegistrar_noDuplicateToolNames",
-          "title": "test_toolRegistrar_noDuplicateToolNames",
-          "file": "Tests/AxionHelperTests/MCP/HelperMCPServerTests.swift",
-          "line": 277,
-          "level": "unit",
-          "status": "active"
-        },
-        {
-          "id": "HelperMCPServerTests:test_toolRegistrar_allToolsUseSnakeCase",
-          "title": "test_toolRegistrar_allToolsUseSnakeCase",
-          "file": "Tests/AxionHelperTests/MCP/HelperMCPServerTests.swift",
-          "line": 292,
-          "level": "unit",
-          "status": "active"
-        }
+        {"title": "test_plan_codable_roundTrip_preservesAllFields", "file": "Tests/AxionCoreTests/PlanTests.swift", "level": "unit", "status": "active"},
+        {"title": "test_value_string_roundTrip", "file": "Tests/AxionCoreTests/PlanTests.swift", "level": "unit", "status": "active"},
+        {"title": "test_value_int_roundTrip", "file": "Tests/AxionCoreTests/PlanTests.swift", "level": "unit", "status": "active"},
+        {"title": "test_value_bool_roundTrip", "file": "Tests/AxionCoreTests/PlanTests.swift", "level": "unit", "status": "active"},
+        {"title": "test_value_placeholder_roundTrip", "file": "Tests/AxionCoreTests/PlanTests.swift", "level": "unit", "status": "active"},
+        {"title": "test_value_placeholder_preservesDollarSign", "file": "Tests/AxionCoreTests/PlanTests.swift", "level": "unit", "status": "active"},
+        {"title": "test_step_codable_roundTrip", "file": "Tests/AxionCoreTests/PlanTests.swift", "level": "unit", "status": "active"}
       ]
     },
     {
-      "id": "AC3",
-      "title": "未知工具调用错误",
-      "description": "Given Helper 收到未知工具名调用, When 执行 tool_call, Then 返回 isError=true 的 ToolResult，message 说明工具不存在",
-      "priority": "P0",
-      "coverage": "FULL",
+      "id": "1.1-AC3", "story": "1.1",
+      "description": "RunState 枚举包含所有 9 种状态，支持 Codable",
+      "priority": "P0", "coverage": "FULL",
       "tests": [
-        {
-          "id": "HelperMCPServerTests:test_unknownTool_returnsError",
-          "title": "test_unknownTool_returnsError",
-          "file": "Tests/AxionHelperTests/MCP/HelperMCPServerTests.swift",
-          "line": 188,
-          "level": "unit",
-          "status": "active"
-        },
-        {
-          "id": "HelperMCPServerTests:test_unknownTool_variousNames_returnErrors",
-          "title": "test_unknownTool_variousNames_returnErrors",
-          "file": "Tests/AxionHelperTests/MCP/HelperMCPServerTests.swift",
-          "line": 214,
-          "level": "unit",
-          "status": "active"
-        }
+        {"title": "test_runState_allNineCases", "file": "Tests/AxionCoreTests/RunStateTests.swift", "level": "unit", "status": "active"},
+        {"title": "test_runState_codable_roundTrip", "file": "Tests/AxionCoreTests/RunStateTests.swift", "level": "unit", "status": "active"},
+        {"title": "test_runState_rawValue", "file": "Tests/AxionCoreTests/RunStateTests.swift", "level": "unit", "status": "active"}
       ]
     },
     {
-      "id": "AC4",
-      "title": "EOF 优雅退出",
-      "description": "Given Helper 进程的 stdin 收到 EOF, When 管道关闭, Then Helper 优雅退出，无崩溃日志",
-      "priority": "P0",
-      "coverage": "FULL",
+      "id": "1.1-AC4", "story": "1.1",
+      "description": "AxionConfig Codable camelCase 输出，apiKey 不编码",
+      "priority": "P0", "coverage": "FULL",
       "tests": [
-        {
-          "id": "HelperMCPServerTests:test_mcpServer_runStdio_exitsOnEOF",
-          "title": "test_mcpServer_runStdio_exitsOnEOF",
-          "file": "Tests/AxionHelperTests/MCP/HelperMCPServerTests.swift",
-          "line": 239,
-          "level": "unit",
-          "status": "active"
-        },
-        {
-          "id": "HelperProcessSmokeTests:test_helperProcess_gracefulExitOnEOF",
-          "title": "test_helperProcess_gracefulExitOnEOF",
-          "file": "Tests/AxionHelperTests/MCP/HelperProcessSmokeTests.swift",
-          "line": 116,
-          "level": "integration",
-          "status": "active"
-        }
+        {"title": "test_config_codable_outputIsCamelCase", "file": "Tests/AxionCoreTests/AxionConfigTests.swift", "level": "unit", "status": "active"},
+        {"title": "test_config_codable_roundTrip", "file": "Tests/AxionCoreTests/AxionConfigTests.swift", "level": "unit", "status": "active"},
+        {"title": "test_config_defaultValues", "file": "Tests/AxionCoreTests/AxionConfigTests.swift", "level": "unit", "status": "active"},
+        {"title": "test_config_apiKeyNil_notEncoded", "file": "Tests/AxionCoreTests/AxionConfigTests.swift", "level": "unit", "status": "active"}
+      ]
+    },
+    {
+      "id": "1.1-AC5", "story": "1.1",
+      "description": "AxionError MCP ToolResult 格式（error/message/suggestion 三字段）",
+      "priority": "P0", "coverage": "FULL",
+      "tests": [
+        {"title": "test_error_toToolResultJSON_containsRequiredFields", "file": "Tests/AxionCoreTests/AxionErrorTests.swift", "level": "unit", "status": "active"},
+        {"title": "test_error_toToolResultJSON_validJSON", "file": "Tests/AxionCoreTests/AxionErrorTests.swift", "level": "unit", "status": "active"},
+        {"title": "test_error_equality", "file": "Tests/AxionCoreTests/AxionErrorTests.swift", "level": "unit", "status": "active"},
+        {"title": "test_error_planningFailed_format", "file": "Tests/AxionCoreTests/AxionErrorTests.swift", "level": "unit", "status": "active"},
+        {"title": "test_error_executionFailed_format", "file": "Tests/AxionCoreTests/AxionErrorTests.swift", "level": "unit", "status": "active"},
+        {"title": "test_error_helperNotRunning_format", "file": "Tests/AxionCoreTests/AxionErrorTests.swift", "level": "unit", "status": "active"},
+        {"title": "test_error_maxRetriesExceeded_format", "file": "Tests/AxionCoreTests/AxionErrorTests.swift", "level": "unit", "status": "active"},
+        {"title": "test_error_mcpError_format", "file": "Tests/AxionCoreTests/AxionErrorTests.swift", "level": "unit", "status": "active"}
+      ]
+    },
+    {
+      "id": "1.1-AC6", "story": "1.1",
+      "description": "Protocol/Constants/辅助类型文件位于正确目录",
+      "priority": "P0", "coverage": "FULL",
+      "tests": [
+        {"title": "test_plannerProtocol_existsInAxionCore", "file": "Tests/AxionCoreTests/SPMScaffoldTests.swift", "level": "unit", "status": "active"},
+        {"title": "test_executorProtocol_existsInAxionCore", "file": "Tests/AxionCoreTests/SPMScaffoldTests.swift", "level": "unit", "status": "active"},
+        {"title": "test_verifierProtocol_existsInAxionCore", "file": "Tests/AxionCoreTests/SPMScaffoldTests.swift", "level": "unit", "status": "active"},
+        {"title": "test_mcpClientProtocol_existsInAxionCore", "file": "Tests/AxionCoreTests/SPMScaffoldTests.swift", "level": "unit", "status": "active"},
+        {"title": "test_outputProtocol_existsInAxionCore", "file": "Tests/AxionCoreTests/SPMScaffoldTests.swift", "level": "unit", "status": "active"},
+        {"title": "test_toolNamesConstant_existsInAxionCore", "file": "Tests/AxionCoreTests/SPMScaffoldTests.swift", "level": "unit", "status": "active"},
+        {"title": "test_axionError_conformsToError", "file": "Tests/AxionCoreTests/SPMScaffoldTests.swift", "level": "unit", "status": "active"},
+        {"title": "test_runContext_existsInAxionCore", "file": "Tests/AxionCoreTests/SPMScaffoldTests.swift", "level": "unit", "status": "active"},
+        {"title": "test_executedStep_existsInAxionCore", "file": "Tests/AxionCoreTests/SPMScaffoldTests.swift", "level": "unit", "status": "active"}
+      ]
+    },
+    {
+      "id": "1.2-AC1", "story": "1.2",
+      "description": "MCP initialize 响应包含服务端能力和工具列表",
+      "priority": "P0", "coverage": "FULL",
+      "tests": [
+        {"title": "test_mcpServer_creation_hasCorrectNameAndVersion", "file": "Tests/AxionHelperTests/MCP/HelperMCPServerTests.swift", "level": "unit", "status": "active"},
+        {"title": "test_mcpServer_initialize_includesToolsCapability", "file": "Tests/AxionHelperTests/MCP/HelperMCPServerTests.swift", "level": "unit", "status": "active"},
+        {"title": "test_helperProcess_initializeResponds", "file": "Tests/AxionHelperTests/MCP/HelperProcessSmokeTests.swift", "level": "integration", "status": "active"},
+        {"title": "test_mcpModule_importsSuccessfully", "file": "Tests/AxionHelperTests/MCP/HelperScaffoldTests.swift", "level": "unit", "status": "active"},
+        {"title": "test_mcpToolModule_importsSuccessfully", "file": "Tests/AxionHelperTests/MCP/HelperScaffoldTests.swift", "level": "unit", "status": "active"},
+        {"title": "test_axionHelper_target_compiles", "file": "Tests/AxionHelperTests/MCP/HelperScaffoldTests.swift", "level": "unit", "status": "active"},
+        {"title": "test_toolRegistrar_existsInAxionHelper", "file": "Tests/AxionHelperTests/MCP/HelperScaffoldTests.swift", "level": "unit", "status": "active"}
+      ]
+    },
+    {
+      "id": "1.2-AC2", "story": "1.2",
+      "description": "tools/list 返回所有已注册工具（15+），含 name/description/inputSchema",
+      "priority": "P0", "coverage": "FULL",
+      "tests": [
+        {"title": "test_toolsList_returnsAllRegisteredTools", "file": "Tests/AxionHelperTests/MCP/HelperMCPServerTests.swift", "level": "unit", "status": "active"},
+        {"title": "test_toolsList_eachToolHasNameDescriptionAndSchema", "file": "Tests/AxionHelperTests/MCP/HelperMCPServerTests.swift", "level": "unit", "status": "active"},
+        {"title": "test_toolsList_containsAllExpectedToolNames", "file": "Tests/AxionHelperTests/MCP/HelperMCPServerTests.swift", "level": "unit", "status": "active"},
+        {"title": "test_toolsList_matchesToolNamesConstants", "file": "Tests/AxionHelperTests/MCP/HelperMCPServerTests.swift", "level": "unit", "status": "active"},
+        {"title": "test_toolRegistrar_registerAll_isCallable", "file": "Tests/AxionHelperTests/MCP/HelperMCPServerTests.swift", "level": "unit", "status": "active"},
+        {"title": "test_toolRegistrar_noDuplicateToolNames", "file": "Tests/AxionHelperTests/MCP/HelperMCPServerTests.swift", "level": "unit", "status": "active"},
+        {"title": "test_toolRegistrar_allToolsUseSnakeCase", "file": "Tests/AxionHelperTests/MCP/HelperMCPServerTests.swift", "level": "unit", "status": "active"}
+      ]
+    },
+    {
+      "id": "1.2-AC3", "story": "1.2",
+      "description": "未知工具调用返回 isError=true 的 ToolResult",
+      "priority": "P0", "coverage": "FULL",
+      "tests": [
+        {"title": "test_unknownTool_returnsError", "file": "Tests/AxionHelperTests/MCP/HelperMCPServerTests.swift", "level": "unit", "status": "active"},
+        {"title": "test_unknownTool_variousNames_returnErrors", "file": "Tests/AxionHelperTests/MCP/HelperMCPServerTests.swift", "level": "unit", "status": "active"}
+      ]
+    },
+    {
+      "id": "1.2-AC4", "story": "1.2",
+      "description": "stdin EOF 时 Helper 优雅退出，无崩溃",
+      "priority": "P0", "coverage": "FULL",
+      "tests": [
+        {"title": "test_mcpServer_runStdio_exitsOnEOF", "file": "Tests/AxionHelperTests/MCP/HelperMCPServerTests.swift", "level": "unit", "status": "active"},
+        {"title": "test_helperProcess_gracefulExitOnEOF", "file": "Tests/AxionHelperTests/MCP/HelperProcessSmokeTests.swift", "level": "integration", "status": "active"}
+      ]
+    },
+    {
+      "id": "1.3-AC1", "story": "1.3",
+      "description": "launch_app 启动 Calculator 成功，返回包含 pid 的结果",
+      "priority": "P0", "coverage": "FULL",
+      "tests": [
+        {"title": "test_launchApp_calculator_returnsSuccessWithPid", "file": "Tests/AxionHelperTests/AppManagement/LaunchAppToolTests.swift", "level": "unit", "status": "active"},
+        {"title": "test_launchApp_appIsRunningAfterLaunch", "file": "Tests/AxionHelperTests/AppManagement/LaunchAppToolTests.swift", "level": "unit", "status": "active"},
+        {"title": "test_launchApp_alreadyRunning_returnsExistingPid", "file": "Tests/AxionHelperTests/AppManagement/LaunchAppToolTests.swift", "level": "unit", "status": "active"}
+      ]
+    },
+    {
+      "id": "1.3-AC2", "story": "1.3",
+      "description": "list_apps 返回运行中的应用列表，每项含 pid 和 app_name",
+      "priority": "P0", "coverage": "FULL",
+      "tests": [
+        {"title": "test_listApps_returnsRunningAppsList", "file": "Tests/AxionHelperTests/AppManagement/LaunchAppToolTests.swift", "level": "unit", "status": "active"},
+        {"title": "test_listApps_eachAppHasPidAndName", "file": "Tests/AxionHelperTests/AppManagement/LaunchAppToolTests.swift", "level": "unit", "status": "active"},
+        {"title": "test_listApps_containsFinder", "file": "Tests/AxionHelperTests/AppManagement/LaunchAppToolTests.swift", "level": "unit", "status": "active"}
+      ]
+    },
+    {
+      "id": "1.3-AC3", "story": "1.3",
+      "description": "list_windows 返回窗口列表，每项含 window_id/title/bounds",
+      "priority": "P0", "coverage": "FULL",
+      "tests": [
+        {"title": "test_listWindows_returnsWindowList", "file": "Tests/AxionHelperTests/WindowManagement/WindowManagementToolTests.swift", "level": "unit", "status": "active"},
+        {"title": "test_listWindows_eachWindowHasRequiredFields", "file": "Tests/AxionHelperTests/WindowManagement/WindowManagementToolTests.swift", "level": "unit", "status": "active"},
+        {"title": "test_listWindows_filterByPid_returnsFilteredResults", "file": "Tests/AxionHelperTests/WindowManagement/WindowManagementToolTests.swift", "level": "unit", "status": "active"}
+      ]
+    },
+    {
+      "id": "1.3-AC4", "story": "1.3",
+      "description": "get_window_state 返回完整窗口状态（bounds/is_minimized/is_focused/ax_tree）",
+      "priority": "P0", "coverage": "FULL",
+      "tests": [
+        {"title": "test_getWindowState_returnsCompleteState", "file": "Tests/AxionHelperTests/WindowManagement/WindowManagementToolTests.swift", "level": "unit", "status": "active"},
+        {"title": "test_getWindowState_containsRequiredFields", "file": "Tests/AxionHelperTests/WindowManagement/WindowManagementToolTests.swift", "level": "unit", "status": "active"},
+        {"title": "test_getWindowState_boundsContainsPositionAndSize", "file": "Tests/AxionHelperTests/WindowManagement/WindowManagementToolTests.swift", "level": "unit", "status": "active"},
+        {"title": "test_getWindowState_invalidWindowId_returnsError", "file": "Tests/AxionHelperTests/WindowManagement/WindowManagementToolTests.swift", "level": "unit", "status": "active"}
+      ]
+    },
+    {
+      "id": "1.3-AC5", "story": "1.3",
+      "description": "launch_app 应用未安装返回 app_not_found 错误 + suggestion",
+      "priority": "P0", "coverage": "FULL",
+      "tests": [
+        {"title": "test_launchApp_appNotFound_returnsError", "file": "Tests/AxionHelperTests/AppManagement/LaunchAppToolTests.swift", "level": "unit", "status": "active"},
+        {"title": "test_launchApp_missingAppName_returnsError", "file": "Tests/AxionHelperTests/AppManagement/LaunchAppToolTests.swift", "level": "unit", "status": "active"}
       ]
     }
   ],
   "coverage_statistics": {
-    "total_requirements": 4,
-    "fully_covered": 4,
+    "total_requirements": 15,
+    "fully_covered": 15,
     "partially_covered": 0,
     "uncovered": 0,
     "overall_coverage_percentage": 100,
     "priority_breakdown": {
-      "P0": { "total": 4, "covered": 4, "percentage": 100 },
-      "P1": { "total": 0, "covered": 0, "percentage": 100 },
-      "P2": { "total": 0, "covered": 0, "percentage": 100 },
-      "P3": { "total": 0, "covered": 0, "percentage": 100 }
+      "P0": {"total": 15, "covered": 15, "percentage": 100},
+      "P1": {"total": 0, "covered": 0, "percentage": 100},
+      "P2": {"total": 0, "covered": 0, "percentage": 100},
+      "P3": {"total": 0, "covered": 0, "percentage": 100}
     }
   },
   "gap_analysis": {
@@ -240,44 +235,23 @@
   },
   "test_inventory": {
     "summary": {
-      "files": 3,
-      "cases": 20,
+      "files": 14,
+      "cases": 82,
       "skipped_cases": 0,
       "fixme_cases": 0,
       "pending_cases": 0,
       "by_level": {
-        "unit": { "tests": 17, "criteria_covered": 4 },
-        "integration": { "tests": 3, "criteria_covered": 2 },
-        "e2e": { "tests": 0, "criteria_covered": 0 },
-        "api": { "tests": 0, "criteria_covered": 0 },
-        "component": { "tests": 0, "criteria_covered": 0 },
-        "other": { "tests": 0, "criteria_covered": 0 }
+        "unit": {"tests": 76, "criteria_covered": 15},
+        "integration": {"tests": 5, "criteria_covered": 2},
+        "e2e": {"tests": 0, "criteria_covered": 0},
+        "api": {"tests": 0, "criteria_covered": 0},
+        "component": {"tests": 0, "criteria_covered": 0},
+        "other": {"tests": 1, "criteria_covered": 1}
       }
     },
-    "tests": [
-      { "id": "HelperMCPServerTests:test_mcpServer_creation_hasCorrectNameAndVersion", "file": "Tests/AxionHelperTests/MCP/HelperMCPServerTests.swift", "line": 50, "title": "test_mcpServer_creation_hasCorrectNameAndVersion", "level": "unit", "status": "active", "skipped": false, "fixme": false, "pending": false, "blocker_reason": "" },
-      { "id": "HelperMCPServerTests:test_mcpServer_initialize_includesToolsCapability", "file": "Tests/AxionHelperTests/MCP/HelperMCPServerTests.swift", "line": 66, "title": "test_mcpServer_initialize_includesToolsCapability", "level": "unit", "status": "active", "skipped": false, "fixme": false, "pending": false, "blocker_reason": "" },
-      { "id": "HelperMCPServerTests:test_toolsList_returnsAllRegisteredTools", "file": "Tests/AxionHelperTests/MCP/HelperMCPServerTests.swift", "line": 84, "title": "test_toolsList_returnsAllRegisteredTools", "level": "unit", "status": "active", "skipped": false, "fixme": false, "pending": false, "blocker_reason": "" },
-      { "id": "HelperMCPServerTests:test_toolsList_eachToolHasNameDescriptionAndSchema", "file": "Tests/AxionHelperTests/MCP/HelperMCPServerTests.swift", "line": 96, "title": "test_toolsList_eachToolHasNameDescriptionAndSchema", "level": "unit", "status": "active", "skipped": false, "fixme": false, "pending": false, "blocker_reason": "" },
-      { "id": "HelperMCPServerTests:test_toolsList_containsAllExpectedToolNames", "file": "Tests/AxionHelperTests/MCP/HelperMCPServerTests.swift", "line": 110, "title": "test_toolsList_containsAllExpectedToolNames", "level": "unit", "status": "active", "skipped": false, "fixme": false, "pending": false, "blocker_reason": "" },
-      { "id": "HelperMCPServerTests:test_toolsList_matchesToolNamesConstants", "file": "Tests/AxionHelperTests/MCP/HelperMCPServerTests.swift", "line": 144, "title": "test_toolsList_matchesToolNamesConstants", "level": "unit", "status": "active", "skipped": false, "fixme": false, "pending": false, "blocker_reason": "" },
-      { "id": "HelperMCPServerTests:test_stubTool_perform_returnsNotYetImplemented", "file": "Tests/AxionHelperTests/MCP/HelperMCPServerTests.swift", "line": 162, "title": "test_stubTool_perform_returnsNotYetImplemented", "level": "unit", "status": "active", "skipped": false, "fixme": false, "pending": false, "blocker_reason": "" },
-      { "id": "HelperMCPServerTests:test_unknownTool_returnsError", "file": "Tests/AxionHelperTests/MCP/HelperMCPServerTests.swift", "line": 188, "title": "test_unknownTool_returnsError", "level": "unit", "status": "active", "skipped": false, "fixme": false, "pending": false, "blocker_reason": "" },
-      { "id": "HelperMCPServerTests:test_unknownTool_variousNames_returnErrors", "file": "Tests/AxionHelperTests/MCP/HelperMCPServerTests.swift", "line": 214, "title": "test_unknownTool_variousNames_returnErrors", "level": "unit", "status": "active", "skipped": false, "fixme": false, "pending": false, "blocker_reason": "" },
-      { "id": "HelperMCPServerTests:test_mcpServer_runStdio_exitsOnEOF", "file": "Tests/AxionHelperTests/MCP/HelperMCPServerTests.swift", "line": 239, "title": "test_mcpServer_runStdio_exitsOnEOF", "level": "unit", "status": "active", "skipped": false, "fixme": false, "pending": false, "blocker_reason": "" },
-      { "id": "HelperMCPServerTests:test_toolRegistrar_registerAll_isCallable", "file": "Tests/AxionHelperTests/MCP/HelperMCPServerTests.swift", "line": 263, "title": "test_toolRegistrar_registerAll_isCallable", "level": "unit", "status": "active", "skipped": false, "fixme": false, "pending": false, "blocker_reason": "" },
-      { "id": "HelperMCPServerTests:test_toolRegistrar_noDuplicateToolNames", "file": "Tests/AxionHelperTests/MCP/HelperMCPServerTests.swift", "line": 277, "title": "test_toolRegistrar_noDuplicateToolNames", "level": "unit", "status": "active", "skipped": false, "fixme": false, "pending": false, "blocker_reason": "" },
-      { "id": "HelperMCPServerTests:test_toolRegistrar_allToolsUseSnakeCase", "file": "Tests/AxionHelperTests/MCP/HelperMCPServerTests.swift", "line": 292, "title": "test_toolRegistrar_allToolsUseSnakeCase", "level": "unit", "status": "active", "skipped": false, "fixme": false, "pending": false, "blocker_reason": "" },
-      { "id": "HelperProcessSmokeTests:test_helperProcess_initializeResponds", "file": "Tests/AxionHelperTests/MCP/HelperProcessSmokeTests.swift", "line": 52, "title": "test_helperProcess_initializeResponds", "level": "integration", "status": "active", "skipped": false, "fixme": false, "pending": false, "blocker_reason": "" },
-      { "id": "HelperProcessSmokeTests:test_helperProcess_gracefulExitOnEOF", "file": "Tests/AxionHelperTests/MCP/HelperProcessSmokeTests.swift", "line": 116, "title": "test_helperProcess_gracefulExitOnEOF", "level": "integration", "status": "active", "skipped": false, "fixme": false, "pending": false, "blocker_reason": "" },
-      { "id": "HelperProcessSmokeTests:test_helperProcess_startupTime_meetsNFR2", "file": "Tests/AxionHelperTests/MCP/HelperProcessSmokeTests.swift", "line": 171, "title": "test_helperProcess_startupTime_meetsNFR2", "level": "integration", "status": "active", "skipped": false, "fixme": false, "pending": false, "blocker_reason": "" },
-      { "id": "HelperScaffoldTests:test_mcpModule_importsSuccessfully", "file": "Tests/AxionHelperTests/MCP/HelperScaffoldTests.swift", "line": 17, "title": "test_mcpModule_importsSuccessfully", "level": "unit", "status": "active", "skipped": false, "fixme": false, "pending": false, "blocker_reason": "" },
-      { "id": "HelperScaffoldTests:test_mcpToolModule_importsSuccessfully", "file": "Tests/AxionHelperTests/MCP/HelperScaffoldTests.swift", "line": 27, "title": "test_mcpToolModule_importsSuccessfully", "level": "unit", "status": "active", "skipped": false, "fixme": false, "pending": false, "blocker_reason": "" },
-      { "id": "HelperScaffoldTests:test_axionHelper_target_compiles", "file": "Tests/AxionHelperTests/MCP/HelperScaffoldTests.swift", "line": 36, "title": "test_axionHelper_target_compiles", "level": "unit", "status": "active", "skipped": false, "fixme": false, "pending": false, "blocker_reason": "" },
-      { "id": "HelperScaffoldTests:test_toolRegistrar_existsInAxionHelper", "file": "Tests/AxionHelperTests/MCP/HelperScaffoldTests.swift", "line": 45, "title": "test_toolRegistrar_existsInAxionHelper", "level": "unit", "status": "active", "skipped": false, "fixme": false, "pending": false, "blocker_reason": "" }
-    ],
     "blockers": []
   },
+  "blockers": [],
   "recommendations": [
     {
       "priority": "LOW",
