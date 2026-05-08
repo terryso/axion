@@ -36,15 +36,14 @@
 
 generated: 2026-05-08
 last_updated: 2026-05-08
-project: axion
 project_key: NOKEY
 tracking_system: file-system
 story_location: _bmad-output/implementation-artifacts
 
 development_status:
   # Epic 1: AxionHelper — macOS 桌面自动化引擎
-  epic-1: backlog
-  1-1-spm-scaffolding-axioncore-models: backlog
+  epic-1: in-progress
+  1-1-spm-scaffolding-axioncore-models: done
   1-2-helper-mcp-server-foundation: backlog
   1-3-app-launch-window-management: backlog
   1-4-mouse-keyboard-operations: backlog

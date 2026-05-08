@@ -1,35 +1,20 @@
-# Swift
+# Build artifacts
 .build/
 .swiftpm/
 Packages/
+xcuserdata/
 *.xcodeproj/
 *.xcworkspace/
-xcuserdata/
-DerivedData/
 
 # macOS
 .DS_Store
-*.dSYM
-*.dSYM.zip
-
-# Build artifacts
-build/
-*.o
-*.swiftdoc
-*.swiftsourceinfo
-*.swiftmodule
-*.abi.json
+*.swp
+*~
 
 # Secrets
 .env
 *.env.local
 
 # IDE
+.vscode/
 .idea/
-*.swp
-*~
-
-# Axion runtime
-.axion/
-
-# BMad (project management, not source)

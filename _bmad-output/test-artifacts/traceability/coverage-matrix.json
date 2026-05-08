@@ -1,0 +1,440 @@
+{
+  "phase": "PHASE_1_COMPLETE",
+  "generated_at": "2026-05-08T05:31:52Z",
+  "trace_target": {
+    "type": "story",
+    "id": "1.1",
+    "label": "SPM 项目脚手架与 AxionCore 共享模型"
+  },
+  "collection_mode": "contract_static",
+  "allow_gate": true,
+  "coverage_basis": "acceptance_criteria",
+  "summary_confidence": "high",
+  "oracle": {
+    "resolution_mode": "formal_requirements",
+    "confidence": "high",
+    "sources": [
+      "_bmad-output/implementation-artifacts/1-1-spm-scaffolding-axioncore-models.md",
+      "_bmad-output/test-artifacts/atdd-checklist-1-1-spm-scaffolding-axioncore-models.md"
+    ],
+    "external_pointer_status": "not_used",
+    "synthetic": false
+  },
+  "requirements": [
+    {
+      "id": "AC1",
+      "title": "SPM 编译成功",
+      "description": "运行 swift build 后项目编译成功，生成 AxionCLI 和 AxionHelper 两个可执行目标，AxionCore 作为 library target 存在",
+      "priority": "P0",
+      "coverage": "FULL",
+      "tests": [
+        {
+          "id": "SPMScaffoldTests:test_axionCore_module_compiles",
+          "title": "test_axionCore_module_compiles",
+          "file": "Tests/AxionCoreTests/SPMScaffoldTests.swift",
+          "line": 18,
+          "level": "integration",
+          "status": "active",
+          "skipped": false
+        }
+      ],
+      "heuristic_signals": {
+        "endpoint_coverage": "not_applicable",
+        "auth_negative_path": "not_applicable",
+        "error_path": "not_applicable"
+      }
+    },
+    {
+      "id": "AC2",
+      "title": "Plan 模型 Codable round-trip",
+      "description": "Plan 模型包含 steps 和 stopWhen，JSON 编解码 round-trip 数据完整，Value 枚举 placeholder case 正确保留",
+      "priority": "P0",
+      "coverage": "FULL",
+      "tests": [
+        {
+          "id": "PlanTests:test_plan_codable_roundTrip_preservesAllFields",
+          "title": "test_plan_codable_roundTrip_preservesAllFields",
+          "file": "Tests/AxionCoreTests/PlanTests.swift",
+          "line": 8,
+          "level": "unit",
+          "status": "active",
+          "skipped": false
+        },
+        {
+          "id": "PlanTests:test_value_string_roundTrip",
+          "title": "test_value_string_roundTrip",
+          "file": "Tests/AxionCoreTests/PlanTests.swift",
+          "line": 36,
+          "level": "unit",
+          "status": "active",
+          "skipped": false
+        },
+        {
+          "id": "PlanTests:test_value_int_roundTrip",
+          "title": "test_value_int_roundTrip",
+          "file": "Tests/AxionCoreTests/PlanTests.swift",
+          "line": 43,
+          "level": "unit",
+          "status": "active",
+          "skipped": false
+        },
+        {
+          "id": "PlanTests:test_value_bool_roundTrip",
+          "title": "test_value_bool_roundTrip",
+          "file": "Tests/AxionCoreTests/PlanTests.swift",
+          "line": 50,
+          "level": "unit",
+          "status": "active",
+          "skipped": false
+        },
+        {
+          "id": "PlanTests:test_value_placeholder_roundTrip",
+          "title": "test_value_placeholder_roundTrip",
+          "file": "Tests/AxionCoreTests/PlanTests.swift",
+          "line": 57,
+          "level": "unit",
+          "status": "active",
+          "skipped": false
+        },
+        {
+          "id": "PlanTests:test_value_placeholder_preservesDollarSign",
+          "title": "test_value_placeholder_preservesDollarSign",
+          "file": "Tests/AxionCoreTests/PlanTests.swift",
+          "line": 64,
+          "level": "unit",
+          "status": "active",
+          "skipped": false
+        },
+        {
+          "id": "PlanTests:test_step_codable_roundTrip",
+          "title": "test_step_codable_roundTrip",
+          "file": "Tests/AxionCoreTests/PlanTests.swift",
+          "line": 81,
+          "level": "unit",
+          "status": "active",
+          "skipped": false
+        }
+      ],
+      "heuristic_signals": {
+        "endpoint_coverage": "not_applicable",
+        "auth_negative_path": "not_applicable",
+        "error_path": "present"
+      }
+    },
+    {
+      "id": "AC3",
+      "title": "RunState 枚举完整性",
+      "description": "RunState 枚举包含 planning/executing/verifying/replanning/done/blocked/needsClarification/cancelled/failed 全部 9 个 case",
+      "priority": "P0",
+      "coverage": "FULL",
+      "tests": [
+        {
+          "id": "RunStateTests:test_runState_containsAllNineCases",
+          "title": "test_runState_containsAllNineCases",
+          "file": "Tests/AxionCoreTests/RunStateTests.swift",
+          "line": 8,
+          "level": "unit",
+          "status": "active",
+          "skipped": false
+        },
+        {
+          "id": "RunStateTests:test_runState_allExpectedCasesExist",
+          "title": "test_runState_allExpectedCasesExist",
+          "file": "Tests/AxionCoreTests/RunStateTests.swift",
+          "line": 13,
+          "level": "unit",
+          "status": "active",
+          "skipped": false
+        },
+        {
+          "id": "RunStateTests:test_runState_rawValues_matchCamelCase",
+          "title": "test_runState_rawValues_matchCamelCase",
+          "file": "Tests/AxionCoreTests/RunStateTests.swift",
+          "line": 24,
+          "level": "unit",
+          "status": "active",
+          "skipped": false
+        },
+        {
+          "id": "RunStateTests:test_runState_codable_roundTrip",
+          "title": "test_runState_codable_roundTrip",
+          "file": "Tests/AxionCoreTests/RunStateTests.swift",
+          "line": 38,
+          "level": "unit",
+          "status": "active",
+          "skipped": false
+        },
+        {
+          "id": "RunStateTests:test_runState_jsonEncoding_producesStringValue",
+          "title": "test_runState_jsonEncoding_producesStringValue",
+          "file": "Tests/AxionCoreTests/RunStateTests.swift",
+          "line": 46,
+          "level": "unit",
+          "status": "active",
+          "skipped": false
+        }
+      ],
+      "heuristic_signals": {
+        "endpoint_coverage": "not_applicable",
+        "auth_negative_path": "not_applicable",
+        "error_path": "not_applicable"
+      }
+    },
+    {
+      "id": "AC4",
+      "title": "AxionConfig Codable camelCase 输出",
+      "description": "AxionConfig 编码为 JSON 时输出 camelCase 格式，apiKey 不出现在编码输出中",
+      "priority": "P0",
+      "coverage": "FULL",
+      "tests": [
+        {
+          "id": "AxionConfigTests:test_config_codable_outputIsCamelCase",
+          "title": "test_config_codable_outputIsCamelCase",
+          "file": "Tests/AxionCoreTests/AxionConfigTests.swift",
+          "line": 8,
+          "level": "unit",
+          "status": "active",
+          "skipped": false
+        },
+        {
+          "id": "AxionConfigTests:test_config_codable_roundTrip",
+          "title": "test_config_codable_roundTrip",
+          "file": "Tests/AxionCoreTests/AxionConfigTests.swift",
+          "line": 40,
+          "level": "unit",
+          "status": "active",
+          "skipped": false
+        },
+        {
+          "id": "AxionConfigTests:test_config_defaultValues",
+          "title": "test_config_defaultValues",
+          "file": "Tests/AxionCoreTests/AxionConfigTests.swift",
+          "line": 66,
+          "level": "unit",
+          "status": "active",
+          "skipped": false
+        },
+        {
+          "id": "AxionConfigTests:test_config_apiKeyNil_notEncoded",
+          "title": "test_config_apiKeyNil_notEncoded",
+          "file": "Tests/AxionCoreTests/AxionConfigTests.swift",
+          "line": 78,
+          "level": "unit",
+          "status": "active",
+          "skipped": false
+        }
+      ],
+      "heuristic_signals": {
+        "endpoint_coverage": "not_applicable",
+        "auth_negative_path": "not_applicable",
+        "error_path": "not_applicable"
+      }
+    },
+    {
+      "id": "AC5",
+      "title": "AxionError MCP ToolResult 格式",
+      "description": "AxionError 枚举转换为 MCP ToolResult 错误格式，包含 error/message/suggestion 三个必填字段",
+      "priority": "P0",
+      "coverage": "FULL",
+      "tests": [
+        {
+          "id": "AxionErrorTests:test_error_toToolResultJSON_containsRequiredFields",
+          "title": "test_error_toToolResultJSON_containsRequiredFields",
+          "file": "Tests/AxionCoreTests/AxionErrorTests.swift",
+          "line": 8,
+          "level": "unit",
+          "status": "active",
+          "skipped": false
+        },
+        {
+          "id": "AxionErrorTests:test_error_planningFailed_format",
+          "title": "test_error_planningFailed_format",
+          "file": "Tests/AxionCoreTests/AxionErrorTests.swift",
+          "line": 18,
+          "level": "unit",
+          "status": "active",
+          "skipped": false
+        },
+        {
+          "id": "AxionErrorTests:test_error_executionFailed_format",
+          "title": "test_error_executionFailed_format",
+          "file": "Tests/AxionCoreTests/AxionErrorTests.swift",
+          "line": 25,
+          "level": "unit",
+          "status": "active",
+          "skipped": false
+        },
+        {
+          "id": "AxionErrorTests:test_error_helperNotRunning_format",
+          "title": "test_error_helperNotRunning_format",
+          "file": "Tests/AxionCoreTests/AxionErrorTests.swift",
+          "line": 33,
+          "level": "unit",
+          "status": "active",
+          "skipped": false
+        },
+        {
+          "id": "AxionErrorTests:test_error_mcpError_format",
+          "title": "test_error_mcpError_format",
+          "file": "Tests/AxionCoreTests/AxionErrorTests.swift",
+          "line": 42,
+          "level": "unit",
+          "status": "active",
+          "skipped": false
+        },
+        {
+          "id": "AxionErrorTests:test_error_maxRetriesExceeded_format",
+          "title": "test_error_maxRetriesExceeded_format",
+          "file": "Tests/AxionCoreTests/AxionErrorTests.swift",
+          "line": 51,
+          "level": "unit",
+          "status": "active",
+          "skipped": false
+        },
+        {
+          "id": "AxionErrorTests:test_error_toToolResultJSON_validJSON",
+          "title": "test_error_toToolResultJSON_validJSON",
+          "file": "Tests/AxionCoreTests/AxionErrorTests.swift",
+          "line": 58,
+          "level": "unit",
+          "status": "active",
+          "skipped": false
+        },
+        {
+          "id": "AxionErrorTests:test_error_equality",
+          "title": "test_error_equality",
+          "file": "Tests/AxionCoreTests/AxionErrorTests.swift",
+          "line": 91,
+          "level": "unit",
+          "status": "active",
+          "skipped": false
+        }
+      ],
+      "heuristic_signals": {
+        "endpoint_coverage": "not_applicable",
+        "auth_negative_path": "not_applicable",
+        "error_path": "present"
+      }
+    },
+    {
+      "id": "AC6",
+      "title": "Protocol 文件位置",
+      "description": "PlannerProtocol, ExecutorProtocol, VerifierProtocol, MCPClientProtocol, OutputProtocol 位于 AxionCore/Protocols/ 目录",
+      "priority": "P0",
+      "coverage": "FULL",
+      "tests": [
+        {
+          "id": "SPMScaffoldTests:test_plannerProtocol_existsInAxionCore",
+          "title": "test_plannerProtocol_existsInAxionCore",
+          "file": "Tests/AxionCoreTests/SPMScaffoldTests.swift",
+          "line": 33,
+          "level": "integration",
+          "status": "active",
+          "skipped": false
+        },
+        {
+          "id": "SPMScaffoldTests:test_executorProtocol_existsInAxionCore",
+          "title": "test_executorProtocol_existsInAxionCore",
+          "file": "Tests/AxionCoreTests/SPMScaffoldTests.swift",
+          "line": 39,
+          "level": "integration",
+          "status": "active",
+          "skipped": false
+        },
+        {
+          "id": "SPMScaffoldTests:test_verifierProtocol_existsInAxionCore",
+          "title": "test_verifierProtocol_existsInAxionCore",
+          "file": "Tests/AxionCoreTests/SPMScaffoldTests.swift",
+          "line": 44,
+          "level": "integration",
+          "status": "active",
+          "skipped": false
+        },
+        {
+          "id": "SPMScaffoldTests:test_mcpClientProtocol_existsInAxionCore",
+          "title": "test_mcpClientProtocol_existsInAxionCore",
+          "file": "Tests/AxionCoreTests/SPMScaffoldTests.swift",
+          "line": 49,
+          "level": "integration",
+          "status": "active",
+          "skipped": false
+        },
+        {
+          "id": "SPMScaffoldTests:test_outputProtocol_existsInAxionCore",
+          "title": "test_outputProtocol_existsInAxionCore",
+          "file": "Tests/AxionCoreTests/SPMScaffoldTests.swift",
+          "line": 54,
+          "level": "integration",
+          "status": "active",
+          "skipped": false
+        }
+      ],
+      "heuristic_signals": {
+        "endpoint_coverage": "not_applicable",
+        "auth_negative_path": "not_applicable",
+        "error_path": "not_applicable"
+      }
+    }
+  ],
+  "coverage_statistics": {
+    "total_requirements": 6,
+    "fully_covered": 6,
+    "partially_covered": 0,
+    "uncovered": 0,
+    "overall_coverage_percentage": 100,
+    "priority_breakdown": {
+      "P0": { "total": 6, "covered": 6, "percentage": 100 },
+      "P1": { "total": 0, "covered": 0, "percentage": 100 },
+      "P2": { "total": 0, "covered": 0, "percentage": 100 },
+      "P3": { "total": 0, "covered": 0, "percentage": 100 }
+    }
+  },
+  "gap_analysis": {
+    "critical_gaps": [],
+    "high_gaps": [],
+    "medium_gaps": [],
+    "low_gaps": [],
+    "partial_coverage_items": [],
+    "unit_only_items": []
+  },
+  "coverage_heuristics": {
+    "endpoint_gaps": [],
+    "auth_negative_path_gaps": [],
+    "happy_path_only_gaps": [],
+    "ui_journey_gaps": [],
+    "ui_state_gaps": [],
+    "counts": {
+      "endpoints_without_tests": 0,
+      "auth_missing_negative_paths": 0,
+      "happy_path_only_criteria": 0,
+      "ui_journeys_without_e2e": 0,
+      "ui_states_missing_coverage": 0
+    }
+  },
+  "test_inventory": {
+    "summary": {
+      "files": 5,
+      "cases": 34,
+      "skipped_cases": 0,
+      "fixme_cases": 0,
+      "pending_cases": 0,
+      "by_level": {
+        "unit": { "tests": 24, "criteria_covered": 4 },
+        "integration": { "tests": 10, "criteria_covered": 2 },
+        "e2e": { "tests": 0, "criteria_covered": 0 },
+        "api": { "tests": 0, "criteria_covered": 0 },
+        "component": { "tests": 0, "criteria_covered": 0 },
+        "other": { "tests": 0, "criteria_covered": 0 }
+      }
+    },
+    "blockers": []
+  },
+  "blockers": [],
+  "recommendations": [
+    {
+      "priority": "LOW",
+      "action": "Run /bmad:tea:test-review to assess test quality",
+      "requirements": []
+    }
+  ]
+}
