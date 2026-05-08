@@ -59,7 +59,7 @@ cp "$BUILD_DIR/AxionHelper" "$MACOS/$APP_NAME"
 chmod +x "$MACOS/$APP_NAME"
 
 # 4. Generate Info.plist (replace {{VERSION}} placeholder)
-VERSION=$(cat "$PROJECT_ROOT/VERSION" 2>/dev/null | tr -d '[:space:]' || echo "0.1.0")
+VERSION=$(head -1 "$PROJECT_ROOT/VERSION" 2>/dev/null | tr -d '[:space:]' || echo "0.1.0")
 sed "s|{{VERSION}}|$VERSION|g" "$SCRIPT_DIR/Info.plist" > "$CONTENTS/Info.plist"
 
 echo "    Version: $VERSION"

@@ -1,0 +1,396 @@
+{
+  "phase": "PHASE_1_COMPLETE",
+  "generated_at": "2026-05-09T01:20:10Z",
+  "trace_target": {
+    "type": "story",
+    "id": "2-1",
+    "label": "CLI Entry & ArgumentParser Skeleton"
+  },
+  "collection_mode": "contract_static",
+  "allow_gate": true,
+  "coverage_basis": "acceptance_criteria",
+  "summary_confidence": "high",
+  "oracle": {
+    "resolution_mode": "formal_requirements",
+    "confidence": "high",
+    "sources": [
+      "_bmad-output/implementation-artifacts/2-1-cli-entry-argumentparser-skeleton.md",
+      "_bmad-output/test-artifacts/atdd-checklist-2-1-cli-entry-argumentparser-skeleton.md",
+      "_bmad-output/project-context.md"
+    ],
+    "external_pointer_status": "not_used",
+    "synthetic": false
+  },
+
+  "requirements": [
+    {
+      "id": "AC1",
+      "title": "axion --help displays root command help",
+      "description": "Given axion compiled, When run 'axion --help', Then display root command help listing run/setup/doctor subcommands and their descriptions",
+      "priority": "P0",
+      "coverage": "FULL",
+      "tests": [
+        {
+          "id": "AC1-T1",
+          "title": "test_axionHelp_showsRunSubcommand",
+          "file": "Tests/AxionCLITests/Commands/AxionCommandTests.swift",
+          "line": 13,
+          "level": "unit",
+          "status": "active"
+        },
+        {
+          "id": "AC1-T2",
+          "title": "test_axionHelp_showsSetupSubcommand",
+          "file": "Tests/AxionCLITests/Commands/AxionCommandTests.swift",
+          "line": 22,
+          "level": "unit",
+          "status": "active"
+        },
+        {
+          "id": "AC1-T3",
+          "title": "test_axionHelp_showsDoctorSubcommand",
+          "file": "Tests/AxionCLITests/Commands/AxionCommandTests.swift",
+          "line": 31,
+          "level": "unit",
+          "status": "active"
+        }
+      ]
+    },
+    {
+      "id": "AC2",
+      "title": "axion --version displays version number",
+      "description": "Given axion compiled, When run 'axion --version', Then display version number",
+      "priority": "P0",
+      "coverage": "FULL",
+      "tests": [
+        {
+          "id": "AC2-T1",
+          "title": "test_axionVersion_configurationHasVersion",
+          "file": "Tests/AxionCLITests/Commands/AxionCommandTests.swift",
+          "line": 42,
+          "level": "unit",
+          "status": "active"
+        }
+      ]
+    },
+    {
+      "id": "AC3",
+      "title": "Unknown subcommand displays error message",
+      "description": "Given axion compiled, When run 'axion unknown', Then display error message and help info",
+      "priority": "P0",
+      "coverage": "FULL",
+      "tests": [
+        {
+          "id": "AC3-T1",
+          "title": "test_unknownSubcommand_throwsParseError",
+          "file": "Tests/AxionCLITests/Commands/AxionCommandTests.swift",
+          "line": 53,
+          "level": "unit",
+          "status": "active"
+        }
+      ]
+    },
+    {
+      "id": "EXT-1",
+      "title": "RunCommand parses task positional argument",
+      "description": "RunCommand correctly parses the required 'task' positional argument including Unicode/Chinese text",
+      "priority": "P1",
+      "coverage": "FULL",
+      "tests": [
+        {
+          "id": "EXT-1-T1",
+          "title": "test_runCommandParsesTaskArgument",
+          "file": "Tests/AxionCLITests/Commands/AxionCommandTests.swift",
+          "line": 67,
+          "level": "unit",
+          "status": "active"
+        }
+      ]
+    },
+    {
+      "id": "EXT-2",
+      "title": "RunCommand parses --live flag with correct default",
+      "description": "RunCommand correctly parses --live flag and defaults to false (dry-run mode)",
+      "priority": "P1",
+      "coverage": "FULL",
+      "tests": [
+        {
+          "id": "EXT-2-T1",
+          "title": "test_runCommandParsesLiveFlag",
+          "file": "Tests/AxionCLITests/Commands/AxionCommandTests.swift",
+          "line": 73,
+          "level": "unit",
+          "status": "active"
+        },
+        {
+          "id": "EXT-2-T2",
+          "title": "test_runCommandLiveDefaultIsFalse",
+          "file": "Tests/AxionCLITests/Commands/AxionCommandTests.swift",
+          "line": 79,
+          "level": "unit",
+          "status": "active"
+        }
+      ]
+    },
+    {
+      "id": "EXT-3",
+      "title": "RunCommand parses --max-steps option with correct default",
+      "description": "RunCommand correctly parses --max-steps Int option and defaults to nil",
+      "priority": "P1",
+      "coverage": "FULL",
+      "tests": [
+        {
+          "id": "EXT-3-T1",
+          "title": "test_runCommandParsesMaxSteps",
+          "file": "Tests/AxionCLITests/Commands/AxionCommandTests.swift",
+          "line": 85,
+          "level": "unit",
+          "status": "active"
+        },
+        {
+          "id": "EXT-3-T2",
+          "title": "test_runCommandMaxStepsDefaultIsNil",
+          "file": "Tests/AxionCLITests/Commands/AxionCommandTests.swift",
+          "line": 91,
+          "level": "unit",
+          "status": "active"
+        }
+      ]
+    },
+    {
+      "id": "EXT-4",
+      "title": "RunCommand parses --max-batches option with correct default",
+      "description": "RunCommand correctly parses --max-batches Int option and defaults to nil",
+      "priority": "P1",
+      "coverage": "FULL",
+      "tests": [
+        {
+          "id": "EXT-4-T1",
+          "title": "test_runCommandParsesMaxBatches",
+          "file": "Tests/AxionCLITests/Commands/AxionCommandTests.swift",
+          "line": 97,
+          "level": "unit",
+          "status": "active"
+        },
+        {
+          "id": "EXT-4-T2",
+          "title": "test_runCommandMaxBatchesDefaultIsNil",
+          "file": "Tests/AxionCLITests/Commands/AxionCommandTests.swift",
+          "line": 103,
+          "level": "unit",
+          "status": "active"
+        }
+      ]
+    },
+    {
+      "id": "EXT-5",
+      "title": "RunCommand parses --allow-foreground flag",
+      "description": "RunCommand correctly parses --allow-foreground boolean flag",
+      "priority": "P1",
+      "coverage": "FULL",
+      "tests": [
+        {
+          "id": "EXT-5-T1",
+          "title": "test_runCommandParsesAllowForeground",
+          "file": "Tests/AxionCLITests/Commands/AxionCommandTests.swift",
+          "line": 109,
+          "level": "unit",
+          "status": "active"
+        }
+      ]
+    },
+    {
+      "id": "EXT-6",
+      "title": "RunCommand parses --verbose flag",
+      "description": "RunCommand correctly parses --verbose boolean flag",
+      "priority": "P1",
+      "coverage": "FULL",
+      "tests": [
+        {
+          "id": "EXT-6-T1",
+          "title": "test_runCommandParsesVerbose",
+          "file": "Tests/AxionCLITests/Commands/AxionCommandTests.swift",
+          "line": 115,
+          "level": "unit",
+          "status": "active"
+        }
+      ]
+    },
+    {
+      "id": "EXT-7",
+      "title": "RunCommand parses --json flag",
+      "description": "RunCommand correctly parses --json boolean flag",
+      "priority": "P1",
+      "coverage": "FULL",
+      "tests": [
+        {
+          "id": "EXT-7-T1",
+          "title": "test_runCommandParsesJson",
+          "file": "Tests/AxionCLITests/Commands/AxionCommandTests.swift",
+          "line": 121,
+          "level": "unit",
+          "status": "active"
+        }
+      ]
+    },
+    {
+      "id": "EXT-8",
+      "title": "RunCommand requires task argument",
+      "description": "RunCommand throws error when task positional argument is missing",
+      "priority": "P1",
+      "coverage": "FULL",
+      "tests": [
+        {
+          "id": "EXT-8-T1",
+          "title": "test_runCommandRequiresTaskArgument",
+          "file": "Tests/AxionCLITests/Commands/AxionCommandTests.swift",
+          "line": 127,
+          "level": "unit",
+          "status": "active"
+        }
+      ]
+    },
+    {
+      "id": "EXT-9",
+      "title": "RunCommand parses all arguments combined",
+      "description": "RunCommand correctly parses all 7 arguments/flags together in a single invocation",
+      "priority": "P1",
+      "coverage": "FULL",
+      "tests": [
+        {
+          "id": "EXT-9-T1",
+          "title": "test_runCommandParsesAllArgumentsCombined",
+          "file": "Tests/AxionCLITests/Commands/AxionCommandTests.swift",
+          "line": 134,
+          "level": "unit",
+          "status": "active"
+        }
+      ]
+    },
+    {
+      "id": "EXT-10",
+      "title": "SetupCommand skeleton exists and is parseable",
+      "description": "SetupCommand can be parsed as a valid ParsableCommand",
+      "priority": "P1",
+      "coverage": "FULL",
+      "tests": [
+        {
+          "id": "EXT-10-T1",
+          "title": "test_setupCommandExists",
+          "file": "Tests/AxionCLITests/Commands/AxionCommandTests.swift",
+          "line": 156,
+          "level": "unit",
+          "status": "active"
+        }
+      ]
+    },
+    {
+      "id": "EXT-11",
+      "title": "DoctorCommand skeleton exists and is parseable",
+      "description": "DoctorCommand can be parsed as a valid ParsableCommand",
+      "priority": "P1",
+      "coverage": "FULL",
+      "tests": [
+        {
+          "id": "EXT-11-T1",
+          "title": "test_doctorCommandExists",
+          "file": "Tests/AxionCLITests/Commands/AxionCommandTests.swift",
+          "line": 164,
+          "level": "unit",
+          "status": "active"
+        }
+      ]
+    },
+    {
+      "id": "EXT-12",
+      "title": "AxionVersion.current is valid and matches VERSION file",
+      "description": "AxionVersion.current returns a non-empty string equal to the VERSION file content (0.1.0)",
+      "priority": "P1",
+      "coverage": "FULL",
+      "tests": [
+        {
+          "id": "EXT-12-T1",
+          "title": "test_axionVersion_currentIsNotEmpty",
+          "file": "Tests/AxionCLITests/Commands/AxionCommandTests.swift",
+          "line": 172,
+          "level": "unit",
+          "status": "active"
+        },
+        {
+          "id": "EXT-12-T2",
+          "title": "test_axionVersion_matchesVersionFile",
+          "file": "Tests/AxionCLITests/Commands/AxionCommandTests.swift",
+          "line": 179,
+          "level": "unit",
+          "status": "active"
+        }
+      ]
+    }
+  ],
+
+  "coverage_statistics": {
+    "total_requirements": 15,
+    "fully_covered": 15,
+    "partially_covered": 0,
+    "uncovered": 0,
+    "overall_coverage_percentage": 100,
+
+    "priority_breakdown": {
+      "P0": { "total": 3, "covered": 3, "percentage": 100 },
+      "P1": { "total": 12, "covered": 12, "percentage": 100 },
+      "P2": { "total": 0, "covered": 0, "percentage": 100 },
+      "P3": { "total": 0, "covered": 0, "percentage": 100 }
+    }
+  },
+
+  "gap_analysis": {
+    "critical_gaps": [],
+    "high_gaps": [],
+    "medium_gaps": [],
+    "low_gaps": [],
+    "partial_coverage_items": [],
+    "unit_only_items": []
+  },
+
+  "coverage_heuristics": {
+    "endpoint_gaps": [],
+    "auth_negative_path_gaps": [],
+    "happy_path_only_gaps": [],
+    "ui_journey_gaps": [],
+    "ui_state_gaps": [],
+    "counts": {
+      "endpoints_without_tests": 0,
+      "auth_missing_negative_paths": 0,
+      "happy_path_only_criteria": 0,
+      "ui_journeys_without_e2e": 0,
+      "ui_states_missing_coverage": 0
+    }
+  },
+
+  "test_inventory": {
+    "summary": {
+      "files": 1,
+      "cases": 21,
+      "skipped_cases": 0,
+      "fixme_cases": 0,
+      "pending_cases": 0,
+      "by_level": {
+        "e2e": { "tests": 0, "criteria_covered": 0 },
+        "api": { "tests": 0, "criteria_covered": 0 },
+        "component": { "tests": 0, "criteria_covered": 0 },
+        "unit": { "tests": 21, "criteria_covered": 15 },
+        "other": { "tests": 0, "criteria_covered": 0 }
+      }
+    },
+    "tests": [],
+    "blockers": []
+  },
+
+  "recommendations": [
+    {
+      "priority": "LOW",
+      "action": "Run /bmad:tea:test-review to assess test quality",
+      "requirements": []
+    }
+  ]
+}

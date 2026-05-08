@@ -29,7 +29,7 @@ done
 
 # Default version from VERSION file
 if [ -z "$VERSION" ]; then
-    VERSION=$(cat "$PROJECT_ROOT/VERSION" 2>/dev/null | tr -d '[:space:]' || echo "0.1.0")
+    VERSION=$(head -1 "$PROJECT_ROOT/VERSION" 2>/dev/null | tr -d '[:space:]' || echo "0.1.0")
 fi
 
 ARCH="$(uname -m)"
@@ -48,7 +48,7 @@ echo "==> Building Helper App Bundle..."
 
 # 3. Assemble distribution directory
 echo "==> Assembling distribution package..."
-rm -rf "$DIST_DIR"
+[ -n "$DIST_DIR" ] && [ "$DIST_DIR" != "/" ] && rm -rf "$DIST_DIR"
 mkdir -p "$DIST_DIR/bin"
 mkdir -p "$DIST_DIR/libexec/axion"
 
