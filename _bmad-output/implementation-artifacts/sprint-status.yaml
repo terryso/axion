@@ -1,5 +1,5 @@
 # generated: 2026-05-08
-# last_updated: 2026-05-08T21:30:00
+# last_updated: 2026-05-08T23:30:00
 # project: axion
 # project_key: NOKEY
 # tracking_system: file-system
@@ -35,7 +35,7 @@
 # - Dev moves story to 'review', then runs code-review (fresh context, different LLM recommended)
 
 generated: 2026-05-08
-last_updated: 2026-05-08T21:30:00
+last_updated: 2026-05-08T23:30:00
 project_key: NOKEY
 tracking_system: file-system
 story_location: _bmad-output/implementation-artifacts
@@ -48,7 +48,7 @@ development_status:
   1-3-app-launch-window-management: done
   1-4-mouse-keyboard-operations: done
   1-5-screenshot-ax-tree-url-open: done
-  1-6-helper-integration-app-packaging: backlog
+  1-6-helper-integration-app-packaging: done
   epic-1-retrospective: optional
 
   # Epic 2: CLI 安装配置与首次运行体验

@@ -167,6 +167,66 @@ final class HelperProcessSmokeTests: XCTestCase {
         )
     }
 
+    // [P1] Helper exits cleanly after MCP initialize → stdin EOF sequence (AC5: Helper 随 CLI 退出)
+    func test_helperProcess_initializeThenEOF_exitsCleanly() async throws {
+        // Given: AxionHelper 已编译
+        guard FileManager.default.fileExists(atPath: helperExecutablePath) else {
+            XCTFail("AxionHelper not found at \(helperExecutablePath). Run `swift build` first.")
+            return
+        }
+
+        let process = makeHelperProcess()
+        let stdinPipe = process.standardInput as! Pipe
+        let stdoutPipe = process.standardOutput as! Pipe
+
+        // When: 启动进程
+        try process.run()
+
+        try await Task.sleep(nanoseconds: 200_000_000) // 200ms settle
+
+        // Send MCP initialize
+        let initializeRequest = """
+        {"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2024-11-05","capabilities":{},"clientInfo":{"name":"TestClient","version":"1.0.0"}}}
+
+        """
+        guard let requestData = initializeRequest.data(using: .utf8) else {
+            XCTFail("Failed to encode initialize request")
+            return
+        }
+        stdinPipe.fileHandleForWriting.write(requestData)
+
+        // Verify initialize response
+        let readHandle = stdoutPipe.fileHandleForReading
+        var responseData = Data()
+        let initDeadline = Date().addingTimeInterval(3.0)
+        while responseData.isEmpty && Date() < initDeadline {
+            let available = readHandle.availableData
+            if !available.isEmpty { responseData.append(available) }
+            else { try await Task.sleep(nanoseconds: 50_000_000) }
+        }
+
+        XCTAssertGreaterThan(responseData.count, 0, "Should receive initialize response")
+
+        // Verify the response is valid JSON-RPC with result
+        let responseObj = try JSONSerialization.jsonObject(with: responseData)
+        let responseDict = try XCTUnwrap(responseObj as? [String: Any])
+        XCTAssertNotNil(responseDict["result"], "Initialize should return result")
+        XCTAssertEqual(responseDict["id"] as? Int, 1, "Response ID should match request")
+
+        // When: 关闭 stdin（模拟 CLI 退出）
+        stdinPipe.fileHandleForWriting.closeFile()
+
+        // Then: Helper 进程退出，无残留
+        let exitDeadline = Date().addingTimeInterval(3.0)
+        while process.isRunning && Date() < exitDeadline {
+            try await Task.sleep(nanoseconds: 100_000_000)
+        }
+
+        XCTAssertFalse(process.isRunning, "Helper should exit after stdin EOF (no residual process)")
+        XCTAssertEqual(process.terminationStatus, 0, "Helper should exit cleanly with code 0")
+        XCTAssertEqual(process.terminationReason, .exit, "Helper should terminate normally, not by signal")
+    }
+
     // [P1] AxionHelper 启动响应时间满足 NFR2 (< 500ms)
     func test_helperProcess_startupTime_meetsNFR2() async throws {
         // Given: AxionHelper 已编译

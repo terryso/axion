@@ -1,6 +1,6 @@
 {
   "schema_version": "0.1.0",
-  "snapshot_at": "2026-05-08T21:18:36Z",
+  "snapshot_at": "2026-05-09T00:03:06.169143Z",
   "repo": "axion",
   "collection_mode": "contract_static",
   "collection_status": "COLLECTED",
@@ -9,79 +9,112 @@
   "source_sha": "",
   "target": {
     "type": "stories",
-    "id": "1.1-1.4",
-    "label": "Stories 1.1 (SPM Scaffolding), 1.2 (MCP Server), 1.3 (App/Window), 1.4 (Mouse/Keyboard)"
+    "id": "1-6",
+    "label": "Epic 1 Stories 1.1-1.6"
   },
-  "decision_mode": "autonomous",
+  "decision_mode": "yolo",
   "evaluator": "Nick",
   "confidence": "high",
   "oracle": {
     "resolution_mode": "formal_requirements",
     "confidence": "high",
     "sources": [
-      "_bmad-output/implementation-artifacts/1-1-spm-scaffolding-axioncore-models.md",
-      "_bmad-output/implementation-artifacts/1-2-helper-mcp-server-foundation.md",
-      "_bmad-output/implementation-artifacts/1-3-app-launch-window-management.md",
-      "_bmad-output/implementation-artifacts/1-4-mouse-keyboard-operations.md",
-      "_bmad-output/test-artifacts/atdd-checklist-1-1-spm-scaffolding-axioncore-models.md",
-      "_bmad-output/test-artifacts/atdd-checklist-1-2-helper-mcp-server-foundation.md",
-      "_bmad-output/test-artifacts/atdd-checklist-1-3-app-launch-window-management.md",
-      "_bmad-output/test-artifacts/atdd-checklist-1-4-mouse-keyboard-operations.md"
+      "_bmad-output/planning-artifacts/epics.md",
+      "_bmad-output/planning-artifacts/prd.md"
     ],
     "external_pointer_status": "not_used",
     "synthetic": false
   },
   "coverage": {
     "inventory": {
-      "covered": 23,
-      "total": 23,
-      "pct": 100
+      "covered": 41,
+      "total": 43,
+      "pct": 95
     },
     "priority_breakdown": {
-      "P0": {"total": 23, "covered": 23, "pct": 100},
-      "P1": {"total": 0, "covered": 0, "pct": 100},
-      "P2": {"total": 0, "covered": 0, "pct": 100},
-      "P3": {"total": 0, "covered": 0, "pct": 100}
+      "P0": {
+        "total": 25,
+        "covered": 23,
+        "pct": 92
+      },
+      "P1": {
+        "total": 15,
+        "covered": 15,
+        "pct": 100
+      },
+      "P2": {
+        "total": 3,
+        "covered": 3,
+        "pct": 100
+      },
+      "P3": {
+        "total": 0,
+        "covered": 0,
+        "pct": 100
+      }
     },
     "by_level": {
-      "unit": {"tests": 129, "criteria_covered": 23},
-      "integration": {"tests": 9, "criteria_covered": 4},
-      "e2e": {"tests": 0, "criteria_covered": 0},
-      "api": {"tests": 0, "criteria_covered": 0},
-      "component": {"tests": 0, "criteria_covered": 0}
+      "e2e": {
+        "tests": 0,
+        "criteria_covered": 0
+      },
+      "api": {
+        "tests": 0,
+        "criteria_covered": 0
+      },
+      "component": {
+        "tests": 0,
+        "criteria_covered": 0
+      },
+      "unit": {
+        "tests": 128,
+        "criteria_covered": 41
+      },
+      "integration": {
+        "tests": 3,
+        "criteria_covered": 3
+      },
+      "other": {
+        "tests": 0,
+        "criteria_covered": 0
+      }
     }
   },
   "tests": {
-    "files": 18,
-    "cases": 138,
+    "files": 16,
+    "cases": 131,
     "skipped_cases": 0,
     "fixme_cases": 0,
     "pending_cases": 0
   },
   "risk_summary": {
-    "critical_open": 0,
+    "critical_open": 1,
     "high_open": 0,
     "medium_open": 0,
     "low_open": 0
   },
   "heuristics": {
     "endpoint_gaps": 0,
-    "auth_negative_path_status": "not_applicable",
-    "error_path_status": "complete",
+    "auth_negative_path_status": "present",
+    "error_path_status": "present",
     "ui_journey_status": "not_applicable",
     "ui_state_status": "not_applicable"
   },
   "blockers": [],
   "recommendations": [
     {
-      "priority": "LOW",
-      "action": "Run /bmad:tea:test-review to assess test quality against the Definition of Done checklist",
-      "requirements": ["all"]
+      "priority": "URGENT",
+      "action": "Add NFR3 performance test for S1.6-AC4 (single AX operation < 200ms)",
+      "requirements": [
+        "S1.6-AC4"
+      ]
     },
     {
-      "priority": "INFO",
-      "action": "Story 1.4 two-layer testing pattern (service + tool) is a strong model for future stories",
-      "requirements": ["1.4"]
+      "priority": "MEDIUM",
+      "action": "Add CLI process exit test to fully cover S1.6-AC6 (Helper exits when CLI exits)",
+      "requirements": [
+        "S1.6-AC6"
+      ]
     }
   ],
   "links": {
@@ -90,17 +123,17 @@
     "artifact_url": "",
     "journey_evidence_url": ""
   },
-  "gate_status": "PASS",
+  "gate_status": "FAIL",
   "gate_criteria": {
     "p0_coverage_required": "100%",
-    "p0_coverage_actual": "100%",
-    "p0_status": "MET",
+    "p0_coverage_actual": "92%",
+    "p0_status": "NOT_MET",
     "p1_coverage_target": "90%",
     "p1_coverage_minimum": "80%",
     "p1_coverage_actual": "100%",
     "p1_status": "MET",
     "overall_coverage_minimum": "80%",
-    "overall_coverage_actual": "100%",
+    "overall_coverage_actual": "95%",
     "overall_status": "MET"
   }
 }

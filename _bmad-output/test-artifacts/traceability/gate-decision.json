@@ -1,29 +1,20 @@
 {
   "schema_version": "0.1.0",
-  "evaluated_at": "2026-05-08T21:18:36Z",
+  "evaluated_at": "2026-05-09T00:03:06.169143Z",
   "repo": "axion",
   "target": {
     "type": "stories",
-    "id": "1.1-1.4",
-    "label": "Stories 1.1 (SPM Scaffolding), 1.2 (MCP Server), 1.3 (App/Window), 1.4 (Mouse/Keyboard)"
+    "id": "1-6",
+    "label": "Epic 1 Stories 1.1-1.6"
   },
   "collection_status": "COLLECTED",
   "gate_basis": "priority_thresholds",
-  "gate_status": "PASS",
-  "rationale": "All 23 acceptance criteria across Stories 1.1-1.4 have 100% coverage with 138 passing tests (0 failures, 0 skipped). Every tool operation has both success-path and error-path tests. The two-layer testing approach (service-layer pure logic + tool-layer MCP wiring) provides defense in depth. No gaps detected at any priority level.",
-  "p0_status": "MET",
+  "gate_status": "FAIL",
+  "rationale": "P0 coverage is 92% (required: 100%). 1 critical requirements uncovered.",
+  "p0_status": "NOT_MET",
   "p1_status": "MET",
   "overall_status": "MET",
-  "critical_open": 0,
-  "evidence": {
-    "total_tests": 138,
-    "passing_tests": 138,
-    "failing_tests": 0,
-    "skipped_tests": 0,
-    "pass_rate_pct": 100,
-    "execution_time_seconds": 2.2,
-    "test_results_source": "local-run (swift test)"
-  },
+  "critical_open": 1,
   "links": {
     "trace_report_path": "_bmad-output/test-artifacts/traceability-matrix.md",
     "trace_report_url": "",
