@@ -5,7 +5,7 @@ import PackageDescription
 let package = Package(
     name: "OpenAgentSDK",
     platforms: [
-        .macOS(.v13),
+        .macOS(.v14),
     ],
     products: [
         .library(
@@ -15,8 +15,8 @@ let package = Package(
     ],
     dependencies: [
         .package(
-            url: "https://github.com/DePasqualeOrg/mcp-swift-sdk.git",
-            from: "0.1.0"
+            url: "https://github.com/terryso/swift-mcp.git",
+            from: "0.1.5"
         ),
         .package(
             url: "https://github.com/swiftlang/swift-docc-plugin",
@@ -27,7 +27,7 @@ let package = Package(
         .target(
             name: "OpenAgentSDK",
             dependencies: [
-                .product(name: "MCP", package: "mcp-swift-sdk"),
+                .product(name: "MCP", package: "swift-mcp"),
             ],
             path: "Sources/OpenAgentSDK"
         ),
@@ -39,7 +39,7 @@ let package = Package(
         .executableTarget(
             name: "E2ETest",
             dependencies: ["OpenAgentSDK",
-                .product(name: "MCP", package: "mcp-swift-sdk"),
+                .product(name: "MCP", package: "swift-mcp"),
             ],
             path: "Sources/E2ETest"
         ),
@@ -61,7 +61,7 @@ let package = Package(
         .executableTarget(
             name: "MCPIntegration",
             dependencies: ["OpenAgentSDK",
-                .product(name: "MCP", package: "mcp-swift-sdk"),
+                .product(name: "MCP", package: "swift-mcp"),
             ],
             path: "Examples/MCPIntegration"
         ),
@@ -98,7 +98,7 @@ let package = Package(
         .executableTarget(
             name: "AdvancedMCPExample",
             dependencies: ["OpenAgentSDK",
-                .product(name: "MCP", package: "mcp-swift-sdk"),
+                .product(name: "MCP", package: "swift-mcp"),
             ],
             path: "Examples/AdvancedMCPExample"
         ),
