@@ -12,6 +12,53 @@ private struct ToolErrorPayload: Codable {
     let suggestion: String
 }
 
+// MARK: - Tool Result Types (Story 1.4)
+
+private struct CoordinateActionResult: Codable {
+    let success: Bool
+    let action: String
+    let x: Int
+    let y: Int
+}
+
+private struct DragActionResult: Codable {
+    let success: Bool
+    let action: String
+    let fromX: Int
+    let fromY: Int
+    let toX: Int
+    let toY: Int
+    enum CodingKeys: String, CodingKey {
+        case success, action
+        case fromX = "from_x", fromY = "from_y", toX = "to_x", toY = "to_y"
+    }
+}
+
+private struct TextActionResult: Codable {
+    let success: Bool
+    let action: String
+    let text: String
+}
+
+private struct KeyActionResult: Codable {
+    let success: Bool
+    let action: String
+    let key: String
+}
+
+private struct HotkeyActionResult: Codable {
+    let success: Bool
+    let action: String
+    let keys: String
+}
+
+private struct ScrollActionResult: Codable {
+    let success: Bool
+    let action: String
+    let direction: String
+    let amount: Int
+}
+
 /// Centralized registration of all AxionHelper MCP tools.
 ///
 /// Story 1.3 tools (launch_app, list_apps, list_windows, get_window_state)
@@ -151,7 +198,24 @@ struct ClickTool {
     var y: Int
 
     func perform() async throws -> String {
-        "Not yet implemented: click"
+        do {
+            try ServiceContainer.shared.inputSimulation.click(x: x, y: y)
+            let result = CoordinateActionResult(success: true, action: "click", x: x, y: y)
+            let encoder = JSONEncoder()
+            encoder.outputFormatting = [.sortedKeys]
+            let data = try encoder.encode(result)
+            return String(data: data, encoding: .utf8) ?? "{}"
+        } catch let error as InputSimulationError {
+            let payload = ToolErrorPayload(
+                error: error.errorCode,
+                message: error.localizedDescription,
+                suggestion: error.suggestion
+            )
+            let encoder = JSONEncoder()
+            encoder.outputFormatting = [.sortedKeys]
+            let data = try encoder.encode(payload)
+            return String(data: data, encoding: .utf8) ?? "{}"
+        }
     }
 }
 
@@ -167,7 +231,24 @@ struct DoubleClickTool {
     var y: Int
 
     func perform() async throws -> String {
-        "Not yet implemented: double_click"
+        do {
+            try ServiceContainer.shared.inputSimulation.doubleClick(x: x, y: y)
+            let result = CoordinateActionResult(success: true, action: "double_click", x: x, y: y)
+            let encoder = JSONEncoder()
+            encoder.outputFormatting = [.sortedKeys]
+            let data = try encoder.encode(result)
+            return String(data: data, encoding: .utf8) ?? "{}"
+        } catch let error as InputSimulationError {
+            let payload = ToolErrorPayload(
+                error: error.errorCode,
+                message: error.localizedDescription,
+                suggestion: error.suggestion
+            )
+            let encoder = JSONEncoder()
+            encoder.outputFormatting = [.sortedKeys]
+            let data = try encoder.encode(payload)
+            return String(data: data, encoding: .utf8) ?? "{}"
+        }
     }
 }
 
@@ -183,7 +264,24 @@ struct RightClickTool {
     var y: Int
 
     func perform() async throws -> String {
-        "Not yet implemented: right_click"
+        do {
+            try ServiceContainer.shared.inputSimulation.rightClick(x: x, y: y)
+            let result = CoordinateActionResult(success: true, action: "right_click", x: x, y: y)
+            let encoder = JSONEncoder()
+            encoder.outputFormatting = [.sortedKeys]
+            let data = try encoder.encode(result)
+            return String(data: data, encoding: .utf8) ?? "{}"
+        } catch let error as InputSimulationError {
+            let payload = ToolErrorPayload(
+                error: error.errorCode,
+                message: error.localizedDescription,
+                suggestion: error.suggestion
+            )
+            let encoder = JSONEncoder()
+            encoder.outputFormatting = [.sortedKeys]
+            let data = try encoder.encode(payload)
+            return String(data: data, encoding: .utf8) ?? "{}"
+        }
     }
 }
 
@@ -198,7 +296,24 @@ struct TypeTextTool {
     var text: String
 
     func perform() async throws -> String {
-        "Not yet implemented: type_text"
+        do {
+            try ServiceContainer.shared.inputSimulation.typeText(text)
+            let result = TextActionResult(success: true, action: "type_text", text: text)
+            let encoder = JSONEncoder()
+            encoder.outputFormatting = [.sortedKeys]
+            let data = try encoder.encode(result)
+            return String(data: data, encoding: .utf8) ?? "{}"
+        } catch let error as InputSimulationError {
+            let payload = ToolErrorPayload(
+                error: error.errorCode,
+                message: error.localizedDescription,
+                suggestion: error.suggestion
+            )
+            let encoder = JSONEncoder()
+            encoder.outputFormatting = [.sortedKeys]
+            let data = try encoder.encode(payload)
+            return String(data: data, encoding: .utf8) ?? "{}"
+        }
     }
 }
 
@@ -211,7 +326,24 @@ struct PressKeyTool {
     var key: String
 
     func perform() async throws -> String {
-        "Not yet implemented: press_key"
+        do {
+            try ServiceContainer.shared.inputSimulation.pressKey(key)
+            let result = KeyActionResult(success: true, action: "press_key", key: key)
+            let encoder = JSONEncoder()
+            encoder.outputFormatting = [.sortedKeys]
+            let data = try encoder.encode(result)
+            return String(data: data, encoding: .utf8) ?? "{}"
+        } catch let error as InputSimulationError {
+            let payload = ToolErrorPayload(
+                error: error.errorCode,
+                message: error.localizedDescription,
+                suggestion: error.suggestion
+            )
+            let encoder = JSONEncoder()
+            encoder.outputFormatting = [.sortedKeys]
+            let data = try encoder.encode(payload)
+            return String(data: data, encoding: .utf8) ?? "{}"
+        }
     }
 }
 
@@ -224,7 +356,24 @@ struct HotkeyTool {
     var keys: String
 
     func perform() async throws -> String {
-        "Not yet implemented: hotkey"
+        do {
+            try ServiceContainer.shared.inputSimulation.hotkey(keys)
+            let result = HotkeyActionResult(success: true, action: "hotkey", keys: keys)
+            let encoder = JSONEncoder()
+            encoder.outputFormatting = [.sortedKeys]
+            let data = try encoder.encode(result)
+            return String(data: data, encoding: .utf8) ?? "{}"
+        } catch let error as InputSimulationError {
+            let payload = ToolErrorPayload(
+                error: error.errorCode,
+                message: error.localizedDescription,
+                suggestion: error.suggestion
+            )
+            let encoder = JSONEncoder()
+            encoder.outputFormatting = [.sortedKeys]
+            let data = try encoder.encode(payload)
+            return String(data: data, encoding: .utf8) ?? "{}"
+        }
     }
 }
 
@@ -242,7 +391,24 @@ struct ScrollTool {
     var amount: Int
 
     func perform() async throws -> String {
-        "Not yet implemented: scroll"
+        do {
+            try ServiceContainer.shared.inputSimulation.scroll(direction: direction, amount: amount)
+            let result = ScrollActionResult(success: true, action: "scroll", direction: direction, amount: amount)
+            let encoder = JSONEncoder()
+            encoder.outputFormatting = [.sortedKeys]
+            let data = try encoder.encode(result)
+            return String(data: data, encoding: .utf8) ?? "{}"
+        } catch let error as InputSimulationError {
+            let payload = ToolErrorPayload(
+                error: error.errorCode,
+                message: error.localizedDescription,
+                suggestion: error.suggestion
+            )
+            let encoder = JSONEncoder()
+            encoder.outputFormatting = [.sortedKeys]
+            let data = try encoder.encode(payload)
+            return String(data: data, encoding: .utf8) ?? "{}"
+        }
     }
 }
 
@@ -264,7 +430,24 @@ struct DragTool {
     var toY: Int
 
     func perform() async throws -> String {
-        "Not yet implemented: drag"
+        do {
+            try ServiceContainer.shared.inputSimulation.drag(fromX: fromX, fromY: fromY, toX: toX, toY: toY)
+            let result = DragActionResult(success: true, action: "drag", fromX: fromX, fromY: fromY, toX: toX, toY: toY)
+            let encoder = JSONEncoder()
+            encoder.outputFormatting = [.sortedKeys]
+            let data = try encoder.encode(result)
+            return String(data: data, encoding: .utf8) ?? "{}"
+        } catch let error as InputSimulationError {
+            let payload = ToolErrorPayload(
+                error: error.errorCode,
+                message: error.localizedDescription,
+                suggestion: error.suggestion
+            )
+            let encoder = JSONEncoder()
+            encoder.outputFormatting = [.sortedKeys]
+            let data = try encoder.encode(payload)
+            return String(data: data, encoding: .utf8) ?? "{}"
+        }
     }
 }
 

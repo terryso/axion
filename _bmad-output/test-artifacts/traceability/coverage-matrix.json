@@ -1,10 +1,10 @@
 {
   "phase": "PHASE_1_COMPLETE",
-  "generated_at": "2026-05-08T19:00:00Z",
+  "generated_at": "2026-05-08T21:18:36Z",
   "trace_target": {
     "type": "stories",
-    "id": "1.1-1.3",
-    "label": "Stories 1.1 through 1.3: SPM Scaffolding, Helper MCP Server, App Launch & Window Management"
+    "id": "1.1-1.4",
+    "label": "Stories 1.1-1.4: SPM Scaffolding, Helper MCP Server, App Launch & Window Management, Mouse & Keyboard Operations"
   },
   "collection_mode": "contract_static",
   "allow_gate": true,
@@ -17,9 +17,11 @@
       "_bmad-output/implementation-artifacts/1-1-spm-scaffolding-axioncore-models.md",
       "_bmad-output/implementation-artifacts/1-2-helper-mcp-server-foundation.md",
       "_bmad-output/implementation-artifacts/1-3-app-launch-window-management.md",
+      "_bmad-output/implementation-artifacts/1-4-mouse-keyboard-operations.md",
       "_bmad-output/test-artifacts/atdd-checklist-1-1-spm-scaffolding-axioncore-models.md",
       "_bmad-output/test-artifacts/atdd-checklist-1-2-helper-mcp-server-foundation.md",
-      "_bmad-output/test-artifacts/atdd-checklist-1-3-app-launch-window-management.md"
+      "_bmad-output/test-artifacts/atdd-checklist-1-3-app-launch-window-management.md",
+      "_bmad-output/test-artifacts/atdd-checklist-1-4-mouse-keyboard-operations.md"
     ],
     "external_pointer_status": "not_used",
     "synthetic": false
@@ -54,9 +56,11 @@
       "description": "RunState 枚举包含所有 9 种状态，支持 Codable",
       "priority": "P0", "coverage": "FULL",
       "tests": [
-        {"title": "test_runState_allNineCases", "file": "Tests/AxionCoreTests/RunStateTests.swift", "level": "unit", "status": "active"},
+        {"title": "test_runState_containsAllNineCases", "file": "Tests/AxionCoreTests/RunStateTests.swift", "level": "unit", "status": "active"},
+        {"title": "test_runState_allExpectedCasesExist", "file": "Tests/AxionCoreTests/RunStateTests.swift", "level": "unit", "status": "active"},
+        {"title": "test_runState_rawValues_matchCamelCase", "file": "Tests/AxionCoreTests/RunStateTests.swift", "level": "unit", "status": "active"},
         {"title": "test_runState_codable_roundTrip", "file": "Tests/AxionCoreTests/RunStateTests.swift", "level": "unit", "status": "active"},
-        {"title": "test_runState_rawValue", "file": "Tests/AxionCoreTests/RunStateTests.swift", "level": "unit", "status": "active"}
+        {"title": "test_runState_jsonEncoding_producesStringValue", "file": "Tests/AxionCoreTests/RunStateTests.swift", "level": "unit", "status": "active"}
       ]
     },
     {
@@ -152,9 +156,8 @@
       "description": "launch_app 启动 Calculator 成功，返回包含 pid 的结果",
       "priority": "P0", "coverage": "FULL",
       "tests": [
-        {"title": "test_launchApp_calculator_returnsSuccessWithPid", "file": "Tests/AxionHelperTests/AppManagement/LaunchAppToolTests.swift", "level": "unit", "status": "active"},
-        {"title": "test_launchApp_appIsRunningAfterLaunch", "file": "Tests/AxionHelperTests/AppManagement/LaunchAppToolTests.swift", "level": "unit", "status": "active"},
-        {"title": "test_launchApp_alreadyRunning_returnsExistingPid", "file": "Tests/AxionHelperTests/AppManagement/LaunchAppToolTests.swift", "level": "unit", "status": "active"}
+        {"title": "test_launchApp_success_returnsJsonWithPid", "file": "Tests/AxionHelperTests/Tools/LaunchAppToolTests.swift", "level": "unit", "status": "active"},
+        {"title": "test_launchApp_alreadyRunning_returnsExistingPid", "file": "Tests/AxionHelperTests/Tools/LaunchAppToolTests.swift", "level": "unit", "status": "active"}
       ]
     },
     {
@@ -162,9 +165,8 @@
       "description": "list_apps 返回运行中的应用列表，每项含 pid 和 app_name",
       "priority": "P0", "coverage": "FULL",
       "tests": [
-        {"title": "test_listApps_returnsRunningAppsList", "file": "Tests/AxionHelperTests/AppManagement/LaunchAppToolTests.swift", "level": "unit", "status": "active"},
-        {"title": "test_listApps_eachAppHasPidAndName", "file": "Tests/AxionHelperTests/AppManagement/LaunchAppToolTests.swift", "level": "unit", "status": "active"},
-        {"title": "test_listApps_containsFinder", "file": "Tests/AxionHelperTests/AppManagement/LaunchAppToolTests.swift", "level": "unit", "status": "active"}
+        {"title": "test_listApps_returnsJsonArray", "file": "Tests/AxionHelperTests/Tools/LaunchAppToolTests.swift", "level": "unit", "status": "active"},
+        {"title": "test_listApps_eachAppHasPidAndName", "file": "Tests/AxionHelperTests/Tools/LaunchAppToolTests.swift", "level": "unit", "status": "active"}
       ]
     },
     {
@@ -172,9 +174,9 @@
       "description": "list_windows 返回窗口列表，每项含 window_id/title/bounds",
       "priority": "P0", "coverage": "FULL",
       "tests": [
-        {"title": "test_listWindows_returnsWindowList", "file": "Tests/AxionHelperTests/WindowManagement/WindowManagementToolTests.swift", "level": "unit", "status": "active"},
-        {"title": "test_listWindows_eachWindowHasRequiredFields", "file": "Tests/AxionHelperTests/WindowManagement/WindowManagementToolTests.swift", "level": "unit", "status": "active"},
-        {"title": "test_listWindows_filterByPid_returnsFilteredResults", "file": "Tests/AxionHelperTests/WindowManagement/WindowManagementToolTests.swift", "level": "unit", "status": "active"}
+        {"title": "test_listWindows_returnsJsonArray", "file": "Tests/AxionHelperTests/Tools/WindowManagementToolTests.swift", "level": "unit", "status": "active"},
+        {"title": "test_listWindows_filterByPid", "file": "Tests/AxionHelperTests/Tools/WindowManagementToolTests.swift", "level": "unit", "status": "active"},
+        {"title": "test_listWindows_eachWindowHasRequiredFields", "file": "Tests/AxionHelperTests/Tools/WindowManagementToolTests.swift", "level": "unit", "status": "active"}
       ]
     },
     {
@@ -182,10 +184,9 @@
       "description": "get_window_state 返回完整窗口状态（bounds/is_minimized/is_focused/ax_tree）",
       "priority": "P0", "coverage": "FULL",
       "tests": [
-        {"title": "test_getWindowState_returnsCompleteState", "file": "Tests/AxionHelperTests/WindowManagement/WindowManagementToolTests.swift", "level": "unit", "status": "active"},
-        {"title": "test_getWindowState_containsRequiredFields", "file": "Tests/AxionHelperTests/WindowManagement/WindowManagementToolTests.swift", "level": "unit", "status": "active"},
-        {"title": "test_getWindowState_boundsContainsPositionAndSize", "file": "Tests/AxionHelperTests/WindowManagement/WindowManagementToolTests.swift", "level": "unit", "status": "active"},
-        {"title": "test_getWindowState_invalidWindowId_returnsError", "file": "Tests/AxionHelperTests/WindowManagement/WindowManagementToolTests.swift", "level": "unit", "status": "active"}
+        {"title": "test_getWindowState_returnsCompleteState", "file": "Tests/AxionHelperTests/Tools/WindowManagementToolTests.swift", "level": "unit", "status": "active"},
+        {"title": "test_getWindowState_invalidWindowId_returnsErrorJson", "file": "Tests/AxionHelperTests/Tools/WindowManagementToolTests.swift", "level": "unit", "status": "active"},
+        {"title": "test_getWindowState_boundsContainsPositionAndSize", "file": "Tests/AxionHelperTests/Tools/WindowManagementToolTests.swift", "level": "unit", "status": "active"}
       ]
     },
     {
@@ -193,19 +194,110 @@
       "description": "launch_app 应用未安装返回 app_not_found 错误 + suggestion",
       "priority": "P0", "coverage": "FULL",
       "tests": [
-        {"title": "test_launchApp_appNotFound_returnsError", "file": "Tests/AxionHelperTests/AppManagement/LaunchAppToolTests.swift", "level": "unit", "status": "active"},
-        {"title": "test_launchApp_missingAppName_returnsError", "file": "Tests/AxionHelperTests/AppManagement/LaunchAppToolTests.swift", "level": "unit", "status": "active"}
+        {"title": "test_launchApp_appNotFound_returnsErrorJson", "file": "Tests/AxionHelperTests/Tools/LaunchAppToolTests.swift", "level": "unit", "status": "active"}
+      ]
+    },
+    {
+      "id": "1.4-AC1", "story": "1.4",
+      "description": "click 工具接收坐标执行单击操作，返回成功 JSON",
+      "priority": "P0", "coverage": "FULL",
+      "tests": [
+        {"title": "test_click_validCoordinates_returnsSuccessJson", "file": "Tests/AxionHelperTests/Tools/MouseKeyboardToolTests.swift", "level": "unit", "status": "active"},
+        {"title": "test_click_outOfBounds_returnsErrorJson", "file": "Tests/AxionHelperTests/Tools/MouseKeyboardToolTests.swift", "level": "unit", "status": "active"},
+        {"title": "test_click_doesNotReturnStubText", "file": "Tests/AxionHelperTests/Tools/MouseKeyboardToolTests.swift", "level": "unit", "status": "active"}
+      ]
+    },
+    {
+      "id": "1.4-AC2", "story": "1.4",
+      "description": "double_click 工具执行双击操作",
+      "priority": "P0", "coverage": "FULL",
+      "tests": [
+        {"title": "test_doubleClick_validCoordinates_returnsSuccessJson", "file": "Tests/AxionHelperTests/Tools/MouseKeyboardToolTests.swift", "level": "unit", "status": "active"}
+      ]
+    },
+    {
+      "id": "1.4-AC3", "story": "1.4",
+      "description": "right_click 工具执行右键点击",
+      "priority": "P0", "coverage": "FULL",
+      "tests": [
+        {"title": "test_rightClick_validCoordinates_returnsSuccessJson", "file": "Tests/AxionHelperTests/Tools/MouseKeyboardToolTests.swift", "level": "unit", "status": "active"}
+      ]
+    },
+    {
+      "id": "1.4-AC4", "story": "1.4",
+      "description": "type_text 工具输入文本",
+      "priority": "P0", "coverage": "FULL",
+      "tests": [
+        {"title": "test_typeText_validText_returnsSuccessJson", "file": "Tests/AxionHelperTests/Tools/MouseKeyboardToolTests.swift", "level": "unit", "status": "active"},
+        {"title": "test_typeText_unicodeCharacters_returnsSuccessJson", "file": "Tests/AxionHelperTests/Tools/MouseKeyboardToolTests.swift", "level": "unit", "status": "active"},
+        {"title": "test_typeText_doesNotReturnStubText", "file": "Tests/AxionHelperTests/Tools/MouseKeyboardToolTests.swift", "level": "unit", "status": "active"}
+      ]
+    },
+    {
+      "id": "1.4-AC5", "story": "1.4",
+      "description": "press_key 工具按键名执行按键操作",
+      "priority": "P0", "coverage": "FULL",
+      "tests": [
+        {"title": "test_keyNameMapping_return_mapsToCorrectKeyCode", "file": "Tests/AxionHelperTests/Services/InputSimulationServiceTests.swift", "level": "unit", "status": "active"},
+        {"title": "test_keyNameMapping_enter_mapsToReturnKeyCode", "file": "Tests/AxionHelperTests/Services/InputSimulationServiceTests.swift", "level": "unit", "status": "active"},
+        {"title": "test_keyNameMapping_tab_mapsToCorrectKeyCode", "file": "Tests/AxionHelperTests/Services/InputSimulationServiceTests.swift", "level": "unit", "status": "active"},
+        {"title": "test_keyNameMapping_escape_mapsToCorrectKeyCode", "file": "Tests/AxionHelperTests/Services/InputSimulationServiceTests.swift", "level": "unit", "status": "active"},
+        {"title": "test_keyNameMapping_space_mapsToCorrectKeyCode", "file": "Tests/AxionHelperTests/Services/InputSimulationServiceTests.swift", "level": "unit", "status": "active"},
+        {"title": "test_keyNameMapping_delete_mapsToCorrectKeyCode", "file": "Tests/AxionHelperTests/Services/InputSimulationServiceTests.swift", "level": "unit", "status": "active"},
+        {"title": "test_keyNameMapping_functionKeys_mapCorrectly", "file": "Tests/AxionHelperTests/Services/InputSimulationServiceTests.swift", "level": "unit", "status": "active"},
+        {"title": "test_keyNameMapping_arrowKeys_mapCorrectly", "file": "Tests/AxionHelperTests/Services/InputSimulationServiceTests.swift", "level": "unit", "status": "active"},
+        {"title": "test_keyNameMapping_singleLetter_a_mapsToZero", "file": "Tests/AxionHelperTests/Services/InputSimulationServiceTests.swift", "level": "unit", "status": "active"},
+        {"title": "test_keyNameMapping_invalidKey_returnsNil", "file": "Tests/AxionHelperTests/Services/InputSimulationServiceTests.swift", "level": "unit", "status": "active"},
+        {"title": "test_pressKey_validKey_returnsSuccessJson", "file": "Tests/AxionHelperTests/Tools/MouseKeyboardToolTests.swift", "level": "unit", "status": "active"},
+        {"title": "test_pressKey_invalidKeyName_returnsErrorJson", "file": "Tests/AxionHelperTests/Tools/MouseKeyboardToolTests.swift", "level": "unit", "status": "active"}
+      ]
+    },
+    {
+      "id": "1.4-AC6", "story": "1.4",
+      "description": "hotkey 工具执行组合键操作",
+      "priority": "P0", "coverage": "FULL",
+      "tests": [
+        {"title": "test_hotkeyParsing_cmdC_returnsCommandFlagAndCKeyCode", "file": "Tests/AxionHelperTests/Services/InputSimulationServiceTests.swift", "level": "unit", "status": "active"},
+        {"title": "test_hotkeyParsing_cmdShiftS_returnsCombinedFlags", "file": "Tests/AxionHelperTests/Services/InputSimulationServiceTests.swift", "level": "unit", "status": "active"},
+        {"title": "test_hotkeyParsing_ctrlAltDelete_returnsCombinedFlags", "file": "Tests/AxionHelperTests/Services/InputSimulationServiceTests.swift", "level": "unit", "status": "active"},
+        {"title": "test_hotkeyParsing_singleKeyNoModifier_throwsInvalidHotkeyFormat", "file": "Tests/AxionHelperTests/Services/InputSimulationServiceTests.swift", "level": "unit", "status": "active"},
+        {"title": "test_hotkeyParsing_unknownModifier_throwsInvalidHotkeyFormat", "file": "Tests/AxionHelperTests/Services/InputSimulationServiceTests.swift", "level": "unit", "status": "active"},
+        {"title": "test_hotkeyParsing_commandAlias_worksAsCmd", "file": "Tests/AxionHelperTests/Services/InputSimulationServiceTests.swift", "level": "unit", "status": "active"},
+        {"title": "test_hotkeyParsing_optionAlias_worksAsAlt", "file": "Tests/AxionHelperTests/Services/InputSimulationServiceTests.swift", "level": "unit", "status": "active"},
+        {"title": "test_hotkey_validCombination_returnsSuccessJson", "file": "Tests/AxionHelperTests/Tools/MouseKeyboardToolTests.swift", "level": "unit", "status": "active"},
+        {"title": "test_hotkey_invalidFormat_returnsErrorJson", "file": "Tests/AxionHelperTests/Tools/MouseKeyboardToolTests.swift", "level": "unit", "status": "active"}
+      ]
+    },
+    {
+      "id": "1.4-AC7", "story": "1.4",
+      "description": "scroll 工具执行滚动操作",
+      "priority": "P0", "coverage": "FULL",
+      "tests": [
+        {"title": "test_scrollDirection_up_returnsPositiveValue", "file": "Tests/AxionHelperTests/Services/InputSimulationServiceTests.swift", "level": "unit", "status": "active"},
+        {"title": "test_scrollDirection_down_returnsNegativeValue", "file": "Tests/AxionHelperTests/Services/InputSimulationServiceTests.swift", "level": "unit", "status": "active"},
+        {"title": "test_scrollDirection_invalidDirection_throwsError", "file": "Tests/AxionHelperTests/Services/InputSimulationServiceTests.swift", "level": "unit", "status": "active"},
+        {"title": "test_scrollDirection_isCaseInsensitive", "file": "Tests/AxionHelperTests/Services/InputSimulationServiceTests.swift", "level": "unit", "status": "active"},
+        {"title": "test_scroll_validDirection_returnsSuccessJson", "file": "Tests/AxionHelperTests/Tools/MouseKeyboardToolTests.swift", "level": "unit", "status": "active"}
+      ]
+    },
+    {
+      "id": "1.4-AC8", "story": "1.4",
+      "description": "drag 工具执行拖拽操作",
+      "priority": "P0", "coverage": "FULL",
+      "tests": [
+        {"title": "test_drag_validCoordinates_returnsSuccessJson", "file": "Tests/AxionHelperTests/Tools/MouseKeyboardToolTests.swift", "level": "unit", "status": "active"},
+        {"title": "test_drag_outOfBounds_returnsErrorJson", "file": "Tests/AxionHelperTests/Tools/MouseKeyboardToolTests.swift", "level": "unit", "status": "active"}
       ]
     }
   ],
   "coverage_statistics": {
-    "total_requirements": 15,
-    "fully_covered": 15,
+    "total_requirements": 23,
+    "fully_covered": 23,
     "partially_covered": 0,
     "uncovered": 0,
     "overall_coverage_percentage": 100,
     "priority_breakdown": {
-      "P0": {"total": 15, "covered": 15, "percentage": 100},
+      "P0": {"total": 23, "covered": 23, "percentage": 100},
       "P1": {"total": 0, "covered": 0, "percentage": 100},
       "P2": {"total": 0, "covered": 0, "percentage": 100},
       "P3": {"total": 0, "covered": 0, "percentage": 100}
@@ -235,18 +327,17 @@
   },
   "test_inventory": {
     "summary": {
-      "files": 14,
-      "cases": 82,
+      "files": 18,
+      "cases": 138,
       "skipped_cases": 0,
       "fixme_cases": 0,
       "pending_cases": 0,
       "by_level": {
-        "unit": {"tests": 76, "criteria_covered": 15},
-        "integration": {"tests": 5, "criteria_covered": 2},
+        "unit": {"tests": 129, "criteria_covered": 23},
+        "integration": {"tests": 9, "criteria_covered": 4},
         "e2e": {"tests": 0, "criteria_covered": 0},
         "api": {"tests": 0, "criteria_covered": 0},
-        "component": {"tests": 0, "criteria_covered": 0},
-        "other": {"tests": 1, "criteria_covered": 1}
+        "component": {"tests": 0, "criteria_covered": 0}
       }
     },
     "blockers": []
@@ -256,7 +347,12 @@
     {
       "priority": "LOW",
       "action": "Run /bmad:tea:test-review to assess test quality against the Definition of Done checklist",
-      "requirements": []
+      "requirements": ["all"]
+    },
+    {
+      "priority": "INFO",
+      "action": "Story 1.4 two-layer testing pattern (service + tool) is a strong model for future stories",
+      "requirements": ["1.4"]
     }
   ]
 }

@@ -7,9 +7,11 @@ import Foundation
 struct ServiceContainer: Sendable {
     var appLauncher: any AppLaunching
     var accessibilityEngine: any WindowManaging
+    var inputSimulation: any InputSimulating
 
     nonisolated(unsafe) static var shared = ServiceContainer(
         appLauncher: AppLauncherService(),
-        accessibilityEngine: AccessibilityEngineService()
+        accessibilityEngine: AccessibilityEngineService(),
+        inputSimulation: InputSimulationService()
     )
 }
