@@ -92,4 +92,67 @@ final class ScreenshotServiceTests: XCTestCase {
         XCTAssertTrue(base64Data.count <= 5 * 1024 * 1024,
                       "1KB data base64 should be well under 5MB limit")
     }
+
+    // MARK: - Error Description Content
+
+    func test_screenshotError_windowCaptureFailed_containsWindowId() {
+        let error = ScreenshotError.windowCaptureFailed(windowId: 999)
+        let desc = error.errorDescription
+        XCTAssertNotNil(desc)
+        XCTAssertTrue(desc!.contains("999"), "Description should contain window ID")
+    }
+
+    func test_screenshotError_screenshotTooLarge_containsSize() {
+        let size = 7 * 1024 * 1024
+        let error = ScreenshotError.screenshotTooLarge(sizeBytes: size)
+        let desc = error.errorDescription
+        XCTAssertNotNil(desc)
+        XCTAssertTrue(desc!.contains(String(size)), "Description should contain size in bytes")
+    }
+
+    func test_screenshotError_imageConversionFailed_description() {
+        let error = ScreenshotError.imageConversionFailed
+        XCTAssertEqual(error.errorDescription, "Failed to convert screenshot image to JPEG")
+    }
+
+    func test_screenshotError_fullScreenCaptureFailed_description() {
+        let error = ScreenshotError.fullScreenCaptureFailed
+        XCTAssertEqual(error.errorDescription, "Failed to capture full screen")
+    }
+
+    // MARK: - Error Suggestions
+
+    func test_screenshotError_suggestions_notEmpty() {
+        XCTAssertFalse(ScreenshotError.windowCaptureFailed(windowId: 1).suggestion.isEmpty)
+        XCTAssertFalse(ScreenshotError.fullScreenCaptureFailed.suggestion.isEmpty)
+        XCTAssertFalse(ScreenshotError.imageConversionFailed.suggestion.isEmpty)
+        XCTAssertFalse(ScreenshotError.screenshotTooLarge(sizeBytes: 1).suggestion.isEmpty)
+    }
+
+    func test_screenshotError_windowCaptureFailed_suggestsListWindows() {
+        let error = ScreenshotError.windowCaptureFailed(windowId: 1)
+        XCTAssertTrue(error.suggestion.contains("list_windows"))
+    }
+
+    func test_screenshotError_fullScreenCaptureFailed_suggestsPermission() {
+        let error = ScreenshotError.fullScreenCaptureFailed
+        XCTAssertTrue(error.suggestion.contains("screen recording"))
+    }
+
+    func test_screenshotError_screenshotTooLarge_suggestsWindowCapture() {
+        let error = ScreenshotError.screenshotTooLarge(sizeBytes: 9999999)
+        XCTAssertTrue(error.suggestion.lowercased().contains("window"))
+    }
+
+    // MARK: - Error Codes Distinct
+
+    func test_screenshotError_allErrorCodesDistinct() {
+        let codes = [
+            ScreenshotError.windowCaptureFailed(windowId: 1).errorCode,
+            ScreenshotError.fullScreenCaptureFailed.errorCode,
+            ScreenshotError.imageConversionFailed.errorCode,
+            ScreenshotError.screenshotTooLarge(sizeBytes: 1).errorCode,
+        ]
+        XCTAssertEqual(Set(codes).count, codes.count, "All error codes should be distinct")
+    }
 }

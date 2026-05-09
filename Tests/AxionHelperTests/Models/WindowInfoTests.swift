@@ -37,4 +37,78 @@ final class WindowInfoTests: XCTestCase {
         let decoded = try JSONDecoder().decode(WindowBounds.self, from: data)
         XCTAssertEqual(decoded, original)
     }
+
+    // MARK: - JSON snake_case keys
+
+    func testJson_snakeCaseKeys() throws {
+        let info = WindowInfo(
+            windowId: 42, pid: 1234,
+            title: "Test", appName: "Safari", bundleId: "com.apple.Safari",
+            bounds: WindowBounds(x: 0, y: 0, width: 800, height: 600)
+        )
+        let data = try JSONEncoder().encode(info)
+        let json = try JSONSerialization.jsonObject(with: data) as! [String: Any]
+
+        // snake_case keys
+        XCTAssertNotNil(json["window_id"])
+        XCTAssertNotNil(json["app_name"])
+        XCTAssertNotNil(json["bundle_id"])
+        // NOT camelCase
+        XCTAssertNil(json["windowId"])
+        XCTAssertNil(json["appName"])
+        XCTAssertNil(json["bundleId"])
+    }
+
+    // MARK: - Equality
+
+    func testEquality_same() {
+        let a = WindowInfo(
+            windowId: 1, pid: 100, title: "W", appName: "A", bundleId: "com.a",
+            bounds: WindowBounds(x: 0, y: 0, width: 100, height: 100)
+        )
+        let b = WindowInfo(
+            windowId: 1, pid: 100, title: "W", appName: "A", bundleId: "com.a",
+            bounds: WindowBounds(x: 0, y: 0, width: 100, height: 100)
+        )
+        XCTAssertEqual(a, b)
+    }
+
+    func testEquality_differentWindowId() {
+        let a = WindowInfo(windowId: 1, pid: 100, title: nil, appName: nil, bundleId: nil, bounds: WindowBounds(x: 0, y: 0, width: 0, height: 0))
+        let b = WindowInfo(windowId: 2, pid: 100, title: nil, appName: nil, bundleId: nil, bounds: WindowBounds(x: 0, y: 0, width: 0, height: 0))
+        XCTAssertNotEqual(a, b)
+    }
+
+    func testEquality_differentBounds() {
+        let a = WindowInfo(windowId: 1, pid: 100, title: nil, appName: nil, bundleId: nil, bounds: WindowBounds(x: 0, y: 0, width: 100, height: 100))
+        let b = WindowInfo(windowId: 1, pid: 100, title: nil, appName: nil, bundleId: nil, bounds: WindowBounds(x: 0, y: 0, width: 200, height: 200))
+        XCTAssertNotEqual(a, b)
+    }
+
+    // MARK: - WindowBounds
+
+    func testWindowBounds_equality() {
+        let a = WindowBounds(x: 10, y: 20, width: 100, height: 200)
+        let b = WindowBounds(x: 10, y: 20, width: 100, height: 200)
+        let c = WindowBounds(x: 0, y: 0, width: 100, height: 200)
+        XCTAssertEqual(a, b)
+        XCTAssertNotEqual(a, c)
+    }
+
+    func testWindowBounds_zeroValues() throws {
+        let bounds = WindowBounds(x: 0, y: 0, width: 0, height: 0)
+        let data = try JSONEncoder().encode(bounds)
+        let decoded = try JSONDecoder().decode(WindowBounds.self, from: data)
+        XCTAssertEqual(decoded, bounds)
+    }
+
+    func testWindowBounds_jsonKeys() throws {
+        let bounds = WindowBounds(x: 10, y: 20, width: 100, height: 200)
+        let data = try JSONEncoder().encode(bounds)
+        let json = try JSONSerialization.jsonObject(with: data) as! [String: Any]
+        XCTAssertEqual(json["x"] as? Int, 10)
+        XCTAssertEqual(json["y"] as? Int, 20)
+        XCTAssertEqual(json["width"] as? Int, 100)
+        XCTAssertEqual(json["height"] as? Int, 200)
+    }
 }

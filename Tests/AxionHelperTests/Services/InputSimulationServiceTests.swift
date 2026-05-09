@@ -269,4 +269,166 @@ final class InputSimulationServiceTests: XCTestCase {
         XCTAssertNotNil(error.errorDescription)
         XCTAssertFalse(error.suggestion.isEmpty)
     }
+
+    // MARK: - Key Map Completeness
+
+    func test_keyNameMapping_allLetters_mapCorrectly() throws {
+        let service = InputSimulationService()
+        let expectedLetters: [String: CGKeyCode] = [
+            "a": 0x00, "b": 0x0B, "c": 0x08, "d": 0x02, "e": 0x0E,
+            "f": 0x03, "g": 0x05, "h": 0x04, "i": 0x22, "j": 0x26,
+            "k": 0x28, "l": 0x25, "m": 0x2E, "n": 0x2D, "o": 0x1F,
+            "p": 0x23, "q": 0x0C, "r": 0x0F, "s": 0x01, "t": 0x11,
+            "u": 0x20, "v": 0x09, "w": 0x0D, "x": 0x07, "y": 0x10,
+            "z": 0x06,
+        ]
+        for (name, expected) in expectedLetters {
+            let actual = service.keyCodeForName(name)
+            XCTAssertEqual(actual, expected, "'\(name)' should map to 0x\(String(expected, radix: 16))")
+        }
+    }
+
+    func test_keyNameMapping_isCaseInsensitive() throws {
+        let service = InputSimulationService()
+        let lower = service.keyCodeForName("return")
+        let upper = service.keyCodeForName("RETURN")
+        let mixed = service.keyCodeForName("Return")
+        XCTAssertEqual(lower, upper)
+        XCTAssertEqual(lower, mixed)
+        XCTAssertEqual(lower, 0x24)
+    }
+
+    func test_keyNameMapping_escAlias() throws {
+        let service = InputSimulationService()
+        XCTAssertEqual(service.keyCodeForName("esc"), 0x35)
+        XCTAssertEqual(service.keyCodeForName("esc"), service.keyCodeForName("escape"))
+    }
+
+    func test_keyNameMapping_backspaceAlias() throws {
+        let service = InputSimulationService()
+        XCTAssertEqual(service.keyCodeForName("backspace"), 0x33)
+        XCTAssertEqual(service.keyCodeForName("backspace"), service.keyCodeForName("delete"))
+    }
+
+    func test_keyNameMapping_homeEndPageUpDown() throws {
+        let service = InputSimulationService()
+        XCTAssertEqual(service.keyCodeForName("home"), 0x73)
+        XCTAssertEqual(service.keyCodeForName("end"), 0x77)
+        XCTAssertEqual(service.keyCodeForName("pageup"), 0x74)
+        XCTAssertEqual(service.keyCodeForName("pagedown"), 0x79)
+        XCTAssertEqual(service.keyCodeForName("forwarddelete"), 0x75)
+    }
+
+    // MARK: - Hotkey Parsing Extended
+
+    func test_hotkeyParsing_ctrlAlias_worksAsControl() throws {
+        let service = InputSimulationService()
+        let result = try service.parseHotkey("control+a")
+        XCTAssertTrue(result.flags.contains(.maskControl), "'control+a' should set .maskControl")
+    }
+
+    func test_hotkeyParsing_altAlias_worksAsAlt() throws {
+        let service = InputSimulationService()
+        let result = try service.parseHotkey("alt+a")
+        XCTAssertTrue(result.flags.contains(.maskAlternate), "'alt+a' should set .maskAlternate")
+    }
+
+    func test_hotkeyParsing_threeModifiers() throws {
+        let service = InputSimulationService()
+        let result = try service.parseHotkey("cmd+shift+ctrl+a")
+        XCTAssertTrue(result.flags.contains(.maskCommand))
+        XCTAssertTrue(result.flags.contains(.maskShift))
+        XCTAssertTrue(result.flags.contains(.maskControl))
+        XCTAssertEqual(result.keyCode, 0x00)
+    }
+
+    func test_hotkeyParsing_fourModifiers() throws {
+        let service = InputSimulationService()
+        let result = try service.parseHotkey("cmd+shift+ctrl+alt+a")
+        XCTAssertTrue(result.flags.contains(.maskCommand))
+        XCTAssertTrue(result.flags.contains(.maskShift))
+        XCTAssertTrue(result.flags.contains(.maskControl))
+        XCTAssertTrue(result.flags.contains(.maskAlternate))
+    }
+
+    func test_hotkeyParsing_caseInsensitive() throws {
+        let service = InputSimulationService()
+        let result = try service.parseHotkey("CMD+SHIFT+C")
+        XCTAssertTrue(result.flags.contains(.maskCommand))
+        XCTAssertTrue(result.flags.contains(.maskShift))
+        XCTAssertEqual(result.keyCode, 0x08)
+    }
+
+    func test_hotkeyParsing_whitespaceHandling() throws {
+        let service = InputSimulationService()
+        let result = try service.parseHotkey("cmd + shift + c")
+        XCTAssertTrue(result.flags.contains(.maskCommand))
+        XCTAssertTrue(result.flags.contains(.maskShift))
+        XCTAssertEqual(result.keyCode, 0x08)
+    }
+
+    func test_hotkeyParsing_unknownMainKey_throwsInvalidKeyName() throws {
+        let service = InputSimulationService()
+        XCTAssertThrowsError(try service.parseHotkey("cmd+nonexistent")) { error in
+            guard let simError = error as? InputSimulationError else {
+                XCTFail("Expected InputSimulationError"); return
+            }
+            if case .invalidKeyName = simError {
+                // expected
+            } else {
+                XCTFail("Expected invalidKeyName, got \(simError)")
+            }
+        }
+    }
+
+    // MARK: - Scroll Direction Extended
+
+    func test_scrollDirection_downIsCaseInsensitive() throws {
+        let service = InputSimulationService()
+        let value = try service.scrollValueForDirection("DOWN", amount: 3)
+        XCTAssertEqual(value, -3)
+    }
+
+    func test_scrollDirection_zeroAmount() throws {
+        let service = InputSimulationService()
+        let value = try service.scrollValueForDirection("up", amount: 0)
+        XCTAssertEqual(value, 0)
+    }
+
+    func test_scrollDirection_largeAmount() throws {
+        let service = InputSimulationService()
+        let value = try service.scrollValueForDirection("down", amount: 1000)
+        XCTAssertEqual(value, -1000)
+    }
+
+    // MARK: - Error Descriptions
+
+    func test_error_coordinatesOutOfBounds_containsCoordinates() {
+        let error = InputSimulationError.coordinatesOutOfBounds(x: -5, y: 10)
+        let desc = error.errorDescription
+        XCTAssertNotNil(desc)
+        XCTAssertTrue(desc!.contains("-5"))
+        XCTAssertTrue(desc!.contains("10"))
+    }
+
+    func test_error_invalidKeyName_containsKeyName() {
+        let error = InputSimulationError.invalidKeyName("foobar")
+        let desc = error.errorDescription
+        XCTAssertNotNil(desc)
+        XCTAssertTrue(desc!.contains("foobar"))
+    }
+
+    func test_error_invalidHotkeyFormat_containsKeys() {
+        let error = InputSimulationError.invalidHotkeyFormat("xyz+abc")
+        let desc = error.errorDescription
+        XCTAssertNotNil(desc)
+        XCTAssertTrue(desc!.contains("xyz+abc"))
+    }
+
+    func test_error_invalidDirection_containsDirection() {
+        let error = InputSimulationError.invalidDirection("sideways")
+        let desc = error.errorDescription
+        XCTAssertNotNil(desc)
+        XCTAssertTrue(desc!.contains("sideways"))
+    }
 }

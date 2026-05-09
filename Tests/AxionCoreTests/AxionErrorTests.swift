@@ -86,6 +86,120 @@ final class AxionErrorTests: XCTestCase {
         }
     }
 
+    // MARK: - All Error Cases
+
+    func test_error_verificationFailed_format() throws {
+        let error = AxionError.verificationFailed(step: 5, reason: "window not visible")
+        let payload = error.errorPayload
+
+        XCTAssertEqual(payload.error, "verification_failed")
+        XCTAssertTrue(payload.message.contains("step 5"))
+        XCTAssertTrue(payload.message.contains("window not visible"))
+        XCTAssertFalse(payload.suggestion.isEmpty)
+    }
+
+    func test_error_helperConnectionFailed_format() throws {
+        let error = AxionError.helperConnectionFailed(reason: "timeout")
+        let payload = error.errorPayload
+
+        XCTAssertEqual(payload.error, "helper_connection_failed")
+        XCTAssertTrue(payload.message.contains("timeout"))
+        XCTAssertFalse(payload.suggestion.isEmpty)
+    }
+
+    func test_error_configError_format() throws {
+        let error = AxionError.configError(reason: "missing apiKey")
+        let payload = error.errorPayload
+
+        XCTAssertEqual(payload.error, "config_error")
+        XCTAssertTrue(payload.message.contains("missing apiKey"))
+        XCTAssertFalse(payload.suggestion.isEmpty)
+    }
+
+    func test_error_invalidPlan_format() throws {
+        let error = AxionError.invalidPlan(reason: "no steps")
+        let payload = error.errorPayload
+
+        XCTAssertEqual(payload.error, "invalid_plan")
+        XCTAssertTrue(payload.message.contains("no steps"))
+        XCTAssertFalse(payload.suggestion.isEmpty)
+    }
+
+    func test_error_timeout_format() throws {
+        let error = AxionError.timeout(operation: "launch", seconds: 30.0)
+        let payload = error.errorPayload
+
+        XCTAssertEqual(payload.error, "timeout")
+        XCTAssertTrue(payload.message.contains("launch"))
+        XCTAssertTrue(payload.message.contains("30"))
+        XCTAssertFalse(payload.suggestion.isEmpty)
+    }
+
+    func test_error_cancelled_format() throws {
+        let error = AxionError.cancelled
+        let payload = error.errorPayload
+
+        XCTAssertEqual(payload.error, "cancelled")
+        XCTAssertFalse(payload.suggestion.isEmpty)
+    }
+
+    func test_error_unknown_format() throws {
+        let error = AxionError.unknown(reason: "something unexpected")
+        let payload = error.errorPayload
+
+        XCTAssertEqual(payload.error, "unknown")
+        XCTAssertTrue(payload.message.contains("something unexpected"))
+        XCTAssertFalse(payload.suggestion.isEmpty)
+    }
+
+    // MARK: - toToolResultJSON Format
+
+    func test_toToolResultJSON_producesSortedKeys() throws {
+        let error = AxionError.mcpError(tool: "click", reason: "failed")
+        let jsonString = error.toToolResultJSON()
+        let data = Data(jsonString.utf8)
+
+        // Verify it's valid JSON
+        let json = try JSONSerialization.jsonObject(with: data) as! [String: Any]
+        // SortedKeys encoder should produce keys in order
+        let sortedKeys = Array(json.keys).sorted()
+        XCTAssertEqual(sortedKeys, ["error", "message", "suggestion"])
+    }
+
+    func test_toToolResultJSON_allCases_produceValidJSON() throws {
+        let allErrors: [AxionError] = [
+            .planningFailed(reason: "r"),
+            .executionFailed(step: 1, reason: "r"),
+            .verificationFailed(step: 1, reason: "r"),
+            .helperNotRunning,
+            .helperConnectionFailed(reason: "r"),
+            .configError(reason: "r"),
+            .mcpError(tool: "t", reason: "r"),
+            .invalidPlan(reason: "r"),
+            .maxRetriesExceeded(retries: 3),
+            .timeout(operation: "op", seconds: 1.0),
+            .cancelled,
+            .unknown(reason: "r"),
+        ]
+        for error in allErrors {
+            let jsonString = error.toToolResultJSON()
+            let data = Data(jsonString.utf8)
+            let json = try JSONSerialization.jsonObject(with: data) as? [String: Any]
+            XCTAssertNotNil(json, "toToolResultJSON should produce valid JSON for \(error)")
+            XCTAssertEqual(json?["error"] as? String, error.errorPayload.error)
+        }
+    }
+
+    // MARK: - MCPErrorPayload
+
+    func test_mcpErrorPayload_equality() {
+        let a = AxionError.MCPErrorPayload(error: "e", message: "m", suggestion: "s")
+        let b = AxionError.MCPErrorPayload(error: "e", message: "m", suggestion: "s")
+        let c = AxionError.MCPErrorPayload(error: "x", message: "m", suggestion: "s")
+        XCTAssertEqual(a, b)
+        XCTAssertNotEqual(a, c)
+    }
+
     // MARK: - Equality
 
     func test_error_equality() {
@@ -99,5 +213,16 @@ final class AxionErrorTests: XCTestCase {
             AxionError.planningFailed(reason: "a"),
             AxionError.planningFailed(reason: "b")
         )
+    }
+
+    func test_error_equality_allCases() {
+        XCTAssertEqual(AxionError.cancelled, AxionError.cancelled)
+        XCTAssertEqual(AxionError.timeout(operation: "a", seconds: 1.0), AxionError.timeout(operation: "a", seconds: 1.0))
+        XCTAssertNotEqual(AxionError.timeout(operation: "a", seconds: 1.0), AxionError.timeout(operation: "b", seconds: 1.0))
+        XCTAssertNotEqual(AxionError.timeout(operation: "a", seconds: 1.0), AxionError.timeout(operation: "a", seconds: 2.0))
+        XCTAssertEqual(AxionError.maxRetriesExceeded(retries: 3), AxionError.maxRetriesExceeded(retries: 3))
+        XCTAssertNotEqual(AxionError.maxRetriesExceeded(retries: 3), AxionError.maxRetriesExceeded(retries: 4))
+        XCTAssertEqual(AxionError.unknown(reason: "x"), AxionError.unknown(reason: "x"))
+        XCTAssertNotEqual(AxionError.unknown(reason: "x"), AxionError.unknown(reason: "y"))
     }
 }

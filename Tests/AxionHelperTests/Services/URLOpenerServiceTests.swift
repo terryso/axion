@@ -152,4 +152,80 @@ final class URLOpenerServiceTests: XCTestCase {
         XCTAssertNotNil(error.errorDescription)
         XCTAssertFalse(error.suggestion.isEmpty)
     }
+
+    // MARK: - Additional URL Validation
+
+    // [P0] URL without host throws error
+    func test_openURL_urlWithoutHost_throwsError() {
+        let service = URLOpenerService()
+        XCTAssertThrowsError(try service.openURL("https://")) { error in
+            guard let urlError = error as? URLOpenerError else {
+                XCTFail("Expected URLOpenerError"); return
+            }
+            // Either invalidURL or unsupportedScheme
+            XCTAssertTrue(
+                urlError.errorCode == "invalid_url" || urlError.errorCode == "unsupported_scheme",
+                "URL without host should throw an error"
+            )
+        }
+    }
+
+    // [P0] URL with only scheme
+    func test_openURL_schemeOnly_throwsError() {
+        let service = URLOpenerService()
+        XCTAssertThrowsError(try service.openURL("https://"))
+    }
+
+    // [P0] Protocol conformance check
+    func test_urlOpenerService_conformsToURLOpening() {
+        let service = URLOpenerService()
+        XCTAssertTrue(service is URLOpening,
+                      "URLOpenerService should conform to URLOpening protocol")
+    }
+
+    // MARK: - Error Description Content
+
+    func test_urlOpenerError_invalidURL_containsUrl() {
+        let error = URLOpenerError.invalidURL("bad-url")
+        XCTAssertTrue(error.errorDescription!.contains("bad-url"))
+    }
+
+    func test_urlOpenerError_unsupportedScheme_containsUrl() {
+        let error = URLOpenerError.unsupportedScheme("ftp://host")
+        XCTAssertTrue(error.errorDescription!.contains("ftp://host"))
+    }
+
+    func test_urlOpenerError_failedToOpen_containsUrl() {
+        let error = URLOpenerError.failedToOpen("https://example.com")
+        XCTAssertTrue(error.errorDescription!.contains("https://example.com"))
+    }
+
+    // MARK: - Suggestions
+
+    func test_urlOpenerError_suggestions_notEmpty() {
+        XCTAssertFalse(URLOpenerError.invalidURL("x").suggestion.isEmpty)
+        XCTAssertFalse(URLOpenerError.unsupportedScheme("ftp://x").suggestion.isEmpty)
+        XCTAssertFalse(URLOpenerError.failedToOpen("https://x").suggestion.isEmpty)
+    }
+
+    func test_urlOpenerError_unsupportedScheme_suggestsHttpHttps() {
+        let error = URLOpenerError.unsupportedScheme("ftp://x")
+        XCTAssertTrue(error.suggestion.contains("http"))
+    }
+
+    func test_urlOpenerError_invalidURL_suggestsValidUrl() {
+        let error = URLOpenerError.invalidURL("x")
+        XCTAssertTrue(error.suggestion.contains("http"))
+    }
+
+    // MARK: - Error Codes Distinct
+
+    func test_urlOpenerError_allErrorCodesDistinct() {
+        let codes = [
+            URLOpenerError.invalidURL("x").errorCode,
+            URLOpenerError.unsupportedScheme("x").errorCode,
+            URLOpenerError.failedToOpen("x").errorCode,
+        ]
+        XCTAssertEqual(Set(codes).count, codes.count, "All error codes should be distinct")
+    }
 }
