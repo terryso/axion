@@ -27,6 +27,31 @@ jobs:
           path: axion/.build
           key: swift-${{ runner.os }}-${{ hashFiles('axion/Package.resolved') }}
           restore-keys: swift-${{ runner.os }}-
-      - name: Run unit tests
+      - name: Run unit tests with coverage
         working-directory: axion
-        run: make test
+        run: swift test --enable-code-coverage --skip AxionHelperIntegrationTests
+      - name: Extract coverage percentage
+        working-directory: axion
+        run: |
+          XCTEST_PATH="$(find .build -name '*.xctest' -type d | head -1)"
+          BINARY="${XCTEST_PATH}/Contents/MacOS/$(basename "$XCTEST_PATH" .xctest)"
+          PROF_DATA=".build/debug/codecov/default.profdata"
+          set -- $(xcrun llvm-cov report "$BINARY" \
+            -instr-profile="$PROF_DATA" \
+            -ignore-filename-regex='.build/|Tests/' \
+            | tail -1)
+          COVERAGE=$(printf "%.1f" $(echo "$4" | sed 's/%//'))
+          echo "COVERAGE=$COVERAGE" >> $GITHUB_ENV
+          echo "Coverage: ${COVERAGE}%"
+      - name: Update coverage badge
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        uses: Schneegans/dynamic-badges-action@v1.8.0
+        with:
+          auth: ${{ secrets.GIST_TOKEN }}
+          gistID: ${{ secrets.GIST_ID }}
+          filename: coverage.json
+          label: coverage
+          message: ${{ env.COVERAGE }}%
+          valColorRange: ${{ env.COVERAGE }}
+          maxColorRange: 100
+          minColorRange: 0
