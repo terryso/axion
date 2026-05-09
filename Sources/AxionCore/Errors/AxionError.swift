@@ -1,6 +1,6 @@
 import Foundation
 
-enum AxionError: Error, Equatable {
+public enum AxionError: Error, Equatable {
     case planningFailed(reason: String)
     case executionFailed(step: Int, reason: String)
     case verificationFailed(step: Int, reason: String)
@@ -14,13 +14,13 @@ enum AxionError: Error, Equatable {
     case cancelled
     case unknown(reason: String)
 
-    struct MCPErrorPayload: Codable, Equatable {
-        let error: String
-        let message: String
-        let suggestion: String
+    public struct MCPErrorPayload: Codable, Equatable {
+        public let error: String
+        public let message: String
+        public let suggestion: String
     }
 
-    var errorPayload: MCPErrorPayload {
+    public var errorPayload: MCPErrorPayload {
         switch self {
         case .planningFailed(let reason):
             return MCPErrorPayload(
@@ -97,7 +97,7 @@ enum AxionError: Error, Equatable {
         }
     }
 
-    func toToolResultJSON() -> String {
+    public func toToolResultJSON() -> String {
         let encoder = JSONEncoder()
         encoder.outputFormatting = [.sortedKeys, .prettyPrinted]
         guard let data = try? encoder.encode(errorPayload) else {

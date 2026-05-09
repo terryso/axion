@@ -93,8 +93,8 @@ import AxionCore
 - 所有共享模型放在 `AxionCore/` — 遵循 `Codable + Equatable` 一致性
 - 枚举使用 `String` 原始值以支持 Codable → `enum RunState: String, Codable`
 - 复杂枚举编码使用 `{type, value}` 模式（参见 `Value.swift`）
-- API Key **永远** 不出现在 Codable 编码中 — `AxionConfig.CodingKeys` 排除 `apiKey`
 - Config 使用 camelCase JSON 键 — `CodingKeys` 不做转换，依赖 Swift 默认行为
+- **部分 JSON 解码规范**：Codable 模型的 `init(from decoder:)` 使用 `decodeIfPresent` + `?? Self.default.xxx`，使缺失字段自动回退到默认值。新增字段时只需在此 init 中加一行，调用方无需修改。
 
 ### 错误处理
 

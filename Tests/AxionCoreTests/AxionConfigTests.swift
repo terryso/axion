@@ -51,8 +51,7 @@ final class AxionConfigTests: XCTestCase {
         let data = try JSONEncoder().encode(config)
         let decoded = try JSONDecoder().decode(AxionConfig.self, from: data)
 
-        // apiKey is excluded from Codable (security: read from Keychain only)
-        XCTAssertNil(decoded.apiKey)
+        XCTAssertEqual(decoded.apiKey, "sk-test-key")
         XCTAssertEqual(decoded.model, "claude-opus-4-20250514")
         XCTAssertEqual(decoded.maxSteps, 30)
         XCTAssertEqual(decoded.maxBatches, 10)

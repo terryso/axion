@@ -99,7 +99,7 @@ NFR23: 支持 Apple Silicon（arm64）和 Intel（x86_64）
 ### Additional Requirements
 
 - AR1: 使用自定义 SPM 项目结构（三目标：AxionCLI / AxionHelper / AxionCore），无现成 starter template
-- AR2: API Key 存储使用 macOS Keychain（Security.framework），不存明文 config（D1）
+- AR2: API Key 与其他配置统一存储在 config.json（文件权限 0o600），环境变量 AXION_API_KEY 可覆盖（D1）
 - AR3: Plan 数据模型使用强类型 Codable JSON 结构，支持 Value 枚举占位符（D2）
 - AR4: 执行循环使用显式状态机（RunState 枚举 + RunContext），含 replanning 路径（D3）
 - AR5: 配置系统分层：默认值 → config.json → 环境变量 → CLI 参数（D4）
@@ -170,10 +170,10 @@ FR41: Epic 3 - SDK 边界文档
 **ARs covered:** AR1, AR3, AR6, AR11
 
 ### Epic 2: CLI 安装配置与首次运行体验
-用户可以安装 Axion（brew install）、完成首次配置（axion setup：API Key 输入、权限引导）、验证系统环境（axion doctor）。配置系统支持分层覆盖（默认值 → config.json → 环境变量 → CLI 参数），API Key 安全存储于 macOS Keychain。
+用户可以安装 Axion（brew install）、完成首次配置（axion setup：API Key 输入、权限引导）、验证系统环境（axion doctor）。配置系统支持分层覆盖（默认值 → config.json → 环境变量 → CLI 参数）。
 
 **FRs covered:** FR1, FR2, FR3, FR4, FR5
-**ARs covered:** AR2, AR5
+**ARs covered:** AR5
 
 ### Epic 3: 自然语言任务执行
 用户输入 `axion run "打开计算器，计算 17 乘以 23" --live`，Axion 完成完整的 plan → execute → verify → replan 循环：Planner 调用 LLM 生成结构化执行计划，Executor 通过 MCP 调用 Helper 逐步执行，Verifier 通过截图和 AX tree 验证结果，失败时携带上下文自动重规划。整个过程中终端实时显示进度，支持干跑模式、步数限制、Ctrl-C 中断和前台模式。所有核心编排通过 SDK 公共 API 完成（Agent Loop、MCP Client、Tool Registry、Hooks、Streaming），产出清晰的 SDK 边界文档。
@@ -360,7 +360,7 @@ So that Axion 可以作为完整产品使用 Helper 的桌面操作能力.
 
 ## Epic 2: CLI 安装配置与首次运行体验
 
-用户可以安装 Axion、完成首次配置、验证系统环境。配置系统支持分层覆盖，API Key 安全存储于 Keychain。
+用户可以安装 Axion、完成首次配置、验证系统环境。配置系统支持分层覆盖，所有配置统一存储在 config.json。
 
 ### Story 2.1: CLI 入口与 ArgumentParser 骨架
 
@@ -382,21 +382,17 @@ So that 我可以了解 Axion 提供的命令和用法.
 **When** 运行 `axion unknown`
 **Then** 显示错误提示和帮助信息
 
-### Story 2.2: 配置系统与 Keychain 安全存储
+### Story 2.2: 配置系统与分层加载
 
 As a 用户,
-I want API Key 安全存储在 Keychain 中，配置文件管理其他参数,
-So that 我的凭证不会泄露，且可以通过配置文件和环境变量调整行为.
+I want 所有配置（含 API Key）统一存储在 config.json，支持分层覆盖,
+So that 我可以通过一个文件管理所有配置，且环境变量和 CLI 参数可以覆盖文件设置.
 
 **Acceptance Criteria:**
 
-**Given** 首次使用
-**When** 调用 KeychainStore.save(key:)
-**Then** API Key 写入 macOS Keychain（service: "com.axion.cli"）
-
-**Given** API Key 已存储在 Keychain
-**When** 调用 KeychainStore.load()
-**Then** 返回正确的 API Key
+**Given** ~/.axion/config.json 存在 {"apiKey": "sk-ant-xxx", "maxSteps": 30}
+**When** ConfigManager 加载配置
+**Then** apiKey 和 maxSteps 正确读取
 
 **Given** ~/.axion/config.json 存在 {"maxSteps": 30}
 **When** ConfigManager 加载配置
@@ -428,7 +424,7 @@ So that 我可以在 5 分钟内准备好使用 Axion.
 
 **Given** API Key 输入完成
 **When** setup 继续
-**Then** 将 API Key 安全存储到 Keychain
+**Then** 将 API Key 写入 ~/.axion/config.json
 
 **Given** API Key 已存储
 **When** setup 检查 Accessibility 权限
@@ -452,7 +448,7 @@ So that 我可以快速定位和修复配置问题.
 
 **Given** 运行 `axion doctor`
 **When** 检查 API Key
-**Then** 报告 Keychain 中是否存在有效的 API Key
+**Then** 报告 config.json 中是否存在有效的 API Key
 
 **Given** API Key 缺失
 **When** doctor 输出

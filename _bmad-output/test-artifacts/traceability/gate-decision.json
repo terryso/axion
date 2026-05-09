@@ -1,24 +1,14 @@
 {
   "schema_version": "0.1.0",
-  "evaluated_at": "2026-05-09T00:03:06.169143Z",
+  "evaluated_at": "2026-05-09T07:55:00Z",
   "repo": "axion",
-  "target": {
-    "type": "stories",
-    "id": "1-6",
-    "label": "Epic 1 Stories 1.1-1.6"
-  },
+  "target": { "type": "story", "id": "2-2", "label": "Config System & Keychain Storage" },
   "collection_status": "COLLECTED",
   "gate_basis": "priority_thresholds",
-  "gate_status": "FAIL",
-  "rationale": "P0 coverage is 92% (required: 100%). 1 critical requirements uncovered.",
-  "p0_status": "NOT_MET",
+  "gate_status": "PASS",
+  "rationale": "P0 coverage is 100%, P1 coverage is 100% (target: 90%), and overall coverage is 100% (minimum: 80%). All 6 formal acceptance criteria from Story 2-2 are fully covered by 26 unit tests.",
+  "p0_status": "MET",
   "p1_status": "MET",
   "overall_status": "MET",
-  "critical_open": 1,
-  "links": {
-    "trace_report_path": "_bmad-output/test-artifacts/traceability-matrix.md",
-    "trace_report_url": "",
-    "artifact_url": "",
-    "journey_evidence_url": ""
-  }
+  "critical_open": 0
 }

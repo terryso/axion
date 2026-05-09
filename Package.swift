@@ -53,7 +53,7 @@ let package = Package(
         ),
         .testTarget(
             name: "AxionCLITests",
-            dependencies: ["AxionCLI"],
+            dependencies: ["AxionCLI", "AxionCore"],
             path: "Tests/AxionCLITests"
         ),
         .testTarget(
