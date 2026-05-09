@@ -18,3 +18,6 @@ xcuserdata/
 # IDE
 .vscode/
 .idea/
+
+# Distribution generated files
+Distribution/homebrew/axion.rb

@@ -2,11 +2,13 @@
 # build-helper-app.sh — Package SPM-built AxionHelper into a macOS App Bundle.
 #
 # Usage:
-#   bash build-helper-app.sh [debug|release] [--sign]
+#   bash build-helper-app.sh [debug|release] [--sign [--sign-identity <identity>]] [--arch <arch>]
 #
 # Options:
-#   debug|release   Build configuration (default: debug)
-#   --sign          Ad-hoc codesign the resulting App Bundle
+#   debug|release              Build configuration (default: debug)
+#   --sign                     Codesign the resulting App Bundle (ad-hoc if no identity given)
+#   --sign-identity <identity> Apple Developer signing identity (e.g. "Developer ID Application: ...")
+#   --arch <arch>              Target architecture (default: auto-detect)
 #
 # Outputs:
 #   .build/AxionHelper.app/  (standard macOS App Bundle)
@@ -14,27 +16,57 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 PROJECT_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
-BUILD_CONFIG="${1:-debug}"
-SIGN="${2:-}"
+BUILD_CONFIG="debug"
+SIGN=false
+SIGN_IDENTITY=""
+ARCH=""
 
-# Normalize: first arg might be the config, second might be --sign
-# Support: build-helper-app.sh release --sign
-# Support: build-helper-app.sh --sign (defaults to debug)
-if [ "$BUILD_CONFIG" = "--sign" ]; then
-    BUILD_CONFIG="debug"
-    SIGN="--sign"
+# Parse arguments
+while [[ $# -gt 0 ]]; do
+    case "$1" in
+        debug|release)
+            BUILD_CONFIG="$1"
+            ;;
+        --sign)
+            SIGN=true
+            ;;
+        --sign-identity)
+            SIGN=true
+            SIGN_IDENTITY="$2"
+            shift
+            ;;
+        --arch)
+            ARCH="$2"
+            shift
+            ;;
+        *)
+            echo "Warning: Unknown argument '$1'" >&2
+            ;;
+    esac
+    shift
+done
+
+# Auto-detect architecture if not specified
+if [ -z "$ARCH" ]; then
+    ARCH="$(uname -m)"
 fi
-
-ARCH="$(uname -m)"
 
 echo "==> Building AxionHelper (${BUILD_CONFIG}) for ${ARCH}..."
 
 # 1. Compile AxionHelper
+BUILD_FLAGS=()
 if [ "$BUILD_CONFIG" = "release" ]; then
-    swift build -c release --package-path "$PROJECT_ROOT"
+    BUILD_FLAGS+=(-c release)
+fi
+if [ -n "$ARCH" ] && [ "$ARCH" != "$(uname -m)" ]; then
+    echo "Note: Cross-compilation for $ARCH requested. Ensure Swift toolchain supports it."
+fi
+
+swift build "${BUILD_FLAGS[@]}" --package-path "$PROJECT_ROOT"
+
+if [ "$BUILD_CONFIG" = "release" ]; then
     BUILD_DIR="$PROJECT_ROOT/.build/$ARCH-apple-macosx/release"
 else
-    swift build --package-path "$PROJECT_ROOT"
     BUILD_DIR="$PROJECT_ROOT/.build/$ARCH-apple-macosx/debug"
 fi
 
@@ -65,10 +97,20 @@ sed "s|{{VERSION}}|$VERSION|g" "$SCRIPT_DIR/Info.plist" > "$CONTENTS/Info.plist"
 echo "    Version: $VERSION"
 echo "    Binary:  $MACOS/$APP_NAME"
 
-# 5. Ad-hoc codesign (optional)
-if [ "$SIGN" = "--sign" ]; then
-    echo "==> Signing $APP_BUNDLE (ad-hoc)..."
-    codesign --force --sign - "$APP_BUNDLE"
+# 5. Codesign (optional)
+if [ "$SIGN" = true ]; then
+    ENTITLEMENTS="$SCRIPT_DIR/AxionHelper.entitlements"
+    if [ -n "$SIGN_IDENTITY" ]; then
+        echo "==> Signing $APP_BUNDLE with identity '$SIGN_IDENTITY'..."
+        codesign --force --sign "$SIGN_IDENTITY" \
+            --entitlements "$ENTITLEMENTS" \
+            "$APP_BUNDLE"
+    else
+        echo "==> Signing $APP_BUNDLE (ad-hoc)..."
+        codesign --force --sign - \
+            --entitlements "$ENTITLEMENTS" \
+            "$APP_BUNDLE"
+    fi
 fi
 
 echo "==> Done: $APP_BUNDLE"

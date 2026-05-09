@@ -2,11 +2,12 @@
 # build-release.sh — Full release build: CLI + Helper App + tar.gz + Homebrew formula.
 #
 # Usage:
-#   bash build-release.sh [version] [--sign]
+#   bash build-release.sh [version] [--sign [--sign-identity <identity>]]
 #
 # Options:
-#   version   Version string (default: read from VERSION file)
-#   --sign    Codesign with Apple Developer identity (prompts for identity if not set)
+#   version                   Version string (default: read from VERSION file)
+#   --sign                    Codesign with ad-hoc or Apple Developer identity
+#   --sign-identity <id>      Apple Developer signing identity
 #
 # Outputs:
 #   .build/dist/axion-{version}.tar.gz
@@ -19,12 +20,23 @@ PROJECT_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
 # Parse arguments
 VERSION=""
 SIGN_FLAG=""
+SIGN_IDENTITY_FLAG=""
 
-for arg in "$@"; do
-    case "$arg" in
-        --sign) SIGN_FLAG="--sign" ;;
-        *) [ -z "$VERSION" ] && VERSION="$arg" ;;
+while [[ $# -gt 0 ]]; do
+    case "$1" in
+        --sign-identity)
+            SIGN_FLAG="--sign"
+            SIGN_IDENTITY_FLAG="--sign-identity $2"
+            shift
+            ;;
+        --sign)
+            SIGN_FLAG="--sign"
+            ;;
+        *)
+            [ -z "$VERSION" ] && VERSION="$1"
+            ;;
     esac
+    shift
 done
 
 # Default version from VERSION file
@@ -44,7 +56,7 @@ BUILD_DIR="$PROJECT_ROOT/.build/$ARCH-apple-macosx/release"
 
 # 2. Build Helper App Bundle
 echo "==> Building Helper App Bundle..."
-"$SCRIPT_DIR/build-helper-app.sh" release "$SIGN_FLAG"
+"$SCRIPT_DIR/build-helper-app.sh" release $SIGN_FLAG $SIGN_IDENTITY_FLAG
 
 # 3. Assemble distribution directory
 echo "==> Assembling distribution package..."
@@ -73,7 +85,7 @@ SHA256=$(shasum -a 256 "$TAR_PATH" | cut -d' ' -f1)
 if [ -f "$SCRIPT_DIR/axion.rb.template" ]; then
     sed -e "s|{{VERSION}}|$VERSION|g" \
         -e "s|{{SHA256}}|$SHA256|g" \
-        -e "s|{{URL}}|https://github.com/terryso/homebrew-tap/releases/download/v$VERSION/axion-$VERSION.tar.gz|g" \
+        -e "s|{{URL}}|https://github.com/terryso/axion/releases/download/v$VERSION/axion-$VERSION.tar.gz|g" \
         "$SCRIPT_DIR/axion.rb.template" > "$SCRIPT_DIR/axion.rb"
     echo "==> Generated Distribution/homebrew/axion.rb"
 fi

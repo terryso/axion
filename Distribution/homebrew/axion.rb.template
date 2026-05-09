@@ -12,6 +12,13 @@ class Axion < Formula
     libexec.install Dir["libexec/*"]
   end
 
+  def caveats
+    <<~EOS
+      Run `axion setup` to configure your API key and permissions.
+      Run `axion doctor` to verify your environment.
+    EOS
+  end
+
   test do
     assert_match(/#{version}/, shell_output("#{bin}/axion --version"))
   end
