@@ -38,7 +38,7 @@ jobs:
           PROF_DATA=".build/debug/codecov/default.profdata"
           set -- $(xcrun llvm-cov report "$BINARY" \
             -instr-profile="$PROF_DATA" \
-            -ignore-filename-regex='.build/|Tests/' \
+            -ignore-filename-regex='.build/|Tests/|open-agent-sdk|swift-mcp|swift-argument|swift-system|swift-syntax|swift-sse|ArgumentParser' \
             | tail -1)
           COVERAGE=$(printf "%.1f" $(echo "$4" | sed 's/%//'))
           echo "COVERAGE=$COVERAGE" >> $GITHUB_ENV
