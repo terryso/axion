@@ -82,7 +82,7 @@ enum ConfigManager {
 
     // MARK: - Private
 
-    private static var defaultConfigDirectory: String {
+    static var defaultConfigDirectory: String {
         (NSHomeDirectory() as NSString).appendingPathComponent(".axion")
     }
 

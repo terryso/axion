@@ -1,0 +1,34 @@
+{
+  "evaluated_at": "2026-05-09T10:25:00Z",
+  "gate_basis": "priority_thresholds",
+  "gate_status": "PASS",
+  "gate_type": "story",
+  "target": {
+    "type": "story",
+    "id": "2.3",
+    "title": "axion setup first-time config command"
+  },
+  "criteria": {
+    "p0_coverage": { "threshold": 100, "actual": 100, "status": "PASS" },
+    "p0_pass_rate": { "threshold": 100, "actual": 100, "status": "PASS" },
+    "security_issues": { "threshold": 0, "actual": 0, "status": "PASS" },
+    "critical_nfr_failures": { "threshold": 0, "actual": 0, "status": "PASS" },
+    "flaky_tests": { "threshold": 0, "actual": 0, "status": "PASS" },
+    "p1_coverage": { "threshold": 90, "actual": 100, "status": "PASS" },
+    "p1_pass_rate": { "threshold": 95, "actual": 100, "status": "PASS" },
+    "overall_pass_rate": { "threshold": 95, "actual": 100, "status": "PASS" },
+    "overall_coverage": { "threshold": 80, "actual": 100, "status": "PASS" }
+  },
+  "rationale": "All P0 criteria met with 100% coverage and 100% pass rate across 23 tests. All 7 acceptance criteria (AC1-AC7) plus NFR9 fully covered. No security issues. Test suite is deterministic and fast (0.23s). Three deferred items from code review are pre-existing design limitations, not coverage gaps.",
+  "per_criterion_status": {
+    "AC1_prompt_for_api_key": { "coverage": "FULL", "tests": ["test_setup_promptsForApiKey_whenNoConfig"], "priority": "P0" },
+    "AC2_api_key_saved": { "coverage": "FULL", "tests": ["test_setup_savesApiKey_toConfigJson", "test_setup_createsConfigDirectory_ifMissing", "test_setup_configFilePermissions_are600"], "priority": "P0" },
+    "AC3_accessibility_check": { "coverage": "FULL", "tests": ["test_permissionChecker_checkAccessibility_returnsStatus", "test_setup_showsAccessibilityCheckResult"], "priority": "P0/P1" },
+    "AC4_screen_recording_check": { "coverage": "FULL", "tests": ["test_permissionChecker_checkScreenRecording_returnsStatus", "test_setup_showsScreenRecordingCheckResult"], "priority": "P0/P1" },
+    "AC5_completion_message": { "coverage": "FULL", "tests": ["test_setup_showsCompletionMessage"], "priority": "P0" },
+    "AC6_api_key_masking": { "coverage": "FULL", "tests": ["test_maskApiKey_longKey_showsMasked", "test_maskApiKey_shortKey_showsMasked", "test_maskApiKey_emptyKey_returnsEmpty", "test_setup_showsMaskedApiKey_inSummary"], "priority": "P0/P1" },
+    "AC7_repeat_run": { "coverage": "FULL", "tests": ["test_setup_detectsExistingApiKey", "test_setup_keepsExistingApiKey_whenUserDeclines", "test_setup_replacesApiKey_whenUserConfirms"], "priority": "P0/P1" },
+    "NFR9_security": { "coverage": "FULL", "tests": ["test_maskApiKey_longKey_showsMasked", "test_setup_showsMaskedApiKey_inSummary", "test_setup_configFilePermissions_are600"], "priority": "P0" }
+  },
+  "next_steps": "Merge Story 2-3. Proceed to Story 2.4 (axion doctor)."
+}

@@ -1,0 +1,87 @@
+{
+  "schema_version": "1.0",
+  "snapshot_at": "2026-05-09T10:25:00Z",
+  "repo": "axion",
+  "collection_mode": "story",
+  "collection_status": "COLLECTED",
+  "inventory_basis": "story-ac-nfr",
+  "source_sha": "local",
+  "gate_basis": "priority_thresholds",
+  "target": {
+    "type": "story",
+    "id": "2.3"
+  },
+  "oracle": {
+    "resolution_mode": "formal-requirements",
+    "confidence": "HIGH",
+    "sources": [
+      "Story 2-3 Acceptance Criteria (AC1-AC7)",
+      "NFR9 (API Key non-leakage)",
+      "project-context.md configuration system rules"
+    ],
+    "external_pointer_status": "resolved",
+    "synthetic": false
+  },
+  "coverage": {
+    "inventory": {
+      "covered": 19,
+      "total": 19,
+      "pct": 100
+    },
+    "priority_breakdown": {
+      "p0": { "covered": 13, "total": 13, "pct": 100 },
+      "p1": { "covered": 6, "total": 6, "pct": 100 },
+      "p2": { "covered": 0, "total": 0, "pct": 0 },
+      "p3": { "covered": 0, "total": 0, "pct": 0 }
+    },
+    "by_level": {
+      "unit": 23,
+      "api": 0,
+      "component": 0,
+      "e2e": 0,
+      "other": 0
+    }
+  },
+  "tests": {
+    "total": 23,
+    "passed": 23,
+    "failed": 0,
+    "skipped": 0,
+    "duration_seconds": 0.23
+  },
+  "gate_status": "PASS",
+  "gate_criteria": {
+    "p0_coverage": { "threshold": 100, "actual": 100, "status": "PASS" },
+    "p0_pass_rate": { "threshold": 100, "actual": 100, "status": "PASS" },
+    "p1_coverage": { "threshold": 90, "actual": 100, "status": "PASS" },
+    "p1_pass_rate": { "threshold": 95, "actual": 100, "status": "PASS" },
+    "overall_pass_rate": { "threshold": 95, "actual": 100, "status": "PASS" },
+    "overall_coverage": { "threshold": 80, "actual": 100, "status": "PASS" },
+    "security_issues": { "threshold": 0, "actual": 0, "status": "PASS" },
+    "critical_nfrs_fail": { "threshold": 0, "actual": 0, "status": "PASS" },
+    "flaky_tests": { "threshold": 0, "actual": 0, "status": "PASS" }
+  },
+  "risk_summary": {
+    "critical": 0,
+    "high": 0,
+    "medium": 0,
+    "low": 0
+  },
+  "heuristics": {
+    "endpoint_gaps": [],
+    "auth_negative_path_status": "not_applicable",
+    "error_path_status": "covered",
+    "ui_journey_status": "not_applicable",
+    "ui_state_status": "not_applicable"
+  },
+  "blockers": [],
+  "recommendations": [
+    "Extract PermissionChecker protocol for Story 2.4 reuse"
+  ],
+  "links": {
+    "trace_report_path": "_bmad-output/test-artifacts/traceability/traceability-matrix-2-3.md",
+    "trace_report_url": "",
+    "artifact_url": "",
+    "journey_evidence_url": ""
+  }
+}
