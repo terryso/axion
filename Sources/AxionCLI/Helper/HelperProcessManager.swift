@@ -291,6 +291,7 @@ actor HelperProcessManager {
         case .int(let i): return .int(i)
         case .bool(let b): return .bool(b)
         case .placeholder(let p): return .string(p)
+        case .array(let arr): return .array(arr.map { toMCPValue($0) })
         }
     }
 

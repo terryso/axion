@@ -2,14 +2,19 @@ import Foundation
 
 // MARK: - StopCondition
 
-struct StopCondition: Codable, Equatable {
-    let type: StopType
-    let value: String?
+public struct StopCondition: Codable, Equatable {
+    public let type: StopType
+    public let value: String?
+
+    public init(type: StopType, value: String? = nil) {
+        self.type = type
+        self.value = value
+    }
 }
 
 // MARK: - StopType
 
-enum StopType: String, Codable {
+public enum StopType: String, Codable {
     case windowAppears
     case windowDisappears
     case fileExists

@@ -1,0 +1,21 @@
+{
+  "schema_version": "0.1.0",
+  "evaluated_at": "2026-05-10T01:36:00Z",
+  "repo": "axion",
+  "target": {
+    "type": "story",
+    "id": "3-2",
+    "label": "Prompt 管理与规划引擎"
+  },
+  "collection_status": "COLLECTED",
+  "gate_basis": "priority_thresholds",
+  "gate_status": "PASS",
+  "rationale": "P0 coverage is 100%, P1 coverage is 100% (no P1 requirements — all 7 ACs are P0), and overall coverage is 100% (minimum: 80%). All acceptance criteria have FULL test coverage with 51 active unit tests across 3 test files. No critical or high gaps identified.",
+  "p0_status": "MET",
+  "p1_status": "MET",
+  "overall_status": "MET",
+  "critical_open": 0,
+  "links": {
+    "trace_report_path": "_bmad-output/test-artifacts/traceability/traceability-matrix-3-2.md"
+  }
+}

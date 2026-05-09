@@ -1,6 +1,6 @@
 import Foundation
 
-enum RunState: String, Codable, CaseIterable, Equatable {
+public enum RunState: String, Codable, CaseIterable, Equatable {
     case planning
     case executing
     case verifying

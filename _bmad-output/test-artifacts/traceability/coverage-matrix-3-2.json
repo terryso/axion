@@ -1,0 +1,427 @@
+{
+  "phase": "PHASE_1_COMPLETE",
+  "generated_at": "2026-05-10T01:36:00Z",
+  "trace_target": {
+    "type": "story",
+    "id": "3-2",
+    "label": "Prompt 管理与规划引擎"
+  },
+  "collection_mode": "contract_static",
+  "allow_gate": true,
+  "coverage_basis": "acceptance_criteria",
+  "summary_confidence": "high",
+  "oracle": {
+    "resolution_mode": "formal_requirements",
+    "confidence": "high",
+    "sources": [
+      "_bmad-output/implementation-artifacts/3-2-prompt-management-planning-engine.md",
+      "_bmad-output/test-artifacts/atdd-checklist-3-2-prompt-management-planning-engine.md"
+    ],
+    "external_pointer_status": "not_used",
+    "synthetic": false
+  },
+
+  "requirements": [
+    {
+      "id": "AC1",
+      "title": "Prompt 文件加载与模板变量注入",
+      "priority": "P0",
+      "coverage": "FULL",
+      "tests": [
+        {
+          "id": "AC1-T01",
+          "title": "test_promptBuilder_typeExists",
+          "file": "Tests/AxionCLITests/Planner/PromptBuilderTests.swift",
+          "level": "unit",
+          "status": "active"
+        },
+        {
+          "id": "AC1-T02",
+          "title": "test_load_existingFile_returnsContent",
+          "file": "Tests/AxionCLITests/Planner/PromptBuilderTests.swift",
+          "level": "unit",
+          "status": "active"
+        },
+        {
+          "id": "AC1-T03",
+          "title": "test_load_missingFile_throwsError",
+          "file": "Tests/AxionCLITests/Planner/PromptBuilderTests.swift",
+          "level": "unit",
+          "status": "active"
+        },
+        {
+          "id": "AC1-T04",
+          "title": "test_load_noVariables_returnsRawContent",
+          "file": "Tests/AxionCLITests/Planner/PromptBuilderTests.swift",
+          "level": "unit",
+          "status": "active"
+        },
+        {
+          "id": "AC1-T05",
+          "title": "test_load_multipleOccurrences_replacesAll",
+          "file": "Tests/AxionCLITests/Planner/PromptBuilderTests.swift",
+          "level": "unit",
+          "status": "active"
+        },
+        {
+          "id": "AC1-T06",
+          "title": "test_templateVariable_injectedCorrectly",
+          "file": "Tests/AxionCLITests/Planner/PromptBuilderTests.swift",
+          "level": "unit",
+          "status": "active"
+        },
+        {
+          "id": "AC1-T07",
+          "title": "test_buildToolListDescription_formatsToolNames",
+          "file": "Tests/AxionCLITests/Planner/PromptBuilderTests.swift",
+          "level": "unit",
+          "status": "active"
+        },
+        {
+          "id": "AC1-T08",
+          "title": "test_buildToolListDescription_emptyList_returnsEmpty",
+          "file": "Tests/AxionCLITests/Planner/PromptBuilderTests.swift",
+          "level": "unit",
+          "status": "active"
+        },
+        {
+          "id": "AC1-T09",
+          "title": "test_buildPlannerPrompt_includesTask",
+          "file": "Tests/AxionCLITests/Planner/PromptBuilderTests.swift",
+          "level": "unit",
+          "status": "active"
+        },
+        {
+          "id": "AC1-T10",
+          "title": "test_buildPlannerPrompt_withReplanContext_includesFailureInfo",
+          "file": "Tests/AxionCLITests/Planner/PromptBuilderTests.swift",
+          "level": "unit",
+          "status": "active"
+        },
+        {
+          "id": "AC1-T11",
+          "title": "test_resolvePromptDirectory_returnsValidPath",
+          "file": "Tests/AxionCLITests/Planner/PromptBuilderTests.swift",
+          "level": "unit",
+          "status": "active"
+        },
+        {
+          "id": "AC1-T12",
+          "title": "test_load_unresolvedVariables_remainAsPlaceholders",
+          "file": "Tests/AxionCLITests/Planner/PromptBuilderTests.swift",
+          "level": "unit",
+          "status": "active"
+        }
+      ]
+    },
+    {
+      "id": "AC2",
+      "title": "LLM 规划生成结构化 Plan",
+      "priority": "P0",
+      "coverage": "FULL",
+      "tests": [
+        {
+          "id": "AC2-T01",
+          "title": "test_llmPlanner_typeExists",
+          "file": "Tests/AxionCLITests/Planner/LLMPlannerTests.swift",
+          "level": "unit",
+          "status": "active"
+        },
+        {
+          "id": "AC2-T02",
+          "title": "test_llmClientProtocol_typeExists",
+          "file": "Tests/AxionCLITests/Planner/LLMPlannerTests.swift",
+          "level": "unit",
+          "status": "active"
+        },
+        {
+          "id": "AC2-T03",
+          "title": "test_createPlan_callsLLMWithCorrectPrompt",
+          "file": "Tests/AxionCLITests/Planner/LLMPlannerTests.swift",
+          "level": "unit",
+          "status": "active"
+        },
+        {
+          "id": "AC2-T04",
+          "title": "test_createPlan_returnsPlanWithSteps",
+          "file": "Tests/AxionCLITests/Planner/LLMPlannerTests.swift",
+          "level": "unit",
+          "status": "active"
+        },
+        {
+          "id": "AC2-T05",
+          "title": "test_llmPlanner_init_withConfigAndClients",
+          "file": "Tests/AxionCLITests/Planner/LLMPlannerTests.swift",
+          "level": "unit",
+          "status": "active"
+        }
+      ]
+    },
+    {
+      "id": "AC3",
+      "title": "Plan 步骤结构完整性",
+      "priority": "P0",
+      "coverage": "FULL",
+      "tests": [
+        {
+          "id": "AC3-T01",
+          "title": "test_parsePlan_stepStructure_hasAllRequiredFields",
+          "file": "Tests/AxionCLITests/Planner/PlanParserTests.swift",
+          "level": "unit",
+          "status": "active"
+        },
+        {
+          "id": "AC3-T02",
+          "title": "test_validatePlan_validPlan_returnsPlan",
+          "file": "Tests/AxionCLITests/Planner/PlanParserTests.swift",
+          "level": "unit",
+          "status": "active"
+        },
+        {
+          "id": "AC3-T03",
+          "title": "test_parsePlan_argsField_mapsToParameters",
+          "file": "Tests/AxionCLITests/Planner/PlanParserTests.swift",
+          "level": "unit",
+          "status": "active"
+        },
+        {
+          "id": "AC3-T04",
+          "title": "test_parsePlan_expectedChangeField_snakeCaseMapped",
+          "file": "Tests/AxionCLITests/Planner/PlanParserTests.swift",
+          "level": "unit",
+          "status": "active"
+        },
+        {
+          "id": "AC3-T05",
+          "title": "test_validatePlan_emptySteps_throwsInvalidPlan",
+          "file": "Tests/AxionCLITests/Planner/PlanParserTests.swift",
+          "level": "unit",
+          "status": "active"
+        },
+        {
+          "id": "AC3-T06",
+          "title": "test_validatePlan_emptyStopWhen_throwsInvalidPlan",
+          "file": "Tests/AxionCLITests/Planner/PlanParserTests.swift",
+          "level": "unit",
+          "status": "active"
+        }
+      ]
+    },
+    {
+      "id": "AC4",
+      "title": "Markdown 围栏解析",
+      "priority": "P0",
+      "coverage": "FULL",
+      "tests": [
+        {
+          "id": "AC4-T01",
+          "title": "test_planParser_typeExists",
+          "file": "Tests/AxionCLITests/Planner/PlanParserTests.swift",
+          "level": "unit",
+          "status": "active"
+        },
+        {
+          "id": "AC4-T02",
+          "title": "test_stripFences_jsonInBackticks_extractsJSON",
+          "file": "Tests/AxionCLITests/Planner/PlanParserTests.swift",
+          "level": "unit",
+          "status": "active"
+        },
+        {
+          "id": "AC4-T03",
+          "title": "test_stripFences_jsonInPlainBackticks_extractsJSON",
+          "file": "Tests/AxionCLITests/Planner/PlanParserTests.swift",
+          "level": "unit",
+          "status": "active"
+        },
+        {
+          "id": "AC4-T04",
+          "title": "test_stripFences_pureJSON_returnsAsIs",
+          "file": "Tests/AxionCLITests/Planner/PlanParserTests.swift",
+          "level": "unit",
+          "status": "active"
+        },
+        {
+          "id": "AC4-T05",
+          "title": "test_stripFences_nestedBracesInStrings_handlesCorrectly",
+          "file": "Tests/AxionCLITests/Planner/PlanParserTests.swift",
+          "level": "unit",
+          "status": "active"
+        }
+      ]
+    },
+    {
+      "id": "AC5",
+      "title": "前导文本解析",
+      "priority": "P0",
+      "coverage": "FULL",
+      "tests": [
+        {
+          "id": "AC5-T01",
+          "title": "test_stripFences_proseBeforeJSON_extractsJSON",
+          "file": "Tests/AxionCLITests/Planner/PlanParserTests.swift",
+          "level": "unit",
+          "status": "active"
+        },
+        {
+          "id": "AC5-T02",
+          "title": "test_stripFences_jsonWithTrailingText_extractsJSON",
+          "file": "Tests/AxionCLITests/Planner/PlanParserTests.swift",
+          "level": "unit",
+          "status": "active"
+        }
+      ]
+    },
+    {
+      "id": "AC6",
+      "title": "LLM API 重试（NFR6）",
+      "priority": "P0",
+      "coverage": "FULL",
+      "tests": [
+        {
+          "id": "AC6-T01",
+          "title": "test_createPlan_retriesOnNetworkError_upToMaxRetries",
+          "file": "Tests/AxionCLITests/Planner/LLMPlannerTests.swift",
+          "level": "unit",
+          "status": "active"
+        },
+        {
+          "id": "AC6-T02",
+          "title": "test_createPlan_succeedsOnRetry_afterInitialFailure",
+          "file": "Tests/AxionCLITests/Planner/LLMPlannerTests.swift",
+          "level": "unit",
+          "status": "active"
+        },
+        {
+          "id": "AC6-T03",
+          "title": "test_createPlan_doesNotRetryOnParseError",
+          "file": "Tests/AxionCLITests/Planner/LLMPlannerTests.swift",
+          "level": "unit",
+          "status": "active"
+        }
+      ]
+    },
+    {
+      "id": "AC7",
+      "title": "Plan 解析失败不静默丢弃（NFR7）",
+      "priority": "P0",
+      "coverage": "FULL",
+      "tests": [
+        {
+          "id": "AC7-T01",
+          "title": "test_parsePlan_failurePreservesRawResponse_NFR7",
+          "file": "Tests/AxionCLITests/Planner/PlanParserTests.swift",
+          "level": "unit",
+          "status": "active"
+        },
+        {
+          "id": "AC7-T02",
+          "title": "test_parsePlan_invalidJSON_throwsInvalidPlan",
+          "file": "Tests/AxionCLITests/Planner/PlanParserTests.swift",
+          "level": "unit",
+          "status": "active"
+        }
+      ]
+    }
+  ],
+
+  "coverage_statistics": {
+    "total_requirements": 7,
+    "fully_covered": 7,
+    "partially_covered": 0,
+    "uncovered": 0,
+    "overall_coverage_percentage": 100,
+    "priority_breakdown": {
+      "P0": { "total": 7, "covered": 7, "percentage": 100 },
+      "P1": { "total": 0, "covered": 0, "percentage": 100 },
+      "P2": { "total": 0, "covered": 0, "percentage": 100 },
+      "P3": { "total": 0, "covered": 0, "percentage": 100 }
+    }
+  },
+
+  "gap_analysis": {
+    "critical_gaps": [],
+    "high_gaps": [],
+    "medium_gaps": [
+      {
+        "id": "EXTRA-1",
+        "title": "真实 LLM API 集成测试",
+        "priority": "N/A",
+        "coverage": "NONE",
+        "gap": "所有 LLMPlanner 测试使用 MockLLMClient。真实 Anthropic API 调用的端到端验证需要集成测试（属于 Tests/**/Integration/ 目录），不在单元测试范围内。"
+      },
+      {
+        "id": "EXTRA-2",
+        "title": "Planner prompt 文件 planner-system.md 内容验证",
+        "priority": "N/A",
+        "coverage": "NONE",
+        "gap": "Story Task 2 创建了 planner-system.md 但无独立测试验证其内容正确性。该文件的存在由 PromptBuilder 的 resolvePromptDirectory + load 间接验证，但内容完整性（包含 {{tools}} 占位符、shifted key 映射等）未直接测试。"
+      }
+    ],
+    "low_gaps": [
+      {
+        "id": "EDGE-1",
+        "title": "callLLMWithRetry 对非 AxionError 类型的错误重试",
+        "priority": "N/A",
+        "coverage": "PARTIAL",
+        "gap": "callLLMWithRetry 对非 AxionError 类型的错误（如 URLError）也会重试，但测试只覆盖了 AxionError.planningFailed 场景。其他错误类型的重试行为未直接测试。"
+      }
+    ],
+    "partial_coverage_items": [],
+    "unit_only_items": []
+  },
+
+  "coverage_heuristics": {
+    "endpoint_gaps": [],
+    "auth_negative_path_gaps": [],
+    "happy_path_only_gaps": [
+      { "id": "AC2", "note": "createPlan happy path tested; llmThrowsError tests verify error propagation but do not test partial response scenarios" }
+    ],
+    "ui_journey_gaps": [],
+    "ui_state_gaps": [],
+    "counts": {
+      "endpoints_without_tests": 0,
+      "auth_missing_negative_paths": 0,
+      "happy_path_only_criteria": 1,
+      "ui_journeys_without_e2e": 0,
+      "ui_states_missing_coverage": 0
+    }
+  },
+
+  "test_inventory": {
+    "summary": {
+      "files": 3,
+      "cases": 51,
+      "skipped_cases": 0,
+      "fixme_cases": 0,
+      "pending_cases": 0,
+      "by_level": {
+        "e2e": { "tests": 0, "criteria_covered": 0 },
+        "api": { "tests": 0, "criteria_covered": 0 },
+        "component": { "tests": 0, "criteria_covered": 0 },
+        "unit": { "tests": 51, "criteria_covered": 7 },
+        "other": { "tests": 0, "criteria_covered": 0 }
+      }
+    },
+    "tests": [],
+    "blockers": []
+  },
+
+  "recommendations": [
+    {
+      "priority": "LOW",
+      "action": "添加集成测试验证真实 Anthropic API 调用的端到端 Planner 流程（放在 Tests/**/Integration/ 目录）",
+      "requirements": ["AC2"]
+    },
+    {
+      "priority": "LOW",
+      "action": "添加测试验证 planner-system.md 内容包含必需的占位符（{{tools}}）和 shifted key 映射",
+      "requirements": ["AC1"]
+    },
+    {
+      "priority": "LOW",
+      "action": "运行 /bmad:tea:test-review 评估测试质量",
+      "requirements": []
+    }
+  ]
+}

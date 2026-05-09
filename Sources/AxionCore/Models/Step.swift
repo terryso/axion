@@ -31,6 +31,7 @@ public enum Value: Codable, Equatable, Sendable {
     case int(Int)
     case bool(Bool)
     case placeholder(String)
+    indirect case array([Value])
 
     private enum CodingKeys: String, CodingKey {
         case type
@@ -41,6 +42,7 @@ public enum Value: Codable, Equatable, Sendable {
     private static let codingTypeInt = "int"
     private static let codingTypeBool = "bool"
     private static let codingTypePlaceholder = "placeholder"
+    private static let codingTypeArray = "array"
 
     public func encode(to encoder: Encoder) throws {
         var container = encoder.container(keyedBy: CodingKeys.self)
@@ -57,6 +59,9 @@ public enum Value: Codable, Equatable, Sendable {
         case .placeholder(let v):
             try container.encode(Self.codingTypePlaceholder, forKey: .type)
             try container.encode(v, forKey: .value)
+        case .array(let v):
+            try container.encode(Self.codingTypeArray, forKey: .type)
+            try container.encode(v, forKey: .value)
         }
     }
 
@@ -72,6 +77,8 @@ public enum Value: Codable, Equatable, Sendable {
             self = .bool(try container.decode(Bool.self, forKey: .value))
         case Self.codingTypePlaceholder:
             self = .placeholder(try container.decode(String.self, forKey: .value))
+        case Self.codingTypeArray:
+            self = .array(try container.decode([Value].self, forKey: .value))
         default:
             throw DecodingError.dataCorruptedError(
                 forKey: .type,

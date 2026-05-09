@@ -1,10 +1,19 @@
 import Foundation
 
-struct ExecutedStep: Codable, Equatable {
-    let stepIndex: Int
-    let tool: String
-    let parameters: [String: Value]
-    let result: String
-    let success: Bool
-    let timestamp: Date
+public struct ExecutedStep: Codable, Equatable {
+    public let stepIndex: Int
+    public let tool: String
+    public let parameters: [String: Value]
+    public let result: String
+    public let success: Bool
+    public let timestamp: Date
+
+    public init(stepIndex: Int, tool: String, parameters: [String: Value], result: String, success: Bool, timestamp: Date) {
+        self.stepIndex = stepIndex
+        self.tool = tool
+        self.parameters = parameters
+        self.result = result
+        self.success = success
+        self.timestamp = timestamp
+    }
 }
