@@ -29,6 +29,7 @@ let package = Package(
             dependencies: [
                 "AxionCore",
                 .product(name: "OpenAgentSDK", package: "open-agent-sdk-swift"),
+                .product(name: "MCP", package: "swift-mcp"),
                 .product(name: "ArgumentParser", package: "swift-argument-parser"),
             ],
             path: "Sources/AxionCLI"
@@ -53,7 +54,11 @@ let package = Package(
         ),
         .testTarget(
             name: "AxionCLITests",
-            dependencies: ["AxionCLI", "AxionCore"],
+            dependencies: [
+                "AxionCLI",
+                "AxionCore",
+                .product(name: "MCP", package: "swift-mcp"),
+            ],
             path: "Tests/AxionCLITests"
         ),
         .testTarget(

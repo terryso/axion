@@ -1,0 +1,21 @@
+{
+  "schema_version": "0.1.0",
+  "evaluated_at": "2026-05-09T16:25:36Z",
+  "repo": "axion",
+  "target": {
+    "type": "story",
+    "id": "3-1",
+    "label": "Helper 进程管理器与 MCP 客户端连接"
+  },
+  "collection_status": "COLLECTED",
+  "gate_basis": "priority_thresholds",
+  "gate_status": "CONCERNS",
+  "rationale": "P0 coverage is 100% and overall coverage is 67% (minimum: 80%). P0 is fully met, but 2 P1 requirements have only PARTIAL coverage (33% P1 coverage, below the 80% minimum). The partial coverage is due to the inherently integration-test-dependent nature of signal handling and crash restart flows.",
+  "p0_status": "MET",
+  "p1_status": "NOT_MET",
+  "overall_status": "NOT_MET",
+  "critical_open": 0,
+  "links": {
+    "trace_report_path": "_bmad-output/test-artifacts/traceability/traceability-matrix-3-1.md"
+  }
+}

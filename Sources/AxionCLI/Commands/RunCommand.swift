@@ -1,6 +1,7 @@
 import ArgumentParser
+import Foundation
 
-struct RunCommand: ParsableCommand {
+struct RunCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
         commandName: "run",
         abstract: "执行桌面自动化任务"
@@ -27,7 +28,21 @@ struct RunCommand: ParsableCommand {
     @Flag(name: .long, help: "JSON 格式输出")
     var json: Bool = false
 
-    func run() throws {
-        throw CleanExit.message("Run command not yet implemented (Epic 3)")
+    mutating func run() async throws {
+        let manager = HelperProcessManager()
+
+        do {
+            try await withTaskCancellationHandler {
+                try await manager.start()
+
+                // 后续 Story 在此处添加 RunEngine 编排
+                throw CleanExit.message("Run command partially implemented (Story 3.1)")
+            } onCancel: {
+                Task { await manager.stop() }
+            }
+        } catch {
+            await manager.stop()
+            throw error
+        }
     }
 }

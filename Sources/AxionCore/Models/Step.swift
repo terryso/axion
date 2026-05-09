@@ -2,17 +2,31 @@ import Foundation
 
 // MARK: - Step
 
-struct Step: Codable, Equatable {
-    let index: Int
-    let tool: String
-    let parameters: [String: Value]
-    let purpose: String
-    let expectedChange: String
+public struct Step: Codable, Equatable {
+    public let index: Int
+    public let tool: String
+    public let parameters: [String: Value]
+    public let purpose: String
+    public let expectedChange: String
+
+    public init(
+        index: Int,
+        tool: String,
+        parameters: [String: Value],
+        purpose: String,
+        expectedChange: String
+    ) {
+        self.index = index
+        self.tool = tool
+        self.parameters = parameters
+        self.purpose = purpose
+        self.expectedChange = expectedChange
+    }
 }
 
 // MARK: - Value
 
-enum Value: Codable, Equatable {
+public enum Value: Codable, Equatable, Sendable {
     case string(String)
     case int(Int)
     case bool(Bool)
@@ -28,7 +42,7 @@ enum Value: Codable, Equatable {
     private static let codingTypeBool = "bool"
     private static let codingTypePlaceholder = "placeholder"
 
-    func encode(to encoder: Encoder) throws {
+    public func encode(to encoder: Encoder) throws {
         var container = encoder.container(keyedBy: CodingKeys.self)
         switch self {
         case .string(let v):
@@ -46,7 +60,7 @@ enum Value: Codable, Equatable {
         }
     }
 
-    init(from decoder: Decoder) throws {
+    public init(from decoder: Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
         let type = try container.decode(String.self, forKey: .type)
         switch type {

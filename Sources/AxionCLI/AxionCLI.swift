@@ -1,7 +1,7 @@
 import ArgumentParser
 
 @main
-struct AxionCLI: ParsableCommand {
+struct AxionCLI: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
         commandName: "axion",
         abstract: "Axion — macOS 桌面自动化 CLI",

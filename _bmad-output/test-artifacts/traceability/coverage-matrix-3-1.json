@@ -1,0 +1,306 @@
+{
+  "phase": "PHASE_1_COMPLETE",
+  "generated_at": "2026-05-09T16:25:36Z",
+  "trace_target": {
+    "type": "story",
+    "id": "3-1",
+    "label": "Helper 进程管理器与 MCP 客户端连接"
+  },
+  "collection_mode": "contract_static",
+  "allow_gate": true,
+  "coverage_basis": "acceptance_criteria",
+  "summary_confidence": "high",
+  "oracle": {
+    "resolution_mode": "formal_requirements",
+    "confidence": "high",
+    "sources": [
+      "_bmad-output/implementation-artifacts/3-1-helper-process-manager-mcp-client.md",
+      "_bmad-output/test-artifacts/atdd-checklist-3-1-helper-process-manager-mcp-client.md"
+    ],
+    "external_pointer_status": "not_used",
+    "synthetic": false
+  },
+
+  "requirements": [
+    {
+      "id": "AC1",
+      "title": "启动 Helper 并建立 MCP 连接",
+      "priority": "P0",
+      "coverage": "FULL",
+      "tests": [
+        {
+          "id": "AC1-T01",
+          "title": "test_helperProcessManager_typeExists",
+          "file": "Tests/AxionCLITests/Helper/HelperProcessManagerTests.swift",
+          "level": "unit",
+          "status": "active"
+        },
+        {
+          "id": "AC1-T02",
+          "title": "test_helperProcessManager_startMethodExists",
+          "file": "Tests/AxionCLITests/Helper/HelperProcessManagerTests.swift",
+          "level": "unit",
+          "status": "active"
+        },
+        {
+          "id": "AC1-T03",
+          "title": "test_start_throwsWhenHelperPathNotFound",
+          "file": "Tests/AxionCLITests/Helper/HelperProcessManagerTests.swift",
+          "level": "unit",
+          "status": "active"
+        },
+        {
+          "id": "AC1-T04",
+          "title": "test_start_connectsMCPClient_isRunningReflectsTransport",
+          "file": "Tests/AxionCLITests/Helper/HelperProcessManagerTests.swift",
+          "level": "unit",
+          "status": "active"
+        },
+        {
+          "id": "AC1-T05",
+          "title": "test_start_throwsHelperConnectionFailed_onMCPError",
+          "file": "Tests/AxionCLITests/Helper/HelperProcessManagerTests.swift",
+          "level": "unit",
+          "status": "active"
+        },
+        {
+          "id": "AC1-T06",
+          "title": "test_runCommand_startsHelperProcessManager",
+          "file": "Tests/AxionCLITests/Commands/RunCommandATDDTests.swift",
+          "level": "unit",
+          "status": "active"
+        }
+      ]
+    },
+    {
+      "id": "AC2",
+      "title": "MCP 连接就绪确认",
+      "priority": "P0",
+      "coverage": "FULL",
+      "tests": [
+        {
+          "id": "AC2-T01",
+          "title": "test_listTools_returnsToolNames",
+          "file": "Tests/AxionCLITests/Helper/HelperProcessManagerTests.swift",
+          "level": "unit",
+          "status": "active"
+        },
+        {
+          "id": "AC2-T02",
+          "title": "test_helperProcessManager_isRunningMethodExists",
+          "file": "Tests/AxionCLITests/Helper/HelperProcessManagerTests.swift",
+          "level": "unit",
+          "status": "active"
+        },
+        {
+          "id": "AC2-T03",
+          "title": "test_listTools_toolNamesAreSnakeCase",
+          "file": "Tests/AxionCLITests/Helper/HelperProcessManagerTests.swift",
+          "level": "unit",
+          "status": "active"
+        }
+      ]
+    },
+    {
+      "id": "AC3",
+      "title": "正常退出清理",
+      "priority": "P0",
+      "coverage": "FULL",
+      "tests": [
+        {
+          "id": "AC3-T01",
+          "title": "test_stop_closesMCPClientAndTransport",
+          "file": "Tests/AxionCLITests/Helper/HelperProcessManagerTests.swift",
+          "level": "unit",
+          "status": "active"
+        },
+        {
+          "id": "AC3-T02",
+          "title": "test_stop_whenNotStarted_isNoOp",
+          "file": "Tests/AxionCLITests/Helper/HelperProcessManagerTests.swift",
+          "level": "unit",
+          "status": "active"
+        },
+        {
+          "id": "AC3-T03",
+          "title": "test_stop_gracefulShutdown_closesConnectionFirst",
+          "file": "Tests/AxionCLITests/Helper/HelperProcessManagerTests.swift",
+          "level": "unit",
+          "status": "active"
+        },
+        {
+          "id": "AC3-T04",
+          "title": "test_runCommand_stopsHelperOnExit",
+          "file": "Tests/AxionCLITests/Commands/RunCommandATDDTests.swift",
+          "level": "unit",
+          "status": "active"
+        }
+      ]
+    },
+    {
+      "id": "AC4",
+      "title": "强制终止回退",
+      "priority": "P1",
+      "coverage": "FULL",
+      "tests": [
+        {
+          "id": "AC4-T01",
+          "title": "test_stop_forceKillAfterTimeout",
+          "file": "Tests/AxionCLITests/Helper/HelperProcessManagerTests.swift",
+          "level": "unit",
+          "status": "active"
+        }
+      ]
+    },
+    {
+      "id": "AC5",
+      "title": "Ctrl-C 信号传播 (NFR8)",
+      "priority": "P1",
+      "coverage": "PARTIAL",
+      "tests": [
+        {
+          "id": "AC5-T01",
+          "title": "test_setupSignalHandling_registersSIGINTHandler",
+          "file": "Tests/AxionCLITests/Helper/HelperProcessManagerTests.swift",
+          "level": "unit",
+          "status": "active"
+        },
+        {
+          "id": "AC5-T02",
+          "title": "test_runCommand_conformsToAsyncParsableCommand",
+          "file": "Tests/AxionCLITests/Commands/RunCommandATDDTests.swift",
+          "level": "unit",
+          "status": "active"
+        }
+      ],
+      "coverage_note": "setupSignalHandling() is a no-op; actual Ctrl-C handling is via withTaskCancellationHandler in RunCommand. Unit test verifies interface exists but does not verify actual signal delivery behavior (requires integration test)."
+    },
+    {
+      "id": "AC6",
+      "title": "Helper 崩溃检测与重启",
+      "priority": "P1",
+      "coverage": "PARTIAL",
+      "tests": [
+        {
+          "id": "AC6-T01",
+          "title": "test_crashMonitor_detectsCrashViaTransportState",
+          "file": "Tests/AxionCLITests/Helper/HelperProcessManagerTests.swift",
+          "level": "unit",
+          "status": "active"
+        },
+        {
+          "id": "AC6-T02",
+          "title": "test_crashMonitor_hasRestartedPreventsSecondRestart",
+          "file": "Tests/AxionCLITests/Helper/HelperProcessManagerTests.swift",
+          "level": "unit",
+          "status": "active"
+        }
+      ],
+      "coverage_note": "Tests verify crash detection via transport state and hasRestarted guard. Does not verify the full restart flow (performCrashRestart calls start() which requires a real Helper path). Deferred to integration tests."
+    }
+  ],
+
+  "coverage_statistics": {
+    "total_requirements": 6,
+    "fully_covered": 4,
+    "partially_covered": 2,
+    "uncovered": 0,
+    "overall_coverage_percentage": 67,
+    "priority_breakdown": {
+      "P0": { "total": 3, "covered": 3, "percentage": 100 },
+      "P1": { "total": 3, "covered": 1, "percentage": 33 },
+      "P2": { "total": 0, "covered": 0, "percentage": 100 },
+      "P3": { "total": 0, "covered": 0, "percentage": 100 }
+    }
+  },
+
+  "gap_analysis": {
+    "critical_gaps": [],
+    "high_gaps": [
+      {
+        "id": "AC5",
+        "title": "Ctrl-C 信号传播 (NFR8)",
+        "priority": "P1",
+        "coverage": "PARTIAL",
+        "gap": "setupSignalHandling() is a documented no-op. Actual signal handling via withTaskCancellationHandler is not directly tested at unit level. Integration test needed for real SIGINT delivery."
+      },
+      {
+        "id": "AC6",
+        "title": "Helper 崩溃检测与重启",
+        "priority": "P1",
+        "coverage": "PARTIAL",
+        "gap": "Tests verify crash state detection and hasRestarted guard, but do not verify the actual restart flow (performCrashRestart -> start()). Integration test needed for real process crash/restart."
+      }
+    ],
+    "medium_gaps": [],
+    "low_gaps": [],
+    "partial_coverage_items": [
+      {
+        "id": "AC5",
+        "title": "Ctrl-C 信号传播 (NFR8)",
+        "priority": "P1"
+      },
+      {
+        "id": "AC6",
+        "title": "Helper 崩溃检测与重启",
+        "priority": "P1"
+      }
+    ],
+    "unit_only_items": []
+  },
+
+  "coverage_heuristics": {
+    "endpoint_gaps": [],
+    "auth_negative_path_gaps": [],
+    "happy_path_only_gaps": [
+      { "id": "AC3", "note": "No test for graceful shutdown timeout (3-second SIGKILL fallback) — spec deviation documented as deferred" },
+      { "id": "AC6", "note": "Crash monitor 500ms polling delay creates transient error window — deferred for MVP" }
+    ],
+    "ui_journey_gaps": [],
+    "ui_state_gaps": [],
+    "counts": {
+      "endpoints_without_tests": 0,
+      "auth_missing_negative_paths": 0,
+      "happy_path_only_criteria": 2,
+      "ui_journeys_without_e2e": 0,
+      "ui_states_missing_coverage": 0
+    }
+  },
+
+  "test_inventory": {
+    "summary": {
+      "files": 2,
+      "cases": 31,
+      "skipped_cases": 0,
+      "fixme_cases": 0,
+      "pending_cases": 0,
+      "by_level": {
+        "e2e": { "tests": 0, "criteria_covered": 0 },
+        "api": { "tests": 0, "criteria_covered": 0 },
+        "component": { "tests": 0, "criteria_covered": 0 },
+        "unit": { "tests": 31, "criteria_covered": 6 },
+        "other": { "tests": 0, "criteria_covered": 0 }
+      }
+    },
+    "tests": [],
+    "blockers": []
+  },
+
+  "recommendations": [
+    {
+      "priority": "MEDIUM",
+      "action": "Complete coverage for 2 partially covered requirements (AC5, AC6) — add integration tests for Ctrl-C signal delivery and crash restart flow",
+      "requirements": ["AC5", "AC6"]
+    },
+    {
+      "priority": "MEDIUM",
+      "action": "Add error/edge scenario tests for 2 happy-path-only criteria (AC3 graceful shutdown timeout, AC6 crash monitor transient window)",
+      "requirements": ["AC3", "AC6"]
+    },
+    {
+      "priority": "LOW",
+      "action": "Run /bmad:tea:test-review to assess test quality",
+      "requirements": []
+    }
+  ]
+}
