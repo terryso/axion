@@ -1,0 +1,179 @@
+{
+  "phase": "PHASE_1_COMPLETE",
+  "generated_at": "2026-05-09T15:07:30.000Z",
+  "trace_target": {
+    "type": "story",
+    "id": "2-4",
+    "label": "axion-doctor-environment-check"
+  },
+  "collection_mode": "contract_static",
+  "allow_gate": true,
+  "coverage_basis": "acceptance_criteria",
+  "summary_confidence": "high",
+  "oracle": {
+    "resolution_mode": "formal_requirements",
+    "confidence": "high",
+    "sources": [
+      "_bmad-output/implementation-artifacts/2-4-axion-doctor-environment-check.md"
+    ],
+    "external_pointer_status": "not_used",
+    "synthetic": false
+  },
+  "requirements": [
+    {
+      "id": "AC1",
+      "title": "API Key 检查",
+      "description": "报告 config.json 中是否存在有效的 API Key",
+      "priority": "P0",
+      "coverage": "FULL",
+      "tests": [
+        {"id": "DoctorCommandTests.swift:test_doctor_reportsApiKeyOk_whenConfigured", "title": "test_doctor_reportsApiKeyOk_whenConfigured", "file": "Tests/AxionCLITests/Commands/DoctorCommandTests.swift", "level": "unit", "status": "active"},
+        {"id": "DoctorCommandTests.swift:test_doctor_reportsApiKeyMissing_whenNoConfig", "title": "test_doctor_reportsApiKeyMissing_whenNoConfig", "file": "Tests/AxionCLITests/Commands/DoctorCommandTests.swift", "level": "unit", "status": "active"},
+        {"id": "DoctorCommandTests.swift:test_doctor_reportsApiKeyMissing_whenNoKey", "title": "test_doctor_reportsApiKeyMissing_whenNoKey", "file": "Tests/AxionCLITests/Commands/DoctorCommandTests.swift", "level": "unit", "status": "active"}
+      ]
+    },
+    {
+      "id": "AC2",
+      "title": "API Key 缺失建议",
+      "description": "API Key 缺失时建议运行 axion setup 配置 API Key",
+      "priority": "P0",
+      "coverage": "FULL",
+      "tests": [
+        {"id": "DoctorCommandTests.swift:test_doctor_reportsApiKeyMissing_whenNoConfig", "title": "test_doctor_reportsApiKeyMissing_whenNoConfig", "file": "Tests/AxionCLITests/Commands/DoctorCommandTests.swift", "level": "unit", "status": "active"},
+        {"id": "DoctorCommandTests.swift:test_doctor_reportsApiKeyMissing_whenNoKey", "title": "test_doctor_reportsApiKeyMissing_whenNoKey", "file": "Tests/AxionCLITests/Commands/DoctorCommandTests.swift", "level": "unit", "status": "active"},
+        {"id": "DoctorCommandTests.swift:test_doctor_reportsCorruptConfig", "title": "test_doctor_reportsCorruptConfig", "file": "Tests/AxionCLITests/Commands/DoctorCommandTests.swift", "level": "unit", "status": "active"}
+      ]
+    },
+    {
+      "id": "AC3",
+      "title": "Accessibility 权限检查",
+      "description": "报告权限状态，未授权时给出具体步骤",
+      "priority": "P0",
+      "coverage": "FULL",
+      "tests": [
+        {"id": "DoctorCommandTests.swift:test_doctor_reportsAccessibilityStatus", "title": "test_doctor_reportsAccessibilityStatus", "file": "Tests/AxionCLITests/Commands/DoctorCommandTests.swift", "level": "unit", "status": "active"}
+      ]
+    },
+    {
+      "id": "AC4",
+      "title": "屏幕录制权限检查",
+      "description": "报告权限状态，未授权时给出修复建议",
+      "priority": "P0",
+      "coverage": "FULL",
+      "tests": [
+        {"id": "DoctorCommandTests.swift:test_doctor_reportsScreenRecordingStatus", "title": "test_doctor_reportsScreenRecordingStatus", "file": "Tests/AxionCLITests/Commands/DoctorCommandTests.swift", "level": "unit", "status": "active"}
+      ]
+    },
+    {
+      "id": "AC5",
+      "title": "macOS 版本检查",
+      "description": "报告当前版本是否满足 14.0+ 要求",
+      "priority": "P0",
+      "coverage": "FULL",
+      "tests": [
+        {"id": "DoctorCommandTests.swift:test_doctor_reportsMacOSVersion", "title": "test_doctor_reportsMacOSVersion", "file": "Tests/AxionCLITests/Commands/DoctorCommandTests.swift", "level": "unit", "status": "active"},
+        {"id": "DoctorCommandTests.swift:test_doctor_reportsUnsupportedMacOS", "title": "test_doctor_reportsUnsupportedMacOS", "file": "Tests/AxionCLITests/Commands/DoctorCommandTests.swift", "level": "unit", "status": "active"}
+      ]
+    },
+    {
+      "id": "AC6",
+      "title": "所有检查通过",
+      "description": "所有检查通过时显示 All checks passed!",
+      "priority": "P0",
+      "coverage": "FULL",
+      "tests": [
+        {"id": "DoctorCommandTests.swift:test_doctor_showsAllChecksPassed_whenEverythingOk", "title": "test_doctor_showsAllChecksPassed_whenEverythingOk", "file": "Tests/AxionCLITests/Commands/DoctorCommandTests.swift", "level": "unit", "status": "active"}
+      ]
+    },
+    {
+      "id": "AC7",
+      "title": "明确修复建议（NFR14）",
+      "description": "每个失败项附带明确的修复建议",
+      "priority": "P0",
+      "coverage": "FULL",
+      "tests": [
+        {"id": "DoctorCommandTests.swift:test_doctor_showsFixHints_forFailedChecks", "title": "test_doctor_showsFixHints_forFailedChecks", "file": "Tests/AxionCLITests/Commands/DoctorCommandTests.swift", "level": "unit", "status": "active"}
+      ]
+    },
+    {
+      "id": "AC8",
+      "title": "API Key 不泄露（NFR9）",
+      "description": "API Key 被掩码显示，完整值不出现在终端输出中",
+      "priority": "P0",
+      "coverage": "FULL",
+      "tests": [
+        {"id": "DoctorCommandTests.swift:test_doctor_masksApiKey_inOutput", "title": "test_doctor_masksApiKey_inOutput", "file": "Tests/AxionCLITests/Commands/DoctorCommandTests.swift", "level": "unit", "status": "active"}
+      ]
+    },
+    {
+      "id": "AC9",
+      "title": "配置文件完整性检查",
+      "description": "config.json 格式损坏时报告解析失败，建议重新运行 axion setup",
+      "priority": "P0",
+      "coverage": "FULL",
+      "tests": [
+        {"id": "DoctorCommandTests.swift:test_doctor_reportsCorruptConfig", "title": "test_doctor_reportsCorruptConfig", "file": "Tests/AxionCLITests/Commands/DoctorCommandTests.swift", "level": "unit", "status": "active"}
+      ]
+    }
+  ],
+  "coverage_statistics": {
+    "total_requirements": 9,
+    "fully_covered": 9,
+    "partially_covered": 0,
+    "uncovered": 0,
+    "overall_coverage_percentage": 100,
+    "priority_breakdown": {
+      "P0": {"total": 9, "covered": 9, "percentage": 100},
+      "P1": {"total": 0, "covered": 0, "percentage": 100},
+      "P2": {"total": 0, "covered": 0, "percentage": 100},
+      "P3": {"total": 0, "covered": 0, "percentage": 100}
+    }
+  },
+  "gap_analysis": {
+    "critical_gaps": [],
+    "high_gaps": [],
+    "medium_gaps": [],
+    "low_gaps": [],
+    "partial_coverage_items": [],
+    "unit_only_items": []
+  },
+  "coverage_heuristics": {
+    "endpoint_gaps": [],
+    "auth_negative_path_gaps": [],
+    "happy_path_only_gaps": [],
+    "ui_journey_gaps": [],
+    "ui_state_gaps": [],
+    "counts": {
+      "endpoints_without_tests": 0,
+      "auth_missing_negative_paths": 0,
+      "happy_path_only_criteria": 0,
+      "ui_journeys_without_e2e": 0,
+      "ui_states_missing_coverage": 0
+    }
+  },
+  "test_inventory": {
+    "summary": {
+      "files": 1,
+      "cases": 22,
+      "skipped_cases": 0,
+      "fixme_cases": 0,
+      "pending_cases": 0,
+      "by_level": {
+        "e2e": {"tests": 0, "criteria_covered": 0},
+        "api": {"tests": 0, "criteria_covered": 0},
+        "component": {"tests": 0, "criteria_covered": 0},
+        "unit": {"tests": 22, "criteria_covered": 9},
+        "other": {"tests": 0, "criteria_covered": 0}
+      }
+    },
+    "blockers": []
+  },
+  "blockers": [],
+  "recommendations": [
+    {
+      "priority": "LOW",
+      "action": "Run /bmad:tea:test-review to assess test quality",
+      "requirements": []
+    }
+  ]
+}

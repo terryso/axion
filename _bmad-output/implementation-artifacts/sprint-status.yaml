@@ -1,5 +1,5 @@
 # generated: 2026-05-08
-# last_updated: 2026-05-09
+# last_updated: 2026-05-09 (story 2-4 created)
 # (reviewed and approved 2026-05-09)
 # project: axion
 # project_key: NOKEY
@@ -36,7 +36,7 @@
 # - Dev moves story to 'review', then runs code-review (fresh context, different LLM recommended)
 
 generated: 2026-05-08
-last_updated: 2026-05-09
+last_updated: 2026-05-09T15:05:00
 project_key: NOKEY
 tracking_system: file-system
 story_location: _bmad-output/implementation-artifacts
@@ -57,7 +57,7 @@ development_status:
   2-1-cli-entry-argumentparser-skeleton: done
   2-2-config-system-keychain-storage: done
   2-3-axion-setup-first-time-config: done
-  2-4-axion-doctor-environment-check: backlog
+  2-4-axion-doctor-environment-check: done
   2-5-homebrew-tap-distribution-packaging: backlog
   epic-2-retrospective: optional
 
