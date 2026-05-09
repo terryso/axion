@@ -62,7 +62,7 @@ so that 我可以了解 Axion 提供的命令和用法.
   - [x] 7.2 测试 `test_axionHelp_showsSubcommands()`：验证 `--help` 输出包含 "run"、"setup"、"doctor" 关键字
   - [x] 7.3 测试 `test_axionVersion_showsVersion()`：验证 `--version` 输出包含版本号
   - [x] 7.4 测试 `test_unknownSubcommand_showsError()`：验证未知子命令返回非零退出码
-  - [x] 7.5 测试 `test_runCommandParsesArguments()`：验证 RunCommand 正确解析 `task`、`--live`、`--max-steps`、`--max-batches`、`--allow-foreground`、`--verbose`、`--json` 参数
+  - [x] 7.5 测试 `test_runCommandParsesArguments()`：验证 RunCommand 正确解析 `task`、`--dryrun`、`--max-steps`、`--max-batches`、`--allow-foreground`、`--verbose`、`--json` 参数
   - [x] 7.6 测试 `test_runCommandRequiresTaskArgument()`：验证 RunCommand 缺少 task 参数时报错
 
 - [x] Task 8: 运行全部单元测试确认无回归
@@ -130,8 +130,8 @@ struct RunCommand: ParsableCommand {
     @Argument(help: "任务描述")
     var task: String
 
-    @Flag(name: .long, help: "实际执行模式（默认为干跑模式）")
-    var live: Bool = false
+    @Flag(name: .long, help: "干跑模式（仅生成计划不实际执行）")
+    var dryrun: Bool = false
 
     @Option(name: .long, help: "单次运行最大步骤数")
     var maxSteps: Int?
@@ -147,7 +147,7 @@ struct RunCommand: ParsableCommand {
 | 参数 | 类型 | Flag/Option/Argument | 说明 |
 |------|------|---------------------|------|
 | `task` | String (positional) | @Argument | 任务描述，必填 |
-| `--live` | Bool (flag) | @Flag | 实际执行模式 |
+| `--dryrun` | Bool (flag) | @Flag | 干跑模式（仅生成计划） |
 | `--max-steps` | Int? | @Option | 最大步骤数 |
 | `--max-batches` | Int? | @Option | 最大批次 |
 | `--allow-foreground` | Bool (flag) | @Flag | 允许前台操作 |
@@ -182,9 +182,9 @@ ArgumentParser 提供了内置的测试支持。通过 `ParsableCommand.parse()`
 ```swift
 // 解析测试
 func test_runCommandParsesArguments() throws {
-    let cmd = try RunCommand.parse(["打开计算器", "--live", "--max-steps", "5"])
+    let cmd = try RunCommand.parse(["打开计算器", "--dryrun", "--max-steps", "5"])
     XCTAssertEqual(cmd.task, "打开计算器")
-    XCTAssertTrue(cmd.live)
+    XCTAssertTrue(cmd.dryrun)
     XCTAssertEqual(cmd.maxSteps, 5)
 }
 
@@ -234,7 +234,7 @@ Tests/AxionCLITests/
 - `--max-steps` -> `AxionConfig.maxSteps`
 - `--max-batches` -> `AxionConfig.maxBatches`
 - `--verbose` -> 影响日志级别（debug vs info）
-- `--live` -> 影响执行模式
+- `--dryrun` -> 影响执行模式（干跑 vs 实际执行）
 - `--allow-foreground` -> 影响 `AxionConfig.sharedSeatMode`
 
 ### 模块依赖规则

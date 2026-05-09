@@ -229,6 +229,8 @@ func test_xxx_roundTrip() throws {
 **Mock 策略：**
 - 通过 Protocol 注入 Mock（`PlannerProtocol`, `MCPClientProtocol` 等）
 - 不 Mock 的层：AxionCore 模型（纯数据）、JSON 编解码（直接 round-trip）
+- 单元测试禁止真实系统调用（NSWorkspace、CGEvent、网络请求等），必须通过 mock/protocol 隔离
+- 涉及真实系统调用的测试（`*RealTests`）必须放在 `Tests/**/Integration/` 目录，由 `make test-integration` 运行，不混入 `make test`
 
 **Helper 测试层级：**
 - 进程级冒烟测试（`HelperProcessSmokeTests`）— 启动真实进程测试 MCP JSON-RPC

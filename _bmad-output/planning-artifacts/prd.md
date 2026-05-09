@@ -101,7 +101,7 @@ Axion 的技术架构分两层：CLI 主进程负责规划、执行、记忆和 
 
 ### 可衡量成果
 
-- Axion 能成功执行 OpenClick README 中的 `openclick run "open Calculator and calculate 17 times 23" --live` 等价任务
+- Axion 能成功执行 OpenClick README 中的 `openclick run "open Calculator and calculate 17 times 23"` 等价任务
 - SDK 新增的能力都有对应的 Axion 集成测试覆盖
 - Axion 代码中 `import OpenAgentSDK` 之后，应用层代码量显著少于 OpenClick 的 ~14k 行 TypeScript
 
@@ -109,7 +109,7 @@ Axion 的技术架构分两层：CLI 主进程负责规划、执行、记忆和 
 
 ### MVP — 证明可行
 
-- CLI 入口（`axion run "任务描述" --live`、`axion setup`、`axion doctor`）
+- CLI 入口（`axion run "任务描述"`、`axion setup`、`axion doctor`）
 - AxionHelper（签名 macOS App）：AX 操作、截图、窗口管理，通过 MCP stdio 暴露
 - Planner：小批量规划引擎，调用 Sonnet 生成工具调用序列
 - Executor：本地执行 planner 输出的步骤，通过 MCP 调用 AxionHelper
@@ -143,7 +143,7 @@ Axion 的技术架构分两层：CLI 主进程负责规划、执行、记忆和 
 **发展：** 李明输入了他的第一个命令：
 
 ```
-axion run "打开计算器，计算 17 乘以 23" --live
+axion run "打开计算器，计算 17 乘以 23"
 ```
 
 他看到终端输出：
@@ -225,8 +225,8 @@ curl -X POST http://localhost:4242/v1/runs \
 
 | 模式 | 命令 | 说明 |
 |------|------|------|
-| 一次性执行 | `axion run "任务描述" --live` | 执行单个任务，完成后退出 |
-| 可脚本化 | `axion run "任务" --live --max-steps 10 --max-batches 6` | 参数化控制，可被其他工具调用 |
+| 一次性执行 | `axion run "任务描述"` | 执行单个任务，完成后退出 |
+| 可脚本化 | `axion run "任务" --max-steps 10 --max-batches 6` | 参数化控制，可被其他工具调用 |
 | 安装与配置 | `axion setup` / `axion doctor` | 首次运行引导，权限检查 |
 | API 服务 | `axion server --port 4242` | HTTP API + SSE 事件流（成长功能） |
 | MCP 服务 | `axion mcp` | 作为 MCP stdio server 供外部 Agent 调用（成长功能） |
@@ -352,8 +352,8 @@ curl -X POST http://localhost:4242/v1/runs \
 
 ### 任务执行
 
-- FR6: 用户可以通过自然语言描述执行桌面自动化任务（`axion run "任务描述" --live`）
-- FR7: 用户可以在干跑模式下预览执行计划而不实际操作桌面（`axion run "任务描述"` 无 `--live`）
+- FR6: 用户可以通过自然语言描述执行桌面自动化任务（`axion run "任务描述"`）
+- FR7: 用户可以在干跑模式下预览执行计划而不实际操作桌面（`axion run "任务描述" --dryrun`）
 - FR8: 用户可以限制任务的最大步数和最大批次（`--max-steps`、`--max-batches`）
 - FR9: 用户可以随时通过 Ctrl-C 中断正在执行的任务
 - FR10: 用户可以在前台模式运行，允许使用全局光标和焦点操作（`--allow-foreground`）

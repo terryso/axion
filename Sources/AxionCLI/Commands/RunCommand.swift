@@ -9,8 +9,8 @@ struct RunCommand: ParsableCommand {
     @Argument(help: "任务描述")
     var task: String
 
-    @Flag(name: .long, help: "实际执行模式（默认为干跑模式）")
-    var live: Bool = false
+    @Flag(name: .long, help: "干跑模式（仅生成计划不实际执行）")
+    var dryrun: Bool = false
 
     @Option(name: .long, help: "单次运行最大步骤数")
     var maxSteps: Int?

@@ -69,16 +69,16 @@ final class AxionCommandTests: XCTestCase {
         XCTAssertEqual(cmd.task, "打开计算器")
     }
 
-    // 验证 RunCommand 正确解析 --live flag
-    func test_runCommandParsesLiveFlag() throws {
-        let cmd = try RunCommand.parse(["打开计算器", "--live"])
-        XCTAssertTrue(cmd.live)
+    // 验证 RunCommand 正确解析 --dryrun flag
+    func test_runCommandParsesDryrunFlag() throws {
+        let cmd = try RunCommand.parse(["打开计算器", "--dryrun"])
+        XCTAssertTrue(cmd.dryrun)
     }
 
-    // 验证 RunCommand 默认 live=false（干跑模式）
-    func test_runCommandLiveDefaultIsFalse() throws {
+    // 验证 RunCommand 默认 dryrun=false（实际执行模式）
+    func test_runCommandDryrunDefaultIsFalse() throws {
         let cmd = try RunCommand.parse(["打开计算器"])
-        XCTAssertFalse(cmd.live)
+        XCTAssertFalse(cmd.dryrun)
     }
 
     // 验证 RunCommand 正确解析 --max-steps 选项
@@ -134,7 +134,7 @@ final class AxionCommandTests: XCTestCase {
     func test_runCommandParsesAllArgumentsCombined() throws {
         let cmd = try RunCommand.parse([
             "打开计算器并输入1+1",
-            "--live",
+            "--dryrun",
             "--max-steps", "10",
             "--max-batches", "4",
             "--allow-foreground",
@@ -142,7 +142,7 @@ final class AxionCommandTests: XCTestCase {
             "--json"
         ])
         XCTAssertEqual(cmd.task, "打开计算器并输入1+1")
-        XCTAssertTrue(cmd.live)
+        XCTAssertTrue(cmd.dryrun)
         XCTAssertEqual(cmd.maxSteps, 10)
         XCTAssertEqual(cmd.maxBatches, 4)
         XCTAssertTrue(cmd.allowForeground)

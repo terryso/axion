@@ -55,7 +55,7 @@ Additional test coverage beyond AC (P1):
 
 | Category | Description | Test Count | Status |
 |----------|-------------|------------|--------|
-| RunCommand 参数解析 | task, --live, --max-steps, --max-batches, --allow-foreground, --verbose, --json | 13 | RED |
+| RunCommand 参数解析 | task, --dryrun, --max-steps, --max-batches, --allow-foreground, --verbose, --json | 13 | RED |
 | SetupCommand 骨架 | 存在性验证 | 1 | RED |
 | DoctorCommand 骨架 | 存在性验证 | 1 | RED |
 | AxionVersion | 版本号常量验证 | 2 | RED |
@@ -109,8 +109,8 @@ This is a **backend (Swift/SPM)** project. Test level selection:
 | # | Test Method | Validates |
 |---|-------------|-----------|
 | 6 | `test_runCommandParsesTaskArgument()` | task 位置参数解析 |
-| 7 | `test_runCommandParsesLiveFlag()` | --live flag 解析为 true |
-| 8 | `test_runCommandLiveDefaultIsFalse()` | live 默认 false |
+| 7 | `test_runCommandParsesDryrunFlag()` | --dryrun flag 解析为 true |
+| 8 | `test_runCommandDryrunDefaultIsFalse()` | dryrun 默认 false |
 | 9 | `test_runCommandParsesMaxSteps()` | --max-steps 5 解析为 5 |
 | 10 | `test_runCommandMaxStepsDefaultIsNil()` | maxSteps 默认 nil |
 | 11 | `test_runCommandParsesMaxBatches()` | --max-batches 3 解析为 3 |

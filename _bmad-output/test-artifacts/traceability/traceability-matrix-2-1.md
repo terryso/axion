@@ -86,7 +86,7 @@ tempCoverageMatrixPath: '_bmad-output/test-artifacts/traceability/coverage-matri
 | ID | Description | Tests | Coverage |
 |----|-------------|-------|----------|
 | EXT-1 | RunCommand parses task positional argument | test_runCommandParsesTaskArgument | FULL |
-| EXT-2 | RunCommand parses --live flag with default | test_runCommandParsesLiveFlag, test_runCommandLiveDefaultIsFalse | FULL |
+| EXT-2 | RunCommand parses --dryrun flag with default | test_runCommandParsesDryrunFlag, test_runCommandDryrunDefaultIsFalse | FULL |
 | EXT-3 | RunCommand parses --max-steps with default | test_runCommandParsesMaxSteps, test_runCommandMaxStepsDefaultIsNil | FULL |
 | EXT-4 | RunCommand parses --max-batches with default | test_runCommandParsesMaxBatches, test_runCommandMaxBatchesDefaultIsNil | FULL |
 | EXT-5 | RunCommand parses --allow-foreground | test_runCommandParsesAllowForeground | FULL |
