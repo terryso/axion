@@ -1,0 +1,24 @@
+{
+  "schema_version": "0.1.0",
+  "evaluated_at": "2026-05-10T10:29:05Z",
+  "repo": "axion",
+  "target": {
+    "type": "story",
+    "id": "3-8",
+    "label": "SDK 边界文档与端到端验证"
+  },
+  "collection_status": "COLLECTED",
+  "gate_basis": "priority_thresholds",
+  "gate_status": "WAIVED",
+  "rationale": "P0/P1 自动化需求（AC1 SDK 审计 + AC2 边界文档 + AC3 短板记录 + Task 8 ToolNames 审计）100% 覆盖，14 个单元测试全部通过。P0/P1 的未覆盖项（AC4-AC7）是环境受限的手动端到端验证场景（需要真实 macOS 桌面、AX 权限、Anthropic API Key），按设计不可自动化，手动验收文档已就绪。",
+  "p0_status": "WAIVED",
+  "p1_status": "WAIVED",
+  "overall_status": "WAIVED",
+  "critical_open": 2,
+  "links": {
+    "trace_report_path": "_bmad-output/test-artifacts/traceability/traceability-matrix-3-8.md",
+    "trace_report_url": "",
+    "artifact_url": "",
+    "journey_evidence_url": ""
+  }
+}

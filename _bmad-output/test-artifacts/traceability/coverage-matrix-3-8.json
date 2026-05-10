@@ -1,0 +1,511 @@
+{
+  "phase": "PHASE_1_COMPLETE",
+  "generated_at": "2026-05-10T10:29:05Z",
+  "trace_target": {
+    "type": "story",
+    "id": "3-8",
+    "label": "SDK 边界文档与端到端验证"
+  },
+  "collection_mode": "contract_static",
+  "allow_gate": true,
+  "coverage_basis": "acceptance_criteria",
+  "summary_confidence": "high",
+  "oracle": {
+    "resolution_mode": "formal_requirements",
+    "confidence": "high",
+    "sources": [
+      "_bmad-output/implementation-artifacts/stories/3-8-sdk-boundary-doc-e2e-verification.md",
+      "_bmad-output/test-artifacts/atdd-checklist-3-8-sdk-boundary-doc-e2e-verification.md",
+      "_bmad-output/test-artifacts/manual-acceptance-3-8.md",
+      "docs/sdk-boundary.md",
+      "Tests/AxionCLITests/Commands/SDKBoundaryAuditTests.swift"
+    ],
+    "external_pointer_status": "not_used",
+    "synthetic": false
+  },
+  "requirements": [
+    {
+      "id": "AC1",
+      "title": "SDK 集成点审查",
+      "priority": "P0",
+      "coverage": "FULL",
+      "tests": [
+        {
+          "id": "3.8-UNIT-001",
+          "title": "test_axionCore_noImportOpenAgentSDK",
+          "file": "Tests/AxionCLITests/Commands/SDKBoundaryAuditTests.swift",
+          "line": 79,
+          "level": "unit",
+          "status": "active"
+        },
+        {
+          "id": "3.8-UNIT-002",
+          "title": "test_axionHelper_noImportOpenAgentSDK",
+          "file": "Tests/AxionCLITests/Commands/SDKBoundaryAuditTests.swift",
+          "line": 100,
+          "level": "unit",
+          "status": "active"
+        },
+        {
+          "id": "3.8-UNIT-003",
+          "title": "test_axionCLI_noImportAxionHelper",
+          "file": "Tests/AxionCLITests/Commands/SDKBoundaryAuditTests.swift",
+          "line": 121,
+          "level": "unit",
+          "status": "active"
+        },
+        {
+          "id": "3.8-UNIT-004",
+          "title": "test_runCommand_usesCreateAgentPublicAPI",
+          "file": "Tests/AxionCLITests/Commands/SDKBoundaryAuditTests.swift",
+          "line": 142,
+          "level": "unit",
+          "status": "active"
+        },
+        {
+          "id": "3.8-UNIT-005",
+          "title": "test_runCommand_usesAgentStreamPublicAPI",
+          "file": "Tests/AxionCLITests/Commands/SDKBoundaryAuditTests.swift",
+          "line": 160,
+          "level": "unit",
+          "status": "active"
+        },
+        {
+          "id": "3.8-UNIT-006",
+          "title": "test_runCommand_usesMcpStdioConfigForHelper",
+          "file": "Tests/AxionCLITests/Commands/SDKBoundaryAuditTests.swift",
+          "line": 177,
+          "level": "unit",
+          "status": "active"
+        },
+        {
+          "id": "3.8-UNIT-007",
+          "title": "test_runCommand_usesHookRegistryForSafetyCheck",
+          "file": "Tests/AxionCLITests/Commands/SDKBoundaryAuditTests.swift",
+          "line": 196,
+          "level": "unit",
+          "status": "active"
+        },
+        {
+          "id": "3.8-UNIT-008",
+          "title": "test_noDirectAnthropicHTTPCalls",
+          "file": "Tests/AxionCLITests/Commands/SDKBoundaryAuditTests.swift",
+          "line": 218,
+          "level": "unit",
+          "status": "active"
+        }
+      ]
+    },
+    {
+      "id": "AC2",
+      "title": "SDK 边界文档",
+      "priority": "P1",
+      "coverage": "FULL",
+      "tests": [
+        {
+          "id": "3.8-UNIT-009",
+          "title": "test_sdkBoundaryDoc_existsAndNonEmpty",
+          "file": "Tests/AxionCLITests/Commands/SDKBoundaryAuditTests.swift",
+          "line": 250,
+          "level": "unit",
+          "status": "active"
+        },
+        {
+          "id": "3.8-UNIT-010",
+          "title": "test_sdkBoundaryDoc_containsBoundaryTable",
+          "file": "Tests/AxionCLITests/Commands/SDKBoundaryAuditTests.swift",
+          "line": 270,
+          "level": "unit",
+          "status": "active"
+        },
+        {
+          "id": "3.8-UNIT-011",
+          "title": "test_sdkBoundaryDoc_containsAPIUsageInventory",
+          "file": "Tests/AxionCLITests/Commands/SDKBoundaryAuditTests.swift",
+          "line": 286,
+          "level": "unit",
+          "status": "active"
+        }
+      ]
+    },
+    {
+      "id": "AC3",
+      "title": "SDK 短板记录",
+      "priority": "P2",
+      "coverage": "FULL",
+      "tests": [
+        {
+          "id": "3.8-UNIT-012",
+          "title": "test_sdkBoundaryDoc_containsGapAnalysisSection",
+          "file": "Tests/AxionCLITests/Commands/SDKBoundaryAuditTests.swift",
+          "line": 306,
+          "level": "unit",
+          "status": "active"
+        }
+      ]
+    },
+    {
+      "id": "AC4",
+      "title": "Calculator 端到端验证",
+      "priority": "P0",
+      "coverage": "NONE",
+      "tests": [
+        {
+          "id": "3.8-MANUAL-001",
+          "title": "Calculator E2E: 计算 17x23=391",
+          "file": "_bmad-output/test-artifacts/manual-acceptance-3-8.md",
+          "line": null,
+          "level": "manual",
+          "status": "pending"
+        }
+      ]
+    },
+    {
+      "id": "AC5",
+      "title": "TextEdit 端到端验证",
+      "priority": "P0",
+      "coverage": "NONE",
+      "tests": [
+        {
+          "id": "3.8-MANUAL-002",
+          "title": "TextEdit E2E: 输入 Hello World",
+          "file": "_bmad-output/test-artifacts/manual-acceptance-3-8.md",
+          "line": null,
+          "level": "manual",
+          "status": "pending"
+        }
+      ]
+    },
+    {
+      "id": "AC6",
+      "title": "Finder 端到端验证",
+      "priority": "P1",
+      "coverage": "NONE",
+      "tests": [
+        {
+          "id": "3.8-MANUAL-003",
+          "title": "Finder E2E: 进入下载目录",
+          "file": "_bmad-output/test-artifacts/manual-acceptance-3-8.md",
+          "line": null,
+          "level": "manual",
+          "status": "pending"
+        }
+      ]
+    },
+    {
+      "id": "AC7",
+      "title": "浏览器端到端验证",
+      "priority": "P1",
+      "coverage": "NONE",
+      "tests": [
+        {
+          "id": "3.8-MANUAL-004",
+          "title": "Safari E2E: 访问 example.com",
+          "file": "_bmad-output/test-artifacts/manual-acceptance-3-8.md",
+          "line": null,
+          "level": "manual",
+          "status": "pending"
+        }
+      ]
+    },
+    {
+      "id": "TASK8",
+      "title": "SDK 边界审计测试（ToolNames 审计）",
+      "priority": "P1",
+      "coverage": "FULL",
+      "tests": [
+        {
+          "id": "3.8-UNIT-013",
+          "title": "test_toolNames_allToolNames_containsAllRegisteredTools",
+          "file": "Tests/AxionCLITests/Commands/SDKBoundaryAuditTests.swift",
+          "line": 325,
+          "level": "unit",
+          "status": "active"
+        },
+        {
+          "id": "3.8-UNIT-014",
+          "title": "test_toolNames_foregroundToolNames_correctClassification",
+          "file": "Tests/AxionCLITests/Commands/SDKBoundaryAuditTests.swift",
+          "line": 349,
+          "level": "unit",
+          "status": "active"
+        }
+      ]
+    }
+  ],
+  "coverage_statistics": {
+    "total_requirements": 8,
+    "fully_covered": 4,
+    "partially_covered": 0,
+    "uncovered": 4,
+    "overall_coverage_percentage": 50,
+    "priority_breakdown": {
+      "P0": { "total": 3, "covered": 1, "percentage": 33 },
+      "P1": { "total": 3, "covered": 2, "percentage": 67 },
+      "P2": { "total": 1, "covered": 1, "percentage": 100 },
+      "P3": { "total": 0, "covered": 0, "percentage": 100 }
+    }
+  },
+  "gap_analysis": {
+    "critical_gaps": [
+      {
+        "id": "AC4",
+        "title": "Calculator 端到端验证",
+        "priority": "P0",
+        "coverage": "NONE",
+        "reason": "需要真实 macOS 桌面环境、Helper 进程、Anthropic API Key 和 AX 权限。手动测试待执行。"
+      },
+      {
+        "id": "AC5",
+        "title": "TextEdit 端到端验证",
+        "priority": "P0",
+        "coverage": "NONE",
+        "reason": "需要真实 macOS 桌面环境、Helper 进程、Anthropic API Key 和 AX 权限。手动测试待执行。"
+      }
+    ],
+    "high_gaps": [
+      {
+        "id": "AC6",
+        "title": "Finder 端到端验证",
+        "priority": "P1",
+        "coverage": "NONE",
+        "reason": "需要真实 macOS 桌面环境。手动测试待执行。"
+      },
+      {
+        "id": "AC7",
+        "title": "浏览器端到端验证",
+        "priority": "P1",
+        "coverage": "NONE",
+        "reason": "需要真实 macOS 桌面环境。手动测试待执行。"
+      }
+    ],
+    "medium_gaps": [],
+    "low_gaps": [],
+    "partial_coverage_items": [],
+    "unit_only_items": []
+  },
+  "coverage_heuristics": {
+    "endpoint_gaps": [],
+    "auth_negative_path_gaps": [],
+    "happy_path_only_gaps": [],
+    "ui_journey_gaps": [
+      { "id": "AC4", "journey": "Calculator 端到端" },
+      { "id": "AC5", "journey": "TextEdit 端到端" },
+      { "id": "AC6", "journey": "Finder 端到端" },
+      { "id": "AC7", "journey": "Safari 端到端" }
+    ],
+    "ui_state_gaps": [],
+    "counts": {
+      "endpoints_without_tests": 0,
+      "auth_missing_negative_paths": 0,
+      "happy_path_only_criteria": 0,
+      "ui_journeys_without_e2e": 4,
+      "ui_states_missing_coverage": 0
+    }
+  },
+  "test_inventory": {
+    "summary": {
+      "files": 1,
+      "cases": 14,
+      "skipped_cases": 0,
+      "fixme_cases": 0,
+      "pending_cases": 0,
+      "by_level": {
+        "e2e": { "tests": 0, "criteria_covered": 0 },
+        "api": { "tests": 0, "criteria_covered": 0 },
+        "component": { "tests": 0, "criteria_covered": 0 },
+        "unit": { "tests": 14, "criteria_covered": 4 },
+        "other": { "tests": 0, "criteria_covered": 0 }
+      }
+    },
+    "tests": [
+      {
+        "id": "3.8-UNIT-001",
+        "file": "Tests/AxionCLITests/Commands/SDKBoundaryAuditTests.swift",
+        "line": 79,
+        "title": "test_axionCore_noImportOpenAgentSDK",
+        "level": "unit",
+        "status": "active",
+        "skipped": false,
+        "fixme": false,
+        "pending": false,
+        "blocker_reason": ""
+      },
+      {
+        "id": "3.8-UNIT-002",
+        "file": "Tests/AxionCLITests/Commands/SDKBoundaryAuditTests.swift",
+        "line": 100,
+        "title": "test_axionHelper_noImportOpenAgentSDK",
+        "level": "unit",
+        "status": "active",
+        "skipped": false,
+        "fixme": false,
+        "pending": false,
+        "blocker_reason": ""
+      },
+      {
+        "id": "3.8-UNIT-003",
+        "file": "Tests/AxionCLITests/Commands/SDKBoundaryAuditTests.swift",
+        "line": 121,
+        "title": "test_axionCLI_noImportAxionHelper",
+        "level": "unit",
+        "status": "active",
+        "skipped": false,
+        "fixme": false,
+        "pending": false,
+        "blocker_reason": ""
+      },
+      {
+        "id": "3.8-UNIT-004",
+        "file": "Tests/AxionCLITests/Commands/SDKBoundaryAuditTests.swift",
+        "line": 142,
+        "title": "test_runCommand_usesCreateAgentPublicAPI",
+        "level": "unit",
+        "status": "active",
+        "skipped": false,
+        "fixme": false,
+        "pending": false,
+        "blocker_reason": ""
+      },
+      {
+        "id": "3.8-UNIT-005",
+        "file": "Tests/AxionCLITests/Commands/SDKBoundaryAuditTests.swift",
+        "line": 160,
+        "title": "test_runCommand_usesAgentStreamPublicAPI",
+        "level": "unit",
+        "status": "active",
+        "skipped": false,
+        "fixme": false,
+        "pending": false,
+        "blocker_reason": ""
+      },
+      {
+        "id": "3.8-UNIT-006",
+        "file": "Tests/AxionCLITests/Commands/SDKBoundaryAuditTests.swift",
+        "line": 177,
+        "title": "test_runCommand_usesMcpStdioConfigForHelper",
+        "level": "unit",
+        "status": "active",
+        "skipped": false,
+        "fixme": false,
+        "pending": false,
+        "blocker_reason": ""
+      },
+      {
+        "id": "3.8-UNIT-007",
+        "file": "Tests/AxionCLITests/Commands/SDKBoundaryAuditTests.swift",
+        "line": 196,
+        "title": "test_runCommand_usesHookRegistryForSafetyCheck",
+        "level": "unit",
+        "status": "active",
+        "skipped": false,
+        "fixme": false,
+        "pending": false,
+        "blocker_reason": ""
+      },
+      {
+        "id": "3.8-UNIT-008",
+        "file": "Tests/AxionCLITests/Commands/SDKBoundaryAuditTests.swift",
+        "line": 218,
+        "title": "test_noDirectAnthropicHTTPCalls",
+        "level": "unit",
+        "status": "active",
+        "skipped": false,
+        "fixme": false,
+        "pending": false,
+        "blocker_reason": ""
+      },
+      {
+        "id": "3.8-UNIT-009",
+        "file": "Tests/AxionCLITests/Commands/SDKBoundaryAuditTests.swift",
+        "line": 250,
+        "title": "test_sdkBoundaryDoc_existsAndNonEmpty",
+        "level": "unit",
+        "status": "active",
+        "skipped": false,
+        "fixme": false,
+        "pending": false,
+        "blocker_reason": ""
+      },
+      {
+        "id": "3.8-UNIT-010",
+        "file": "Tests/AxionCLITests/Commands/SDKBoundaryAuditTests.swift",
+        "line": 270,
+        "title": "test_sdkBoundaryDoc_containsBoundaryTable",
+        "level": "unit",
+        "status": "active",
+        "skipped": false,
+        "fixme": false,
+        "pending": false,
+        "blocker_reason": ""
+      },
+      {
+        "id": "3.8-UNIT-011",
+        "file": "Tests/AxionCLITests/Commands/SDKBoundaryAuditTests.swift",
+        "line": 286,
+        "title": "test_sdkBoundaryDoc_containsAPIUsageInventory",
+        "level": "unit",
+        "status": "active",
+        "skipped": false,
+        "fixme": false,
+        "pending": false,
+        "blocker_reason": ""
+      },
+      {
+        "id": "3.8-UNIT-012",
+        "file": "Tests/AxionCLITests/Commands/SDKBoundaryAuditTests.swift",
+        "line": 306,
+        "title": "test_sdkBoundaryDoc_containsGapAnalysisSection",
+        "level": "unit",
+        "status": "active",
+        "skipped": false,
+        "fixme": false,
+        "pending": false,
+        "blocker_reason": ""
+      },
+      {
+        "id": "3.8-UNIT-013",
+        "file": "Tests/AxionCLITests/Commands/SDKBoundaryAuditTests.swift",
+        "line": 325,
+        "title": "test_toolNames_allToolNames_containsAllRegisteredTools",
+        "level": "unit",
+        "status": "active",
+        "skipped": false,
+        "fixme": false,
+        "pending": false,
+        "blocker_reason": ""
+      },
+      {
+        "id": "3.8-UNIT-014",
+        "file": "Tests/AxionCLITests/Commands/SDKBoundaryAuditTests.swift",
+        "line": 349,
+        "title": "test_toolNames_foregroundToolNames_correctClassification",
+        "level": "unit",
+        "status": "active",
+        "skipped": false,
+        "fixme": false,
+        "pending": false,
+        "blocker_reason": ""
+      }
+    ],
+    "blockers": []
+  },
+  "blockers": [],
+  "recommendations": [
+    {
+      "priority": "URGENT",
+      "action": "手动执行 Calculator 和 TextEdit 端到端验证（AC4/AC5），需要真实 macOS 桌面环境和 AX 权限",
+      "requirements": ["AC4", "AC5"]
+    },
+    {
+      "priority": "HIGH",
+      "action": "手动执行 Finder 和 Safari 端到端验证（AC6/AC7）",
+      "requirements": ["AC6", "AC7"]
+    },
+    {
+      "priority": "LOW",
+      "action": "Run /bmad:tea:test-review to assess test quality",
+      "requirements": []
+    }
+  ]
+}
