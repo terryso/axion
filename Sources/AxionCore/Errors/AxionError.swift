@@ -10,6 +10,8 @@ public enum AxionError: Error, Equatable {
     case mcpError(tool: String, reason: String)
     case invalidPlan(reason: String)
     case maxRetriesExceeded(retries: Int)
+    case stepBudgetExceeded(steps: Int, limit: Int)
+    case batchBudgetExceeded(batches: Int, limit: Int)
     case timeout(operation: String, seconds: Double)
     case cancelled
     case unknown(reason: String)
@@ -75,6 +77,18 @@ public enum AxionError: Error, Equatable {
                 error: "max_retries_exceeded",
                 message: "Maximum replan retries (\(retries)) exceeded.",
                 suggestion: "The task may be too complex. Try breaking it down."
+            )
+        case .stepBudgetExceeded(let steps, let limit):
+            return MCPErrorPayload(
+                error: "step_budget_exceeded",
+                message: "Step budget exceeded: \(steps)/\(limit) steps used.",
+                suggestion: "Increase --max-steps or simplify the task."
+            )
+        case .batchBudgetExceeded(let batches, let limit):
+            return MCPErrorPayload(
+                error: "batch_budget_exceeded",
+                message: "Batch budget exceeded: \(batches)/\(limit) batches used.",
+                suggestion: "Increase --max-batches or simplify the task."
             )
         case .timeout(let operation, let seconds):
             return MCPErrorPayload(

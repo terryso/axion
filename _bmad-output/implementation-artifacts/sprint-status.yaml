@@ -1,5 +1,5 @@
 # generated: 2026-05-08
-# last_updated: 2026-05-10 (story 3-5 done)
+# last_updated: 2026-05-10 (story 3-6 done)
 # (reviewed and approved 2026-05-09)
 # project: axion
 # project_key: NOKEY
@@ -36,7 +36,7 @@
 # - Dev moves story to 'review', then runs code-review (fresh context, different LLM recommended)
 
 generated: 2026-05-08
-last_updated: 2026-05-10 (story 3-5 done)
+last_updated: 2026-05-10 (story 3-6 done)
 project_key: NOKEY
 tracking_system: file-system
 story_location: _bmad-output/implementation-artifacts
@@ -68,7 +68,7 @@ development_status:
   3-3-step-execution-placeholder-resolution: done
   3-4-task-verification-stop-condition: done
   3-5-output-trace-progress-display: done
-  3-6-run-engine-state-machine: backlog
+  3-6-run-engine-state-machine: done
   3-7-sdk-integration-run-command: backlog
   3-8-sdk-boundary-doc-e2e-verification: backlog
   epic-3-retrospective: optional

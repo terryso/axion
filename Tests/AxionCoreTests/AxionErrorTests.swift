@@ -70,6 +70,8 @@ final class AxionErrorTests: XCTestCase {
             .mcpError(tool: "test", reason: "test"),
             .invalidPlan(reason: "test"),
             .maxRetriesExceeded(retries: 1),
+            .stepBudgetExceeded(steps: 20, limit: 20),
+            .batchBudgetExceeded(batches: 6, limit: 6),
             .timeout(operation: "test", seconds: 30),
             .cancelled,
             .unknown(reason: "test"),
@@ -177,6 +179,8 @@ final class AxionErrorTests: XCTestCase {
             .mcpError(tool: "t", reason: "r"),
             .invalidPlan(reason: "r"),
             .maxRetriesExceeded(retries: 3),
+            .stepBudgetExceeded(steps: 20, limit: 20),
+            .batchBudgetExceeded(batches: 6, limit: 6),
             .timeout(operation: "op", seconds: 1.0),
             .cancelled,
             .unknown(reason: "r"),
@@ -222,6 +226,10 @@ final class AxionErrorTests: XCTestCase {
         XCTAssertNotEqual(AxionError.timeout(operation: "a", seconds: 1.0), AxionError.timeout(operation: "a", seconds: 2.0))
         XCTAssertEqual(AxionError.maxRetriesExceeded(retries: 3), AxionError.maxRetriesExceeded(retries: 3))
         XCTAssertNotEqual(AxionError.maxRetriesExceeded(retries: 3), AxionError.maxRetriesExceeded(retries: 4))
+        XCTAssertEqual(AxionError.stepBudgetExceeded(steps: 10, limit: 10), AxionError.stepBudgetExceeded(steps: 10, limit: 10))
+        XCTAssertNotEqual(AxionError.stepBudgetExceeded(steps: 10, limit: 10), AxionError.stepBudgetExceeded(steps: 11, limit: 10))
+        XCTAssertEqual(AxionError.batchBudgetExceeded(batches: 6, limit: 6), AxionError.batchBudgetExceeded(batches: 6, limit: 6))
+        XCTAssertNotEqual(AxionError.batchBudgetExceeded(batches: 6, limit: 6), AxionError.batchBudgetExceeded(batches: 7, limit: 6))
         XCTAssertEqual(AxionError.unknown(reason: "x"), AxionError.unknown(reason: "x"))
         XCTAssertNotEqual(AxionError.unknown(reason: "x"), AxionError.unknown(reason: "y"))
     }

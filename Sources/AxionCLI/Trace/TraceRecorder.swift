@@ -224,6 +224,15 @@ actor TraceRecorder {
         ])
     }
 
+    /// Records a replan event.
+    func recordReplan(attempt: Int, maxRetries: Int, reason: String) {
+        record(event: TraceEventType.replan, payload: [
+            "attempt": attempt,
+            "maxRetries": maxRetries,
+            "reason": reason
+        ])
+    }
+
     /// Records a run_done event.
     func recordRunDone(totalSteps: Int, durationMs: Int, replanCount: Int) {
         record(event: TraceEventType.runDone, payload: [
