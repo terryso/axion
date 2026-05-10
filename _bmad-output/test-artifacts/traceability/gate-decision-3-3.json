@@ -1,0 +1,24 @@
+{
+  "schema_version": "0.1.0",
+  "evaluated_at": "2026-05-10T07:12:00Z",
+  "repo": "axion",
+  "target": {
+    "type": "story",
+    "id": "3-3",
+    "label": "Step Execution & Placeholder Resolution"
+  },
+  "collection_status": "COLLECTED",
+  "gate_basis": "priority_thresholds",
+  "gate_status": "PASS",
+  "rationale": "P0 coverage is 100%, P1 coverage is 100% (target: 90%), and overall coverage is 100% (minimum: 80%). All 7 acceptance criteria are fully covered by 52 passing unit tests with 0 failures. Test quality is strong with both isolated unit tests and integration tests covering the full execution pipeline (PlaceholderResolver -> SafetyChecker -> MCP call -> absorbResult).",
+  "p0_status": "MET",
+  "p1_status": "MET",
+  "overall_status": "MET",
+  "critical_open": 0,
+  "links": {
+    "trace_report_path": "_bmad-output/test-artifacts/traceability-matrix-3-3.md",
+    "trace_report_url": "",
+    "artifact_url": "",
+    "journey_evidence_url": ""
+  }
+}

@@ -165,6 +165,9 @@ actor HelperProcessManager {
             throw AxionError.helperNotRunning
         }
 
+        // Prevent SIGPIPE from killing the process when Helper exits unexpectedly
+        signal(SIGPIPE, SIG_IGN)
+
         let config = McpStdioConfig(command: helperPath)
 
         // Create a single transport wrapper for both process management and MCP communication.

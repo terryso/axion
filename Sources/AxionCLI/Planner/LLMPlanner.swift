@@ -22,11 +22,14 @@ struct LLMPlanner: PlannerProtocol {
     let config: AxionConfig
     let llmClient: LLMClientProtocol
     let mcpClient: MCPClientProtocol
+    let retryDelay: @Sendable (UInt64) async throws -> Void
 
-    init(config: AxionConfig, llmClient: LLMClientProtocol, mcpClient: MCPClientProtocol) {
+    init(config: AxionConfig, llmClient: LLMClientProtocol, mcpClient: MCPClientProtocol,
+         retryDelay: @escaping @Sendable (UInt64) async throws -> Void = { try await Task.sleep(nanoseconds: $0) }) {
         self.config = config
         self.llmClient = llmClient
         self.mcpClient = mcpClient
+        self.retryDelay = retryDelay
     }
 
     // MARK: - PlannerProtocol conformance
@@ -207,12 +210,12 @@ struct LLMPlanner: PlannerProtocol {
                 }
                 lastError = error
                 if attempt < maxRetries {
-                    try await Task.sleep(nanoseconds: baseDelays[attempt])
+                    try await retryDelay(baseDelays[attempt])
                 }
             } catch {
                 lastError = error
                 if attempt < maxRetries {
-                    try await Task.sleep(nanoseconds: baseDelays[attempt])
+                    try await retryDelay(baseDelays[attempt])
                 }
             }
         }

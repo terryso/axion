@@ -97,7 +97,7 @@ final class LLMPlannerTests: XCTestCase {
         """)
         let mockMCP = MockPlannerMCPClient()
         let config = AxionConfig.default
-        let planner = LLMPlanner(config: config, llmClient: mockLLM, mcpClient: mockMCP)
+        let planner = LLMPlanner(config: config, llmClient: mockLLM, mcpClient: mockMCP, retryDelay: { _ in })
 
         let context = RunContext(
             planId: UUID(),
@@ -128,7 +128,7 @@ final class LLMPlannerTests: XCTestCase {
         """)
         let mockMCP = MockPlannerMCPClient()
         let config = AxionConfig.default
-        let planner = LLMPlanner(config: config, llmClient: mockLLM, mcpClient: mockMCP)
+        let planner = LLMPlanner(config: config, llmClient: mockLLM, mcpClient: mockMCP, retryDelay: { _ in })
 
         let context = RunContext(
             planId: UUID(),
@@ -157,7 +157,7 @@ final class LLMPlannerTests: XCTestCase {
 
         let mockMCP = MockPlannerMCPClient()
         let config = AxionConfig.default
-        let planner = LLMPlanner(config: config, llmClient: mockLLM, mcpClient: mockMCP)
+        let planner = LLMPlanner(config: config, llmClient: mockLLM, mcpClient: mockMCP, retryDelay: { _ in })
 
         let context = RunContext(
             planId: UUID(),
@@ -180,7 +180,7 @@ final class LLMPlannerTests: XCTestCase {
         let mockLLM = MockLLMClient(stubbedResponse: "This is not valid JSON at all")
         let mockMCP = MockPlannerMCPClient()
         let config = AxionConfig.default
-        let planner = LLMPlanner(config: config, llmClient: mockLLM, mcpClient: mockMCP)
+        let planner = LLMPlanner(config: config, llmClient: mockLLM, mcpClient: mockMCP, retryDelay: { _ in })
 
         let context = RunContext(
             planId: UUID(),
@@ -212,7 +212,7 @@ final class LLMPlannerTests: XCTestCase {
 
         let mockMCP = MockPlannerMCPClient()
         let config = AxionConfig.default
-        let planner = LLMPlanner(config: config, llmClient: mockLLM, mcpClient: mockMCP)
+        let planner = LLMPlanner(config: config, llmClient: mockLLM, mcpClient: mockMCP, retryDelay: { _ in })
 
         let context = RunContext(
             planId: UUID(),
@@ -248,7 +248,7 @@ final class LLMPlannerTests: XCTestCase {
 
         let mockMCP = MockPlannerMCPClient()
         let config = AxionConfig.default
-        let planner = LLMPlanner(config: config, llmClient: mockLLM, mcpClient: mockMCP)
+        let planner = LLMPlanner(config: config, llmClient: mockLLM, mcpClient: mockMCP, retryDelay: { _ in })
 
         let context = RunContext(
             planId: UUID(),
@@ -270,7 +270,7 @@ final class LLMPlannerTests: XCTestCase {
         let mockLLM = MockLLMClient(stubbedResponse: "Invalid JSON response, not a network error")
         let mockMCP = MockPlannerMCPClient()
         let config = AxionConfig.default
-        let planner = LLMPlanner(config: config, llmClient: mockLLM, mcpClient: mockMCP)
+        let planner = LLMPlanner(config: config, llmClient: mockLLM, mcpClient: mockMCP, retryDelay: { _ in })
 
         let context = RunContext(
             planId: UUID(),
@@ -302,7 +302,7 @@ final class LLMPlannerTests: XCTestCase {
         """)
         let mockMCP = MockPlannerMCPClient()
         let config = AxionConfig.default
-        let planner = LLMPlanner(config: config, llmClient: mockLLM, mcpClient: mockMCP)
+        let planner = LLMPlanner(config: config, llmClient: mockLLM, mcpClient: mockMCP, retryDelay: { _ in })
 
         let currentPlan = Plan(
             id: UUID(),
@@ -358,7 +358,7 @@ final class LLMPlannerTests: XCTestCase {
         """)
         let mockMCP = MockPlannerMCPClient()
         let config = AxionConfig.default
-        let planner = LLMPlanner(config: config, llmClient: mockLLM, mcpClient: mockMCP)
+        let planner = LLMPlanner(config: config, llmClient: mockLLM, mcpClient: mockMCP, retryDelay: { _ in })
 
         let context = RunContext(
             planId: UUID(),
@@ -388,7 +388,7 @@ final class LLMPlannerTests: XCTestCase {
         mockMCP.shouldThrowOnScreenshot = true
         mockMCP.shouldThrowOnAXTree = true
         let config = AxionConfig.default
-        let planner = LLMPlanner(config: config, llmClient: mockLLM, mcpClient: mockMCP)
+        let planner = LLMPlanner(config: config, llmClient: mockLLM, mcpClient: mockMCP, retryDelay: { _ in })
 
         let context = RunContext(
             planId: UUID(),
@@ -415,7 +415,7 @@ final class LLMPlannerTests: XCTestCase {
         """)
         let mockMCP = MockPlannerMCPClient()
         let config = AxionConfig.default
-        let planner = LLMPlanner(config: config, llmClient: mockLLM, mcpClient: mockMCP)
+        let planner = LLMPlanner(config: config, llmClient: mockLLM, mcpClient: mockMCP, retryDelay: { _ in })
 
         let currentPlan = Plan(
             id: UUID(),
@@ -459,7 +459,7 @@ final class LLMPlannerTests: XCTestCase {
         let mockLLM = MockLLMClient()
         let mockMCP = MockPlannerMCPClient()
         let config = AxionConfig.default
-        let planner = LLMPlanner(config: config, llmClient: mockLLM, mcpClient: mockMCP)
+        let planner = LLMPlanner(config: config, llmClient: mockLLM, mcpClient: mockMCP, retryDelay: { _ in })
         let _ = planner
     }
 
@@ -475,7 +475,7 @@ final class LLMPlannerTests: XCTestCase {
         let mockMCP = MockPlannerMCPClient()
         mockMCP.stubbedTools = ["launch_app", "click", "type_text", "screenshot"]
         let config = AxionConfig.default
-        let planner = LLMPlanner(config: config, llmClient: mockLLM, mcpClient: mockMCP)
+        let planner = LLMPlanner(config: config, llmClient: mockLLM, mcpClient: mockMCP, retryDelay: { _ in })
 
         let context = RunContext(
             planId: UUID(),
