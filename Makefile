@@ -4,10 +4,10 @@ build:
 	swift build
 
 test:
-	swift test --skip AxionHelperIntegrationTests
+	swift test --skip AxionHelperIntegrationTests --skip AxionCLIIntegrationTests
 
 test-integration:
-	swift test --filter AxionHelperIntegrationTests
+	AXION_HELPER_PATH="$$(pwd)/.build/AxionHelper.app/Contents/MacOS/AxionHelper" swift test --filter AxionHelperIntegrationTests --filter AxionCLIIntegrationTests
 
 test-all:
 	swift test
