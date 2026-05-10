@@ -1,5 +1,5 @@
 import Foundation
 
-protocol VerifierProtocol {
-    func verify(step: ExecutedStep, expectedChange: String, context: RunContext) async throws -> Bool
+public protocol VerifierProtocol {
+    func verify(plan: Plan, executedSteps: [ExecutedStep], context: RunContext) async throws -> VerificationResult
 }

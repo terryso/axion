@@ -1,0 +1,177 @@
+{
+  "phase": "PHASE_1_COMPLETE",
+  "generated_at": "2026-05-10T11:32:13",
+  "trace_target": {
+    "type": "story",
+    "id": "3-4",
+    "label": "Task Verification & Stop Condition Evaluation"
+  },
+  "collection_mode": "contract_static",
+  "allow_gate": true,
+  "coverage_basis": "acceptance_criteria",
+  "summary_confidence": "high",
+  "oracle": {
+    "resolution_mode": "formal_requirements",
+    "confidence": "high",
+    "sources": [
+      "_bmad-output/implementation-artifacts/stories/3-4-task-verification-stop-condition.md",
+      "_bmad-output/test-artifacts/atdd-checklist-3-4-task-verification-stop-condition.md"
+    ],
+    "external_pointer_status": "not_used",
+    "synthetic": false
+  },
+
+  "requirements": [
+    {
+      "id": "AC1",
+      "title": "Batch execution captures verification context (screenshot + AX tree)",
+      "priority": "P0",
+      "coverage": "FULL",
+      "tests": [
+        {"id": "TV-01", "title": "test_taskVerifier_typeExists", "file": "Tests/AxionCLITests/Verifier/TaskVerifierTests.swift", "level": "unit", "priority": "P0", "status": "active"},
+        {"id": "TV-02", "title": "test_taskVerifier_conformsToVerifierProtocol", "file": "Tests/AxionCLITests/Verifier/TaskVerifierTests.swift", "level": "unit", "priority": "P0", "status": "active"},
+        {"id": "TV-03", "title": "test_verify_screenshotAndAxTreeCaptured_returnsDone", "file": "Tests/AxionCLITests/Verifier/TaskVerifierTests.swift", "level": "unit", "priority": "P0", "status": "active"},
+        {"id": "TV-08", "title": "test_verify_mcpScreenshotFailure_degradesGracefully", "file": "Tests/AxionCLITests/Verifier/TaskVerifierTests.swift", "level": "unit", "priority": "P1", "status": "active"},
+        {"id": "TV-09", "title": "test_verify_mcpAxTreeFailure_degradesGracefully", "file": "Tests/AxionCLITests/Verifier/TaskVerifierTests.swift", "level": "unit", "priority": "P1", "status": "active"},
+        {"id": "TV-10", "title": "test_verify_mcpBothFail_degradesGracefully", "file": "Tests/AxionCLITests/Verifier/TaskVerifierTests.swift", "level": "unit", "priority": "P1", "status": "active"},
+        {"id": "TV-13", "title": "test_verify_callsScreenshotWithCorrectWindowId", "file": "Tests/AxionCLITests/Verifier/TaskVerifierTests.swift", "level": "unit", "priority": "P1", "status": "active"},
+        {"id": "TV-14", "title": "test_verify_callsGetAccessibilityTreeWithCorrectPid", "file": "Tests/AxionCLITests/Verifier/TaskVerifierTests.swift", "level": "unit", "priority": "P1", "status": "active"},
+        {"id": "TV-18", "title": "test_verify_contextWithoutPid_callsMCPWithoutPid", "file": "Tests/AxionCLITests/Verifier/TaskVerifierTests.swift", "level": "unit", "priority": "P1", "status": "active"}
+      ]
+    },
+    {
+      "id": "AC2",
+      "title": "StopCondition evaluation with LLM assistance",
+      "priority": "P0",
+      "coverage": "FULL",
+      "tests": [
+        {"id": "SCE-01", "title": "test_evaluate_textAppears_textFoundInAxTree_returnsSatisfied", "file": "Tests/AxionCLITests/Verifier/StopConditionEvaluatorTests.swift", "level": "unit", "priority": "P0", "status": "active"},
+        {"id": "SCE-02", "title": "test_evaluate_textAppears_textNotFound_returnsNotSatisfied", "file": "Tests/AxionCLITests/Verifier/StopConditionEvaluatorTests.swift", "level": "unit", "priority": "P0", "status": "active"},
+        {"id": "SCE-03", "title": "test_evaluate_textAppears_caseInsensitive", "file": "Tests/AxionCLITests/Verifier/StopConditionEvaluatorTests.swift", "level": "unit", "priority": "P1", "status": "active"},
+        {"id": "SCE-04", "title": "test_evaluate_windowAppears_windowTitleFound_returnsSatisfied", "file": "Tests/AxionCLITests/Verifier/StopConditionEvaluatorTests.swift", "level": "unit", "priority": "P0", "status": "active"},
+        {"id": "SCE-05", "title": "test_evaluate_windowAppears_windowNotFound_returnsNotSatisfied", "file": "Tests/AxionCLITests/Verifier/StopConditionEvaluatorTests.swift", "level": "unit", "priority": "P0", "status": "active"},
+        {"id": "SCE-06", "title": "test_evaluate_windowDisappears_windowGone_returnsSatisfied", "file": "Tests/AxionCLITests/Verifier/StopConditionEvaluatorTests.swift", "level": "unit", "priority": "P0", "status": "active"},
+        {"id": "SCE-07", "title": "test_evaluate_windowDisappears_windowStillPresent_returnsNotSatisfied", "file": "Tests/AxionCLITests/Verifier/StopConditionEvaluatorTests.swift", "level": "unit", "priority": "P0", "status": "active"},
+        {"id": "SCE-08", "title": "test_evaluate_maxStepsReached_stepsEqualMax_returnsSatisfied", "file": "Tests/AxionCLITests/Verifier/StopConditionEvaluatorTests.swift", "level": "unit", "priority": "P0", "status": "active"},
+        {"id": "SCE-09", "title": "test_evaluate_maxStepsReached_stepsBelowMax_returnsNotSatisfied", "file": "Tests/AxionCLITests/Verifier/StopConditionEvaluatorTests.swift", "level": "unit", "priority": "P0", "status": "active"},
+        {"id": "SCE-10", "title": "test_evaluate_processExits_processGone_returnsSatisfied", "file": "Tests/AxionCLITests/Verifier/StopConditionEvaluatorTests.swift", "level": "unit", "priority": "P1", "status": "active"},
+        {"id": "SCE-11", "title": "test_evaluate_customType_returnsUncertain", "file": "Tests/AxionCLITests/Verifier/StopConditionEvaluatorTests.swift", "level": "unit", "priority": "P0", "status": "active"},
+        {"id": "SCE-12", "title": "test_evaluate_fileExists_returnsUncertain", "file": "Tests/AxionCLITests/Verifier/StopConditionEvaluatorTests.swift", "level": "unit", "priority": "P1", "status": "active"},
+        {"id": "SCE-13", "title": "test_evaluate_emptyConditions_returnsSatisfied", "file": "Tests/AxionCLITests/Verifier/StopConditionEvaluatorTests.swift", "level": "unit", "priority": "P1", "status": "active"},
+        {"id": "SCE-14", "title": "test_evaluate_multipleConditions_allSatisfied_returnsSatisfied", "file": "Tests/AxionCLITests/Verifier/StopConditionEvaluatorTests.swift", "level": "unit", "priority": "P1", "status": "active"},
+        {"id": "SCE-15", "title": "test_evaluate_multipleConditions_oneNotSatisfied_returnsNotSatisfied", "file": "Tests/AxionCLITests/Verifier/StopConditionEvaluatorTests.swift", "level": "unit", "priority": "P1", "status": "active"},
+        {"id": "SCE-16", "title": "test_evaluate_textAppears_nilAxTree_returnsUncertain", "file": "Tests/AxionCLITests/Verifier/StopConditionEvaluatorTests.swift", "level": "unit", "priority": "P1", "status": "active"},
+        {"id": "SCE-17", "title": "test_evaluate_windowAppears_nilAxTree_returnsUncertain", "file": "Tests/AxionCLITests/Verifier/StopConditionEvaluatorTests.swift", "level": "unit", "priority": "P1", "status": "active"},
+        {"id": "SCE-18", "title": "test_stopEvaluationResult_hasExpectedCases", "file": "Tests/AxionCLITests/Verifier/StopConditionEvaluatorTests.swift", "level": "unit", "priority": "P0", "status": "active"},
+        {"id": "TV-11", "title": "test_verify_llmFailure_returnsBlocked", "file": "Tests/AxionCLITests/Verifier/TaskVerifierTests.swift", "level": "unit", "priority": "P0", "status": "active"},
+        {"id": "TV-12", "title": "test_verify_llmInvalidJSON_returnsBlocked", "file": "Tests/AxionCLITests/Verifier/TaskVerifierTests.swift", "level": "unit", "priority": "P1", "status": "active"},
+        {"id": "TV-16", "title": "test_verify_textAppears_matchedLocally_skipsLLM", "file": "Tests/AxionCLITests/Verifier/TaskVerifierTests.swift", "level": "unit", "priority": "P1", "status": "active"},
+        {"id": "TV-17", "title": "test_verify_customCondition_callsLLM", "file": "Tests/AxionCLITests/Verifier/TaskVerifierTests.swift", "level": "unit", "priority": "P0", "status": "active"}
+      ]
+    },
+    {
+      "id": "AC3",
+      "title": "Task completion state .done",
+      "priority": "P0",
+      "coverage": "FULL",
+      "tests": [
+        {"id": "VR-01", "title": "test_verificationResult_doneRoundTrip_preservesAllFields", "file": "Tests/AxionCoreTests/VerificationResultTests.swift", "level": "unit", "priority": "P0", "status": "active"},
+        {"id": "VR-04", "title": "test_verificationResult_doneFactoryMethod_correctState", "file": "Tests/AxionCoreTests/VerificationResultTests.swift", "level": "unit", "priority": "P0", "status": "active"},
+        {"id": "VR-07", "title": "test_verificationResult_done_withoutOptionals", "file": "Tests/AxionCoreTests/VerificationResultTests.swift", "level": "unit", "priority": "P1", "status": "active"},
+        {"id": "TV-03", "title": "test_verify_screenshotAndAxTreeCaptured_returnsDone", "file": "Tests/AxionCLITests/Verifier/TaskVerifierTests.swift", "level": "unit", "priority": "P0", "status": "active"},
+        {"id": "TV-06", "title": "test_verify_llmReturnsDone_returnsDone", "file": "Tests/AxionCLITests/Verifier/TaskVerifierTests.swift", "level": "unit", "priority": "P0", "status": "active"},
+        {"id": "TV-15", "title": "test_verify_noStopConditions_returnsDone", "file": "Tests/AxionCLITests/Verifier/TaskVerifierTests.swift", "level": "unit", "priority": "P1", "status": "active"}
+      ]
+    },
+    {
+      "id": "AC4",
+      "title": "Task blocked state .blocked",
+      "priority": "P0",
+      "coverage": "FULL",
+      "tests": [
+        {"id": "VR-02", "title": "test_verificationResult_blockedRoundTrip_preservesAllFields", "file": "Tests/AxionCoreTests/VerificationResultTests.swift", "level": "unit", "priority": "P0", "status": "active"},
+        {"id": "VR-05", "title": "test_verificationResult_blockedFactoryMethod_correctState", "file": "Tests/AxionCoreTests/VerificationResultTests.swift", "level": "unit", "priority": "P0", "status": "active"},
+        {"id": "TV-04", "title": "test_verify_stopConditionNotMet_returnsBlocked", "file": "Tests/AxionCLITests/Verifier/TaskVerifierTests.swift", "level": "unit", "priority": "P0", "status": "active"},
+        {"id": "TV-07", "title": "test_verify_llmReturnsBlocked_returnsBlocked", "file": "Tests/AxionCLITests/Verifier/TaskVerifierTests.swift", "level": "unit", "priority": "P0", "status": "active"},
+        {"id": "TV-11", "title": "test_verify_llmFailure_returnsBlocked", "file": "Tests/AxionCLITests/Verifier/TaskVerifierTests.swift", "level": "unit", "priority": "P0", "status": "active"},
+        {"id": "TV-12", "title": "test_verify_llmInvalidJSON_returnsBlocked", "file": "Tests/AxionCLITests/Verifier/TaskVerifierTests.swift", "level": "unit", "priority": "P1", "status": "active"}
+      ]
+    },
+    {
+      "id": "AC5",
+      "title": "Needs clarification state .needsClarification",
+      "priority": "P0",
+      "coverage": "FULL",
+      "tests": [
+        {"id": "VR-03", "title": "test_verificationResult_needsClarificationRoundTrip_preservesAllFields", "file": "Tests/AxionCoreTests/VerificationResultTests.swift", "level": "unit", "priority": "P0", "status": "active"},
+        {"id": "VR-06", "title": "test_verificationResult_needsClarificationFactoryMethod_correctState", "file": "Tests/AxionCoreTests/VerificationResultTests.swift", "level": "unit", "priority": "P0", "status": "active"},
+        {"id": "TV-05", "title": "test_verify_llmReturnsNeedsClarification_returnsNeedsClarification", "file": "Tests/AxionCLITests/Verifier/TaskVerifierTests.swift", "level": "unit", "priority": "P0", "status": "active"}
+      ]
+    }
+  ],
+
+  "coverage_statistics": {
+    "total_requirements": 5,
+    "fully_covered": 5,
+    "partially_covered": 0,
+    "uncovered": 0,
+    "overall_coverage_percentage": 100,
+    "priority_breakdown": {
+      "P0": { "total": 5, "covered": 5, "percentage": 100 },
+      "P1": { "total": 0, "covered": 0, "percentage": 100 },
+      "P2": { "total": 0, "covered": 0, "percentage": 100 },
+      "P3": { "total": 0, "covered": 0, "percentage": 100 }
+    }
+  },
+
+  "gap_analysis": {
+    "critical_gaps": [],
+    "high_gaps": [],
+    "medium_gaps": [],
+    "low_gaps": [],
+    "partial_coverage_items": [],
+    "unit_only_items": []
+  },
+
+  "coverage_heuristics": {
+    "endpoint_gaps": [],
+    "auth_negative_path_gaps": [],
+    "happy_path_only_gaps": [],
+    "ui_journey_gaps": [],
+    "ui_state_gaps": [],
+    "counts": {
+      "endpoints_without_tests": 0,
+      "auth_missing_negative_paths": 0,
+      "happy_path_only_criteria": 0,
+      "ui_journeys_without_e2e": 0,
+      "ui_states_missing_coverage": 0
+    }
+  },
+
+  "test_inventory": {
+    "summary": {
+      "files": 3,
+      "cases": 45,
+      "skipped_cases": 0,
+      "fixme_cases": 0,
+      "pending_cases": 0,
+      "by_level": {
+        "e2e": { "tests": 0, "criteria_covered": 0 },
+        "api": { "tests": 0, "criteria_covered": 0 },
+        "component": { "tests": 0, "criteria_covered": 0 },
+        "unit": { "tests": 45, "criteria_covered": 5 },
+        "other": { "tests": 0, "criteria_covered": 0 }
+      }
+    },
+    "tests": [],
+    "blockers": []
+  },
+
+  "recommendations": [
+    {
+      "priority": "LOW",
+      "action": "Run /bmad:tea:test-review to assess test quality",
+      "requirements": []
+    }
+  ]
+}
