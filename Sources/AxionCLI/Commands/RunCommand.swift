@@ -233,6 +233,7 @@ protocol SDKMessageOutputHandler {
 /// Terminal output handler — displays human-readable progress via TerminalOutput.
 final class SDKTerminalOutputHandler: SDKMessageOutputHandler {
     private let output: TerminalOutput
+    private var isStreaming = false
 
     init(output: TerminalOutput = TerminalOutput()) {
         self.output = output
@@ -245,26 +246,25 @@ final class SDKTerminalOutputHandler: SDKMessageOutputHandler {
     func handleMessage(_ message: SDKMessage) {
         switch message {
         case .assistant(let data):
-            // Display LLM reasoning/response text
-            if !data.text.isEmpty {
+            if isStreaming {
+                output.endStream()
+                isStreaming = false
+            } else if !data.text.isEmpty {
                 output.write("[axion] \(data.text)")
             }
 
         case .toolUse(let data):
-            // Display tool invocation
             output.write("[axion] 执行: \(data.toolName)")
 
         case .toolResult(let data):
-            // Display tool result
             if data.isError {
                 output.write("[axion] 结果: 错误 — \(String(data.content.prefix(100)))")
             } else {
-                let snippet = String(data.content.prefix(80))
+                let snippet = summarizeResult(data.content)
                 output.write("[axion] 结果: \(snippet)")
             }
 
         case .result(let data):
-            // Display final result
             switch data.subtype {
             case .success:
                 if !data.text.isEmpty {
@@ -283,8 +283,8 @@ final class SDKTerminalOutputHandler: SDKMessageOutputHandler {
             }
 
         case .partialMessage(let data):
-            // Stream partial text directly (no prefix for streaming feel)
             output.writeStream(data.text)
+            isStreaming = true
 
         default:
             break
@@ -293,6 +293,16 @@ final class SDKTerminalOutputHandler: SDKMessageOutputHandler {
 
     func displayCompletion() {
         output.write("[axion] 运行结束。")
+    }
+
+    private func summarizeResult(_ content: String) -> String {
+        if content.hasPrefix("{\"action\":\"screenshot\"") || content.contains("image_data") || content.contains("[微压缩]") {
+            return "[screenshot captured]"
+        }
+        if content.contains("Base64") || content.contains("base64") {
+            return "[screenshot captured]"
+        }
+        return String(content.prefix(120))
     }
 }
 

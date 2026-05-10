@@ -21,9 +21,15 @@ final class TerminalOutput: OutputProtocol {
         self.write = write
     }
 
-    /// Writes a raw string directly without any prefix (for SDK streaming).
+    /// Writes streaming text inline without a trailing newline (typewriter effect).
     func writeStream(_ text: String) {
-        write(text)
+        Swift.print(text, terminator: "")
+        fflush(stdout)
+    }
+
+    /// Ends the current streaming line (prints newline if mid-stream).
+    func endStream() {
+        Swift.print("")
     }
 
     // MARK: - OutputProtocol — New Methods (Story 3-5)

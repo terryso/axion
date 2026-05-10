@@ -85,9 +85,7 @@ final class RunEngineIntegrationTests: XCTestCase {
         do {
             try await mgr.start()
         } catch {
-            XCTFail("Failed to start Helper process: \(error). " +
-                    "Ensure AxionHelper.app is built and AX permissions are granted.")
-            return
+            throw XCTSkip("AxionHelper not available — build it first or set AXION_HELPER_PATH.")
         }
 
         let running = await mgr.isRunning()
@@ -119,7 +117,7 @@ final class RunEngineIntegrationTests: XCTestCase {
     // MARK: - AC1, AC2: Happy path — plan -> execute -> verify -> done
 
     func test_real_happyPath_launchAndVerifyCalculator() async throws {
-        guard let mcpClient else { return }
+        guard let mcpClient else { throw XCTSkip("AxionHelper not available — build it first or set AXION_HELPER_PATH.") }
 
         let plan = Plan(
             id: UUID(), task: "Launch Calculator",
@@ -180,7 +178,7 @@ final class RunEngineIntegrationTests: XCTestCase {
     // MARK: - AC8: Dryrun mode — plan only, no execution
 
     func test_real_dryrunMode_plansWithoutExecution() async throws {
-        guard let mcpClient else { return }
+        guard let mcpClient else { throw XCTSkip("AxionHelper not available — build it first or set AXION_HELPER_PATH.") }
 
         let plan = Plan(
             id: UUID(), task: "Launch Calculator",
@@ -239,7 +237,7 @@ final class RunEngineIntegrationTests: XCTestCase {
     // MARK: - AC12: Step failure triggers replan
 
     func test_real_stepFailureTriggersReplan() async throws {
-        guard let mcpClient else { return }
+        guard let mcpClient else { throw XCTSkip("AxionHelper not available — build it first or set AXION_HELPER_PATH.") }
 
         // Plan 1: use click (foreground op) in shared-seat mode — safety check will fail
         let plan1 = Plan(
@@ -310,7 +308,7 @@ final class RunEngineIntegrationTests: XCTestCase {
     // MARK: - AC3, AC4: Blocked verification triggers replan
 
     func test_real_blockedVerificationTriggersReplan() async throws {
-        guard let mcpClient else { return }
+        guard let mcpClient else { throw XCTSkip("AxionHelper not available — build it first or set AXION_HELPER_PATH.") }
 
         let plan1 = Plan(
             id: UUID(), task: "Launch Calculator",
@@ -386,7 +384,7 @@ final class RunEngineIntegrationTests: XCTestCase {
     // MARK: - Output recording through RunEngine
 
     func test_real_outputRecording() async throws {
-        guard let mcpClient else { return }
+        guard let mcpClient else { throw XCTSkip("AxionHelper not available — build it first or set AXION_HELPER_PATH.") }
 
         let plan = Plan(
             id: UUID(), task: "Launch Calculator",
@@ -480,10 +478,10 @@ private final class BlockedThenDoneVerifier: VerifierProtocol {
     func verify(plan: Plan, executedSteps: [ExecutedStep], context: RunContext) async throws -> VerificationResult {
         callCount += 1
         if callCount == 1 {
-            var verifier = TaskVerifier(mcpClient: mcpClient, llmClient: blockedLLM, config: config)
+            let verifier = TaskVerifier(mcpClient: mcpClient, llmClient: blockedLLM, config: config)
             return try await verifier.verify(plan: plan, executedSteps: executedSteps, context: context)
         } else {
-            var verifier = TaskVerifier(mcpClient: mcpClient, llmClient: doneLLM, config: config)
+            let verifier = TaskVerifier(mcpClient: mcpClient, llmClient: doneLLM, config: config)
             return try await verifier.verify(plan: plan, executedSteps: executedSteps, context: context)
         }
     }

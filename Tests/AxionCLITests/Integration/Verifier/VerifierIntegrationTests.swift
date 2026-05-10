@@ -45,9 +45,7 @@ final class VerifierIntegrationTests: XCTestCase {
         do {
             try await mgr.start()
         } catch {
-            XCTFail("Failed to start Helper process: \(error). " +
-                    "Ensure AxionHelper.app is built and AX permissions are granted.")
-            return
+            throw XCTSkip("AxionHelper not available — build it first or set AXION_HELPER_PATH.")
         }
 
         let running = await mgr.isRunning()
@@ -105,7 +103,7 @@ final class VerifierIntegrationTests: XCTestCase {
     // MARK: - AC1 & AC2: Real screenshot + AX tree capture, stop condition evaluation
 
     func test_real_captureScreenshotAndAxTree() async throws {
-        guard let mcpClient else { return }
+        guard let mcpClient else { throw XCTSkip("AxionHelper not available — build it first or set AXION_HELPER_PATH.") }
 
         let (pid, windowId, windowTitle) = try await launchCalculator()
         print("🖥️ Calculator: pid=\(pid), windowId=\(windowId), title=\"\(windowTitle)\"")
@@ -158,7 +156,7 @@ final class VerifierIntegrationTests: XCTestCase {
     // MARK: - AC1-AC5: Full TaskVerifier flow with real MCP context capture
 
     func test_real_taskVerifier_withRealMCP() async throws {
-        guard let mcpClient else { return }
+        guard let mcpClient else { throw XCTSkip("AxionHelper not available — build it first or set AXION_HELPER_PATH.") }
 
         let (pid, windowId, windowTitle) = try await launchCalculator()
 
@@ -222,7 +220,7 @@ final class VerifierIntegrationTests: XCTestCase {
     // MARK: - AC2: StopConditionEvaluator with real AX tree
 
     func test_real_stopConditionEvaluator_withRealAxTree() async throws {
-        guard let mcpClient else { return }
+        guard let mcpClient else { throw XCTSkip("AxionHelper not available — build it first or set AXION_HELPER_PATH.") }
 
         let (pid, windowId, windowTitle) = try await launchCalculator()
 

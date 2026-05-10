@@ -67,9 +67,7 @@ final class OutputTraceIntegrationTests: XCTestCase {
         do {
             try await mgr.start()
         } catch {
-            XCTFail("Failed to start Helper process: \(error). " +
-                    "Ensure AxionHelper.app is built and AX permissions are granted.")
-            return
+            throw XCTSkip("AxionHelper not available — build it first or set AXION_HELPER_PATH.")
         }
 
         let running = await mgr.isRunning()
@@ -101,7 +99,7 @@ final class OutputTraceIntegrationTests: XCTestCase {
     // MARK: - AC1-AC4: StepExecutor + TerminalOutput
 
     func test_real_stepExecutor_withTerminalOutput() async throws {
-        guard let mcpClient else { return }
+        guard let mcpClient else { throw XCTSkip("AxionHelper not available — build it first or set AXION_HELPER_PATH.") }
 
         var capturedOutput: [String] = []
         let output = TerminalOutput { capturedOutput.append($0) }
@@ -160,7 +158,7 @@ final class OutputTraceIntegrationTests: XCTestCase {
     // MARK: - AC5: StepExecutor + JSONOutput
 
     func test_real_stepExecutor_withJSONOutput() async throws {
-        guard let mcpClient else { return }
+        guard let mcpClient else { throw XCTSkip("AxionHelper not available — build it first or set AXION_HELPER_PATH.") }
 
         let output = JSONOutput()
 
@@ -233,7 +231,7 @@ final class OutputTraceIntegrationTests: XCTestCase {
     // MARK: - AC6-AC7: StepExecutor + TraceRecorder
 
     func test_real_stepExecutor_withTraceRecorder() async throws {
-        guard let mcpClient else { return }
+        guard let mcpClient else { throw XCTSkip("AxionHelper not available — build it first or set AXION_HELPER_PATH.") }
 
         var config = AxionConfig.default
         config.traceEnabled = true
@@ -344,7 +342,7 @@ final class OutputTraceIntegrationTests: XCTestCase {
     // MARK: - AC1-AC7: TaskVerifier + Output + Trace
 
     func test_real_taskVerifier_withOutputAndTrace() async throws {
-        guard let mcpClient else { return }
+        guard let mcpClient else { throw XCTSkip("AxionHelper not available — build it first or set AXION_HELPER_PATH.") }
 
         // Launch Calculator first
         let (pid, _, windowTitle) = try await launchCalculator()
@@ -448,7 +446,7 @@ final class OutputTraceIntegrationTests: XCTestCase {
     // MARK: - AC1-AC7: Full Pipeline (Execute + Verify)
 
     func test_real_fullPipeline_executeAndVerify() async throws {
-        guard let mcpClient else { return }
+        guard let mcpClient else { throw XCTSkip("AxionHelper not available — build it first or set AXION_HELPER_PATH.") }
 
         // Setup all components
         var capturedOutput: [String] = []

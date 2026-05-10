@@ -26,8 +26,7 @@ final class SDKAgentIntegrationTests: XCTestCase {
         try await super.setUp()
 
         guard let path = HelperPathResolver.resolveHelperPath() else {
-            XCTFail("AxionHelper not found. Build it first or set AXION_HELPER_PATH.")
-            return
+            throw XCTSkip("AxionHelper not available — build it first or set AXION_HELPER_PATH.")
         }
         helperPath = path
     }
@@ -37,7 +36,7 @@ final class SDKAgentIntegrationTests: XCTestCase {
     /// Creating an Agent with Helper as MCP server should connect and discover tools.
     /// We use an invalid API key — the LLM call will fail but MCP connection should still happen.
     func test_real_sdkAgent_connectsHelperViaMCP() async throws {
-        guard let helperPath else { return }
+        guard let helperPath else { throw XCTSkip("AxionHelper not available — build it first or set AXION_HELPER_PATH.") }
 
         let mcpServers: [String: McpServerConfig] = [
             "axion-helper": .stdio(McpStdioConfig(command: helperPath))
@@ -76,7 +75,7 @@ final class SDKAgentIntegrationTests: XCTestCase {
 
     /// Verify the MCP stdio config correctly references the Helper binary.
     func test_real_mcpStdioConfig_correctHelperPath() async throws {
-        guard let helperPath else { return }
+        guard let helperPath else { throw XCTSkip("AxionHelper not available — build it first or set AXION_HELPER_PATH.") }
 
         let config = McpStdioConfig(command: helperPath)
         XCTAssertEqual(config.command, helperPath)
@@ -90,7 +89,7 @@ final class SDKAgentIntegrationTests: XCTestCase {
 
     /// SafetyChecker hook blocks click in shared seat mode when running through real Agent.
     func test_real_safetyHook_blocksForegroundInSharedSeatMode() async throws {
-        guard let helperPath else { return }
+        guard let helperPath else { throw XCTSkip("AxionHelper not available — build it first or set AXION_HELPER_PATH.") }
 
         let hookRegistry = HookRegistry()
         let foregroundTools = ToolNames.foregroundToolNames
@@ -142,7 +141,7 @@ final class SDKAgentIntegrationTests: XCTestCase {
 
     /// SDKTerminalOutputHandler correctly formats real MCP tool results.
     func test_real_terminalOutputHandler_withRealMCPData() async throws {
-        guard let helperPath else { return }
+        guard let helperPath else { throw XCTSkip("AxionHelper not available — build it first or set AXION_HELPER_PATH.") }
 
         // Use HelperProcessManager to get real MCP data
         let manager = HelperProcessManager()
@@ -205,7 +204,7 @@ final class SDKAgentIntegrationTests: XCTestCase {
 
     /// SDKJSONOutputHandler produces valid JSON with real tool data.
     func test_real_jsonOutputHandler_withRealMCPData() async throws {
-        guard let helperPath else { return }
+        guard let helperPath else { throw XCTSkip("AxionHelper not available — build it first or set AXION_HELPER_PATH.") }
 
         let manager = HelperProcessManager()
         try await manager.start()
@@ -257,7 +256,7 @@ final class SDKAgentIntegrationTests: XCTestCase {
 
     /// TraceRecorder correctly records SDKMessage events from real Helper data.
     func test_real_traceRecording_withSDKMessages() async throws {
-        guard let helperPath else { return }
+        guard let helperPath else { throw XCTSkip("AxionHelper not available — build it first or set AXION_HELPER_PATH.") }
 
         let manager = HelperProcessManager()
         try await manager.start()
@@ -342,7 +341,7 @@ final class SDKAgentIntegrationTests: XCTestCase {
 
     /// Agent.interrupt() can be called on a running agent.
     func test_real_agentInterrupt_isCallable() async throws {
-        guard let helperPath else { return }
+        guard let helperPath else { throw XCTSkip("AxionHelper not available — build it first or set AXION_HELPER_PATH.") }
 
         let options = AgentOptions(
             apiKey: "sk-test",
@@ -370,7 +369,7 @@ final class SDKAgentIntegrationTests: XCTestCase {
 
     /// AgentOptions configuration mirrors AxionConfig settings.
     func test_real_agentOptions_fromAxionConfig() async throws {
-        guard let helperPath else { return }
+        guard let helperPath else { throw XCTSkip("AxionHelper not available — build it first or set AXION_HELPER_PATH.") }
 
         let config = try await ConfigManager.loadConfig()
 
