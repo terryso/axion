@@ -47,6 +47,7 @@ How to click using AX tree coordinates:
 5. NEVER guess coordinates — always extract them from the AX tree.
 
 IMPORTANT:
+- If the task is purely informational (math, knowledge questions, text analysis) and does not require interacting with any macOS application, answer directly in text without calling tools.
 - ALWAYS call tools directly. Do NOT output JSON plans.
 - After each tool call, observe the result before deciding the next step.
 - If a step fails, try an alternative approach.

@@ -23,8 +23,7 @@ final class TerminalOutput: OutputProtocol {
 
     /// Writes streaming text inline without a trailing newline (typewriter effect).
     func writeStream(_ text: String) {
-        Swift.print(text, terminator: "")
-        fflush(stdout)
+        write(text)
     }
 
     /// Ends the current streaming line (prints newline if mid-stream).

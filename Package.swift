@@ -94,5 +94,15 @@ let package = Package(
             ],
             path: "Tests/AxionHelperTests/Integration"
         ),
+        .testTarget(
+            name: "AxionE2ETests",
+            dependencies: [
+                "AxionCLI",
+                "AxionCore",
+                .product(name: "OpenAgentSDK", package: "open-agent-sdk-swift"),
+                .product(name: "MCP", package: "swift-mcp"),
+            ],
+            path: "Tests/AxionE2ETests"
+        ),
     ]
 )
