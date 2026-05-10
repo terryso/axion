@@ -74,6 +74,15 @@ let package = Package(
             exclude: ["Integration"]
         ),
         .testTarget(
+            name: "AxionCLIIntegrationTests",
+            dependencies: [
+                "AxionCLI",
+                "AxionCore",
+                .product(name: "MCP", package: "swift-mcp"),
+            ],
+            path: "Tests/AxionCLITests/Integration"
+        ),
+        .testTarget(
             name: "AxionHelperIntegrationTests",
             dependencies: [
                 "AxionHelper",

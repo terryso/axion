@@ -18,11 +18,19 @@ public struct StepExecutor: ExecutorProtocol {
     private let placeholderResolver: PlaceholderResolver
     private let safetyChecker: SafetyChecker
 
+    /// Callback invoked before a step is executed (for output/trace integration).
+    public var onStepStart: ((Step) -> Void)?
+
+    /// Callback invoked after a step is executed (for output/trace integration).
+    public var onStepDone: ((ExecutedStep) -> Void)?
+
     public init(mcpClient: MCPClientProtocol, config: AxionConfig) {
         self.mcpClient = mcpClient
         self.config = config
         self.placeholderResolver = PlaceholderResolver()
         self.safetyChecker = SafetyChecker()
+        self.onStepStart = nil
+        self.onStepDone = nil
     }
 
     // MARK: - ExecutorProtocol
@@ -30,6 +38,9 @@ public struct StepExecutor: ExecutorProtocol {
     /// Executes a single step within the given run context.
     /// Resolves placeholders, checks safety, refreshes AX state if needed, then calls MCP.
     public func executeStep(_ step: Step, context: RunContext) async throws -> ExecutedStep {
+        // Notify output/trace listeners before step starts
+        onStepStart?(step)
+
         // Build execution context from prior executed steps
         var executionContext = buildExecutionContext(from: context.executedSteps)
 
@@ -48,7 +59,7 @@ public struct StepExecutor: ExecutorProtocol {
             sharedSeatMode: config.sharedSeatMode
         )
         guard safetyResult.allowed else {
-            return ExecutedStep(
+            let failedStep = ExecutedStep(
                 stepIndex: resolvedStep.index,
                 tool: resolvedStep.tool,
                 parameters: resolvedStep.parameters,
@@ -56,6 +67,8 @@ public struct StepExecutor: ExecutorProtocol {
                 success: false,
                 timestamp: Date()
             )
+            onStepDone?(failedStep)
+            return failedStep
         }
 
         // 4. MCP call
@@ -85,7 +98,7 @@ public struct StepExecutor: ExecutorProtocol {
         )
 
         // 6. Build executed step
-        return ExecutedStep(
+        let executedStep = ExecutedStep(
             stepIndex: resolvedStep.index,
             tool: resolvedStep.tool,
             parameters: resolvedStep.parameters,
@@ -93,6 +106,8 @@ public struct StepExecutor: ExecutorProtocol {
             success: true,
             timestamp: Date()
         )
+        onStepDone?(executedStep)
+        return executedStep
     }
 
     // MARK: - Plan Execution
@@ -105,6 +120,9 @@ public struct StepExecutor: ExecutorProtocol {
         var updatedContext = context
 
         for step in plan.steps {
+            // Notify output/trace listeners before step starts
+            onStepStart?(step)
+
             // 1. AX refresh before foreground operations (must happen BEFORE resolve
             //    so that $window_id from the refresh result is available for resolution)
             if shouldRefreshBeforeAXOp(step.tool) {
@@ -128,6 +146,7 @@ public struct StepExecutor: ExecutorProtocol {
                     success: false,
                     timestamp: Date()
                 )
+                onStepDone?(failedStep)
                 executedSteps.append(failedStep)
                 updatedContext.executedSteps = executedSteps
                 updatedContext.currentStepIndex = resolvedStep.index
@@ -150,6 +169,7 @@ public struct StepExecutor: ExecutorProtocol {
                     success: false,
                     timestamp: Date()
                 )
+                onStepDone?(failedStep)
                 executedSteps.append(failedStep)
                 updatedContext.executedSteps = executedSteps
                 updatedContext.currentStepIndex = resolvedStep.index
@@ -172,6 +192,7 @@ public struct StepExecutor: ExecutorProtocol {
                 success: true,
                 timestamp: Date()
             )
+            onStepDone?(executedStep)
             executedSteps.append(executedStep)
         }
 

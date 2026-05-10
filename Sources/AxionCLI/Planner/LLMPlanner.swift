@@ -24,12 +24,16 @@ struct LLMPlanner: PlannerProtocol {
     let mcpClient: MCPClientProtocol
     let retryDelay: @Sendable (UInt64) async throws -> Void
 
+    /// Callback invoked after a plan is created (for output/trace integration).
+    var onPlanCreated: ((Plan) -> Void)?
+
     init(config: AxionConfig, llmClient: LLMClientProtocol, mcpClient: MCPClientProtocol,
          retryDelay: @escaping @Sendable (UInt64) async throws -> Void = { try await Task.sleep(nanoseconds: $0) }) {
         self.config = config
         self.llmClient = llmClient
         self.mcpClient = mcpClient
         self.retryDelay = retryDelay
+        self.onPlanCreated = nil
     }
 
     // MARK: - PlannerProtocol conformance
@@ -50,7 +54,9 @@ struct LLMPlanner: PlannerProtocol {
             imagePaths: []
         )
 
-        return try PlanParser.parse(rawResponse, task: task, maxSteps: context.config.maxSteps)
+        let plan = try PlanParser.parse(rawResponse, task: task, maxSteps: context.config.maxSteps)
+        onPlanCreated?(plan)
+        return plan
     }
 
     func replan(
@@ -115,7 +121,9 @@ struct LLMPlanner: PlannerProtocol {
             imagePaths: []
         )
 
-        return try PlanParser.parse(rawResponse, task: currentPlan.task, maxSteps: context.config.maxSteps)
+        let plan = try PlanParser.parse(rawResponse, task: currentPlan.task, maxSteps: context.config.maxSteps)
+        onPlanCreated?(plan)
+        return plan
     }
 
     // MARK: - Internal Methods

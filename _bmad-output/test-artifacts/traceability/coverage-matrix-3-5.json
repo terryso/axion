@@ -1,0 +1,516 @@
+{
+  "phase": "PHASE_1_COMPLETE",
+  "generated_at": "2026-05-10T12:52:00+08:00",
+  "trace_target": {
+    "type": "story",
+    "id": "3-5",
+    "label": "Output, Trace & Progress Display"
+  },
+  "collection_mode": "contract_static",
+  "allow_gate": true,
+  "coverage_basis": "acceptance_criteria",
+  "summary_confidence": "high",
+  "oracle": {
+    "resolution_mode": "formal_requirements",
+    "confidence": "high",
+    "sources": [
+      "_bmad-output/implementation-artifacts/stories/3-5-output-trace-progress-display.md",
+      "_bmad-output/test-artifacts/atdd-checklist-3-5-output-trace-progress-display.md",
+      "Sources/AxionCore/Protocols/OutputProtocol.swift",
+      "Sources/AxionCLI/Output/TerminalOutput.swift",
+      "Sources/AxionCLI/Output/JSONOutput.swift",
+      "Sources/AxionCLI/Trace/TraceRecorder.swift"
+    ],
+    "external_pointer_status": "not_used",
+    "synthetic": false
+  },
+  "requirements": [
+    {
+      "id": "AC1",
+      "title": "Run start info display (run ID, mode, task)",
+      "priority": "P0",
+      "coverage": "FULL",
+      "tests": [
+        {
+          "id": "OutputProtocolTests:test_outputProtocol_hasRequiredMethods",
+          "title": "test_outputProtocol_hasRequiredMethods",
+          "file": "Tests/AxionCoreTests/OutputProtocolTests.swift",
+          "level": "unit",
+          "status": "active"
+        },
+        {
+          "id": "OutputProtocolTests:test_outputProtocol_displayRunStart_signature",
+          "title": "test_outputProtocol_displayRunStart_signature",
+          "file": "Tests/AxionCoreTests/OutputProtocolTests.swift",
+          "level": "unit",
+          "status": "active"
+        },
+        {
+          "id": "TerminalOutputTests:test_terminalOutput_displayRunStart_showsRunIdAndTask",
+          "title": "test_terminalOutput_displayRunStart_showsRunIdAndTask",
+          "file": "Tests/AxionCLITests/Output/TerminalOutputTests.swift",
+          "level": "unit",
+          "status": "active"
+        },
+        {
+          "id": "TerminalOutputTests:test_terminalOutput_displayRunStart_allThreeLines",
+          "title": "test_terminalOutput_displayRunStart_allThreeLines",
+          "file": "Tests/AxionCLITests/Output/TerminalOutputTests.swift",
+          "level": "unit",
+          "status": "active"
+        },
+        {
+          "id": "TerminalOutputTests:test_terminalOutput_allOutputs_haveAxionPrefix",
+          "title": "test_terminalOutput_allOutputs_haveAxionPrefix",
+          "file": "Tests/AxionCLITests/Output/TerminalOutputTests.swift",
+          "level": "unit",
+          "status": "active"
+        }
+      ]
+    },
+    {
+      "id": "AC2",
+      "title": "Step execution progress display",
+      "priority": "P0",
+      "coverage": "FULL",
+      "tests": [
+        {
+          "id": "TerminalOutputTests:test_terminalOutput_displayPlan_showsStepCount",
+          "title": "test_terminalOutput_displayPlan_showsStepCount",
+          "file": "Tests/AxionCLITests/Output/TerminalOutputTests.swift",
+          "level": "unit",
+          "status": "active"
+        },
+        {
+          "id": "TerminalOutputTests:test_terminalOutput_displayStepResult_showsStepIndex",
+          "title": "test_terminalOutput_displayStepResult_showsStepIndex",
+          "file": "Tests/AxionCLITests/Output/TerminalOutputTests.swift",
+          "level": "unit",
+          "status": "active"
+        }
+      ]
+    },
+    {
+      "id": "AC3",
+      "title": "Step result feedback (ok/x)",
+      "priority": "P0",
+      "coverage": "FULL",
+      "tests": [
+        {
+          "id": "TerminalOutputTests:test_terminalOutput_displayStepResult_success_showsOk",
+          "title": "test_terminalOutput_displayStepResult_success_showsOk",
+          "file": "Tests/AxionCLITests/Output/TerminalOutputTests.swift",
+          "level": "unit",
+          "status": "active"
+        },
+        {
+          "id": "TerminalOutputTests:test_terminalOutput_displayStepResult_failure_showsError",
+          "title": "test_terminalOutput_displayStepResult_failure_showsError",
+          "file": "Tests/AxionCLITests/Output/TerminalOutputTests.swift",
+          "level": "unit",
+          "status": "active"
+        },
+        {
+          "id": "TerminalOutputTests:test_terminalOutput_displayError_showsUserFriendlyMessage",
+          "title": "test_terminalOutput_displayError_showsUserFriendlyMessage",
+          "file": "Tests/AxionCLITests/Output/TerminalOutputTests.swift",
+          "level": "unit",
+          "status": "active"
+        }
+      ]
+    },
+    {
+      "id": "AC4",
+      "title": "Task completion summary",
+      "priority": "P0",
+      "coverage": "FULL",
+      "tests": [
+        {
+          "id": "TerminalOutputTests:test_terminalOutput_displaySummary_showsStepCountAndDuration",
+          "title": "test_terminalOutput_displaySummary_showsStepCountAndDuration",
+          "file": "Tests/AxionCLITests/Output/TerminalOutputTests.swift",
+          "level": "unit",
+          "status": "active"
+        },
+        {
+          "id": "TerminalOutputTests:test_terminalOutput_displaySummary_showsReplanCount",
+          "title": "test_terminalOutput_displaySummary_showsReplanCount",
+          "file": "Tests/AxionCLITests/Output/TerminalOutputTests.swift",
+          "level": "unit",
+          "status": "active"
+        },
+        {
+          "id": "TerminalOutputTests:test_terminalOutput_displayStateChange_planning",
+          "title": "test_terminalOutput_displayStateChange_planning",
+          "file": "Tests/AxionCLITests/Output/TerminalOutputTests.swift",
+          "level": "unit",
+          "status": "active"
+        },
+        {
+          "id": "TerminalOutputTests:test_terminalOutput_displayStateChange_executing",
+          "title": "test_terminalOutput_displayStateChange_executing",
+          "file": "Tests/AxionCLITests/Output/TerminalOutputTests.swift",
+          "level": "unit",
+          "status": "active"
+        },
+        {
+          "id": "TerminalOutputTests:test_terminalOutput_displayReplan_showsAttemptInfo",
+          "title": "test_terminalOutput_displayReplan_showsAttemptInfo",
+          "file": "Tests/AxionCLITests/Output/TerminalOutputTests.swift",
+          "level": "unit",
+          "status": "active"
+        },
+        {
+          "id": "TerminalOutputTests:test_terminalOutput_displayVerificationResult_done",
+          "title": "test_terminalOutput_displayVerificationResult_done",
+          "file": "Tests/AxionCLITests/Output/TerminalOutputTests.swift",
+          "level": "unit",
+          "status": "active"
+        },
+        {
+          "id": "TerminalOutputTests:test_terminalOutput_displayVerificationResult_blocked",
+          "title": "test_terminalOutput_displayVerificationResult_blocked",
+          "file": "Tests/AxionCLITests/Output/TerminalOutputTests.swift",
+          "level": "unit",
+          "status": "active"
+        },
+        {
+          "id": "OutputProtocolTests:test_outputProtocol_displayReplan_signature",
+          "title": "test_outputProtocol_displayReplan_signature",
+          "file": "Tests/AxionCoreTests/OutputProtocolTests.swift",
+          "level": "unit",
+          "status": "active"
+        },
+        {
+          "id": "OutputProtocolTests:test_outputProtocol_displayVerificationResult_signature",
+          "title": "test_outputProtocol_displayVerificationResult_signature",
+          "file": "Tests/AxionCoreTests/OutputProtocolTests.swift",
+          "level": "unit",
+          "status": "active"
+        }
+      ]
+    },
+    {
+      "id": "AC5",
+      "title": "JSON structured output",
+      "priority": "P0",
+      "coverage": "FULL",
+      "tests": [
+        {
+          "id": "JSONOutputTests:test_jsonOutput_typeExists",
+          "title": "test_jsonOutput_typeExists",
+          "file": "Tests/AxionCLITests/Output/JSONOutputTests.swift",
+          "level": "unit",
+          "status": "active"
+        },
+        {
+          "id": "JSONOutputTests:test_jsonOutput_conformsToOutputProtocol",
+          "title": "test_jsonOutput_conformsToOutputProtocol",
+          "file": "Tests/AxionCLITests/Output/JSONOutputTests.swift",
+          "level": "unit",
+          "status": "active"
+        },
+        {
+          "id": "JSONOutputTests:test_jsonOutput_finalize_producesValidJSON",
+          "title": "test_jsonOutput_finalize_producesValidJSON",
+          "file": "Tests/AxionCLITests/Output/JSONOutputTests.swift",
+          "level": "unit",
+          "status": "active"
+        },
+        {
+          "id": "JSONOutputTests:test_jsonOutput_finalize_containsRunId",
+          "title": "test_jsonOutput_finalize_containsRunId",
+          "file": "Tests/AxionCLITests/Output/JSONOutputTests.swift",
+          "level": "unit",
+          "status": "active"
+        },
+        {
+          "id": "JSONOutputTests:test_jsonOutput_finalize_containsTask",
+          "title": "test_jsonOutput_finalize_containsTask",
+          "file": "Tests/AxionCLITests/Output/JSONOutputTests.swift",
+          "level": "unit",
+          "status": "active"
+        },
+        {
+          "id": "JSONOutputTests:test_jsonOutput_finalize_containsSteps",
+          "title": "test_jsonOutput_finalize_containsSteps",
+          "file": "Tests/AxionCLITests/Output/JSONOutputTests.swift",
+          "level": "unit",
+          "status": "active"
+        },
+        {
+          "id": "JSONOutputTests:test_jsonOutput_finalize_containsSummary",
+          "title": "test_jsonOutput_finalize_containsSummary",
+          "file": "Tests/AxionCLITests/Output/JSONOutputTests.swift",
+          "level": "unit",
+          "status": "active"
+        },
+        {
+          "id": "JSONOutputTests:test_jsonOutput_stepsArray_reflectsExecutedSteps",
+          "title": "test_jsonOutput_stepsArray_reflectsExecutedSteps",
+          "file": "Tests/AxionCLITests/Output/JSONOutputTests.swift",
+          "level": "unit",
+          "status": "active"
+        },
+        {
+          "id": "JSONOutputTests:test_jsonOutput_summary_computesTotalSteps",
+          "title": "test_jsonOutput_summary_computesTotalSteps",
+          "file": "Tests/AxionCLITests/Output/JSONOutputTests.swift",
+          "level": "unit",
+          "status": "active"
+        },
+        {
+          "id": "JSONOutputTests:test_jsonOutput_summary_computesSuccessfulSteps",
+          "title": "test_jsonOutput_summary_computesSuccessfulSteps",
+          "file": "Tests/AxionCLITests/Output/JSONOutputTests.swift",
+          "level": "unit",
+          "status": "active"
+        },
+        {
+          "id": "JSONOutputTests:test_jsonOutput_summary_computesFailedSteps",
+          "title": "test_jsonOutput_summary_computesFailedSteps",
+          "file": "Tests/AxionCLITests/Output/JSONOutputTests.swift",
+          "level": "unit",
+          "status": "active"
+        },
+        {
+          "id": "JSONOutputTests:test_jsonOutput_displayRunStart_storesRunInfo",
+          "title": "test_jsonOutput_displayRunStart_storesRunInfo",
+          "file": "Tests/AxionCLITests/Output/JSONOutputTests.swift",
+          "level": "unit",
+          "status": "active"
+        },
+        {
+          "id": "JSONOutputTests:test_jsonOutput_displayError_recordsError",
+          "title": "test_jsonOutput_displayError_recordsError",
+          "file": "Tests/AxionCLITests/Output/JSONOutputTests.swift",
+          "level": "unit",
+          "status": "active"
+        },
+        {
+          "id": "JSONOutputTests:test_jsonOutput_displayStateChange_recordsTransition",
+          "title": "test_jsonOutput_displayStateChange_recordsTransition",
+          "file": "Tests/AxionCLITests/Output/JSONOutputTests.swift",
+          "level": "unit",
+          "status": "active"
+        },
+        {
+          "id": "JSONOutputTests:test_jsonOutput_displayVerificationResult_recordsResult",
+          "title": "test_jsonOutput_displayVerificationResult_recordsResult",
+          "file": "Tests/AxionCLITests/Output/JSONOutputTests.swift",
+          "level": "unit",
+          "status": "active"
+        }
+      ]
+    },
+    {
+      "id": "AC6",
+      "title": "Trace event recording (JSONL file)",
+      "priority": "P0",
+      "coverage": "FULL",
+      "tests": [
+        {
+          "id": "TraceRecorderTests:test_traceRecorder_typeExists",
+          "title": "test_traceRecorder_typeExists",
+          "file": "Tests/AxionCLITests/Trace/TraceRecorderTests.swift",
+          "level": "unit",
+          "status": "active"
+        },
+        {
+          "id": "TraceRecorderTests:test_traceRecorder_isActor",
+          "title": "test_traceRecorder_isActor",
+          "file": "Tests/AxionCLITests/Trace/TraceRecorderTests.swift",
+          "level": "unit",
+          "status": "active"
+        },
+        {
+          "id": "TraceRecorderTests:test_traceRecorder_createsDirectoryAndFile",
+          "title": "test_traceRecorder_createsDirectoryAndFile",
+          "file": "Tests/AxionCLITests/Trace/TraceRecorderTests.swift",
+          "level": "unit",
+          "status": "active"
+        },
+        {
+          "id": "TraceRecorderTests:test_traceRecorder_eventsHaveTimestampAndEventField",
+          "title": "test_traceRecorder_eventsHaveTimestampAndEventField",
+          "file": "Tests/AxionCLITests/Trace/TraceRecorderTests.swift",
+          "level": "unit",
+          "status": "active"
+        },
+        {
+          "id": "TraceRecorderTests:test_traceRecorder_multipleRecords_allWritten",
+          "title": "test_traceRecorder_multipleRecords_allWritten",
+          "file": "Tests/AxionCLITests/Trace/TraceRecorderTests.swift",
+          "level": "unit",
+          "status": "active"
+        },
+        {
+          "id": "TraceRecorderTests:test_traceRecorder_disabled_doesNotWrite",
+          "title": "test_traceRecorder_disabled_doesNotWrite",
+          "file": "Tests/AxionCLITests/Trace/TraceRecorderTests.swift",
+          "level": "unit",
+          "status": "active"
+        },
+        {
+          "id": "TraceRecorderTests:test_traceRecorder_close_flushesData",
+          "title": "test_traceRecorder_close_flushesData",
+          "file": "Tests/AxionCLITests/Trace/TraceRecorderTests.swift",
+          "level": "unit",
+          "status": "active"
+        },
+        {
+          "id": "TraceRecorderTests:test_traceRecorder_recordRunStart_eventType",
+          "title": "test_traceRecorder_recordRunStart_eventType",
+          "file": "Tests/AxionCLITests/Trace/TraceRecorderTests.swift",
+          "level": "unit",
+          "status": "active"
+        },
+        {
+          "id": "TraceRecorderTests:test_traceRecorder_recordPlanCreated_eventType",
+          "title": "test_traceRecorder_recordPlanCreated_eventType",
+          "file": "Tests/AxionCLITests/Trace/TraceRecorderTests.swift",
+          "level": "unit",
+          "status": "active"
+        },
+        {
+          "id": "TraceRecorderTests:test_traceRecorder_recordStepStart_eventType",
+          "title": "test_traceRecorder_recordStepStart_eventType",
+          "file": "Tests/AxionCLITests/Trace/TraceRecorderTests.swift",
+          "level": "unit",
+          "status": "active"
+        },
+        {
+          "id": "TraceRecorderTests:test_traceRecorder_recordStepDone_eventType",
+          "title": "test_traceRecorder_recordStepDone_eventType",
+          "file": "Tests/AxionCLITests/Trace/TraceRecorderTests.swift",
+          "level": "unit",
+          "status": "active"
+        },
+        {
+          "id": "TraceRecorderTests:test_traceRecorder_recordStateChange_eventType",
+          "title": "test_traceRecorder_recordStateChange_eventType",
+          "file": "Tests/AxionCLITests/Trace/TraceRecorderTests.swift",
+          "level": "unit",
+          "status": "active"
+        },
+        {
+          "id": "TraceRecorderTests:test_traceRecorder_recordVerificationResult_eventType",
+          "title": "test_traceRecorder_recordVerificationResult_eventType",
+          "file": "Tests/AxionCLITests/Trace/TraceRecorderTests.swift",
+          "level": "unit",
+          "status": "active"
+        },
+        {
+          "id": "TraceRecorderTests:test_traceRecorder_recordRunDone_eventType",
+          "title": "test_traceRecorder_recordRunDone_eventType",
+          "file": "Tests/AxionCLITests/Trace/TraceRecorderTests.swift",
+          "level": "unit",
+          "status": "active"
+        },
+        {
+          "id": "TraceRecorderTests:test_traceRecorder_recordError_eventType",
+          "title": "test_traceRecorder_recordError_eventType",
+          "file": "Tests/AxionCLITests/Trace/TraceRecorderTests.swift",
+          "level": "unit",
+          "status": "active"
+        }
+      ]
+    },
+    {
+      "id": "AC7",
+      "title": "Trace file format (JSON lines with ts + event)",
+      "priority": "P0",
+      "coverage": "FULL",
+      "tests": [
+        {
+          "id": "TraceRecorderTests:test_traceRecorder_timestampIsISO8601",
+          "title": "test_traceRecorder_timestampIsISO8601",
+          "file": "Tests/AxionCLITests/Trace/TraceRecorderTests.swift",
+          "level": "unit",
+          "status": "active"
+        },
+        {
+          "id": "TraceRecorderTests:test_traceRecorder_eventNameIsSnakeCase",
+          "title": "test_traceRecorder_eventNameIsSnakeCase",
+          "file": "Tests/AxionCLITests/Trace/TraceRecorderTests.swift",
+          "level": "unit",
+          "status": "active"
+        },
+        {
+          "id": "TraceRecorderTests:test_traceRecorder_apiKeyNotInPayload",
+          "title": "test_traceRecorder_apiKeyNotInPayload",
+          "file": "Tests/AxionCLITests/Trace/TraceRecorderTests.swift",
+          "level": "unit",
+          "status": "active"
+        },
+        {
+          "id": "TraceRecorderTests:test_traceRecorder_eachLineIsIndependentJSON",
+          "title": "test_traceRecorder_eachLineIsIndependentJSON",
+          "file": "Tests/AxionCLITests/Trace/TraceRecorderTests.swift",
+          "level": "unit",
+          "status": "active"
+        }
+      ]
+    }
+  ],
+  "coverage_statistics": {
+    "total_requirements": 7,
+    "fully_covered": 7,
+    "partially_covered": 0,
+    "uncovered": 0,
+    "overall_coverage_percentage": 100,
+    "priority_breakdown": {
+      "P0": { "total": 7, "covered": 7, "percentage": 100 },
+      "P1": { "total": 0, "covered": 0, "percentage": 100 },
+      "P2": { "total": 0, "covered": 0, "percentage": 100 },
+      "P3": { "total": 0, "covered": 0, "percentage": 100 }
+    }
+  },
+  "gap_analysis": {
+    "critical_gaps": [],
+    "high_gaps": [],
+    "medium_gaps": [],
+    "low_gaps": [],
+    "partial_coverage_items": [],
+    "unit_only_items": []
+  },
+  "coverage_heuristics": {
+    "endpoint_gaps": [],
+    "auth_negative_path_gaps": [],
+    "happy_path_only_gaps": [],
+    "ui_journey_gaps": [],
+    "ui_state_gaps": [],
+    "counts": {
+      "endpoints_without_tests": 0,
+      "auth_missing_negative_paths": 0,
+      "happy_path_only_criteria": 0,
+      "ui_journeys_without_e2e": 0,
+      "ui_states_missing_coverage": 0
+    }
+  },
+  "test_inventory": {
+    "summary": {
+      "files": 4,
+      "cases": 57,
+      "skipped_cases": 0,
+      "fixme_cases": 0,
+      "pending_cases": 0,
+      "by_level": {
+        "unit": { "tests": 57, "criteria_covered": 7 },
+        "e2e": { "tests": 0, "criteria_covered": 0 },
+        "api": { "tests": 0, "criteria_covered": 0 },
+        "component": { "tests": 0, "criteria_covered": 0 },
+        "other": { "tests": 0, "criteria_covered": 0 }
+      }
+    },
+    "tests": [],
+    "blockers": []
+  },
+  "recommendations": [
+    {
+      "priority": "LOW",
+      "action": "Run /bmad:tea:test-review to assess test quality",
+      "requirements": []
+    }
+  ]
+}

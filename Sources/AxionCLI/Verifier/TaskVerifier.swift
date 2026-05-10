@@ -22,11 +22,15 @@ struct TaskVerifier: VerifierProtocol {
     let config: AxionConfig
     let stopConditionEvaluator: StopConditionEvaluator
 
+    /// Callback invoked after verification completes (for output/trace integration).
+    var onVerificationResult: ((VerificationResult) -> Void)?
+
     init(mcpClient: MCPClientProtocol, llmClient: LLMClientProtocol, config: AxionConfig) {
         self.mcpClient = mcpClient
         self.llmClient = llmClient
         self.config = config
         self.stopConditionEvaluator = StopConditionEvaluator()
+        self.onVerificationResult = nil
     }
 
     // MARK: - VerifierProtocol Conformance
@@ -56,20 +60,24 @@ struct TaskVerifier: VerifierProtocol {
 
         switch evaluationResult {
         case .satisfied:
-            return VerificationResult.done(
+            let result = VerificationResult.done(
                 reason: "All stop conditions satisfied",
                 screenshotBase64: screenshot,
                 axTreeSnapshot: axTree
             )
+            onVerificationResult?(result)
+            return result
         case .notSatisfied:
-            return VerificationResult.blocked(
+            let result = VerificationResult.blocked(
                 reason: "Stop conditions not met",
                 screenshotBase64: screenshot,
                 axTreeSnapshot: axTree
             )
+            onVerificationResult?(result)
+            return result
         case .uncertain:
             // Step 4: Delegate to LLM for semantic evaluation
-            return await evaluateWithLLM(
+            let result = await evaluateWithLLM(
                 task: plan.task,
                 stopConditions: plan.stopWhen,
                 screenshot: screenshot,
@@ -77,6 +85,8 @@ struct TaskVerifier: VerifierProtocol {
                 executedSteps: executedSteps,
                 planSteps: plan.steps
             )
+            onVerificationResult?(result)
+            return result
         }
     }
 
