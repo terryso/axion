@@ -15,6 +15,8 @@ public enum AxionError: Error, Equatable {
     case timeout(operation: String, seconds: Double)
     case cancelled
     case unknown(reason: String)
+    case missingApiKey(suggestion: String)
+    case helperNotFound(suggestion: String)
 
     public struct MCPErrorPayload: Codable, Equatable {
         public let error: String
@@ -107,6 +109,18 @@ public enum AxionError: Error, Equatable {
                 error: "unknown",
                 message: reason,
                 suggestion: "Check logs for more details."
+            )
+        case .missingApiKey(let suggestion):
+            return MCPErrorPayload(
+                error: "missing_api_key",
+                message: "API key is required but not configured.",
+                suggestion: suggestion
+            )
+        case .helperNotFound(let suggestion):
+            return MCPErrorPayload(
+                error: "helper_not_found",
+                message: "AxionHelper.app could not be found.",
+                suggestion: suggestion
             )
         }
     }

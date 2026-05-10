@@ -58,6 +58,7 @@ let package = Package(
                 "AxionCLI",
                 "AxionCore",
                 .product(name: "MCP", package: "swift-mcp"),
+                .product(name: "OpenAgentSDK", package: "open-agent-sdk-swift"),
             ],
             path: "Tests/AxionCLITests",
             exclude: ["Integration"]

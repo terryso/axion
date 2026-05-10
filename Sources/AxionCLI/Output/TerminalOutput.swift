@@ -14,11 +14,16 @@ import AxionCore
 /// - No emoji — pure ASCII for terminal/pipeline compatibility
 final class TerminalOutput: OutputProtocol {
 
-    private let write: (String) -> Void
+    let write: (String) -> Void
     private var planStepsCount: Int = 0
 
     init(write: @escaping (String) -> Void = { print($0) }) {
         self.write = write
+    }
+
+    /// Writes a raw string directly without any prefix (for SDK streaming).
+    func writeStream(_ text: String) {
+        write(text)
     }
 
     // MARK: - OutputProtocol — New Methods (Story 3-5)
