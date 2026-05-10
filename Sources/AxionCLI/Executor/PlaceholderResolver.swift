@@ -59,17 +59,25 @@ public struct PlaceholderResolver {
         ]
         guard contextProducingTools.contains(tool) else { return }
 
-        guard let data = result.data(using: .utf8),
-              let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else {
+        guard let data = result.data(using: .utf8) else { return }
+
+        // Try parsing as JSON object: {"pid": ..., "window_id": ...}
+        if let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any] {
+            // Direct pid / window_id extraction
+            if let pid = json["pid"] as? Int { context.pid = pid }
+            if let windowId = json["window_id"] as? Int { context.windowId = windowId }
+
+            // list_windows mock format: {"windows": [...]}
+            if let windows = json["windows"] as? [[String: Any]], let first = windows.first {
+                if let pid = first["pid"] as? Int { context.pid = pid }
+                if let windowId = first["window_id"] as? Int { context.windowId = windowId }
+            }
             return
         }
 
-        // Direct pid / window_id extraction
-        if let pid = json["pid"] as? Int { context.pid = pid }
-        if let windowId = json["window_id"] as? Int { context.windowId = windowId }
-
-        // list_windows: extract from first window in the array
-        if let windows = json["windows"] as? [[String: Any]], let first = windows.first {
+        // Try parsing as JSON array (real MCP list_windows format): [{...}, {...}]
+        if let windows = try? JSONSerialization.jsonObject(with: data) as? [[String: Any]],
+           let first = windows.first {
             if let pid = first["pid"] as? Int { context.pid = pid }
             if let windowId = first["window_id"] as? Int { context.windowId = windowId }
         }
