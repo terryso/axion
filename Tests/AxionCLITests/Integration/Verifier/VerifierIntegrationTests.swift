@@ -242,13 +242,13 @@ final class VerifierIntegrationTests: XCTestCase {
         XCTAssertEqual(textResult, StopEvaluationResult.satisfied,
                        "Real AX tree should contain '\(windowTitle)' text")
 
-        // windowAppears with dynamic title → notSatisfied (Calculator has no AXWindow role)
+        // windowAppears with dynamic title → satisfied (Calculator AX tree contains AXWindow node with title)
         let windowResult = evaluator.evaluate(
             stopConditions: [StopCondition(type: .windowAppears, value: windowTitle)],
             screenshot: nil, axTree: axTree, executedSteps: [], maxSteps: 20
         )
-        XCTAssertEqual(windowResult, StopEvaluationResult.notSatisfied,
-                       "Real Calculator has no AXWindow node, windowAppears should return notSatisfied")
+        XCTAssertEqual(windowResult, StopEvaluationResult.satisfied,
+                       "Real Calculator AX tree should contain AXWindow with title '\(windowTitle)'")
 
         // windowAppears "TextEdit" → notSatisfied
         let wrongResult = evaluator.evaluate(
