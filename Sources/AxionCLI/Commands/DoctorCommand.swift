@@ -55,8 +55,14 @@ struct DoctorCommand: ParsableCommand {
         var results: [CheckResult] = []
 
         // Check 1: 配置文件存在性和解析性
-        let (configCheck, loadedConfig) = checkConfigFile(at: configFilePath)
+        let (configCheck, fileConfig) = checkConfigFile(at: configFilePath)
         results.append(configCheck)
+
+        // Apply env overrides (e.g., AXION_API_KEY) so doctor reflects actual runtime config
+        var loadedConfig = fileConfig
+        if loadedConfig != nil {
+            ConfigManager.applyEnvOverrides(&loadedConfig!)
+        }
 
         // Check 2: API Key 存在性（从加载的 config 中读取）
         let apiKeyCheck: CheckResult

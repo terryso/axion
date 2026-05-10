@@ -87,7 +87,7 @@ enum ConfigManager {
     }
 
     /// 应用环境变量覆盖。
-    private static func applyEnvOverrides(_ config: inout AxionConfig) {
+    static func applyEnvOverrides(_ config: inout AxionConfig) {
         let env = ProcessInfo.processInfo.environment
 
         if let v = env["AXION_API_KEY"], !v.isEmpty {
