@@ -8,6 +8,7 @@ enum InputSimulationError: Error, LocalizedError {
     case invalidKeyName(String)
     case invalidHotkeyFormat(String)
     case invalidDirection(String)
+    case noClickTarget(message: String)
 
     var errorDescription: String? {
         switch self {
@@ -19,6 +20,8 @@ enum InputSimulationError: Error, LocalizedError {
             return "Invalid hotkey format: '\(keys)'"
         case .invalidDirection(let dir):
             return "Invalid scroll direction: '\(dir)'"
+        case .noClickTarget(let message):
+            return message
         }
     }
 
@@ -32,6 +35,8 @@ enum InputSimulationError: Error, LocalizedError {
             return "invalid_hotkey_format"
         case .invalidDirection:
             return "invalid_direction"
+        case .noClickTarget:
+            return "no_click_target"
         }
     }
 
@@ -45,6 +50,8 @@ enum InputSimulationError: Error, LocalizedError {
             return "Use format 'modifier+key' (e.g. 'cmd+c', 'cmd+shift+s'). At least one modifier required."
         case .invalidDirection:
             return "Use 'up', 'down', 'left', or 'right'."
+        case .noClickTarget:
+            return "Provide either (x, y) coordinates or (__selector with window_id)."
         }
     }
 }

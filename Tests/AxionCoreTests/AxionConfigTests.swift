@@ -71,7 +71,7 @@ final class AxionConfigTests: XCTestCase {
         XCTAssertEqual(config.maxBatches, 6)
         XCTAssertEqual(config.maxReplanRetries, 3)
         XCTAssertTrue(config.traceEnabled)
-        XCTAssertTrue(config.sharedSeatMode)
+        XCTAssertFalse(config.sharedSeatMode)
     }
 
     func test_config_apiKeyNil_notEncoded() throws {

@@ -21,6 +21,9 @@ struct MockAccessibilityEngine: @unchecked Sendable, WindowManaging {
     var getWindowStateHandler: @Sendable (Int) throws -> WindowState
     var getAXTreeHandler: @Sendable (Int, Int) throws -> AXElement
     var activateWindowHandler: @Sendable (Int32, Int?) throws -> Void = { _, _ in }
+    var validateWindowHandler: @Sendable (Int) -> ValidateWindowResult = { windowId in
+        ValidateWindowResult(windowId: windowId, exists: true, actionable: true, title: nil, pid: nil, reason: nil)
+    }
 
     func listWindows(pid: Int32?) -> [WindowInfo] {
         listWindowsHandler(pid)
@@ -36,6 +39,18 @@ struct MockAccessibilityEngine: @unchecked Sendable, WindowManaging {
 
     func activateWindow(pid: Int32, windowId: Int?) throws {
         try activateWindowHandler(pid, windowId)
+    }
+
+    func validateWindow(windowId: Int) -> ValidateWindowResult {
+        validateWindowHandler(windowId)
+    }
+
+    var resolveSelectorHandler: @Sendable (Int, SelectorQuery) throws -> AccessibilityEngineService.SelectorMatchResult = { _, _ in
+        AccessibilityEngineService.SelectorMatchResult(x: 50, y: 50, role: "AXButton", title: "Mock")
+    }
+
+    func resolveSelector(windowId: Int, query: SelectorQuery) throws -> AccessibilityEngineService.SelectorMatchResult {
+        try resolveSelectorHandler(windowId, query)
     }
 }
 

@@ -25,7 +25,7 @@ public struct AxionConfig: Equatable, Sendable {
         maxBatches: 6,
         maxReplanRetries: 3,
         traceEnabled: true,
-        sharedSeatMode: true
+        sharedSeatMode: false
     )
 
     public init(
@@ -37,7 +37,7 @@ public struct AxionConfig: Equatable, Sendable {
         maxBatches: Int = 6,
         maxReplanRetries: Int = 3,
         traceEnabled: Bool = true,
-        sharedSeatMode: Bool = true
+        sharedSeatMode: Bool = false
     ) {
         self.apiKey = apiKey
         self.provider = provider

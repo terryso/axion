@@ -21,13 +21,15 @@ public enum ToolNames {
     public static let getAccessibilityTree = "get_accessibility_tree"
     public static let openUrl = "open_url"
     public static let getFileInfo = "get_file_info"
+    public static let validateWindow = "validate_window"
 
     /// All available tool names for prompt building.
     public static let allToolNames: [String] = [
         launchApp, listApps, quitApp, activateWindow, listWindows,
         getWindowState, moveWindow, resizeWindow, click, doubleClick,
         rightClick, typeText, pressKey, hotkey, scroll, drag,
-        screenshot, getAccessibilityTree, openUrl, getFileInfo
+        screenshot, getAccessibilityTree, openUrl, getFileInfo,
+        validateWindow
     ]
 
     /// Tools that require foreground interaction and are blocked in shared seat mode.

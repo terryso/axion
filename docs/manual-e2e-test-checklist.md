@@ -412,6 +412,101 @@ AXION_API_KEY="sk-ant-invalid-key" axion run "打开计算器" 2>&1
 
 ---
 
+## 八-B、AX Selector 与 pid/window_id 定向
+
+> 本节验证 Click 系列工具的 `__selector` 参数和 `pid`/`window_id` 定向功能。
+
+### 8B.1 Click with __selector — 精确匹配
+
+先用 `axion run` 启动一个有按钮的窗口（如 Calculator），然后手动验证：
+
+```bash
+# 启动 Calculator 并执行一个 selector 点击
+axion run "打开计算器，点击按钮 7"
+```
+
+**预期:**
+- Planner 在规划中使用 `__selector: { title: "7" }` 或坐标点击
+- 如果使用 selector，日志中可见 selector 解析过程
+- Calculator 按下数字 7
+
+**通过 / 失败**
+
+### 8B.2 Click with __selector — 不匹配
+
+```bash
+axion run "打开计算器，点击一个叫 '不存在按钮' 的按钮" --dryrun
+```
+
+**预期:**
+- 干跑模式下不执行实际操作
+- Planner 生成的计划中使用坐标而非 selector（因为没有匹配的按钮）
+- 或者如果 Planner 使用了 selector，执行阶段返回 `selector_no_match` 错误
+
+**通过 / 失败**
+
+### 8B.3 Click 向后兼容 — 纯坐标
+
+```bash
+axion run "打开计算器，计算 2 加 3"
+```
+
+**预期:**
+- 即使不传 selector，纯坐标点击也能正常工作
+- 行为与改动前完全一致
+
+**通过 / 失败**
+
+### 8B.4 type_text / press_key / hotkey 带 pid/window_id
+
+```bash
+axion run "打开 TextEdit，输入 Hello Axion"
+```
+
+**预期:**
+- Planner 在步骤中传递 `pid` 和 `window_id` 参数
+- type_text 正常工作（pid/window_id 为可选参数，不影响行为）
+- "Hello Axion" 出现在 TextEdit 中
+
+**通过 / 失败**
+
+---
+
+## 八-C、Planner 截图视觉
+
+> 本节验证 LLMPlanner 在规划时是否截取并传递截图给 LLM。
+
+### 8C.1 截图传递给 Planner
+
+```bash
+axion run "打开计算器，截图看看屏幕上有什么" --verbose
+```
+
+**预期:**
+- verbose 模式下可看到 Planner 调用包含图片信息
+- Planner 能描述当前屏幕内容（不仅仅是 AX tree 文本）
+- 任务正常完成
+
+**通过 / 失败**
+
+### 8C.2 截图失败时降级
+
+```bash
+# 临时撤销屏幕录制权限后运行（需要手动操作系统设置）
+axion run "打开计算器"
+```
+
+**预期:**
+- 截图失败时自动退化为纯文本（AX tree）规划
+- 任务不因截图失败而阻塞
+- Planner 仍能基于 AX tree 文本完成规划
+
+> 测试后恢复: 重新授予屏幕录制权限
+
+**通过 / 失败**
+
+---
+
 ## 九、端到端综合场景 (Epic 3: Story 3.8)
 
 ### 9.1 计算器完整流程
@@ -497,9 +592,11 @@ make test-e2e
 | 六、智能行为 | 2 | | |
 | 七、Trace 记录 | 1 | | |
 | 八、错误处理 | 3 | | |
+| 八-B、AX Selector 与定向 | 4 | | |
+| 八-C、Planner 截图视觉 | 2 | | |
 | 九、端到端综合场景 | 3 | | |
 | 十、构建与自动化测试 | 2 | | |
-| **总计** | **30** | | |
+| **总计** | **36** | | |
 
 验收人: ________________  日期: ________________
 

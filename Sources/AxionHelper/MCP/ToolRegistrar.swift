@@ -103,6 +103,7 @@ enum ToolRegistrar {
             DragTool.self
             ScreenshotTool.self
             GetAccessibilityTreeTool.self
+            ValidateWindowTool.self
             OpenUrlTool.self
         }
     }
@@ -236,103 +237,180 @@ struct GetWindowStateTool {
 
 // MARK: - Mouse Tools (Story 1.4)
 
+private struct SelectorActionResult: Codable {
+    let success: Bool
+    let action: String
+    let x: Int
+    let y: Int
+    let matchedRole: String?
+    let matchedTitle: String?
+}
+
 @Tool
 struct ClickTool {
     static let name = "click"
-    static let description = "Perform a single click at the specified coordinates"
+    static let description = "Perform a single click, either at coordinates or by AX selector"
 
-    @Parameter(description: "X coordinate")
-    var x: Int
+    @Parameter(description: "X coordinate (required when not using __selector)")
+    var x: Int?
 
-    @Parameter(description: "Y coordinate")
-    var y: Int
+    @Parameter(description: "Y coordinate (required when not using __selector)")
+    var y: Int?
+
+    @Parameter(description: "Process ID of the target application (used with __selector)")
+    var pid: Int?
+
+    @Parameter(key: "window_id", description: "Window identifier (required with __selector)")
+    var windowId: Int?
+
+    @Parameter(key: "__selector", description: "AX element selector: { title?, title_contains?, ax_id?, role?, ordinal? }")
+    var selector: SelectorQuery?
 
     func perform() async throws -> String {
         do {
-            try ServiceContainer.shared.inputSimulation.click(x: x, y: y)
-            let result = CoordinateActionResult(success: true, action: "click", x: x, y: y)
-            let encoder = JSONEncoder()
-            encoder.outputFormatting = [.sortedKeys]
-            let data = try encoder.encode(result)
-            return String(data: data, encoding: .utf8) ?? "{}"
+            let (resolvedX, resolvedY) = try resolveClickTarget()
+            try ServiceContainer.shared.inputSimulation.click(x: resolvedX, y: resolvedY)
+            return encodeClickResult(action: "click", x: resolvedX, y: resolvedY)
         } catch let error as InputSimulationError {
-            let payload = ToolErrorPayload(
-                error: error.errorCode,
-                message: error.localizedDescription,
-                suggestion: error.suggestion
-            )
-            let encoder = JSONEncoder()
-            encoder.outputFormatting = [.sortedKeys]
-            let data = try encoder.encode(payload)
-            return String(data: data, encoding: .utf8) ?? "{}"
+            return encodeError(error)
+        } catch let error as AccessibilityEngineService.SelectorError {
+            return encodeSelectorError(error)
         }
+    }
+
+    private func resolveClickTarget() throws -> (x: Int, y: Int) {
+        if let selector {
+            guard let wid = windowId else {
+                throw InputSimulationError.noClickTarget(message: "window_id is required when using __selector")
+            }
+            let result = try ServiceContainer.shared.accessibilityEngine.resolveSelector(windowId: wid, query: selector)
+            return (result.x, result.y)
+        }
+        guard let x, let y else {
+            throw InputSimulationError.noClickTarget(message: "Provide either (x, y) coordinates or (__selector with window_id)")
+        }
+        return (x, y)
     }
 }
 
 @Tool
 struct DoubleClickTool {
     static let name = "double_click"
-    static let description = "Perform a double click at the specified coordinates"
+    static let description = "Perform a double click, either at coordinates or by AX selector"
 
-    @Parameter(description: "X coordinate")
-    var x: Int
+    @Parameter(description: "X coordinate (required when not using __selector)")
+    var x: Int?
 
-    @Parameter(description: "Y coordinate")
-    var y: Int
+    @Parameter(description: "Y coordinate (required when not using __selector)")
+    var y: Int?
+
+    @Parameter(description: "Process ID of the target application (used with __selector)")
+    var pid: Int?
+
+    @Parameter(key: "window_id", description: "Window identifier (required with __selector)")
+    var windowId: Int?
+
+    @Parameter(key: "__selector", description: "AX element selector: { title?, title_contains?, ax_id?, role?, ordinal? }")
+    var selector: SelectorQuery?
 
     func perform() async throws -> String {
         do {
-            try ServiceContainer.shared.inputSimulation.doubleClick(x: x, y: y)
-            let result = CoordinateActionResult(success: true, action: "double_click", x: x, y: y)
-            let encoder = JSONEncoder()
-            encoder.outputFormatting = [.sortedKeys]
-            let data = try encoder.encode(result)
-            return String(data: data, encoding: .utf8) ?? "{}"
+            let (resolvedX, resolvedY) = try resolveClickTarget()
+            try ServiceContainer.shared.inputSimulation.doubleClick(x: resolvedX, y: resolvedY)
+            return encodeClickResult(action: "double_click", x: resolvedX, y: resolvedY)
         } catch let error as InputSimulationError {
-            let payload = ToolErrorPayload(
-                error: error.errorCode,
-                message: error.localizedDescription,
-                suggestion: error.suggestion
-            )
-            let encoder = JSONEncoder()
-            encoder.outputFormatting = [.sortedKeys]
-            let data = try encoder.encode(payload)
-            return String(data: data, encoding: .utf8) ?? "{}"
+            return encodeError(error)
+        } catch let error as AccessibilityEngineService.SelectorError {
+            return encodeSelectorError(error)
         }
+    }
+
+    private func resolveClickTarget() throws -> (x: Int, y: Int) {
+        if let selector {
+            guard let wid = windowId else {
+                throw InputSimulationError.noClickTarget(message: "window_id is required when using __selector")
+            }
+            let result = try ServiceContainer.shared.accessibilityEngine.resolveSelector(windowId: wid, query: selector)
+            return (result.x, result.y)
+        }
+        guard let x, let y else {
+            throw InputSimulationError.noClickTarget(message: "Provide either (x, y) coordinates or (__selector with window_id)")
+        }
+        return (x, y)
     }
 }
 
 @Tool
 struct RightClickTool {
     static let name = "right_click"
-    static let description = "Perform a right click at the specified coordinates"
+    static let description = "Perform a right click, either at coordinates or by AX selector"
 
-    @Parameter(description: "X coordinate")
-    var x: Int
+    @Parameter(description: "X coordinate (required when not using __selector)")
+    var x: Int?
 
-    @Parameter(description: "Y coordinate")
-    var y: Int
+    @Parameter(description: "Y coordinate (required when not using __selector)")
+    var y: Int?
+
+    @Parameter(description: "Process ID of the target application (used with __selector)")
+    var pid: Int?
+
+    @Parameter(key: "window_id", description: "Window identifier (required with __selector)")
+    var windowId: Int?
+
+    @Parameter(key: "__selector", description: "AX element selector: { title?, title_contains?, ax_id?, role?, ordinal? }")
+    var selector: SelectorQuery?
 
     func perform() async throws -> String {
         do {
-            try ServiceContainer.shared.inputSimulation.rightClick(x: x, y: y)
-            let result = CoordinateActionResult(success: true, action: "right_click", x: x, y: y)
-            let encoder = JSONEncoder()
-            encoder.outputFormatting = [.sortedKeys]
-            let data = try encoder.encode(result)
-            return String(data: data, encoding: .utf8) ?? "{}"
+            let (resolvedX, resolvedY) = try resolveClickTarget()
+            try ServiceContainer.shared.inputSimulation.rightClick(x: resolvedX, y: resolvedY)
+            return encodeClickResult(action: "right_click", x: resolvedX, y: resolvedY)
         } catch let error as InputSimulationError {
-            let payload = ToolErrorPayload(
-                error: error.errorCode,
-                message: error.localizedDescription,
-                suggestion: error.suggestion
-            )
-            let encoder = JSONEncoder()
-            encoder.outputFormatting = [.sortedKeys]
-            let data = try encoder.encode(payload)
-            return String(data: data, encoding: .utf8) ?? "{}"
+            return encodeError(error)
+        } catch let error as AccessibilityEngineService.SelectorError {
+            return encodeSelectorError(error)
         }
     }
+
+    private func resolveClickTarget() throws -> (x: Int, y: Int) {
+        if let selector {
+            guard let wid = windowId else {
+                throw InputSimulationError.noClickTarget(message: "window_id is required when using __selector")
+            }
+            let result = try ServiceContainer.shared.accessibilityEngine.resolveSelector(windowId: wid, query: selector)
+            return (result.x, result.y)
+        }
+        guard let x, let y else {
+            throw InputSimulationError.noClickTarget(message: "Provide either (x, y) coordinates or (__selector with window_id)")
+        }
+        return (x, y)
+    }
+}
+
+// MARK: - Click Helper Encoding
+
+private func encodeClickResult(action: String, x: Int, y: Int) -> String {
+    let result = SelectorActionResult(success: true, action: action, x: x, y: y, matchedRole: nil, matchedTitle: nil)
+    let encoder = JSONEncoder()
+    encoder.outputFormatting = [.sortedKeys]
+    let data = (try? encoder.encode(result)) ?? Data()
+    return String(data: data, encoding: .utf8) ?? "{}"
+}
+
+private func encodeError(_ error: InputSimulationError) -> String {
+    let payload = ToolErrorPayload(error: error.errorCode, message: error.localizedDescription, suggestion: error.suggestion)
+    let encoder = JSONEncoder()
+    encoder.outputFormatting = [.sortedKeys]
+    let data = (try? encoder.encode(payload)) ?? Data()
+    return String(data: data, encoding: .utf8) ?? "{}"
+}
+
+private func encodeSelectorError(_ error: AccessibilityEngineService.SelectorError) -> String {
+    let payload = ToolErrorPayload(error: error.errorCode, message: error.localizedDescription, suggestion: error.suggestion)
+    let encoder = JSONEncoder()
+    encoder.outputFormatting = [.sortedKeys]
+    let data = (try? encoder.encode(payload)) ?? Data()
+    return String(data: data, encoding: .utf8) ?? "{}"
 }
 
 // MARK: - Keyboard Tools (Story 1.4)
@@ -344,6 +422,12 @@ struct TypeTextTool {
 
     @Parameter(description: "Text to type")
     var text: String
+
+    @Parameter(description: "Process ID of the target application (optional, for context)")
+    var pid: Int?
+
+    @Parameter(key: "window_id", description: "Window identifier (optional, for context)")
+    var windowId: Int?
 
     func perform() async throws -> String {
         do {
@@ -375,6 +459,12 @@ struct PressKeyTool {
     @Parameter(description: "Key to press (e.g. 'return', 'tab', 'escape')")
     var key: String
 
+    @Parameter(description: "Process ID of the target application (optional, for context)")
+    var pid: Int?
+
+    @Parameter(key: "window_id", description: "Window identifier (optional, for context)")
+    var windowId: Int?
+
     func perform() async throws -> String {
         do {
             try ServiceContainer.shared.inputSimulation.pressKey(key)
@@ -404,6 +494,12 @@ struct HotkeyTool {
 
     @Parameter(description: "Key combination (e.g. 'cmd+c', 'cmd+shift+s')")
     var keys: String
+
+    @Parameter(description: "Process ID of the target application (optional, for context)")
+    var pid: Int?
+
+    @Parameter(key: "window_id", description: "Window identifier (optional, for context)")
+    var windowId: Int?
 
     func perform() async throws -> String {
         do {
@@ -568,6 +664,25 @@ struct GetAccessibilityTreeTool {
             let data = try encoder.encode(payload)
             return String(data: data, encoding: .utf8) ?? "{}"
         }
+    }
+}
+
+// MARK: - Window Validation Tool
+
+@Tool
+struct ValidateWindowTool {
+    static let name = "validate_window"
+    static let description = "Validate that a window still exists and is actionable (on-screen, non-zero bounds)"
+
+    @Parameter(key: "window_id", description: "Window identifier to validate")
+    var windowId: Int
+
+    func perform() async throws -> String {
+        let result = ServiceContainer.shared.accessibilityEngine.validateWindow(windowId: windowId)
+        let encoder = JSONEncoder()
+        encoder.outputFormatting = [.sortedKeys]
+        let data = try encoder.encode(result)
+        return String(data: data, encoding: .utf8) ?? "{}"
     }
 }
 

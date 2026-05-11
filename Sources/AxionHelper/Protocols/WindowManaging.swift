@@ -5,4 +5,6 @@ protocol WindowManaging: Sendable {
     func getWindowState(windowId: Int) throws -> WindowState
     func getAXTree(windowId: Int, maxNodes: Int) throws -> AXElement
     func activateWindow(pid: Int32, windowId: Int?) throws
+    func validateWindow(windowId: Int) -> ValidateWindowResult
+    func resolveSelector(windowId: Int, query: SelectorQuery) throws -> AccessibilityEngineService.SelectorMatchResult
 }

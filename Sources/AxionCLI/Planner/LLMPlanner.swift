@@ -40,6 +40,7 @@ struct LLMPlanner: PlannerProtocol {
 
     func createPlan(for task: String, context: RunContext) async throws -> Plan {
         let currentStateSummary = await captureCurrentStateSafely()
+        let screenshotPath = await captureScreenshotSafely()
 
         let (systemPrompt, userPrompt) = try await buildPrompts(
             task: task,
@@ -48,10 +49,13 @@ struct LLMPlanner: PlannerProtocol {
             maxStepsPerPlan: context.config.maxSteps
         )
 
+        let imagePaths = screenshotPath.map { [$0] } ?? []
+        defer { cleanupScreenshot(screenshotPath) }
+
         let rawResponse = try await callLLMWithRetry(
             systemPrompt: systemPrompt,
             userPrompt: userPrompt,
-            imagePaths: []
+            imagePaths: imagePaths
         )
 
         let plan = try PlanParser.parse(rawResponse, task: task, maxSteps: context.config.maxSteps)
@@ -107,6 +111,7 @@ struct LLMPlanner: PlannerProtocol {
         )
 
         let currentStateSummary = await captureCurrentStateSafely()
+        let screenshotPath = await captureScreenshotSafely()
 
         let (systemPrompt, userPrompt) = try await buildPrompts(
             task: currentPlan.task,
@@ -115,10 +120,13 @@ struct LLMPlanner: PlannerProtocol {
             maxStepsPerPlan: context.config.maxSteps
         )
 
+        let imagePaths = screenshotPath.map { [$0] } ?? []
+        defer { cleanupScreenshot(screenshotPath) }
+
         let rawResponse = try await callLLMWithRetry(
             systemPrompt: systemPrompt,
             userPrompt: userPrompt,
-            imagePaths: []
+            imagePaths: imagePaths
         )
 
         let plan = try PlanParser.parse(rawResponse, task: currentPlan.task, maxSteps: context.config.maxSteps)
@@ -140,6 +148,30 @@ struct LLMPlanner: PlannerProtocol {
         return components.joined(separator: "\n")
     }
 
+    /// Capture a screenshot via MCP and save to a temp file. Returns the file path, or nil on failure.
+    private func captureScreenshotSafely() async -> String? {
+        do {
+            let result = try await mcpClient.callTool(
+                name: ToolNames.screenshot,
+                arguments: [:]
+            )
+            // Parse JSON response to extract image_data (base64)
+            guard let data = result.data(using: .utf8),
+                  let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+                  let base64 = json["image_data"] as? String,
+                  let imageData = Data(base64Encoded: base64) else {
+                return nil
+            }
+
+            let tempDir = NSTemporaryDirectory()
+            let path = (tempDir as NSString).appendingPathComponent("axion-planner-\(UUID().uuidString).png")
+            try imageData.write(to: URL(fileURLWithPath: path))
+            return path
+        } catch {
+            return nil
+        }
+    }
+
     /// Safely capture AX tree, returning nil on failure
     private func captureAXTreeSafely() async -> String? {
         do {
@@ -151,6 +183,12 @@ struct LLMPlanner: PlannerProtocol {
         } catch {
             return nil
         }
+    }
+
+    /// Clean up temp screenshot file
+    private func cleanupScreenshot(_ path: String?) {
+        guard let path else { return }
+        try? FileManager.default.removeItem(atPath: path)
     }
 
     /// Build system and user prompts for the planner
