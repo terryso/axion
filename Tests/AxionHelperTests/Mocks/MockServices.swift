@@ -20,6 +20,7 @@ struct MockAccessibilityEngine: @unchecked Sendable, WindowManaging {
     var listWindowsHandler: @Sendable (Int32?) -> [WindowInfo]
     var getWindowStateHandler: @Sendable (Int) throws -> WindowState
     var getAXTreeHandler: @Sendable (Int, Int) throws -> AXElement
+    var activateWindowHandler: @Sendable (Int32, Int?) throws -> Void = { _, _ in }
 
     func listWindows(pid: Int32?) -> [WindowInfo] {
         listWindowsHandler(pid)
@@ -31,6 +32,10 @@ struct MockAccessibilityEngine: @unchecked Sendable, WindowManaging {
 
     func getAXTree(windowId: Int, maxNodes: Int) throws -> AXElement {
         try getAXTreeHandler(windowId, maxNodes)
+    }
+
+    func activateWindow(pid: Int32, windowId: Int?) throws {
+        try activateWindowHandler(pid, windowId)
     }
 }
 

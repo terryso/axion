@@ -17,13 +17,17 @@ final class TerminalOutput: OutputProtocol {
     let write: (String) -> Void
     private var planStepsCount: Int = 0
 
-    init(write: @escaping (String) -> Void = { print($0) }) {
+    init(write: @escaping (String) -> Void = {
+        fputs($0 + "\n", stdout)
+        fflush(stdout)
+    }) {
         self.write = write
     }
 
     /// Writes streaming text inline without a trailing newline (typewriter effect).
     func writeStream(_ text: String) {
-        write(text)
+        Swift.print(text, terminator: "")
+        fflush(stdout)
     }
 
     /// Ends the current streaming line (prints newline if mid-stream).

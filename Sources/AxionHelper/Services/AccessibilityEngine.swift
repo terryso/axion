@@ -8,6 +8,8 @@ enum AccessibilityEngineError: Error, LocalizedError {
     case windowNotFound(windowId: Int)
     case axPermissionDenied
     case axTreeBuildFailed(reason: String)
+    case appNotFound(pid: Int32)
+    case activationFailed(pid: Int32)
 
     var errorDescription: String? {
         switch self {
@@ -17,6 +19,10 @@ enum AccessibilityEngineError: Error, LocalizedError {
             return "Accessibility permission not granted"
         case .axTreeBuildFailed(let reason):
             return "Failed to build AX tree: \(reason)"
+        case .appNotFound(let pid):
+            return "Application with pid \(pid) not found"
+        case .activationFailed(let pid):
+            return "Failed to activate application with pid \(pid)"
         }
     }
 
@@ -28,6 +34,10 @@ enum AccessibilityEngineError: Error, LocalizedError {
             return "ax_permission_denied"
         case .axTreeBuildFailed:
             return "ax_tree_build_failed"
+        case .appNotFound:
+            return "app_not_found"
+        case .activationFailed:
+            return "activation_failed"
         }
     }
 
@@ -39,6 +49,10 @@ enum AccessibilityEngineError: Error, LocalizedError {
             return "Grant Accessibility permission in System Settings > Privacy & Security."
         case .axTreeBuildFailed:
             return "Ensure the target application is responsive."
+        case .appNotFound:
+            return "Use list_apps to get valid process IDs."
+        case .activationFailed:
+            return "Ensure the application is responsive and not minimized."
         }
     }
 }
@@ -126,6 +140,22 @@ struct AccessibilityEngineService: WindowManaging {
             isFocused: isFocused,
             axTree: axTree
         )
+    }
+
+    func activateWindow(pid: Int32, windowId: Int? = nil) throws {
+        guard let app = NSRunningApplication(processIdentifier: pid) else {
+            throw AccessibilityEngineError.appNotFound(pid: pid)
+        }
+
+        let activated = app.activate()
+        guard activated else {
+            throw AccessibilityEngineError.activationFailed(pid: pid)
+        }
+
+        // If a specific window is requested, raise it via AX
+        if let windowId {
+            raiseAXWindow(pid: pid, windowId: windowId)
+        }
     }
 
     // MARK: - Private Helpers
@@ -236,6 +266,29 @@ struct AccessibilityEngineService: WindowManaging {
 
         // Fallback: first window
         return axWindows.first
+    }
+
+    private func raiseAXWindow(pid: Int32, windowId: Int) {
+        let axApp = AXUIElementCreateApplication(pid)
+        var windowsRef: AnyObject?
+        let axResult = AXUIElementCopyAttributeValue(axApp, kAXWindowsAttribute as CFString, &windowsRef)
+
+        guard axResult == .success, let axWindows = windowsRef as? [AXUIElement] else { return }
+
+        // Find the matching window by looking up the CG window title
+        let windowList = CGWindowListCopyWindowInfo(.optionAll, kCGNullWindowID) as? [[String: Any]] ?? []
+        guard let cgWindow = windowList.first(where: {
+            $0[kCGWindowNumber as String] as? Int == windowId
+        }) else { return }
+
+        let title = cgWindow[kCGWindowName as String] as? String
+        guard let matched = matchAXWindow(axWindows: axWindows, title: title) else { return }
+
+        // Raise the window
+        let main = true as CFTypeRef
+        AXUIElementSetAttributeValue(matched, kAXMainAttribute as CFString, main)
+        let focused = true as CFTypeRef
+        AXUIElementSetAttributeValue(matched, kAXFocusedAttribute as CFString, focused)
     }
 
     func buildAXTree(element: AXUIElement, maxDepth: Int = 8, maxNodes: Int = 300) -> AXElement {

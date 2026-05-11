@@ -90,6 +90,7 @@ enum ToolRegistrar {
         try await server.register {
             LaunchAppTool.self
             ListAppsTool.self
+            ActivateWindowTool.self
             ListWindowsTool.self
             GetWindowStateTool.self
             ClickTool.self
@@ -153,6 +154,38 @@ struct ListAppsTool {
 }
 
 // MARK: - Window Management Tools (Story 1.3)
+
+@Tool
+struct ActivateWindowTool {
+    static let name = "activate_window"
+    static let description = "Activate (bring to front) an application and optionally a specific window"
+
+    @Parameter(description: "Process ID of the application")
+    var pid: Int
+
+    @Parameter(key: "window_id", description: "Window identifier (optional, activates the app's frontmost window if omitted)")
+    var windowId: Int?
+
+    func perform() async throws -> String {
+        do {
+            try ServiceContainer.shared.accessibilityEngine.activateWindow(pid: Int32(pid), windowId: windowId)
+            var result: [String: Any] = ["success": true, "action": "activate_window", "pid": pid]
+            if let windowId { result["window_id"] = windowId }
+            let data = try JSONSerialization.data(withJSONObject: result, options: [.sortedKeys])
+            return String(data: data, encoding: .utf8) ?? "{}"
+        } catch let error as AccessibilityEngineError {
+            let payload = ToolErrorPayload(
+                error: error.errorCode,
+                message: error.localizedDescription,
+                suggestion: error.suggestion
+            )
+            let encoder = JSONEncoder()
+            encoder.outputFormatting = [.sortedKeys]
+            let data = try encoder.encode(payload)
+            return String(data: data, encoding: .utf8) ?? "{}"
+        }
+    }
+}
 
 @Tool
 struct ListWindowsTool {

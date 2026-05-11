@@ -414,7 +414,11 @@ struct InputSimulationService: InputSimulating {
             virtualKey: parsed.keyCode,
             keyDown: false
         )
-        keyUp?.flags = parsed.flags
+        // Release modifiers on key-up so subsequent events don't see stale Cmd/Shift
+        keyUp?.flags = []
         keyUp?.post(tap: .cghidEventTap)
+
+        // Give the UI time to respond to the hotkey (dialogs, menus, etc.)
+        usleep(500_000) // 500ms
     }
 }

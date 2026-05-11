@@ -58,10 +58,11 @@ struct RunCommand: AsyncParsableCommand {
 
         // 4. Load system prompt from planner-system.md
         let promptDir = PromptBuilder.resolvePromptDirectory()
+        let mcpPrefixedToolNames = ToolNames.allToolNames.map { "mcp__axion-helper__\($0)" }
         let baseSystemPrompt = try PromptBuilder.load(
             name: "planner-system",
             variables: [
-                "tools": PromptBuilder.buildToolListDescription(from: ToolNames.allToolNames),
+                "tools": PromptBuilder.buildToolListDescription(from: mcpPrefixedToolNames),
                 "max_steps": String(config.maxSteps),
             ],
             fromDirectory: promptDir
@@ -231,9 +232,12 @@ protocol SDKMessageOutputHandler {
 }
 
 /// Terminal output handler — displays human-readable progress via TerminalOutput.
+/// Buffers streaming text from .partialMessage and flushes it as a single line
+/// when a structured event (.assistant, .toolUse, .toolResult, .result) arrives.
+/// This prevents streaming text fragments from interleaving with [axion] log lines.
 final class SDKTerminalOutputHandler: SDKMessageOutputHandler {
     private let output: TerminalOutput
-    private var isStreaming = false
+    private var streamBuffer = ""
 
     init(output: TerminalOutput = TerminalOutput()) {
         self.output = output
@@ -246,17 +250,18 @@ final class SDKTerminalOutputHandler: SDKMessageOutputHandler {
     func handleMessage(_ message: SDKMessage) {
         switch message {
         case .assistant(let data):
-            if isStreaming {
-                output.endStream()
-                isStreaming = false
+            if !streamBuffer.isEmpty {
+                flushStreamBuffer()
             } else if !data.text.isEmpty {
                 output.write("[axion] \(data.text)")
             }
 
         case .toolUse(let data):
+            flushStreamBuffer()
             output.write("[axion] 执行: \(data.toolName)")
 
         case .toolResult(let data):
+            flushStreamBuffer()
             if data.isError {
                 output.write("[axion] 结果: 错误 — \(String(data.content.prefix(100)))")
             } else {
@@ -265,6 +270,7 @@ final class SDKTerminalOutputHandler: SDKMessageOutputHandler {
             }
 
         case .result(let data):
+            flushStreamBuffer()
             switch data.subtype {
             case .success:
                 if !data.text.isEmpty {
@@ -283,8 +289,7 @@ final class SDKTerminalOutputHandler: SDKMessageOutputHandler {
             }
 
         case .partialMessage(let data):
-            output.writeStream(data.text)
-            isStreaming = true
+            streamBuffer += data.text
 
         default:
             break
@@ -292,7 +297,16 @@ final class SDKTerminalOutputHandler: SDKMessageOutputHandler {
     }
 
     func displayCompletion() {
+        flushStreamBuffer()
         output.write("[axion] 运行结束。")
+    }
+
+    /// Flush any buffered streaming text as a single [axion] line.
+    private func flushStreamBuffer() {
+        if !streamBuffer.isEmpty {
+            output.write("[axion] \(streamBuffer)")
+            streamBuffer = ""
+        }
     }
 
     private func summarizeResult(_ content: String) -> String {
