@@ -55,7 +55,8 @@ public struct SafetyChecker {
         ToolNames.listWindows,
         ToolNames.screenshot,
         ToolNames.getAccessibilityTree,
-        ToolNames.getFileInfo
+        ToolNames.getFileInfo,
+        ToolNames.validateWindow
     ]
 
     private static let backgroundSafeTools: Set<String> = [
