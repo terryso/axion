@@ -30,9 +30,21 @@ public struct ProcessGitCommandRunner: GitCommandRunning, Sendable {
         process.arguments = ["-c", command]
         process.currentDirectoryURL = URL(fileURLWithPath: cwd)
 
-        let pipe = Pipe()
-        process.standardOutput = pipe
-        process.standardError = Pipe()
+        let outputFile = FileManager.default.temporaryDirectory
+            .appendingPathComponent("git-cmd-\(UUID().uuidString).txt")
+        FileManager.default.createFile(atPath: outputFile.path, contents: nil)
+
+        guard let writeHandle = try? FileHandle(forWritingTo: outputFile) else {
+            try? FileManager.default.removeItem(at: outputFile)
+            return nil
+        }
+        process.standardOutput = writeHandle
+        process.standardError = FileHandle.nullDevice
+
+        defer {
+            try? writeHandle.close()
+            try? FileManager.default.removeItem(at: outputFile)
+        }
 
         do {
             try process.run()
@@ -53,8 +65,9 @@ public struct ProcessGitCommandRunner: GitCommandRunning, Sendable {
             }
 
             guard process.terminationStatus == 0 else { return nil }
-            let data = pipe.fileHandleForReading.readDataToEndOfFile()
-            let output = String(data: data, encoding: .utf8)?
+
+            let data = try? Data(contentsOf: outputFile)
+            let output = String(data: data ?? Data(), encoding: .utf8)?
                 .trimmingCharacters(in: .whitespacesAndNewlines)
             return (output?.isEmpty ?? true) ? nil : output
         } catch {
