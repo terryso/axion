@@ -1195,6 +1195,7 @@ public class Agent: CustomStringConvertible, CustomDebugStringConvertible, @unch
                             planStore: options.planStore,
                             cronStore: options.cronStore,
                             todoStore: options.todoStore,
+                            memoryStore: options.memoryStore,
                             hookRegistry: options.hookRegistry,
                             permissionMode: options.permissionMode,
                             canUseTool: options.canUseTool,
@@ -1344,6 +1345,7 @@ public class Agent: CustomStringConvertible, CustomDebugStringConvertible, @unch
         let capturedPlanStore = options.planStore
         let capturedCronStore = options.cronStore
         let capturedTodoStore = options.todoStore
+        let capturedMemoryStore = options.memoryStore
         let capturedMcpServers = options.mcpServers
         // Note: permissionMode and canUseTool are read fresh from self.options
         // at each tool execution point to support dynamic permission changes mid-stream.
@@ -1985,6 +1987,7 @@ public class Agent: CustomStringConvertible, CustomDebugStringConvertible, @unch
                                     planStore: capturedPlanStore,
                                     cronStore: capturedCronStore,
                                     todoStore: capturedTodoStore,
+                                    memoryStore: capturedMemoryStore,
                                     hookRegistry: capturedHookRegistry,
                                     permissionMode: capturedPermissionMode,
                                     canUseTool: capturedCanUseTool,

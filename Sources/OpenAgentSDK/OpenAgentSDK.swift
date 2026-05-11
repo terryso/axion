@@ -99,6 +99,13 @@
 /// - ``TodoPriority`` — Todo priority enum
 /// - ``TodoStoreError`` — Todo store error type
 ///
+/// ## Memory Store
+/// - ``MemoryStoreProtocol`` — Protocol for cross-run knowledge accumulation stores
+/// - ``InMemoryStore`` — In-memory volatile knowledge store actor
+/// - ``FileBasedMemoryStore`` — File-backed persistent knowledge store actor
+/// - ``KnowledgeEntry`` — Knowledge entry data structure
+/// - ``KnowledgeQueryFilter`` — Query filter for knowledge entries
+///
 /// ## MCP Integration
 /// - ``MCPClientManager`` — Thread-safe MCP server connection manager actor
 /// - ``MCPManagedConnection`` — Managed MCP server connection info

@@ -281,6 +281,9 @@ public struct AgentOptions: Sendable {
     /// Optional todo store for todo management tools.
     /// Injected into ToolContext for use by todo tools (TodoWrite).
     public var todoStore: TodoStore?
+    /// Optional memory store for cross-run knowledge accumulation.
+    /// Injected into ToolContext for use by custom tools via `ToolContext.memoryStore`.
+    public var memoryStore: (any MemoryStoreProtocol)?
     /// Optional session store for session persistence (save/load/restore).
     /// When provided with `sessionId`, Agent will auto-restore and auto-save sessions.
     public var sessionStore: SessionStore?
@@ -449,6 +452,7 @@ public struct AgentOptions: Sendable {
         planStore: PlanStore? = nil,
         cronStore: CronStore? = nil,
         todoStore: TodoStore? = nil,
+        memoryStore: (any MemoryStoreProtocol)? = nil,
         sessionStore: SessionStore? = nil,
         sessionId: String? = nil,
         hookRegistry: HookRegistry? = nil,
@@ -508,6 +512,7 @@ public struct AgentOptions: Sendable {
         self.planStore = planStore
         self.cronStore = cronStore
         self.todoStore = todoStore
+        self.memoryStore = memoryStore
         self.sessionStore = sessionStore
         self.sessionId = sessionId
         self.hookRegistry = hookRegistry
@@ -616,6 +621,7 @@ public struct AgentOptions: Sendable {
         self.planStore = nil
         self.cronStore = nil
         self.todoStore = nil
+        self.memoryStore = nil
         self.sessionStore = nil
         self.sessionId = nil
         self.hookRegistry = nil

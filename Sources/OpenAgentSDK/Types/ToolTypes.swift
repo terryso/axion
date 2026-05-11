@@ -297,6 +297,9 @@ public struct ToolContext: Sendable {
     /// Optional todo store for todo management tools (e.g., TodoWrite).
     /// Injected by Core/ when the tool set includes todo management tools.
     public let todoStore: TodoStore?
+    /// Optional memory store for cross-run knowledge accumulation.
+    /// Injected by Core/ from AgentOptions.memoryStore for use by custom tools.
+    public let memoryStore: (any MemoryStoreProtocol)?
     /// Optional hook registry for lifecycle event hooks.
     /// Injected by Core/ from AgentOptions.hookRegistry for use in ToolExecutor.
     public let hookRegistry: HookRegistry?
@@ -359,6 +362,7 @@ public struct ToolContext: Sendable {
         planStore: PlanStore? = nil,
         cronStore: CronStore? = nil,
         todoStore: TodoStore? = nil,
+        memoryStore: (any MemoryStoreProtocol)? = nil,
         hookRegistry: HookRegistry? = nil,
         permissionMode: PermissionMode? = nil,
         canUseTool: CanUseToolFn? = nil,
@@ -386,6 +390,7 @@ public struct ToolContext: Sendable {
         self.planStore = planStore
         self.cronStore = cronStore
         self.todoStore = todoStore
+        self.memoryStore = memoryStore
         self.hookRegistry = hookRegistry
         self.permissionMode = permissionMode
         self.canUseTool = canUseTool
@@ -415,6 +420,7 @@ public struct ToolContext: Sendable {
             taskStore: taskStore, worktreeStore: worktreeStore,
             planStore: planStore, cronStore: cronStore,
             todoStore: todoStore,
+            memoryStore: memoryStore,
             hookRegistry: hookRegistry,
             permissionMode: permissionMode,
             canUseTool: canUseTool,
@@ -447,6 +453,7 @@ public struct ToolContext: Sendable {
             taskStore: taskStore, worktreeStore: worktreeStore,
             planStore: planStore, cronStore: cronStore,
             todoStore: todoStore,
+            memoryStore: memoryStore,
             hookRegistry: hookRegistry,
             permissionMode: permissionMode,
             canUseTool: canUseTool,
