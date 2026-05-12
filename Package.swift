@@ -16,7 +16,7 @@ let package = Package(
     dependencies: [
         .package(
             url: "https://github.com/terryso/swift-mcp.git",
-            from: "0.1.5"
+            from: "2.0.0"
         ),
         .package(
             url: "https://github.com/swiftlang/swift-docc-plugin",
