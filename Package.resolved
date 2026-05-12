@@ -60,8 +60,8 @@
       "kind" : "remoteSourceControl",
       "location" : "https://github.com/terryso/swift-mcp.git",
       "state" : {
-        "revision" : "289e6bbcc13ae47d15076e8f22777a8f67ba27a3",
-        "version" : "2.0.2"
+        "revision" : "952f8d941dce01ee624123efe9bc5af2b9e6e5b9",
+        "version" : "2.0.3"
       }
     },
     {
