@@ -12,12 +12,16 @@ jobs:
     runs-on: macos-15
     steps:
       - uses: actions/checkout@v4
+      - name: Select Xcode 16.4
+        uses: maxim-lobanov/setup-xcode@v1
+        with:
+          xcode-version: '16.4'
       - name: Cache Swift build
         uses: actions/cache@v4
         with:
           path: .build
-          key: swift-${{ runner.os }}-${{ hashFiles('Package.resolved') }}
-          restore-keys: swift-${{ runner.os }}-
+          key: swift-${{ runner.os }}-xcode16.4-${{ hashFiles('Package.resolved') }}
+          restore-keys: swift-${{ runner.os }}-xcode16.4-
       - name: Run tests with coverage
         run: swift test --enable-code-coverage
       - name: Extract coverage percentage

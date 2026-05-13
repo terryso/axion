@@ -1,5 +1,5 @@
 {
-  "originHash" : "b54002a552a3710e6dd63128b0db473c717ccd5279dddb13e2ebf71d4ee03b84",
+  "originHash" : "90213cd6ad0cef42c61ab11f63c4eada480be70e6a469ffab5d0d4d2b59ff5aa",
   "pins" : [
     {
       "identity" : "swift-asn1",
@@ -60,8 +60,8 @@
       "kind" : "remoteSourceControl",
       "location" : "https://github.com/terryso/swift-mcp.git",
       "state" : {
-        "revision" : "cb88b66b4ed81c6be34961a678e6a07c011d3912",
-        "version" : "0.1.5"
+        "revision" : "293c174fea31c7c5cbc607bd42eee130fdeb887a",
+        "version" : "2.0.4"
       }
     },
     {
