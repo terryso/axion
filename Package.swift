@@ -16,7 +16,7 @@ let package = Package(
         .package(path: "../open-agent-sdk-swift"),
         .package(
             url: "https://github.com/terryso/swift-mcp.git",
-            from: "1.1.0"
+            from: "2.0.0"
         ),
         .package(
             url: "https://github.com/ajevans99/swift-json-schema",
