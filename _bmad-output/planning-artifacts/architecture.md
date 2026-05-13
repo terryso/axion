@@ -107,7 +107,7 @@ axion/
 ├── Sources/
 │   ├── AxionCLI/                    # CLI 主程序（可执行目标）
 │   │   ├── main.swift               # 入口，ArgumentParser 根命令
-│   │   ├── Commands/                # 子命令：RunCommand, SetupCommand, DoctorCommand
+│   │   ├── Commands/                # 子命令：RunCommand, SetupCommand, DoctorCommand, ServerCommand, McpCommand
 │   │   ├── Planner/                 # 规划引擎：LLM 调用、plan 解析、prompt 管理
 │   │   ├── Executor/                # 执行引擎：步骤执行、MCP 调用、占位符解析
 │   │   ├── Verifier/                # 验证引擎：截图/AX 验证、stopWhen 评估
@@ -211,13 +211,13 @@ let package = Package(
 | D7 | Trace 记录格式 | 可观测性、调试效率 |
 | D8 | Helper 进程生命周期管理 | 可靠性（NFR5, NFR8） |
 
-**延迟决策（MVP 后）：**
+**延迟决策（MVP 后）— 已实施状态：**
 
-| 决策 | 延迟理由 |
-|------|----------|
-| HTTP API server 框架 | 成长功能，MVP 不需要 |
-| Memory 持久化方案 | 成长功能，MVP 不需要 |
-| MCP server 模式（供外部调用） | 成长功能，MVP 不需要 |
+| 决策 | 延迟理由 | 状态 |
+|------|----------|------|
+| HTTP API server 框架 | 成长功能，MVP 不需要 | ✅ 已实施（Epic 5，Hummingbird 2.x） |
+| Memory 持久化方案 | 成长功能，MVP 不需要 | ✅ 已实施（Epic 4，SDK FileBasedMemoryStore） |
+| MCP server 模式（供外部调用） | 成长功能，MVP 不需要 | ✅ 已实施（Epic 6，SDK AgentMCPServer） |
 
 ---
 
@@ -770,7 +770,9 @@ axion/
 │   │   │   ├── AxionCommand.swift             # 根命令（注册子命令）
 │   │   │   ├── RunCommand.swift               # FR6–FR10: axion run
 │   │   │   ├── SetupCommand.swift             # FR2: axion setup
-│   │   │   └── DoctorCommand.swift            # FR3: axion doctor
+│   │   │   ├── DoctorCommand.swift            # FR3: axion doctor
+│   │   │   ├── ServerCommand.swift            # FR45–FR46: axion server（Epic 5）
+│   │   │   └── McpCommand.swift               # FR47: axion mcp（Epic 6）
 │   │   ├── Planner/
 │   │   │   ├── LLMPlanner.swift               # FR11–FR14: 调用 LLM 生成 Plan
 │   │   │   ├── PlanParser.swift               # FR14–FR15: 解析 LLM 输出为 Plan
@@ -794,6 +796,19 @@ axion/
 │   │   └── Output/
 │   │       ├── TerminalOutput.swift            # FR33–FR34: 终端实时输出
 │   │       └── JSONOutput.swift               # FR35: JSON 结构化输出
+│   │   ├── API/                                # Epic 5: HTTP API Server
+│   │   │   ├── AgentRunner.swift              # Agent 执行封装
+│   │   │   ├── RunTracker.swift               # 任务状态追踪
+│   │   │   ├── AxionAPI.swift                 # Hummingbird 路由注册
+│   │   │   ├── EventBroadcaster.swift         # SSE 事件广播
+│   │   │   ├── AuthMiddleware.swift           # Bearer token 认证
+│   │   │   ├── ConcurrencyLimiter.swift       # 并发槽位管理
+│   │   │   └── Models/APITypes.swift          # API 请求/响应模型
+│   │   ├── MCP/                                # Epic 6: MCP Server Mode
+│   │   │   ├── MCPServerRunner.swift          # MCP 编排器
+│   │   │   ├── RunTaskTool.swift              # run_task 工具实现
+│   │   │   ├── QueryTaskStatusTool.swift      # query_task_status 工具实现
+│   │   │   └── TaskQueue.swift                # 任务串行化 Actor
 │   │
 │   └── AxionHelper/                           # Helper App（可执行目标）
 │       ├── main.swift                         # 入口：启动 MCP Server

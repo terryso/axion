@@ -118,10 +118,12 @@ struct RunCommand: AsyncParsableCommand {
             maxTurns: effectiveMaxSteps,
             maxTokens: 4096,
             permissionMode: .bypassPermissions,
+            tools: [createPauseForHumanTool()],
             mcpServers: mcpServers,
             memoryStore: memoryStore,
             hookRegistry: hookRegistry,
-            logLevel: verbose ? .debug : .info
+            logLevel: verbose ? .debug : .info,
+            pauseTimeoutMs: 300_000
         )
 
         // 8. Create Agent
@@ -131,6 +133,18 @@ struct RunCommand: AsyncParsableCommand {
         let outputHandler: any SDKMessageOutputHandler = json
             ? SDKJSONOutputHandler()
             : SDKTerminalOutputHandler()
+
+        // 10. Create TakeoverIO for pause interaction
+        // JSON mode: prompt to stderr to keep stdout clean for JSON events
+        let takeoverIO: TakeoverIO
+        if json {
+            takeoverIO = TakeoverIO(
+                write: { fputs($0 + "\n", stderr); fflush(stderr) },
+                readLine: { Swift.readLine() }
+            )
+        } else {
+            takeoverIO = TakeoverIO()
+        }
 
         // 10. Run with cancellation support
         let runId = Self.generateRunId()
@@ -169,6 +183,41 @@ struct RunCommand: AsyncParsableCommand {
                 case .toolResult(let data):
                     if let toolUse = pendingToolUses.removeValue(forKey: data.toolUseId) {
                         collectedPairs.append((toolUse: toolUse, toolResult: data))
+                    }
+                case .system(let data):
+                    switch data.subtype {
+                    case .paused:
+                        guard let pausedData = data.pausedData else { break }
+                        await tracer?.record(event: "takeover_paused", payload: [
+                            "reason": pausedData.reason
+                        ])
+                        let action = takeoverIO.displayTakeoverPrompt(
+                            reason: pausedData.reason,
+                            allowForeground: allowForeground,
+                            completedSteps: totalSteps
+                        )
+                        switch action {
+                        case .resume:
+                            agent.resume(context: "用户已完成手动操作")
+                            await tracer?.record(event: "takeover_resumed", payload: [
+                                "context": "用户已完成手动操作"
+                            ])
+                        case .skip:
+                            agent.resume(context: "skip")
+                            await tracer?.record(event: "takeover_resumed", payload: [
+                                "context": "skip"
+                            ])
+                        case .abort:
+                            agent.interrupt()
+                            await tracer?.record(event: "takeover_aborted", payload: [
+                                "completedSteps": totalSteps
+                            ])
+                        }
+                    case .pausedTimeout:
+                        takeoverIO.displayTimeoutPrompt()
+                        await tracer?.record(event: "takeover_timeout", payload: [:])
+                    default:
+                        break
                     }
                 default:
                     break
@@ -430,6 +479,20 @@ final class SDKTerminalOutputHandler: SDKMessageOutputHandler {
         case .partialMessage(let data):
             streamBuffer += data.text
 
+        case .system(let data):
+            switch data.subtype {
+            case .paused:
+                flushStreamBuffer()
+                if let pausedData = data.pausedData {
+                    output.write("[axion] 任务暂停: \(pausedData.reason)")
+                }
+            case .pausedTimeout:
+                flushStreamBuffer()
+                output.write("[axion] 接管超时（5 分钟无操作），任务终止。")
+            default:
+                break
+            }
+
         default:
             break
         }
@@ -460,16 +523,22 @@ final class SDKTerminalOutputHandler: SDKMessageOutputHandler {
 }
 
 /// JSON output handler — accumulates data and produces structured JSON at completion.
+/// Also outputs streaming paused events as JSON lines for JSON mode consumers.
 final class SDKJSONOutputHandler: SDKMessageOutputHandler {
     private let write: (String) -> Void
+    private let writeEvent: (String) -> Void
     private var runId: String = ""
     private var task: String = ""
     private var steps: [[String: Any]] = []
     private var errors: [[String: String]] = []
     private var resultData: SDKMessage.ResultData?
 
-    init(write: @escaping (String) -> Void = { print($0) }) {
+    init(
+        write: @escaping (String) -> Void = { print($0) },
+        writeEvent: @escaping (String) -> Void = { print($0) }
+    ) {
         self.write = write
+        self.writeEvent = writeEvent
     }
 
     func displayRunStart(runId: String, task: String) {
@@ -493,6 +562,41 @@ final class SDKJSONOutputHandler: SDKMessageOutputHandler {
             }
         case .result(let data):
             resultData = data
+        case .system(let data):
+            switch data.subtype {
+            case .paused:
+                if let pausedData = data.pausedData {
+                    let event: [String: Any] = [
+                        "type": "paused",
+                        "reason": pausedData.reason,
+                        "canResume": pausedData.canResume,
+                        "sessionId": data.sessionId ?? ""
+                    ]
+                    if let jsonData = try? JSONSerialization.data(
+                        withJSONObject: event,
+                        options: [.sortedKeys]
+                    ) {
+                        writeEvent(String(data: jsonData, encoding: .utf8) ?? "{}")
+                    }
+                }
+            case .pausedTimeout:
+                var event: [String: Any] = [
+                    "type": "pausedTimeout",
+                    "canResume": false,
+                    "sessionId": data.sessionId ?? ""
+                ]
+                if let reason = data.pausedData?.reason {
+                    event["reason"] = reason
+                }
+                if let jsonData = try? JSONSerialization.data(
+                    withJSONObject: event,
+                    options: [.sortedKeys]
+                ) {
+                    writeEvent(String(data: jsonData, encoding: .utf8) ?? "{}")
+                }
+            default:
+                break
+            }
         default:
             break
         }

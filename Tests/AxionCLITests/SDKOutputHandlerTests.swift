@@ -257,4 +257,93 @@ final class SDKOutputHandlerTests: XCTestCase {
         handler.handleMessage(.partialMessage(.init(text: "thinking")))
         // Should not crash
     }
+
+    // MARK: - SDKTerminalOutputHandler — Paused Events
+
+    func test_terminalHandler_systemPaused_displaysPausedReason() {
+        var lines: [String] = []
+        let output = TerminalOutput(write: { lines.append($0) })
+        let handler = SDKTerminalOutputHandler(output: output)
+
+        let pausedData = SDKMessage.PausedData(reason: "无法找到目标按钮")
+        handler.handleMessage(.system(.init(
+            subtype: .paused,
+            message: "Agent paused: 无法找到目标按钮",
+            sessionId: "s1",
+            pausedData: pausedData
+        )))
+
+        XCTAssertTrue(lines.contains(where: { $0.contains("暂停") && $0.contains("无法找到目标按钮") }))
+    }
+
+    func test_terminalHandler_systemPausedTimeout_displaysTimeout() {
+        var lines: [String] = []
+        let output = TerminalOutput(write: { lines.append($0) })
+        let handler = SDKTerminalOutputHandler(output: output)
+
+        handler.handleMessage(.system(.init(
+            subtype: .pausedTimeout,
+            message: "Pause timed out",
+            sessionId: "s1",
+            pausedData: SDKMessage.PausedData(reason: "test", canResume: false)
+        )))
+
+        XCTAssertTrue(lines.contains(where: { $0.contains("超时") }))
+    }
+
+    // MARK: - SDKJSONOutputHandler — Paused Events
+
+    func test_jsonHandler_systemPaused_outputsEventJson() {
+        var jsonOutputs: [String] = []
+        let handler = SDKJSONOutputHandler(
+            write: { _ in },
+            writeEvent: { jsonOutputs.append($0) }
+        )
+
+        let pausedData = SDKMessage.PausedData(reason: "无法继续")
+        handler.handleMessage(.system(.init(
+            subtype: .paused,
+            message: "Agent paused: 无法继续",
+            sessionId: "s1",
+            pausedData: pausedData
+        )))
+
+        XCTAssertEqual(jsonOutputs.count, 1)
+        let json = try? JSONSerialization.jsonObject(with: jsonOutputs[0].data(using: .utf8)!) as? [String: Any]
+        XCTAssertEqual(json?["type"] as? String, "paused")
+        XCTAssertEqual(json?["reason"] as? String, "无法继续")
+        XCTAssertEqual(json?["sessionId"] as? String, "s1")
+    }
+
+    func test_jsonHandler_systemPausedTimeout_outputsEventJson() {
+        var jsonOutputs: [String] = []
+        let handler = SDKJSONOutputHandler(
+            write: { _ in },
+            writeEvent: { jsonOutputs.append($0) }
+        )
+
+        handler.handleMessage(.system(.init(
+            subtype: .pausedTimeout,
+            message: "Pause timed out",
+            sessionId: "s1",
+            pausedData: SDKMessage.PausedData(reason: "test", canResume: false)
+        )))
+
+        XCTAssertEqual(jsonOutputs.count, 1)
+        let json = try? JSONSerialization.jsonObject(with: jsonOutputs[0].data(using: .utf8)!) as? [String: Any]
+        XCTAssertEqual(json?["type"] as? String, "pausedTimeout")
+        XCTAssertEqual(json?["reason"] as? String, "test")
+        XCTAssertEqual(json?["sessionId"] as? String, "s1")
+    }
+
+    func test_jsonHandler_systemStatus_ignored() {
+        var jsonOutputs: [String] = []
+        let handler = SDKJSONOutputHandler(
+            write: { _ in },
+            writeEvent: { jsonOutputs.append($0) }
+        )
+
+        handler.handleMessage(.system(.init(subtype: .status, message: "ok")))
+        XCTAssertEqual(jsonOutputs.count, 0)
+    }
 }

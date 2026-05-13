@@ -255,6 +255,7 @@ func test_xxx_roundTrip() throws {
 | `RunTracker` | HTTP API 任务状态管理 | 任务状态串行化（Epic 5） |
 | `EventBroadcaster` | SSE 事件多客户端广播 | 订阅者和重放缓存串行化（Epic 5） |
 | `ConcurrencyLimiter` | 并发任务槽位管理 | 并发计数和排队串行化（Epic 5） |
+| `TaskQueue` | MCP Server 模式任务串行化 | agent.prompt() 调用串行化（Epic 6） |
 
 ### Helper 进程生命周期（D8）
 
@@ -468,6 +469,28 @@ EventBroadcaster.subscribe(runId)             # 订阅实时事件流
 ResponseBody(asyncSequence:)                   # Hummingbird 流式响应
 ```
 
+### MCP Server 数据流（Epic 6）
+
+```
+外部 Agent (Claude Code) stdin/stdout MCP JSON-RPC
+    │
+    ▼
+McpCommand (axion mcp)                           # CLI 子命令入口
+    │
+    ▼
+MCPServerRunner.run()                            # 编排器
+    │
+    ├──► createAgent(options:)                   # 复用 AgentRunner 配置逻辑
+    ├──► agent.assembleFullToolPool()            # 连接 Helper，获取工具列表
+    ├──► RunTracker + TaskQueue                  # 任务追踪和串行化
+    │
+    └──► AgentMCPServer(name:"axion", tools:)    # SDK MCP server
+             │
+             ├── tools/list → [Helper 工具 + run_task + query_task_status]
+             ├── tool_call "run_task" → TaskQueue.enqueue() → agent.prompt(task)
+             └── tool_call "query_task_status" → RunTracker.getRun(runId)
+```
+
 ---
 
 ## OpenAgentSDK 参考路径
@@ -483,6 +506,8 @@ SDK 本地路径：`/Users/nick/CascadeProjects/open-agent-sdk-swift`
 | Hooks | `Examples/SessionsAndHooks/` | Story 3.3 |
 | Session 管理 | `Examples/CompatSessions/` | Story 3.6 |
 | 自定义 System Prompt | `Examples/CustomSystemPromptExample/` | Story 3.2 |
+| AgentMCPServer | `Sources/OpenAgentSDK/MCP/AgentMCPServer.swift` | Story 6.1 |
+| MemoryStore | `Sources/OpenAgentSDK/Memory/` | Story 4.1 |
 
 ---
 

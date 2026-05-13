@@ -1,5 +1,5 @@
 # generated: 2026-05-08
-# last_updated: 2026-05-14
+# last_updated: 2026-05-15
 # project: axion
 # project_key: NOKEY
 # tracking_system: file-system
@@ -35,7 +35,7 @@
 # - Dev moves story to 'review', then runs code-review (fresh context, different LLM recommended)
 
 generated: 2026-05-08
-last_updated: 2026-05-14
+last_updated: 2026-05-15
 project: axion
 project_key: NOKEY
 tracking_system: file-system
@@ -96,13 +96,13 @@ development_status:
   epic-5-retrospective: done
 
   # Epic 6: MCP Server Mode — Agent 协作
-  epic-6: in-progress
+  epic-6: done
   6-1-sdk-agentmcpserver-expose-axion: done
   6-2-axion-mcp-command-agent-integration: done
-  epic-6-retrospective: optional
+  epic-6-retrospective: done
 
   # Epic 7: 执行增强 — Takeover 与 Fast Mode
-  epic-7: backlog
-  7-1-sdk-pause-protocol-user-takeover: backlog
+  epic-7: in-progress
+  7-1-sdk-pause-protocol-user-takeover: done
   7-2-fast-mode: backlog
   epic-7-retrospective: optional
