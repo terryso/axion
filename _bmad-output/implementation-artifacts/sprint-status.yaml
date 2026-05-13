@@ -1,5 +1,5 @@
 # generated: 2026-05-08
-# last_updated: 2026-05-13
+# last_updated: 2026-05-14
 # project: axion
 # project_key: NOKEY
 # tracking_system: file-system
@@ -89,8 +89,8 @@ development_status:
   epic-4-retrospective: optional
 
   # Epic 5: HTTP API Server — 外部集成服务
-  epic-5: backlog
-  5-1-http-api-foundation-task-management: backlog
+  epic-5: in-progress
+  5-1-http-api-foundation-task-management: done
   5-2-sse-event-stream-realtime-progress: backlog
   5-3-server-command-api-authentication: backlog
   epic-5-retrospective: optional

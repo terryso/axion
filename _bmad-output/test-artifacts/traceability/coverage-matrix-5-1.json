@@ -1,0 +1,165 @@
+{
+  "schema_version": "0.1.0",
+  "phase": "PHASE_1_COMPLETE",
+  "trace_target": {
+    "type": "story",
+    "id": "5.1",
+    "label": "HTTP API 基础与任务管理"
+  },
+  "oracle": {
+    "resolution_mode": "formal_requirements",
+    "confidence": "high",
+    "sources": [
+      "_bmad-output/implementation-artifacts/5-1-http-api-foundation-task-management.md",
+      "_bmad-output/test-artifacts/atdd-checklist-5-1-http-api-foundation-task-management.md"
+    ],
+    "external_pointer_status": "not_used",
+    "synthetic": false
+  },
+  "collection_mode": "contract_static",
+  "collection_status": "COLLECTED",
+  "allow_gate": true,
+  "coverage_basis": "acceptance_criteria",
+  "requirements": [
+    {
+      "id": "AC1",
+      "title": "Server 启动与端口监听",
+      "priority": "P0",
+      "coverage": "FULL",
+      "tests": [
+        {"title": "test_serverCommand_defaultPort_is4242", "file": "Tests/AxionCLITests/Commands/ServerCommandTests.swift", "level": "unit", "status": "active"},
+        {"title": "test_serverCommand_defaultHost_is127_0_0_1", "file": "Tests/AxionCLITests/Commands/ServerCommandTests.swift", "level": "unit", "status": "active"},
+        {"title": "test_serverCommand_parsesCustomPort", "file": "Tests/AxionCLITests/Commands/ServerCommandTests.swift", "level": "unit", "status": "active"},
+        {"title": "test_serverCommand_parsesCustomHost", "file": "Tests/AxionCLITests/Commands/ServerCommandTests.swift", "level": "unit", "status": "active"},
+        {"title": "test_serverCommand_parsesVerboseFlag", "file": "Tests/AxionCLITests/Commands/ServerCommandTests.swift", "level": "unit", "status": "active"},
+        {"title": "test_serverCommand_verboseDefaultIsFalse", "file": "Tests/AxionCLITests/Commands/ServerCommandTests.swift", "level": "unit", "status": "active"},
+        {"title": "test_serverCommand_parsesAllOptionsCombined", "file": "Tests/AxionCLITests/Commands/ServerCommandTests.swift", "level": "unit", "status": "active"},
+        {"title": "test_axionCLI_registersServerSubcommand", "file": "Tests/AxionCLITests/Commands/ServerCommandTests.swift", "level": "unit", "status": "active"},
+        {"title": "test_healthEndpoint_returns200WithOkStatus", "file": "Tests/AxionCLITests/API/AxionAPIRoutesTests.swift", "level": "integration", "status": "active"},
+        {"title": "test_healthEndpoint_returnsJsonContentType", "file": "Tests/AxionCLITests/API/AxionAPIRoutesTests.swift", "level": "integration", "status": "active"}
+      ]
+    },
+    {
+      "id": "AC2",
+      "title": "提交异步任务",
+      "priority": "P0",
+      "coverage": "FULL",
+      "tests": [
+        {"title": "test_createRunRequest_codable_roundTrip_preservesAllFields", "file": "Tests/AxionCLITests/API/APITypesTests.swift", "level": "unit", "status": "active"},
+        {"title": "test_createRunRequest_optionalFields_defaultToNil", "file": "Tests/AxionCLITests/API/APITypesTests.swift", "level": "unit", "status": "active"},
+        {"title": "test_createRunRequest_jsonKeys_areSnakeCase", "file": "Tests/AxionCLITests/API/APITypesTests.swift", "level": "unit", "status": "active"},
+        {"title": "test_createRunResponse_codable_roundTrip_preservesAllFields", "file": "Tests/AxionCLITests/API/APITypesTests.swift", "level": "unit", "status": "active"},
+        {"title": "test_createRunResponse_jsonKeys_areSnakeCase", "file": "Tests/AxionCLITests/API/APITypesTests.swift", "level": "unit", "status": "active"},
+        {"title": "test_apiRunStatus_rawValues_matchExpectedStrings", "file": "Tests/AxionCLITests/API/APITypesTests.swift", "level": "unit", "status": "active"},
+        {"title": "test_apiRunStatus_decodesFromValidStrings", "file": "Tests/AxionCLITests/API/APITypesTests.swift", "level": "unit", "status": "active"},
+        {"title": "test_apiRunStatus_decodingInvalidString_throwsError", "file": "Tests/AxionCLITests/API/APITypesTests.swift", "level": "unit", "status": "active"},
+        {"title": "test_submitRun_returnsNonEmptyRunId", "file": "Tests/AxionCLITests/API/RunTrackerTests.swift", "level": "unit", "status": "active"},
+        {"title": "test_submitRun_runIdMatchesExpectedFormat", "file": "Tests/AxionCLITests/API/RunTrackerTests.swift", "level": "unit", "status": "active"},
+        {"title": "test_submitRun_initialState_isCorrect", "file": "Tests/AxionCLITests/API/RunTrackerTests.swift", "level": "unit", "status": "active"},
+        {"title": "test_createRun_validTask_returns202WithRunId", "file": "Tests/AxionCLITests/API/AxionAPIRoutesTests.swift", "level": "integration", "status": "active"},
+        {"title": "test_createRun_withOptions_returns202", "file": "Tests/AxionCLITests/API/AxionAPIRoutesTests.swift", "level": "integration", "status": "active"}
+      ]
+    },
+    {
+      "id": "AC3",
+      "title": "查询运行中任务状态",
+      "priority": "P0",
+      "coverage": "FULL",
+      "tests": [
+        {"title": "test_getRun_returnsSubmittedRun", "file": "Tests/AxionCLITests/API/RunTrackerTests.swift", "level": "unit", "status": "active"},
+        {"title": "test_getRun_nonExistentRunId_returnsNil", "file": "Tests/AxionCLITests/API/RunTrackerTests.swift", "level": "unit", "status": "active"},
+        {"title": "test_getRun_existingRun_returns200WithStatus", "file": "Tests/AxionCLITests/API/AxionAPIRoutesTests.swift", "level": "integration", "status": "active"},
+        {"title": "test_runStatusResponse_codable_roundTrip_preservesAllFields", "file": "Tests/AxionCLITests/API/APITypesTests.swift", "level": "unit", "status": "active"},
+        {"title": "test_runStatusResponse_jsonKeys_areSnakeCase", "file": "Tests/AxionCLITests/API/APITypesTests.swift", "level": "unit", "status": "active"}
+      ]
+    },
+    {
+      "id": "AC4",
+      "title": "查询已完成任务结果",
+      "priority": "P0",
+      "coverage": "FULL",
+      "tests": [
+        {"title": "test_updateRun_updatesStatusToDone", "file": "Tests/AxionCLITests/API/RunTrackerTests.swift", "level": "unit", "status": "active"},
+        {"title": "test_updateRun_updatesStatusToFailed", "file": "Tests/AxionCLITests/API/RunTrackerTests.swift", "level": "unit", "status": "active"},
+        {"title": "test_updateRun_preservesMultipleStepsInOrder", "file": "Tests/AxionCLITests/API/RunTrackerTests.swift", "level": "unit", "status": "active"},
+        {"title": "test_stepSummary_codable_roundTrip_preservesAllFields", "file": "Tests/AxionCLITests/API/APITypesTests.swift", "level": "unit", "status": "active"},
+        {"title": "test_trackedRun_codable_roundTrip_preservesAllFields", "file": "Tests/AxionCLITests/API/APITypesTests.swift", "level": "unit", "status": "active"},
+        {"title": "test_getRun_completedRun_returnsFullResult", "file": "Tests/AxionCLITests/API/AxionAPIRoutesTests.swift", "level": "integration", "status": "active"}
+      ]
+    },
+    {
+      "id": "AC5",
+      "title": "请求参数校验",
+      "priority": "P0",
+      "coverage": "FULL",
+      "tests": [
+        {"title": "test_createRun_missingTask_returns400", "file": "Tests/AxionCLITests/API/AxionAPIRoutesTests.swift", "level": "integration", "status": "active"},
+        {"title": "test_createRun_noTaskField_returns400WithMissingTaskError", "file": "Tests/AxionCLITests/API/AxionAPIRoutesTests.swift", "level": "integration", "status": "active"},
+        {"title": "test_apiErrorResponse_codable_roundTrip_preservesAllFields", "file": "Tests/AxionCLITests/API/APITypesTests.swift", "level": "unit", "status": "active"},
+        {"title": "test_apiErrorResponse_jsonKeys_areCorrect", "file": "Tests/AxionCLITests/API/APITypesTests.swift", "level": "unit", "status": "active"}
+      ]
+    },
+    {
+      "id": "AC6",
+      "title": "Health check 端点",
+      "priority": "P0",
+      "coverage": "FULL",
+      "tests": [
+        {"title": "test_healthResponse_codable_roundTrip_preservesAllFields", "file": "Tests/AxionCLITests/API/APITypesTests.swift", "level": "unit", "status": "active"},
+        {"title": "test_healthResponse_jsonKeys_areSnakeCase", "file": "Tests/AxionCLITests/API/APITypesTests.swift", "level": "unit", "status": "active"},
+        {"title": "test_healthEndpoint_returns200WithOkStatus", "file": "Tests/AxionCLITests/API/AxionAPIRoutesTests.swift", "level": "integration", "status": "active"},
+        {"title": "test_healthEndpoint_returnsJsonContentType", "file": "Tests/AxionCLITests/API/AxionAPIRoutesTests.swift", "level": "integration", "status": "active"}
+      ]
+    }
+  ],
+  "coverage_statistics": {
+    "total_requirements": 6,
+    "fully_covered": 6,
+    "partially_covered": 0,
+    "not_covered": 0,
+    "overall_coverage_percentage": 100,
+    "priority_breakdown": {
+      "P0": {"total": 6, "covered": 6, "percentage": 100},
+      "P1": {"total": 0, "covered": 0, "percentage": 100},
+      "P2": {"total": 0, "covered": 0, "percentage": 100},
+      "P3": {"total": 0, "covered": 0, "percentage": 100}
+    }
+  },
+  "test_inventory": {
+    "summary": {
+      "files": 4,
+      "cases": 46,
+      "skipped_cases": 0,
+      "fixme_cases": 0,
+      "pending_cases": 0,
+      "by_level": {
+        "unit": {"tests": 37, "criteria_covered": 6},
+        "integration": {"tests": 9, "criteria_covered": 6},
+        "api": {"tests": 0, "criteria_covered": 0},
+        "e2e": {"tests": 0, "criteria_covered": 0},
+        "component": {"tests": 0, "criteria_covered": 0},
+        "other": {"tests": 0, "criteria_covered": 0}
+      }
+    }
+  },
+  "gap_analysis": {
+    "critical_gaps": [],
+    "high_gaps": [],
+    "medium_gaps": [],
+    "low_gaps": []
+  },
+  "coverage_heuristics": {
+    "counts": {
+      "endpoints_without_tests": 0,
+      "auth_missing_negative_paths": 0,
+      "happy_path_only_criteria": 0,
+      "ui_journeys_without_e2e": null,
+      "ui_states_missing_coverage": null
+    }
+  },
+  "recommendations": [
+    "All acceptance criteria fully covered by 46 passing tests -- no immediate action required.",
+    "Consider adding AgentRunner unit tests with mocked SDK dependencies in a future story.",
+    "Consider adding concurrent load tests for RunTracker when SSE (Story 5.2) introduces real-time subscriptions."
+  ]
+}
