@@ -34,6 +34,9 @@ struct RunCommand: AsyncParsableCommand {
     @Flag(name: .long, help: "禁用 Memory 上下文注入")
     var noMemory: Bool = false
 
+    @Flag(name: .long, help: "快速模式：简化规划，减少 LLM 调用")
+    var fast: Bool = false
+
     mutating func run() async throws {
         // 1. Load configuration (layered: defaults -> config.json -> env -> CLI args)
         let cliOverrides = CLIOverrides(
@@ -92,6 +95,7 @@ struct RunCommand: AsyncParsableCommand {
 
         let systemPrompt = buildFullSystemPrompt(
             basePrompt: baseSystemPrompt,
+            fast: fast,
             dryrun: dryrun,
             verbose: verbose,
             memoryContext: memoryContext
@@ -108,7 +112,8 @@ struct RunCommand: AsyncParsableCommand {
         )
 
         // 8. Build AgentOptions
-        let effectiveMaxSteps = maxSteps ?? config.maxSteps
+        let effectiveMaxSteps = Self.computeEffectiveMaxSteps(fast: fast, maxSteps: maxSteps, configMaxSteps: config.maxSteps)
+        let effectiveMaxTokens = Self.computeEffectiveMaxTokens(fast: fast)
 
         let options = AgentOptions(
             apiKey: apiKey,
@@ -116,7 +121,7 @@ struct RunCommand: AsyncParsableCommand {
             baseURL: config.baseURL,
             systemPrompt: systemPrompt,
             maxTurns: effectiveMaxSteps,
-            maxTokens: 4096,
+            maxTokens: effectiveMaxTokens,
             permissionMode: .bypassPermissions,
             tools: [createPauseForHumanTool()],
             mcpServers: mcpServers,
@@ -130,9 +135,10 @@ struct RunCommand: AsyncParsableCommand {
         let agent = createAgent(options: options)
 
         // 9. Select output handler
+        let runMode = fast ? "fast" : (dryrun ? "dryrun" : "standard")
         let outputHandler: any SDKMessageOutputHandler = json
-            ? SDKJSONOutputHandler()
-            : SDKTerminalOutputHandler()
+            ? SDKJSONOutputHandler(mode: runMode)
+            : SDKTerminalOutputHandler(mode: runMode)
 
         // 10. Create TakeoverIO for pause interaction
         // JSON mode: prompt to stderr to keep stdout clean for JSON events
@@ -151,7 +157,7 @@ struct RunCommand: AsyncParsableCommand {
         outputHandler.displayRunStart(runId: runId, task: task)
 
         let tracer = try? TraceRecorder(runId: runId, config: config)
-        await tracer?.recordRunStart(runId: runId, task: task, mode: dryrun ? "dryrun" : "standard")
+        await tracer?.recordRunStart(runId: runId, task: task, mode: Self.traceMode(fast: fast, dryrun: dryrun))
 
         // Cleanup expired memory entries at run start
         do {
@@ -301,9 +307,41 @@ struct RunCommand: AsyncParsableCommand {
         return "\(datePart)-\(randomPart)"
     }
 
+    /// Computes the effective max steps for the agent loop.
+    /// In fast mode, caps at 5 to reduce LLM calls (NFR28).
+    internal static func computeEffectiveMaxSteps(fast: Bool, maxSteps: Int?, configMaxSteps: Int) -> Int {
+        if fast {
+            return min(maxSteps ?? configMaxSteps, 5)
+        }
+        return maxSteps ?? configMaxSteps
+    }
+
+    /// Computes the effective max tokens for the agent loop.
+    /// In fast mode, reduces to 2048 to limit output token consumption.
+    internal static func computeEffectiveMaxTokens(fast: Bool) -> Int {
+        return fast ? 2048 : 4096
+    }
+
+    /// Computes the run mode string for trace and output handlers.
+    /// Fast takes priority over dryrun when both are set.
+    internal static func traceMode(fast: Bool, dryrun: Bool) -> String {
+        return fast ? "fast" : (dryrun ? "dryrun" : "standard")
+    }
+
     /// Builds the full system prompt with mode-specific instructions appended.
-    private func buildFullSystemPrompt(basePrompt: String, dryrun: Bool, verbose: Bool, memoryContext: String? = nil) -> String {
+    internal func buildFullSystemPrompt(basePrompt: String, fast: Bool, dryrun: Bool, verbose: Bool, memoryContext: String? = nil) -> String {
         var prompt = basePrompt
+
+        if fast {
+            prompt += """
+
+            IMPORTANT: You are in FAST mode. Generate the MINIMUM steps needed (1-3 steps max).
+            - Skip discovery steps (list_apps, list_windows, get_accessibility_tree) when the target app is obvious
+            - Do NOT call screenshot for verification — trust tool results
+            - Prefer direct actions (launch_app, type_text, hotkey) over exploration
+            - If a step fails, do NOT retry with alternative approaches — report failure immediately
+            """
+        }
 
         if dryrun {
             prompt += "\n\nIMPORTANT: You are in DRYRUN mode. Generate a plan but do NOT execute any tools. Return a plan JSON with status 'done' and the steps you would execute."
@@ -425,14 +463,19 @@ protocol SDKMessageOutputHandler {
 /// This prevents streaming text fragments from interleaving with [axion] log lines.
 final class SDKTerminalOutputHandler: SDKMessageOutputHandler {
     private let output: TerminalOutput
+    private let mode: String
     private var streamBuffer = ""
+    private var startTime: ContinuousClock.Instant?
+    private var totalSteps = 0
 
-    init(output: TerminalOutput = TerminalOutput()) {
+    init(output: TerminalOutput = TerminalOutput(), mode: String = "standard") {
         self.output = output
+        self.mode = mode
     }
 
     func displayRunStart(runId: String, task: String) {
-        output.displayRunStart(runId: runId, task: task, mode: "standard")
+        startTime = ContinuousClock.now
+        output.displayRunStart(runId: runId, task: task, mode: mode)
     }
 
     func handleMessage(_ message: SDKMessage) {
@@ -446,6 +489,7 @@ final class SDKTerminalOutputHandler: SDKMessageOutputHandler {
 
         case .toolUse(let data):
             flushStreamBuffer()
+            totalSteps += 1
             output.write("[axion] 执行: \(data.toolName)")
 
         case .toolResult(let data):
@@ -459,19 +503,31 @@ final class SDKTerminalOutputHandler: SDKMessageOutputHandler {
 
         case .result(let data):
             flushStreamBuffer()
+            let isFast = mode == "fast"
             switch data.subtype {
             case .success:
                 if !data.text.isEmpty {
                     output.write("[axion] 完成: \(data.text)")
                 }
+                if isFast {
+                    let elapsed = computeElapsedSeconds()
+                    output.write("[axion] Fast mode 完成。\(totalSteps) 步，耗时 \(elapsed) 秒。")
+                    output.write("[axion] 如需更精确执行，可去掉 --fast 重试。")
+                }
             case .errorMaxTurns:
                 output.write("[axion] 达到最大步数限制 (\(data.numTurns) 步)")
+                if isFast {
+                    output.write("[axion] 建议去掉 --fast 重新尝试，允许更多步骤完成。")
+                }
             case .errorMaxBudgetUsd:
                 output.write("[axion] 预算超限")
             case .cancelled:
                 output.write("[axion] 已取消")
             case .errorDuringExecution:
                 output.write("[axion] 执行错误")
+                if isFast {
+                    output.write("[axion] 建议去掉 --fast 重新尝试。")
+                }
             case .errorMaxStructuredOutputRetries:
                 output.write("[axion] 结构化输出重试超限")
             }
@@ -520,6 +576,12 @@ final class SDKTerminalOutputHandler: SDKMessageOutputHandler {
         }
         return String(content.prefix(120))
     }
+
+    private func computeElapsedSeconds() -> Int {
+        guard let startTime else { return 0 }
+        let elapsed = ContinuousClock.now - startTime
+        return Int(elapsed.components.seconds)
+    }
 }
 
 /// JSON output handler — accumulates data and produces structured JSON at completion.
@@ -527,6 +589,7 @@ final class SDKTerminalOutputHandler: SDKMessageOutputHandler {
 final class SDKJSONOutputHandler: SDKMessageOutputHandler {
     private let write: (String) -> Void
     private let writeEvent: (String) -> Void
+    private let mode: String
     private var runId: String = ""
     private var task: String = ""
     private var steps: [[String: Any]] = []
@@ -534,9 +597,11 @@ final class SDKJSONOutputHandler: SDKMessageOutputHandler {
     private var resultData: SDKMessage.ResultData?
 
     init(
+        mode: String = "standard",
         write: @escaping (String) -> Void = { print($0) },
         writeEvent: @escaping (String) -> Void = { print($0) }
     ) {
+        self.mode = mode
         self.write = write
         self.writeEvent = writeEvent
     }
@@ -618,6 +683,7 @@ final class SDKJSONOutputHandler: SDKMessageOutputHandler {
 
         result["steps"] = steps
         result["errors"] = errors
+        result["mode"] = mode
 
         let jsonData = (try? JSONSerialization.data(
             withJSONObject: result,

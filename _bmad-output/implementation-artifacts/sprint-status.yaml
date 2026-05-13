@@ -1,5 +1,5 @@
 # generated: 2026-05-08
-# last_updated: 2026-05-15
+# last_updated: 2026-05-14
 # project: axion
 # project_key: NOKEY
 # tracking_system: file-system
@@ -35,7 +35,7 @@
 # - Dev moves story to 'review', then runs code-review (fresh context, different LLM recommended)
 
 generated: 2026-05-08
-last_updated: 2026-05-15
+last_updated: 2026-05-14
 project: axion
 project_key: NOKEY
 tracking_system: file-system
@@ -104,5 +104,5 @@ development_status:
   # Epic 7: 执行增强 — Takeover 与 Fast Mode
   epic-7: in-progress
   7-1-sdk-pause-protocol-user-takeover: done
-  7-2-fast-mode: backlog
+  7-2-fast-mode: done
   epic-7-retrospective: optional
