@@ -1,0 +1,15 @@
+{
+  "hooks": {
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "/Users/nick/CascadeProjects/axion/.claude/skills/bmad-story-automator/scripts/story-automator stop-hook",
+            "timeout": 10
+          }
+        ]
+      }
+    ]
+  }
+}
