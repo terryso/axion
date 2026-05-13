@@ -270,16 +270,210 @@ final class AxionAPIRoutesTests: XCTestCase {
         }
     }
 
+    // MARK: - Story 5.3: Auth + Concurrency tests
+
+    // AC1: Auth-key enabled, POST /v1/runs without Authorization → 401
+    func test_createRun_withAuthKey_noHeader_returns401() async throws {
+        let app = try await buildTestApplication(authKey: "testsecret")
+
+        try await app.test(.router) { client in
+            let body = ByteBuffer(string: "{\"task\": \"open calculator\"}")
+            try await client.execute(uri: "/v1/runs", method: .post, body: body) { response in
+                XCTAssertEqual(response.status, .unauthorized)
+            }
+        }
+    }
+
+    // AC2: Correct Bearer token → request passes
+    func test_createRun_withAuthKey_correctToken_passes() async throws {
+        let app = try await buildTestApplication(authKey: "testsecret")
+
+        try await app.test(.router) { client in
+            var headers = HTTPFields()
+            headers[.authorization] = "Bearer testsecret"
+            let body = ByteBuffer(string: "{\"task\": \"open calculator\"}")
+            try await client.execute(uri: "/v1/runs", method: .post, headers: headers, body: body) { response in
+                XCTAssertEqual(response.status, .accepted)
+            }
+        }
+    }
+
+    // AC4: Concurrency limit — queued response
+    func test_createRun_concurrencyLimitFull_returnsQueuedResponse() async throws {
+        let tracker = RunTracker()
+        let limiter = ConcurrencyLimiter(maxConcurrent: 1)
+        // Fill the slot
+        _ = await limiter.acquire()
+
+        let app = try await buildTestApplication(runTracker: tracker, concurrencyLimiter: limiter)
+
+        try await app.test(.router) { client in
+            let body = ByteBuffer(string: "{\"task\": \"open calculator\"}")
+            try await client.execute(uri: "/v1/runs", method: .post, body: body) { response in
+                XCTAssertEqual(response.status, .accepted)
+                let decoded = try JSONDecoder().decode(QueuedRunResponse.self, from: response.body)
+                XCTAssertEqual(decoded.status, "queued")
+                XCTAssertGreaterThanOrEqual(decoded.position, 1)
+            }
+        }
+    }
+
+    // MARK: - Story 5.3: E2E auth + concurrency scenarios
+
+    // AC2: GET /v1/runs/:runId with correct auth → 200
+    func test_getRun_withAuthKey_correctToken_returns200() async throws {
+        let tracker = RunTracker()
+        let runId = await tracker.submitRun(task: "open calculator", options: RunOptions(task: "open calculator"))
+
+        let app = try await buildTestApplication(runTracker: tracker, authKey: "testsecret")
+
+        try await app.test(.router) { client in
+            var headers = HTTPFields()
+            headers[.authorization] = "Bearer testsecret"
+            try await client.execute(uri: "/v1/runs/\(runId)", method: .get, headers: headers) { response in
+                XCTAssertEqual(response.status, .ok)
+                let body = try JSONDecoder().decode(RunStatusResponse.self, from: response.body)
+                XCTAssertEqual(body.runId, runId)
+                XCTAssertEqual(body.status, "running")
+            }
+        }
+    }
+
+    // AC1: GET /v1/runs/:runId without auth → 401
+    func test_getRun_withAuthKey_noHeader_returns401() async throws {
+        let app = try await buildTestApplication(authKey: "testsecret")
+
+        try await app.test(.router) { client in
+            try await client.execute(uri: "/v1/runs/some-id", method: .get) { response in
+                XCTAssertEqual(response.status, .unauthorized, "GET run without auth should return 401")
+            }
+        }
+    }
+
+    // AC2: SSE endpoint with correct auth → 200
+    func test_sseEndpoint_withAuthKey_correctToken_returns200() async throws {
+        let broadcaster = EventBroadcaster()
+        let tracker = RunTracker(eventBroadcaster: broadcaster)
+        let runId = await tracker.submitRun(task: "open calculator", options: RunOptions(task: "open calculator"))
+
+        let step = StepSummary(index: 0, tool: "launch_app", purpose: "Launch Calculator", success: true)
+        await tracker.updateRun(runId: runId, status: .done, steps: [step], durationMs: 5000, replanCount: 0)
+
+        let app = try await buildTestApplication(runTracker: tracker, eventBroadcaster: broadcaster, authKey: "testsecret")
+
+        try await app.test(.router) { client in
+            var headers = HTTPFields()
+            headers[.authorization] = "Bearer testsecret"
+            try await client.execute(uri: "/v1/runs/\(runId)/events", method: .get, headers: headers) { response in
+                XCTAssertEqual(response.status, .ok, "SSE with correct auth should return 200")
+            }
+        }
+    }
+
+    // AC1: SSE endpoint without auth → 401
+    func test_sseEndpoint_withAuthKey_noHeader_returns401() async throws {
+        let app = try await buildTestApplication(authKey: "testsecret")
+
+        try await app.test(.router) { client in
+            try await client.execute(uri: "/v1/runs/some-id/events", method: .get) { response in
+                XCTAssertEqual(response.status, .unauthorized, "SSE without auth should return 401")
+            }
+        }
+    }
+
+    // AC4: Queued response JSON format — run_id not empty, status = "queued", position >= 1
+    func test_queuedResponse_jsonFormatIsValid() async throws {
+        let tracker = RunTracker()
+        let limiter = ConcurrencyLimiter(maxConcurrent: 1)
+        _ = await limiter.acquire()
+
+        let app = try await buildTestApplication(runTracker: tracker, concurrencyLimiter: limiter)
+
+        try await app.test(.router) { client in
+            let body = ByteBuffer(string: "{\"task\": \"open calculator\"}")
+            try await client.execute(uri: "/v1/runs", method: .post, body: body) { response in
+                XCTAssertEqual(response.status, .accepted)
+                let decoded = try JSONDecoder().decode(QueuedRunResponse.self, from: response.body)
+                XCTAssertEqual(decoded.status, "queued", "Queued response status should be 'queued'")
+                XCTAssertGreaterThanOrEqual(decoded.position, 1, "Queued position should be >= 1")
+                XCTAssertFalse(decoded.runId.isEmpty, "Queued response should have a non-empty runId")
+            }
+        }
+    }
+
+    // Regression: no auth + no limiter = original behavior (Story 5.1)
+    func test_createRun_noAuthNoLimiter_returnsRunningStatus() async throws {
+        let app = try await buildTestApplication()
+
+        try await app.test(.router) { client in
+            let body = ByteBuffer(string: "{\"task\": \"open calculator\"}")
+            try await client.execute(uri: "/v1/runs", method: .post, body: body) { response in
+                XCTAssertEqual(response.status, .accepted)
+                let decoded = try JSONDecoder().decode(CreateRunResponse.self, from: response.body)
+                XCTAssertEqual(decoded.status, "running", "Without limiter, status should be 'running'")
+                XCTAssertFalse(decoded.runId.isEmpty)
+            }
+        }
+    }
+
+    // AC1+AC4: Auth + concurrency limiter combined
+    func test_createRun_authAndConcurrency_combined() async throws {
+        let tracker = RunTracker()
+        let limiter = ConcurrencyLimiter(maxConcurrent: 1)
+        _ = await limiter.acquire()
+
+        let app = try await buildTestApplication(runTracker: tracker, authKey: "mykey", concurrencyLimiter: limiter)
+
+        try await app.test(.router) { client in
+            // Without auth → 401 (not queued)
+            let body = ByteBuffer(string: "{\"task\": \"open calculator\"}")
+            try await client.execute(uri: "/v1/runs", method: .post, body: body) { response in
+                XCTAssertEqual(response.status, .unauthorized, "Auth should be checked before concurrency")
+            }
+
+            // With auth → queued (concurrency full)
+            var headers = HTTPFields()
+            headers[.authorization] = "Bearer mykey"
+            try await client.execute(uri: "/v1/runs", method: .post, headers: headers, body: body) { response in
+                XCTAssertEqual(response.status, .accepted)
+                let decoded = try JSONDecoder().decode(QueuedRunResponse.self, from: response.body)
+                XCTAssertEqual(decoded.status, "queued")
+            }
+        }
+    }
+
+    // AC5: Health endpoint accessible without auth even when auth is configured
+    func test_healthEndpoint_accessibleWithoutAuth_whenAuthEnabled() async throws {
+        let app = try await buildTestApplication(authKey: "secret")
+
+        try await app.test(.router) { client in
+            try await client.execute(uri: "/v1/health", method: .get) { response in
+                XCTAssertEqual(response.status, .ok)
+                let body = try JSONDecoder().decode(HealthResponse.self, from: response.body)
+                XCTAssertEqual(body.status, "ok")
+            }
+        }
+    }
+
     // MARK: - Helper
 
     private func buildTestApplication(
         runTracker: RunTracker? = nil,
-        eventBroadcaster: EventBroadcaster? = nil
+        eventBroadcaster: EventBroadcaster? = nil,
+        authKey: String? = nil,
+        concurrencyLimiter: ConcurrencyLimiter? = nil
     ) async throws -> Application<RouterResponder<BasicRequestContext>> {
         let broadcaster = eventBroadcaster ?? EventBroadcaster()
         let tracker = runTracker ?? RunTracker(eventBroadcaster: broadcaster)
         let router = Router()
-        AxionAPI.registerRoutes(on: router, runTracker: tracker, eventBroadcaster: broadcaster, config: .default)
+        AxionAPI.registerRoutes(
+            on: router,
+            runTracker: tracker,
+            eventBroadcaster: broadcaster,
+            config: .default,
+            authKey: authKey,
+            concurrencyLimiter: concurrencyLimiter
+        )
 
         let app = Application(
             router: router,

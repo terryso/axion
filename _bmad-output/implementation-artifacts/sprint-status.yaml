@@ -1,5 +1,5 @@
 # generated: 2026-05-08
-# last_updated: 2026-05-14
+# last_updated: 2026-05-13
 # project: axion
 # project_key: NOKEY
 # tracking_system: file-system
@@ -92,7 +92,7 @@ development_status:
   epic-5: in-progress
   5-1-http-api-foundation-task-management: done
   5-2-sse-event-stream-realtime-progress: done
-  5-3-server-command-api-authentication: backlog
+  5-3-server-command-api-authentication: done
   epic-5-retrospective: optional
 
   # Epic 6: MCP Server Mode — Agent 协作

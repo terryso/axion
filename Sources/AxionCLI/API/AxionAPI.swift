@@ -17,15 +17,19 @@ enum AxionAPI {
     ///   - runTracker: The shared RunTracker instance for task state management.
     ///   - eventBroadcaster: The shared EventBroadcaster for SSE streaming.
     ///   - config: The loaded AxionConfig.
+    ///   - authKey: Optional Bearer token for authentication (nil = no auth).
+    ///   - concurrencyLimiter: Optional concurrency limiter for task execution.
     static func registerRoutes(
         on router: Router<BasicRequestContext>,
         runTracker: RunTracker,
         eventBroadcaster: EventBroadcaster,
-        config: AxionConfig
+        config: AxionConfig,
+        authKey: String? = nil,
+        concurrencyLimiter: ConcurrencyLimiter? = nil
     ) {
         let v1 = router.group("v1")
 
-        // GET /v1/health
+        // GET /v1/health — no auth required
         v1.get("health") { _, _ in
             EditedResponse(
                 headers: [.contentType: "application/json"],
@@ -36,8 +40,18 @@ enum AxionAPI {
             )
         }
 
+        // Authenticated route group
+        let v1Authed: RouterGroup<BasicRequestContext>
+        if let authKey {
+            v1Authed = v1.group().addMiddleware {
+                AuthMiddleware(authKey: authKey)
+            }
+        } else {
+            v1Authed = v1.group()
+        }
+
         // POST /v1/runs
-        v1.post("runs") { request, context in
+        v1Authed.post("runs") { request, context in
             // Read raw body first (can only be consumed once)
             let buffer: ByteBuffer
             do {
@@ -103,7 +117,81 @@ enum AxionAPI {
                 )
             )
 
-            // Launch agent execution in background
+            // Check concurrency limiter
+            if let limiter = concurrencyLimiter {
+                let acquired = await limiter.tryAcquire()
+                if acquired {
+                    // Slot available immediately — launch agent in background
+                    let capturedConfig = config
+                    _ = Task.detached {
+                        let result = await AgentRunner.runAgent(
+                            config: capturedConfig,
+                            task: createRequest.task,
+                            options: RunOptions(
+                                task: createRequest.task,
+                                maxSteps: createRequest.maxSteps,
+                                maxBatches: createRequest.maxBatches,
+                                allowForeground: createRequest.allowForeground
+                            ),
+                            runId: runId,
+                            eventBroadcaster: eventBroadcaster,
+                            completion: { _, _, _, _, _ in }
+                        )
+                        await runTracker.updateRun(
+                            runId: runId,
+                            status: result.finalStatus,
+                            steps: result.stepSummaries,
+                            durationMs: result.durationMs,
+                            replanCount: result.replanCount
+                        )
+                        await limiter.release()
+                    }
+
+                    var resp = try context.responseEncoder.encode(
+                        CreateRunResponse(runId: runId, status: "running"),
+                        from: request,
+                        context: context
+                    )
+                    resp.status = .accepted
+                    return resp
+                }
+
+                // Queue full — return queued response immediately, background task will execute when slot available
+                let position = await limiter.queueDepth + 1
+                let capturedConfig = config
+                _ = Task.detached {
+                    let slotResult = await limiter.acquire()
+                    guard slotResult >= 0 else { return }
+                    let result = await AgentRunner.runAgent(
+                        config: capturedConfig,
+                        task: createRequest.task,
+                        options: RunOptions(
+                            task: createRequest.task,
+                            maxSteps: createRequest.maxSteps,
+                            maxBatches: createRequest.maxBatches,
+                            allowForeground: createRequest.allowForeground
+                        ),
+                        runId: runId,
+                        eventBroadcaster: eventBroadcaster,
+                        completion: { _, _, _, _, _ in }
+                    )
+                    await runTracker.updateRun(
+                        runId: runId,
+                        status: result.finalStatus,
+                        steps: result.stepSummaries,
+                        durationMs: result.durationMs,
+                        replanCount: result.replanCount
+                    )
+                    await limiter.release()
+                }
+
+                let queuedResp = QueuedRunResponse(runId: runId, status: "queued", position: position)
+                var response = try context.responseEncoder.encode(queuedResp, from: request, context: context)
+                response.status = .accepted
+                return response
+            }
+
+            // No concurrency limiter — original behavior
             let capturedConfig = config
             _ = Task.detached {
                 let result = await AgentRunner.runAgent(
@@ -128,15 +216,17 @@ enum AxionAPI {
                 )
             }
 
-            return EditedResponse(
-                status: .accepted,
-                headers: [.contentType: "application/json"],
-                response: CreateRunResponse(runId: runId, status: "running")
+            var resp = try context.responseEncoder.encode(
+                CreateRunResponse(runId: runId, status: "running"),
+                from: request,
+                context: context
             )
+            resp.status = .accepted
+            return resp
         }
 
         // GET /v1/runs/:runId
-        v1.get("runs/:runId") { request, context in
+        v1Authed.get("runs/:runId") { request, context in
             guard let runId = context.parameters.get("runId") else {
                 throw AxionAPIError(
                     status: .badRequest,
@@ -176,7 +266,7 @@ enum AxionAPI {
         }
 
         // GET /v1/runs/:runId/events — SSE endpoint (Story 5.2)
-        v1.get("runs/:runId/events") { request, context in
+        v1Authed.get("runs/:runId/events") { request, context in
             guard let runId = context.parameters.get("runId") else {
                 throw AxionAPIError(
                     status: .badRequest,

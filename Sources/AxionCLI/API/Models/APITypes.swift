@@ -94,6 +94,21 @@ struct HealthResponse: Codable, Equatable, Sendable, ResponseEncodable {
     let version: String
 }
 
+// MARK: - QueuedRunResponse
+
+/// Response body for `POST /v1/runs` when the task is queued due to concurrency limits.
+struct QueuedRunResponse: Codable, Equatable, Sendable, ResponseEncodable {
+    let runId: String
+    let status: String
+    let position: Int
+
+    enum CodingKeys: String, CodingKey {
+        case runId = "run_id"
+        case status
+        case position
+    }
+}
+
 // MARK: - APIErrorResponse
 
 /// Standard error response format for all API errors.
