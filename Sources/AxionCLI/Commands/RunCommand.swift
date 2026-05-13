@@ -87,6 +87,11 @@ struct RunCommand: AsyncParsableCommand {
 
         // 7. Build AgentOptions
         let effectiveMaxSteps = maxSteps ?? config.maxSteps
+
+        // Create MemoryStore for cross-run knowledge accumulation
+        let memoryDir = (ConfigManager.defaultConfigDirectory as NSString).appendingPathComponent("memory")
+        let memoryStore = FileBasedMemoryStore(memoryDir: memoryDir)
+
         let options = AgentOptions(
             apiKey: apiKey,
             model: config.model,
@@ -96,6 +101,7 @@ struct RunCommand: AsyncParsableCommand {
             maxTokens: 4096,
             permissionMode: .bypassPermissions,
             mcpServers: mcpServers,
+            memoryStore: memoryStore,
             hookRegistry: hookRegistry,
             logLevel: verbose ? .debug : .info
         )
@@ -115,8 +121,20 @@ struct RunCommand: AsyncParsableCommand {
         let tracer = try? TraceRecorder(runId: runId, config: config)
         await tracer?.recordRunStart(runId: runId, task: task, mode: dryrun ? "dryrun" : "standard")
 
+        // Cleanup expired memory entries at run start
+        do {
+            let cleanupService = MemoryCleanupService()
+            _ = try await cleanupService.cleanupExpired(in: memoryStore)
+        } catch {
+            fputs("[axion] warning: memory cleanup failed: \(error.localizedDescription)\n", stderr)
+        }
+
         var totalSteps = 0
         let startTime = ContinuousClock.now
+
+        // Collect toolUse/toolResult pairs for memory extraction (matched by toolUseId)
+        var pendingToolUses: [String: SDKMessage.ToolUseData] = [:]
+        var collectedPairs: [(toolUse: SDKMessage.ToolUseData, toolResult: SDKMessage.ToolResultData)] = []
 
         await withTaskCancellationHandler {
             let messageStream = agent.stream(task)
@@ -125,6 +143,18 @@ struct RunCommand: AsyncParsableCommand {
                 if case .toolUse = message { totalSteps += 1 }
                 outputHandler.handleMessage(message)
                 await recordToTrace(message: message, tracer: tracer)
+
+                // Collect tool pairs for memory extraction (match by toolUseId)
+                switch message {
+                case .toolUse(let data):
+                    pendingToolUses[data.toolUseId] = data
+                case .toolResult(let data):
+                    if let toolUse = pendingToolUses.removeValue(forKey: data.toolUseId) {
+                        collectedPairs.append((toolUse: toolUse, toolResult: data))
+                    }
+                default:
+                    break
+                }
             }
         } onCancel: {
             agent.interrupt()
@@ -138,6 +168,25 @@ struct RunCommand: AsyncParsableCommand {
         outputHandler.displayCompletion()
         await tracer?.recordRunDone(totalSteps: totalSteps, durationMs: durationMs, replanCount: 0)
         await tracer?.close()
+
+        // Extract and save memory (non-blocking — failures are logged but don't fail the run)
+        do {
+            let extractor = AppMemoryExtractor()
+            let entries = try await extractor.extract(
+                from: collectedPairs,
+                task: task,
+                runId: runId
+            )
+            for entry in entries {
+                // Determine domain from tags (app:xxx)
+                let domain = entry.tags.first(where: { $0.hasPrefix("app:") })?
+                    .dropFirst("app:".count).description ?? "unknown"
+                try await memoryStore.save(domain: domain, knowledge: entry)
+            }
+        } catch {
+            fputs("[axion] warning: memory extraction failed: \(error.localizedDescription)\n", stderr)
+        }
+
     }
 
     // MARK: - Private Helpers

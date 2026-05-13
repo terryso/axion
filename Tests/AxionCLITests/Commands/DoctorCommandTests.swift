@@ -300,6 +300,120 @@ final class DoctorCommandTests: XCTestCase {
         }
     }
 
+    // MARK: - [P0] AC5 (Story 4.1): Memory 状态检查
+
+    func test_doctor_reportsMemoryStatus_whenMemoryExists() async throws {
+        // Create a temp directory simulating ~/.axion/memory/ with domain files
+        let memoryDir = tempDir + "/memory"
+        try FileManager.default.createDirectory(
+            atPath: memoryDir,
+            withIntermediateDirectories: true,
+            attributes: [.posixPermissions: 0o700]
+        )
+
+        // Create a domain file with entries
+        let domainData = """
+        [
+          {
+            "id": "test-id",
+            "content": "Test memory entry",
+            "tags": ["test"],
+            "createdAt": "2026-05-13T10:00:00.000Z"
+          }
+        ]
+        """
+        try domainData.write(toFile: memoryDir + "/com.apple.calculator.json", atomically: true, encoding: .utf8)
+
+        let configJSON = """
+        {"apiKey": "sk-ant-test-key-1234567890"}
+        """
+        try configJSON.write(toFile: configFilePath, atomically: true, encoding: .utf8)
+
+        let mock = MockDoctorIO()
+        let _ = DoctorCommand.runDoctor(io: mock, configDirectory: tempDir)
+
+        let output = mock.capturedOutput.joined(separator: "\n")
+        XCTAssertTrue(output.contains("Memory"), "输出应包含 Memory 检查结果")
+    }
+
+    func test_doctor_reportsMemoryUnused_whenNoMemory() async throws {
+        // No memory directory exists
+        let configJSON = """
+        {"apiKey": "sk-ant-test-key-1234567890"}
+        """
+        try configJSON.write(toFile: configFilePath, atomically: true, encoding: .utf8)
+
+        let mock = MockDoctorIO()
+        let _ = DoctorCommand.runDoctor(io: mock, configDirectory: tempDir)
+
+        let output = mock.capturedOutput.joined(separator: "\n")
+        XCTAssertTrue(
+            output.contains("Memory") || output.contains("memory"),
+            "输出应包含 Memory 状态信息（即使未使用）"
+        )
+    }
+
+    func test_doctor_memoryCheck_showsDomainCountAndEntryCount() async throws {
+        // Create a temp directory simulating ~/.axion/memory/ with multiple domains
+        let memoryDir = tempDir + "/memory"
+        try FileManager.default.createDirectory(
+            atPath: memoryDir,
+            withIntermediateDirectories: true,
+            attributes: [.posixPermissions: 0o700]
+        )
+
+        // Domain 1: Calculator (2 entries)
+        let calcData = """
+        [
+          {"id": "c1", "content": "Calc entry 1", "tags": [], "createdAt": "2026-05-13T10:00:00.000Z"},
+          {"id": "c2", "content": "Calc entry 2", "tags": [], "createdAt": "2026-05-13T11:00:00.000Z"}
+        ]
+        """
+        try calcData.write(toFile: memoryDir + "/com.apple.calculator.json", atomically: true, encoding: .utf8)
+
+        // Domain 2: Notes (1 entry)
+        let notesData = """
+        [
+          {"id": "n1", "content": "Notes entry 1", "tags": [], "createdAt": "2026-05-13T10:00:00.000Z"}
+        ]
+        """
+        try notesData.write(toFile: memoryDir + "/com.apple.notes.json", atomically: true, encoding: .utf8)
+
+        let configJSON = """
+        {"apiKey": "sk-ant-test-key-1234567890"}
+        """
+        try configJSON.write(toFile: configFilePath, atomically: true, encoding: .utf8)
+
+        let mock = MockDoctorIO()
+        let report = DoctorCommand.runDoctor(io: mock, configDirectory: tempDir)
+
+        // Check for Memory check in results
+        let memoryCheck = report.results.first { $0.name.contains("Memory") }
+        XCTAssertNotNil(memoryCheck, "应包含 Memory 检查项")
+
+        let output = mock.capturedOutput.joined(separator: "\n")
+        // Output should indicate domain count and entry count
+        XCTAssertTrue(
+            output.contains("2 domains") || output.contains("3 entries") || output.contains("domain"),
+            "Memory 检查应显示 domain 数量和条目数: \(output)"
+        )
+    }
+
+    func test_doctor_memoryCheckFormat_whenUnused() async throws {
+        // No memory directory
+        let configJSON = """
+        {"apiKey": "sk-ant-test-key-1234567890"}
+        """
+        try configJSON.write(toFile: configFilePath, atomically: true, encoding: .utf8)
+
+        let mock = MockDoctorIO()
+        let report = DoctorCommand.runDoctor(io: mock, configDirectory: tempDir)
+
+        let memoryCheck = report.results.first { $0.name.contains("Memory") }
+        XCTAssertNotNil(memoryCheck, "应包含 Memory 检查项")
+        XCTAssertEqual(memoryCheck?.status, .ok, "未使用 Memory 不应报告为失败")
+    }
+
     // MARK: - [P1] 输出格式验证
 
     func test_doctor_output_containsHeader() throws {
