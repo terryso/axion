@@ -31,6 +31,9 @@ struct RunCommand: AsyncParsableCommand {
     @Flag(name: .long, help: "JSON 格式输出")
     var json: Bool = false
 
+    @Flag(name: .long, help: "禁用 Memory 上下文注入")
+    var noMemory: Bool = false
+
     mutating func run() async throws {
         // 1. Load configuration (layered: defaults -> config.json -> env -> CLI args)
         let cliOverrides = CLIOverrides(
@@ -56,7 +59,11 @@ struct RunCommand: AsyncParsableCommand {
             )
         }
 
-        // 4. Load system prompt from planner-system.md
+        // 4. Create MemoryStore for cross-run knowledge accumulation (needed before prompt building)
+        let memoryDir = (ConfigManager.defaultConfigDirectory as NSString).appendingPathComponent("memory")
+        let memoryStore = FileBasedMemoryStore(memoryDir: memoryDir)
+
+        // 5. Load system prompt from planner-system.md
         let promptDir = PromptBuilder.resolvePromptDirectory()
         let mcpPrefixedToolNames = ToolNames.allToolNames.map { "mcp__axion-helper__\($0)" }
         let baseSystemPrompt = try PromptBuilder.load(
@@ -69,28 +76,39 @@ struct RunCommand: AsyncParsableCommand {
         )
 
         // Build full system prompt with mode-specific instructions
+        // Memory context injection (AC1, AC2, AC3, AC4)
+        var memoryContext: String? = nil
+        if !noMemory {
+            do {
+                let contextProvider = MemoryContextProvider()
+                memoryContext = try await contextProvider.buildMemoryContext(
+                    task: task,
+                    store: memoryStore
+                )
+            } catch {
+                fputs("[axion] warning: memory context injection failed: \(error.localizedDescription)\n", stderr)
+            }
+        }
+
         let systemPrompt = buildFullSystemPrompt(
             basePrompt: baseSystemPrompt,
             dryrun: dryrun,
-            verbose: verbose
+            verbose: verbose,
+            memoryContext: memoryContext
         )
 
-        // 5. Configure MCP server for Helper
+        // 6. Configure MCP server for Helper
         let mcpServers: [String: McpServerConfig] = [
             "axion-helper": .stdio(McpStdioConfig(command: helperPath))
         ]
 
-        // 6. Build safety hook registry
+        // 7. Build safety hook registry
         let hookRegistry = await buildSafetyHookRegistry(
             sharedSeatMode: config.sharedSeatMode && !allowForeground
         )
 
-        // 7. Build AgentOptions
+        // 8. Build AgentOptions
         let effectiveMaxSteps = maxSteps ?? config.maxSteps
-
-        // Create MemoryStore for cross-run knowledge accumulation
-        let memoryDir = (ConfigManager.defaultConfigDirectory as NSString).appendingPathComponent("memory")
-        let memoryStore = FileBasedMemoryStore(memoryDir: memoryDir)
 
         let options = AgentOptions(
             apiKey: apiKey,
@@ -235,11 +253,16 @@ struct RunCommand: AsyncParsableCommand {
     }
 
     /// Builds the full system prompt with mode-specific instructions appended.
-    private func buildFullSystemPrompt(basePrompt: String, dryrun: Bool, verbose: Bool) -> String {
+    private func buildFullSystemPrompt(basePrompt: String, dryrun: Bool, verbose: Bool, memoryContext: String? = nil) -> String {
         var prompt = basePrompt
 
         if dryrun {
             prompt += "\n\nIMPORTANT: You are in DRYRUN mode. Generate a plan but do NOT execute any tools. Return a plan JSON with status 'done' and the steps you would execute."
+        }
+
+        // Append Memory context if available
+        if let memoryContext, !memoryContext.isEmpty {
+            prompt += "\n\n\(memoryContext)"
         }
 
         return prompt

@@ -85,7 +85,7 @@ development_status:
   epic-4: in-progress
   4-1-sdk-memorystore-app-memory-extraction: done
   4-2-app-profile-auto-accumulation: done
-  4-3-memory-enhanced-planning: backlog
+  4-3-memory-enhanced-planning: done
   epic-4-retrospective: optional
 
   # Epic 5: HTTP API Server — 外部集成服务

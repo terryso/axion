@@ -15,3 +15,8 @@
 ## Deferred from: code review of 3-2-prompt-management-planning-engine (2026-05-10)
 
 - `resolvePromptDirectory()` fallback returns a path that may not exist, leading to unclear error messages when prompts directory is missing — not introduced by this story, pre-existing design choice that can be improved in a future iteration
+
+## Deferred from: code review of 4-3-memory-enhanced-planning (2026-05-13)
+
+- Tight JSON format coupling in MemoryListCommand — MemoryListCommand directly parses FileBasedMemoryStore's JSON format. Fragile if SDK changes serialization, but covered by tests using FileBasedMemoryStore.
+- No test for `--no-memory` flag at RunCommand level — AC4 flag is only verified at the MemoryContextProvider level, not as an end-to-end RunCommand test. Requires integration test infrastructure.
