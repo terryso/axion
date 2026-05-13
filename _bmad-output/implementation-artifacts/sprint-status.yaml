@@ -98,7 +98,7 @@ development_status:
   # Epic 6: MCP Server Mode — Agent 协作
   epic-6: in-progress
   6-1-sdk-agentmcpserver-expose-axion: done
-  6-2-axion-mcp-command-agent-integration: backlog
+  6-2-axion-mcp-command-agent-integration: done
   epic-6-retrospective: optional
 
   # Epic 7: 执行增强 — Takeover 与 Fast Mode
