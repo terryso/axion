@@ -264,6 +264,9 @@ final class CorePipelineHelperE2ETests: XCTestCase {
         let resolvedStep = resolver.resolve(step: stepWithPlaceholder, context: execContext)
         XCTAssertEqual(resolvedStep.parameters["pid"], .int(execContext.pid!), "$pid should be resolved to actual pid")
 
+        // Wait for Calculator window to become available
+        try await _Concurrency.Task.sleep(nanoseconds: 500_000_000)
+
         let windowsResult = try await mcpClient.callTool(
             name: "list_windows",
             arguments: ["pid": .int(execContext.pid!)]
@@ -349,17 +352,30 @@ final class CorePipelineHelperE2ETests: XCTestCase {
             arguments: ["window_id": .int(execContext.windowId!)]
         )
 
+        // Wait for Calculator window to be fully rendered
+        try await _Concurrency.Task.sleep(nanoseconds: 500_000_000)
+
         let evaluator = StopConditionEvaluator()
 
-        // textAppears "Calculator" → satisfied
-        let satisfiedResult = evaluator.evaluate(
+        // textAppears — check for Calculator (locale-aware: "Calculator" or "计算器")
+        let satisfiedResultEN = evaluator.evaluate(
             stopConditions: [StopCondition(type: .textAppears, value: "Calculator")],
             screenshot: nil,
             axTree: axTreeResult,
             executedSteps: [],
             maxSteps: 20
         )
-        XCTAssertEqual(satisfiedResult, .satisfied, "textAppears 'Calculator' should be satisfied")
+        let satisfiedResultZH = evaluator.evaluate(
+            stopConditions: [StopCondition(type: .textAppears, value: "计算器")],
+            screenshot: nil,
+            axTree: axTreeResult,
+            executedSteps: [],
+            maxSteps: 20
+        )
+        XCTAssertTrue(
+            satisfiedResultEN == .satisfied || satisfiedResultZH == .satisfied,
+            "textAppears 'Calculator' or '计算器' should be satisfied in AX tree: \(axTreeResult.prefix(200))"
+        )
 
         // textAppears "TextEdit" → not satisfied
         let notFoundResult = evaluator.evaluate(

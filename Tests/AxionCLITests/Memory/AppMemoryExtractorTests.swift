@@ -6,13 +6,17 @@ import OpenAgentSDK
 
 // [P0] AppMemoryExtractor type existence, extraction from toolUse/toolResult messages
 // [P1] Domain naming, tag generation, edge cases (empty, single tool, multiple apps)
+// [P1] Enhanced content: AX tree summary, failure markers, workaround inference (Story 4.2)
 // Story 4.1 AC: #1, #2
+// Story 4.2 AC: #1, #3
 
 // MARK: - AppMemoryExtractor ATDD Tests
 
 /// ATDD red-phase tests for AppMemoryExtractor (Story 4.1 AC1, AC2).
 /// Tests that AppMemoryExtractor extracts App operation summaries from SDK
 /// message streams and produces KnowledgeEntry objects organized by App domain.
+/// Enhanced in Story 4.2 (AC1, AC3) to include AX tree summary, failure markers,
+/// and workaround inference in extracted content.
 ///
 /// TDD RED PHASE: These tests will not compile until AppMemoryExtractor is implemented
 /// in Sources/AxionCLI/Memory/AppMemoryExtractor.swift.
@@ -371,6 +375,204 @@ final class AppMemoryExtractorTests: XCTestCase {
         XCTAssertTrue(
             combinedContent.contains("3") || combinedContent.lowercased().contains("step"),
             "Content should include step count information"
+        )
+    }
+
+    // MARK: - P1 Story 4.2 AC1: AX tree structure features in content
+
+    func test_extract_contentIncludesAxTreeSummary_whenWindowStatePresent() async throws {
+        let extractor = AppMemoryExtractor()
+
+        // Simulate a get_window_state tool result with AX tree data
+        let axTreeContent = """
+        {"windows": [{"role": "AXWindow", "title": "Calculator", "children": [{"role": "AXButton", "title": "1"}, {"role": "AXButton", "title": "2"}, {"role": "AXTextField", "title": "display"}]}]}
+        """
+
+        let toolPairs: [(toolUse: SDKMessage.ToolUseData, toolResult: SDKMessage.ToolResultData)] = [
+            (
+                makeToolUse(toolName: "mcp__axion-helper__launch_app", toolUseId: "tu-1", input: "{\"app_name\": \"Calculator\"}"),
+                makeToolResult(toolUseId: "tu-1", content: "{\"success\": true, \"bundle_id\": \"com.apple.calculator\"}")
+            ),
+            (
+                makeToolUse(toolName: "mcp__axion-helper__get_window_state", toolUseId: "tu-2", input: "{\"window_id\": \"main\"}"),
+                makeToolResult(toolUseId: "tu-2", content: axTreeContent)
+            ),
+        ]
+
+        let entries = try await extractor.extract(
+            from: toolPairs,
+            task: "Open Calculator",
+            runId: "20260513-axtree"
+        )
+
+        XCTAssertFalse(entries.isEmpty)
+        let content = entries.first!.content
+        XCTAssertTrue(
+            content.contains("AX特征") || content.contains("AXButton") || content.contains("关键控件"),
+            "Content should include AX tree summary when get_window_state is present, got: \(content)"
+        )
+    }
+
+    func test_extract_contentIncludesAxTreeSummary_whenGetAxTreePresent() async throws {
+        let extractor = AppMemoryExtractor()
+
+        let axTreeContent = """
+        {"root": {"role": "AXApplication", "title": "Calculator", "children": [{"role": "AXWindow", "children": [{"role": "AXButton", "title": "Clear"}]}]}}
+        """
+
+        let toolPairs: [(toolUse: SDKMessage.ToolUseData, toolResult: SDKMessage.ToolResultData)] = [
+            (
+                makeToolUse(toolName: "mcp__axion-helper__launch_app", toolUseId: "tu-1", input: "{\"app_name\": \"Calculator\"}"),
+                makeToolResult(toolUseId: "tu-1", content: "{\"success\": true, \"bundle_id\": \"com.apple.calculator\"}")
+            ),
+            (
+                makeToolUse(toolName: "mcp__axion-helper__get_accessibility_tree", toolUseId: "tu-2", input: "{}"),
+                makeToolResult(toolUseId: "tu-2", content: axTreeContent)
+            ),
+        ]
+
+        let entries = try await extractor.extract(
+            from: toolPairs,
+            task: "Open Calculator",
+            runId: "20260513-axtree2"
+        )
+
+        XCTAssertFalse(entries.isEmpty)
+        let content = entries.first!.content
+        XCTAssertTrue(
+            content.contains("AX特征") || content.contains("AXButton") || content.contains("关键控件"),
+            "Content should include AX tree summary when get_ax_tree is present, got: \(content)"
+        )
+    }
+
+    // MARK: - P1 Story 4.2 AC3: Failure markers in content
+
+    func test_extract_contentIncludesFailureMarker_whenToolFails() async throws {
+        let extractor = AppMemoryExtractor()
+
+        let toolPairs: [(toolUse: SDKMessage.ToolUseData, toolResult: SDKMessage.ToolResultData)] = [
+            (
+                makeToolUse(toolName: "mcp__axion-helper__launch_app", toolUseId: "tu-1", input: "{\"app_name\": \"Calculator\"}"),
+                makeToolResult(toolUseId: "tu-1", content: "{\"success\": true, \"bundle_id\": \"com.apple.calculator\"}")
+            ),
+            (
+                makeToolUse(toolName: "mcp__axion-helper__click", toolUseId: "tu-2", input: "{\"x\": 300, \"y\": 400}"),
+                makeToolResult(toolUseId: "tu-2", content: "{\"error\": \"click failed\", \"message\": \"no element at coordinates\"}", isError: true)
+            ),
+        ]
+
+        let entries = try await extractor.extract(
+            from: toolPairs,
+            task: "Click a button in Calculator",
+            runId: "20260513-fail"
+        )
+
+        XCTAssertFalse(entries.isEmpty)
+        let content = entries.first!.content
+        XCTAssertTrue(
+            content.contains("失败标记"),
+            "Content should include failure marker when a tool result is an error, got: \(content)"
+        )
+    }
+
+    func test_extract_contentIncludesWorkaround_whenFailureFollowedBySuccess() async throws {
+        let extractor = AppMemoryExtractor()
+
+        let toolPairs: [(toolUse: SDKMessage.ToolUseData, toolResult: SDKMessage.ToolResultData)] = [
+            (
+                makeToolUse(toolName: "mcp__axion-helper__launch_app", toolUseId: "tu-1", input: "{\"app_name\": \"Calculator\"}"),
+                makeToolResult(toolUseId: "tu-1", content: "{\"success\": true, \"bundle_id\": \"com.apple.calculator\"}")
+            ),
+            (
+                // Failed: coordinate-based click
+                makeToolUse(toolName: "mcp__axion-helper__click", toolUseId: "tu-2", input: "{\"x\": 300, \"y\": 400}"),
+                makeToolResult(toolUseId: "tu-2", content: "{\"error\": \"click failed\"}", isError: true)
+            ),
+            (
+                // Success: AX selector-based click
+                makeToolUse(toolName: "mcp__axion-helper__click", toolUseId: "tu-3", input: "{\"ax_selector\": \"AXButton[title=\\\"*\\\"]\"}"),
+                makeToolResult(toolUseId: "tu-3", content: "clicked successfully")
+            ),
+        ]
+
+        let entries = try await extractor.extract(
+            from: toolPairs,
+            task: "Click multiply in Calculator",
+            runId: "20260513-workaround"
+        )
+
+        XCTAssertFalse(entries.isEmpty)
+        let content = entries.first!.content
+        XCTAssertTrue(
+            content.contains("修正路径") || content.contains("workaround"),
+            "Content should include workaround when failure is followed by success, got: \(content)"
+        )
+    }
+
+    func test_extract_toolSequenceIncludesParameters_inContent() async throws {
+        let extractor = AppMemoryExtractor()
+
+        let toolPairs: [(toolUse: SDKMessage.ToolUseData, toolResult: SDKMessage.ToolResultData)] = [
+            (
+                makeToolUse(toolName: "mcp__axion-helper__launch_app", toolUseId: "tu-1", input: "{\"app_name\": \"Calculator\"}"),
+                makeToolResult(toolUseId: "tu-1", content: "{\"success\": true, \"bundle_id\": \"com.apple.calculator\"}")
+            ),
+            (
+                makeToolUse(toolName: "mcp__axion-helper__click", toolUseId: "tu-2", input: "{\"x\": 100, \"y\": 200}"),
+                makeToolResult(toolUseId: "tu-2", content: "clicked")
+            ),
+            (
+                makeToolUse(toolName: "mcp__axion-helper__type_text", toolUseId: "tu-3", input: "{\"text\": \"hello\"}"),
+                makeToolResult(toolUseId: "tu-3", content: "typed")
+            ),
+        ]
+
+        let entries = try await extractor.extract(
+            from: toolPairs,
+            task: "Type in Calculator",
+            runId: "20260513-params"
+        )
+
+        XCTAssertFalse(entries.isEmpty)
+        let content = entries.first!.content
+        // Enhanced content should include tool parameters in the sequence
+        XCTAssertTrue(
+            content.contains("click") && content.contains("type_text"),
+            "Content should include tool names in the sequence, got: \(content)"
+        )
+    }
+
+    // MARK: - P1 Story 4.2: Success entries should not contain redundant "(无)" failure marker
+
+    func test_extract_successfulRun_doesNotContainNoFailureMarker() async throws {
+        let extractor = AppMemoryExtractor()
+
+        let toolPairs: [(toolUse: SDKMessage.ToolUseData, toolResult: SDKMessage.ToolResultData)] = [
+            (
+                makeToolUse(toolName: "mcp__axion-helper__launch_app", toolUseId: "tu-1", input: "{\"app_name\": \"Calculator\"}"),
+                makeToolResult(toolUseId: "tu-1", content: "{\"success\": true, \"bundle_id\": \"com.apple.calculator\"}")
+            ),
+            (
+                makeToolUse(toolName: "mcp__axion-helper__click", toolUseId: "tu-2", input: "{\"x\": 100, \"y\": 200}"),
+                makeToolResult(toolUseId: "tu-2", content: "clicked")
+            ),
+        ]
+
+        let entries = try await extractor.extract(
+            from: toolPairs,
+            task: "Open Calculator and click",
+            runId: "20260513-nofail"
+        )
+
+        XCTAssertFalse(entries.isEmpty)
+        let content = entries.first!.content
+        XCTAssertFalse(
+            content.contains("失败标记: (无)"),
+            "Success entries should not include redundant '失败标记: (无)', got: \(content)"
+        )
+        XCTAssertFalse(
+            content.contains("失败标记"),
+            "Success entries should not include any failure marker line, got: \(content)"
         )
     }
 }

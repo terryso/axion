@@ -177,11 +177,44 @@ struct RunCommand: AsyncParsableCommand {
                 task: task,
                 runId: runId
             )
+            var processedDomains: Set<String> = []
             for entry in entries {
                 // Determine domain from tags (app:xxx)
                 let domain = entry.tags.first(where: { $0.hasPrefix("app:") })?
                     .dropFirst("app:".count).description ?? "unknown"
                 try await memoryStore.save(domain: domain, knowledge: entry)
+                processedDomains.insert(domain)
+            }
+
+            // Story 4.2: Profile analysis and familiarity tracking
+            for domain in processedDomains {
+                do {
+                    // Query history for this domain
+                    let history = try await memoryStore.query(domain: domain, filter: nil)
+
+                    // Analyze and generate AppProfile
+                    let analyzer = AppProfileAnalyzer()
+                    let profile = analyzer.analyze(domain: domain, history: history)
+
+                    // Save profile as a KnowledgeEntry (only if there's meaningful data)
+                    if profile.totalRuns > 0 {
+                        let profileContent = buildProfileContent(profile: profile)
+                        let profileEntry = KnowledgeEntry(
+                            id: UUID().uuidString,
+                            content: profileContent,
+                            tags: ["app:\(domain)", "profile"],
+                            createdAt: Date(),
+                            sourceRunId: nil
+                        )
+                        try await memoryStore.save(domain: domain, knowledge: profileEntry)
+                    }
+
+                    // Check and update familiarity
+                    let tracker = FamiliarityTracker()
+                    try await tracker.checkAndUpdateFamiliarity(domain: domain, store: memoryStore)
+                } catch {
+                    fputs("[axion] warning: profile analysis failed for \(domain): \(error.localizedDescription)\n", stderr)
+                }
             }
         } catch {
             fputs("[axion] warning: memory extraction failed: \(error.localizedDescription)\n", stderr)
@@ -234,6 +267,40 @@ struct RunCommand: AsyncParsableCommand {
         }
 
         return registry
+    }
+
+    /// Build a text content string from an AppProfile for storage as KnowledgeEntry.
+    private func buildProfileContent(profile: AppProfile) -> String {
+        var lines: [String] = []
+        lines.append("App Profile: \(profile.domain)")
+        lines.append("总运行次数: \(profile.totalRuns)")
+        lines.append("成功次数: \(profile.successfulRuns)")
+        lines.append("失败次数: \(profile.failedRuns)")
+        lines.append("已熟悉: \(profile.isFamiliar ? "是" : "否")")
+
+        if !profile.axCharacteristics.isEmpty {
+            lines.append("AX特征: \(profile.axCharacteristics.joined(separator: ", "))")
+        }
+
+        if !profile.commonPatterns.isEmpty {
+            let patternDescs = profile.commonPatterns.map { pattern in
+                "\(pattern.sequence.joined(separator: " → ")) (频率:\(pattern.frequency), 成功率:\(Int(round(pattern.successRate * 100)))%)"
+            }
+            lines.append("高频路径: \(patternDescs.joined(separator: "; "))")
+        }
+
+        if !profile.knownFailures.isEmpty {
+            let failureDescs = profile.knownFailures.map { failure in
+                if let workaround = failure.workaround {
+                    return "\(failure.failedAction) — \(failure.reason) (修正: \(workaround))"
+                } else {
+                    return "\(failure.failedAction) — \(failure.reason)"
+                }
+            }
+            lines.append("已知失败: \(failureDescs.joined(separator: "; "))")
+        }
+
+        return lines.joined(separator: "\n")
     }
 
     /// Records an SDKMessage to the trace file.

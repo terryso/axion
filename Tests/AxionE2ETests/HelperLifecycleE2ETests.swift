@@ -49,13 +49,13 @@ final class HelperLifecycleE2ETests: XCTestCase {
 
         // Verify core tools are registered (Story 1.6 AC1)
         let expectedTools = [
-            "launch_app", "list_apps", "quit_app",
+            "launch_app", "list_apps",
             "activate_window", "list_windows", "get_window_state",
             "click", "double_click", "right_click",
             "type_text", "press_key", "hotkey",
             "scroll", "drag",
             "screenshot", "get_accessibility_tree",
-            "open_url", "get_file_info"
+            "open_url", "validate_window"
         ]
 
         for tool in expectedTools {

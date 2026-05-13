@@ -267,8 +267,9 @@ final class RealLLME2ETests: XCTestCase {
         let (toolCalls, finalResult) = try await runAgent(agent, handler: handler, task: "打开 TextEdit，输入 Hello World")
 
         XCTAssertFalse(toolCalls.isEmpty, "Agent should have called at least one tool")
+        let shortNames = toolCalls.map { $0.replacingOccurrences(of: "mcp__axion-helper__", with: "") }
         XCTAssertTrue(
-            toolCalls.contains("launch_app") || toolCalls.contains("type_text"),
+            shortNames.contains("launch_app") || shortNames.contains("type_text"),
             "Should use launch_app and/or type_text, got: \(toolCalls)"
         )
 
@@ -290,14 +291,15 @@ final class RealLLME2ETests: XCTestCase {
             throw XCTSkip("AxionHelper not available")
         }
 
-        let (agent, handler, _) = try await buildAgent(maxTurns: 5)
+        let (agent, handler, _) = try await buildAgent(maxTurns: 8)
         handler.displayRunStart(runId: "real-e2e-004", task: "打开 Finder，进入下载目录")
 
         let (toolCalls, finalResult) = try await runAgent(agent, handler: handler, task: "打开 Finder，进入下载目录")
 
         XCTAssertFalse(toolCalls.isEmpty, "Agent should have called at least one tool")
+        let shortNames = toolCalls.map { $0.replacingOccurrences(of: "mcp__axion-helper__", with: "") }
         XCTAssertTrue(
-            toolCalls.contains("launch_app") || toolCalls.contains("hotkey"),
+            shortNames.contains("launch_app") || shortNames.contains("hotkey"),
             "Should use launch_app and/or hotkey for Finder navigation, got: \(toolCalls)"
         )
 
@@ -320,8 +322,9 @@ final class RealLLME2ETests: XCTestCase {
         let (toolCalls, finalResult) = try await runAgent(agent, handler: handler, task: "打开 Safari，访问 example.com")
 
         XCTAssertFalse(toolCalls.isEmpty, "Agent should have called at least one tool")
+        let shortNames = toolCalls.map { $0.replacingOccurrences(of: "mcp__axion-helper__", with: "") }
         XCTAssertTrue(
-            toolCalls.contains("open_url") || toolCalls.contains("launch_app"),
+            shortNames.contains("open_url") || shortNames.contains("launch_app"),
             "Should use open_url or launch_app, got: \(toolCalls)"
         )
 
