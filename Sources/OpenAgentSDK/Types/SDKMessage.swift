@@ -363,6 +363,10 @@ public enum SDKMessage: Sendable {
             case filesPersisted
             /// Output from a local command execution.
             case localCommandOutput
+            /// Agent paused for human intervention.
+            case paused
+            /// Agent pause timed out.
+            case pausedTimeout
         }
 
         /// The system event subtype.
@@ -393,6 +397,8 @@ public enum SDKMessage: Sendable {
         public let taskNotificationInfo: TaskNotificationInfo?
         /// Rate limit information, available during rateLimit events.
         public let rateLimitInfo: RateLimitInfo?
+        /// Pause data, available during paused events.
+        public let pausedData: PausedData?
 
         /// Creates system data with optional init-specific fields.
         ///
@@ -411,7 +417,8 @@ public enum SDKMessage: Sendable {
         ///   - compactError: Compact error. Defaults to `nil`.
         ///   - taskNotificationInfo: Task notification data. Defaults to `nil`.
         ///   - rateLimitInfo: Rate limit information. Defaults to `nil`.
-        public init(subtype: Subtype, message: String, sessionId: String? = nil, tools: [ToolInfo]? = nil, model: String? = nil, permissionMode: String? = nil, mcpServers: [McpServerInfo]? = nil, cwd: String? = nil, compactMetadata: CompactMetadata? = nil, statusValue: String? = nil, compactResult: String? = nil, compactError: String? = nil, taskNotificationInfo: TaskNotificationInfo? = nil, rateLimitInfo: RateLimitInfo? = nil) {
+        ///   - pausedData: Pause data for paused events. Defaults to `nil`.
+        public init(subtype: Subtype, message: String, sessionId: String? = nil, tools: [ToolInfo]? = nil, model: String? = nil, permissionMode: String? = nil, mcpServers: [McpServerInfo]? = nil, cwd: String? = nil, compactMetadata: CompactMetadata? = nil, statusValue: String? = nil, compactResult: String? = nil, compactError: String? = nil, taskNotificationInfo: TaskNotificationInfo? = nil, rateLimitInfo: RateLimitInfo? = nil, pausedData: PausedData? = nil) {
             self.subtype = subtype
             self.message = message
             self.sessionId = sessionId
@@ -426,6 +433,7 @@ public enum SDKMessage: Sendable {
             self.compactError = compactError
             self.taskNotificationInfo = taskNotificationInfo
             self.rateLimitInfo = rateLimitInfo
+            self.pausedData = pausedData
         }
 
         public static func == (lhs: SystemData, rhs: SystemData) -> Bool {
@@ -443,6 +451,7 @@ public enum SDKMessage: Sendable {
                 && lhs.compactError == rhs.compactError
                 && lhs.taskNotificationInfo == rhs.taskNotificationInfo
                 && lhs.rateLimitInfo == rhs.rateLimitInfo
+                && lhs.pausedData == rhs.pausedData
         }
     }
 
@@ -905,6 +914,28 @@ public enum SDKMessage: Sendable {
             self.rateLimitType = rateLimitType
             self.utilization = utilization
             self.isUsingOverage = isUsingOverage
+        }
+    }
+
+    /// Data for a pause event, emitted when the agent pauses for human intervention.
+    public struct PausedData: Sendable, Equatable {
+        /// The reason the agent paused (provided by the LLM or developer).
+        public let reason: String
+        /// The timestamp when the pause started.
+        public let pausedAt: Date
+        /// Whether the agent can be resumed (true unless already timed out or aborted).
+        public let canResume: Bool
+
+        /// Creates pause data.
+        ///
+        /// - Parameters:
+        ///   - reason: Why the agent paused.
+        ///   - pausedAt: When the pause started. Defaults to now.
+        ///   - canResume: Whether the agent can be resumed. Defaults to `true`.
+        public init(reason: String, pausedAt: Date = Date(), canResume: Bool = true) {
+            self.reason = reason
+            self.pausedAt = pausedAt
+            self.canResume = canResume
         }
     }
 }

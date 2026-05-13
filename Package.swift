@@ -207,5 +207,22 @@ let package = Package(
             dependencies: ["OpenAgentSDK"],
             path: "Examples/CompatSandbox"
         ),
+        .executableTarget(
+            name: "MemoryStoreExample",
+            dependencies: ["OpenAgentSDK"],
+            path: "Examples/MemoryStoreExample"
+        ),
+        .executableTarget(
+            name: "AgentMCPServerExample",
+            dependencies: ["OpenAgentSDK",
+                .product(name: "MCP", package: "swift-mcp"),
+            ],
+            path: "Examples/AgentMCPServerExample"
+        ),
+        .executableTarget(
+            name: "PauseProtocolExample",
+            dependencies: ["OpenAgentSDK"],
+            path: "Examples/PauseProtocolExample"
+        ),
     ]
 )

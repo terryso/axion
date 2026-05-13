@@ -124,6 +124,15 @@
 /// - ``ToolRestriction`` — Enum of tool names that can be restricted in skill definitions
 /// - ``createSkillTool(registry:)`` — Factory for the Skill tool
 /// - ``ToolRestrictionStack`` — Stack-based tool restriction manager for nested skill execution
+///
+/// ## Pause/Resume Protocol
+/// - ``PausedData`` — Data emitted when the agent pauses for human intervention
+/// - ``PauseResult`` — Result of a pause-for-human operation (resumed/aborted/timedOut)
+/// - ``Agent/pause(reason:)`` — Pause the agent, waiting for human intervention
+/// - ``Agent/resume(context:)`` — Resume the agent with human-provided context
+/// - ``createPauseForHumanTool()`` — Factory for the pause_for_human built-in tool
+/// - ``setPauseHandler(_:)-4gz09`` — Set the pause handler for interactive mode
+/// - ``clearPauseHandler()`` — Clear the pause handler
 
 /// Current SDK version.
 public let SDK_VERSION = "0.1.0"

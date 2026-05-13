@@ -173,14 +173,14 @@ final class FileToolsRegistryTests: XCTestCase {
                       "Grep tool should be marked isReadOnly=true")
     }
 
-    /// Core tier returns all 10 tools (Read, Write, Edit, Glob, Grep, Bash, AskUser, ToolSearch, WebFetch, WebSearch).
+    /// Core tier returns all 11 tools (Read, Write, Edit, Glob, Grep, Bash, AskUser, ToolSearch, WebFetch, WebSearch, pause_for_human).
     func testGetAllBaseTools_coreTier_returnsTenTools() {
         // When: requesting core tier tools
         let tools = getAllBaseTools(tier: .core)
 
-        // Then: exactly 10 tools
-        XCTAssertEqual(tools.count, 10,
-                       "Core tier should return exactly 10 tools, got \(tools.count): \(tools.map { $0.name })")
+        // Then: exactly 11 tools
+        XCTAssertEqual(tools.count, 11,
+                       "Core tier should return exactly 11 tools, got \(tools.count): \(tools.map { $0.name })")
     }
 
     // MARK: - AC9: Bash, AskUser, ToolSearch registered in core tier (Story 3.6)
@@ -294,13 +294,13 @@ final class FileToolsRegistryTests: XCTestCase {
                       "WebSearch tool should be marked isReadOnly=true")
     }
 
-    /// AC9 [P0]: Core tier returns all 10 tools (Read, Write, Edit, Glob, Grep, Bash, AskUser, ToolSearch, WebFetch, WebSearch).
+    /// AC9 [P0]: Core tier returns all 11 tools (Read, Write, Edit, Glob, Grep, Bash, AskUser, ToolSearch, WebFetch, WebSearch, pause_for_human).
     func testGetAllBaseTools_coreTier_includesAllTenTools() {
         // When: requesting core tier tools
         let tools = getAllBaseTools(tier: .core)
 
-        // Then: exactly 10 tools
-        XCTAssertEqual(tools.count, 10,
-                       "Core tier should return exactly 10 tools (Read, Write, Edit, Glob, Grep, Bash, AskUser, ToolSearch, WebFetch, WebSearch), got \(tools.count): \(tools.map { $0.name })")
+        // Then: exactly 11 tools
+        XCTAssertEqual(tools.count, 11,
+                       "Core tier should return exactly 11 tools (Read, Write, Edit, Glob, Grep, Bash, AskUser, ToolSearch, WebFetch, WebSearch, pause_for_human), got \(tools.count): \(tools.map { $0.name })")
     }
 }

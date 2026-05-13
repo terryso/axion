@@ -426,6 +426,11 @@ public struct AgentOptions: Sendable {
     /// Maps to the TypeScript SDK's `enableFileCheckpointing` field. Defaults to `false`.
     public var enableFileCheckpointing: Bool
 
+    /// Maximum time in milliseconds the agent will wait in a paused state before
+    /// automatically cancelling. Defaults to 300000 (5 minutes).
+    /// Set to `0` to disable timeout (agent waits indefinitely).
+    public var pauseTimeoutMs: Int
+
     // MARK: - Memberwise Init
 
     public init(
@@ -487,7 +492,8 @@ public struct AgentOptions: Sendable {
         betas: [SdkBeta]? = nil,
         strictMcpConfig: Bool = false,
         extraArgs: [String: String?]? = nil,
-        enableFileCheckpointing: Bool = false
+        enableFileCheckpointing: Bool = false,
+        pauseTimeoutMs: Int = 300_000
     ) {
         self.apiKey = apiKey
         self.model = model
@@ -548,6 +554,7 @@ public struct AgentOptions: Sendable {
         self.strictMcpConfig = strictMcpConfig
         self.extraArgs = extraArgs
         self.enableFileCheckpointing = enableFileCheckpointing
+        self.pauseTimeoutMs = pauseTimeoutMs
     }
 
     // MARK: - Auto-Discover Skills
@@ -656,6 +663,7 @@ public struct AgentOptions: Sendable {
         self.strictMcpConfig = false
         self.extraArgs = nil
         self.enableFileCheckpointing = false
+        self.pauseTimeoutMs = 300_000
     }
 
     // MARK: - Validation

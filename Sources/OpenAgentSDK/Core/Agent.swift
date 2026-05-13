@@ -42,6 +42,29 @@ public class Agent: CustomStringConvertible, CustomDebugStringConvertible, @unch
     /// and read cooperatively by the running Task — no locking needed.
     nonisolated(unsafe) private var _interrupted: Bool = false
 
+    /// Whether the agent is currently in a paused state waiting for human intervention.
+    /// Protected by ``_pauseLock`` for thread-safe access.
+    private var _paused: Bool = false
+
+    /// The reason the agent paused, if any.
+    /// Protected by ``_pauseLock``.
+    private var _pauseReason: String? = nil
+
+    /// Continuation used to suspend and resume the pause handler.
+    /// Protected by ``_pauseLock``.
+    private var _pauseContinuation: CheckedContinuation<String, Never>? = nil
+
+    /// Timeout task for auto-cancelling a paused state.
+    /// Protected by ``_pauseLock``.
+    private var _pauseTimeoutTask: _Concurrency.Task<Void, Never>? = nil
+
+    /// Lock protecting concurrent access to pause state variables.
+    private let _pauseLock: NSLock = {
+        let lock = NSLock()
+        lock.name = "Agent.pauseLock"
+        return lock
+    }()
+
     /// Messages from the most recently completed query, accessible via ``getMessages()``.
     nonisolated(unsafe) private var _lastQueryMessages: [SDKMessage] = []
 
@@ -278,7 +301,173 @@ public class Agent: CustomStringConvertible, CustomDebugStringConvertible, @unch
     /// If no query is currently running, this method does nothing.
     public func interrupt() {
         _interrupted = true
+
+        // If paused, resume the continuation with abort sentinel so the pause handler
+        // can return .aborted and unblock the agent loop.
+        let continuationToResume = _pauseLock.withLock { () -> CheckedContinuation<String, Never>? in
+            let cont = _pauseContinuation
+            _pauseContinuation = nil
+            _pauseTimeoutTask?.cancel()
+            _pauseTimeoutTask = nil
+            _paused = false
+            return cont
+        }
+        continuationToResume?.resume(returning: "__PAUSE_ABORT__")
+
         _streamTask?.cancel()
+    }
+
+    // MARK: - Pause/Resume Protocol (Story 19-3)
+
+    /// Pauses the agent, emitting a paused event and suspending execution until
+    /// ``resume(context:)`` or ``interrupt()`` is called.
+    ///
+    /// When called, the agent:
+    /// 1. Enters a `paused` state
+    /// 2. Emits `SDKMessage.system(.paused)` with ``PausedData``
+    /// 3. Suspends execution until resumed, aborted, or timed out
+    ///
+    /// - Parameter reason: A human-readable description of why the agent needs human help.
+    public func pause(reason: String) {
+        _pauseLock.withLock {
+            guard !_paused else { return } // Already paused, ignore
+            _paused = true
+            _pauseReason = reason
+        }
+        // The actual suspension happens in the pause handler set by stream()/prompt().
+        // This method sets the state; the handler reads it to emit events.
+    }
+
+    /// Resumes the agent from a paused state, injecting the human's context into the conversation.
+    ///
+    /// - Parameter context: A description of what the human did while the agent was paused.
+    ///   This string is injected into the conversation as a user message.
+    public func resume(context: String) {
+        let continuationToResume = _pauseLock.withLock { () -> CheckedContinuation<String, Never>? in
+            guard _paused else { return nil }
+            let cont = _pauseContinuation
+            _pauseContinuation = nil
+            _pauseTimeoutTask?.cancel()
+            _pauseTimeoutTask = nil
+            _paused = false
+            _pauseReason = nil
+            return cont
+        }
+        continuationToResume?.resume(returning: context)
+    }
+
+    /// Internal: Sets up the pause handler for stream() execution.
+    /// The handler emits pause events via the continuation, suspends on CheckedContinuation,
+    /// and returns the human context when resumed.
+    private func setupPauseHandler(
+        continuation: AsyncStream<SDKMessage>.Continuation,
+        pauseTimeoutMs: Int,
+        sessionId: String?
+    ) {
+        setPauseHandler { [weak self] reason in
+            guard let self = self else {
+                return .timedOut
+            }
+
+            let pausedData = SDKMessage.PausedData(reason: reason)
+
+            // Emit paused event
+            continuation.yield(.system(SDKMessage.SystemData(
+                subtype: .paused,
+                message: "Agent paused: \(reason)",
+                sessionId: sessionId,
+                pausedData: pausedData
+            )))
+
+            // Suspend on CheckedContinuation until resume/abort/timeout
+            let result: String = await withCheckedContinuation { cont in
+                self._pauseLock.withLock {
+                    self._pauseContinuation = cont
+                }
+
+                // Start timeout task if configured
+                if pauseTimeoutMs > 0 {
+                    let timeoutTask = _Concurrency.Task {
+                        try? await _Concurrency.Task.sleep(nanoseconds: UInt64(pauseTimeoutMs) * 1_000_000)
+                        guard !_Concurrency.Task.isCancelled else { return }
+
+                        // Timeout fired: emit pausedTimeout and resume with sentinel
+                        continuation.yield(.system(SDKMessage.SystemData(
+                            subtype: .pausedTimeout,
+                            message: "Pause timed out after \(pauseTimeoutMs)ms",
+                            sessionId: sessionId,
+                            pausedData: SDKMessage.PausedData(reason: reason, canResume: false)
+                        )))
+
+                        let contToResume = self._pauseLock.withLock { () -> CheckedContinuation<String, Never>? in
+                            let c = self._pauseContinuation
+                            self._pauseContinuation = nil
+                            self._paused = false
+                            self._pauseReason = nil
+                            return c
+                        }
+                        contToResume?.resume(returning: "__PAUSE_TIMEOUT__")
+                    }
+                    self._pauseLock.withLock {
+                        self._pauseTimeoutTask = timeoutTask
+                    }
+                }
+            }
+
+            // Interpret the result
+            if result == "__PAUSE_ABORT__" {
+                return .aborted
+            } else if result == "__PAUSE_TIMEOUT__" {
+                return .timedOut
+            } else {
+                return .resumed(context: result)
+            }
+        }
+    }
+
+    /// Internal: Sets up the pause handler for prompt() execution.
+    /// Similar to stream() but without a continuation for event emission.
+    private func setupPromptPauseHandler(pauseTimeoutMs: Int) {
+        setPauseHandler { [weak self] reason in
+            guard let self = self else {
+                return .timedOut
+            }
+
+            // Suspend on CheckedContinuation until resume/abort/timeout
+            let result: String = await withCheckedContinuation { cont in
+                self._pauseLock.withLock {
+                    self._pauseContinuation = cont
+                }
+
+                // Start timeout task if configured
+                if pauseTimeoutMs > 0 {
+                    let timeoutTask = _Concurrency.Task {
+                        try? await _Concurrency.Task.sleep(nanoseconds: UInt64(pauseTimeoutMs) * 1_000_000)
+                        guard !_Concurrency.Task.isCancelled else { return }
+
+                        let contToResume = self._pauseLock.withLock { () -> CheckedContinuation<String, Never>? in
+                            let c = self._pauseContinuation
+                            self._pauseContinuation = nil
+                            self._paused = false
+                            self._pauseReason = nil
+                            return c
+                        }
+                        contToResume?.resume(returning: "__PAUSE_TIMEOUT__")
+                    }
+                    self._pauseLock.withLock {
+                        self._pauseTimeoutTask = timeoutTask
+                    }
+                }
+            }
+
+            if result == "__PAUSE_ABORT__" {
+                return .aborted
+            } else if result == "__PAUSE_TIMEOUT__" {
+                return .timedOut
+            } else {
+                return .resumed(context: result)
+            }
+        }
     }
 
     // MARK: - File Checkpointing (rewindFiles)
@@ -834,6 +1023,11 @@ public class Agent: CustomStringConvertible, CustomDebugStringConvertible, @unch
             await hookRegistry.execute(.sessionStart, input: hookInput)
         }
 
+        // Set up pause handler for pause_for_human tool (Story 19-3).
+        // Must be set before the agent loop starts and cleared when it ends.
+        defer { clearPauseHandler() }
+        setupPromptPauseHandler(pauseTimeoutMs: options.pauseTimeoutMs)
+
         // MCP integration: connect MCP servers and merge tools
         let (mcpTools, mcpManager) = await assembleFullToolPool()
 
@@ -1374,6 +1568,7 @@ public class Agent: CustomStringConvertible, CustomDebugStringConvertible, @unch
         let capturedPersistSession = options.persistSession
         let capturedEnv = options.env
         let capturedIncludePartialMessages = options.includePartialMessages
+        let capturedPauseTimeoutMs = options.pauseTimeoutMs
 
         // Build tool definitions for API call
         let capturedApiTools: [[String: Any]]? = {
@@ -1445,6 +1640,15 @@ public class Agent: CustomStringConvertible, CustomDebugStringConvertible, @unch
                         }
                     }
                 }
+
+                // Set up pause handler for pause_for_human tool (Story 19-3).
+                // Must be set before the agent loop starts and cleared when it ends.
+                defer { clearPauseHandler() }
+                setupPauseHandler(
+                    continuation: continuation,
+                    pauseTimeoutMs: capturedPauseTimeoutMs,
+                    sessionId: capturedSessionId
+                )
 
                 var messages = decodedMessages
 

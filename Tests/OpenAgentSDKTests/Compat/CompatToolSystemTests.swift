@@ -441,10 +441,10 @@ final class CompatToolSystemTests: XCTestCase {
         XCTAssertTrue(required?.contains("pattern") ?? false)
     }
 
-    /// AC5 [P0]: Core tool count matches expected (10 tools).
+    /// AC5 [P0]: Core tool count matches expected (11 tools).
     func testCoreToolCount_Is10() {
         let tools = getAllBaseTools(tier: .core)
-        XCTAssertEqual(tools.count, 10, "Core tier should have exactly 10 tools")
+        XCTAssertEqual(tools.count, 11, "Core tier should have exactly 11 tools")
     }
 
     /// AC5 [P1]: All core tools have non-empty name and description.

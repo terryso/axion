@@ -75,6 +75,7 @@ public func getAllBaseTools(tier: ToolTier) -> [ToolProtocol] {
             createToolSearchTool(),
             createWebFetchTool(),
             createWebSearchTool(),
+            createPauseForHumanTool(),
         ]
     case .advanced:
         return []
