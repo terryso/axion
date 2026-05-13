@@ -20,3 +20,8 @@
 
 - Tight JSON format coupling in MemoryListCommand — MemoryListCommand directly parses FileBasedMemoryStore's JSON format. Fragile if SDK changes serialization, but covered by tests using FileBasedMemoryStore.
 - No test for `--no-memory` flag at RunCommand level — AC4 flag is only verified at the MemoryContextProvider level, not as an end-to-end RunCommand test. Requires integration test infrastructure.
+
+## Deferred from: code review of 5-2-sse-event-stream-realtime-progress (2026-05-13)
+
+- batch_completed 事件类型缺失 — spec AC1 列出 batch_completed 但 Dev Notes 和 Tasks 中均未定义其数据结构。当前架构中 AgentRunner 不跟踪 batch 概念。spec ambiguity, 可在未来需求出现时添加。
+- RunTracker.print() 警告未使用日志系统 — Story 5.1 遗留代码，不归本 Story 负责。应在统一日志重构时处理。

@@ -91,7 +91,7 @@ development_status:
   # Epic 5: HTTP API Server — 外部集成服务
   epic-5: in-progress
   5-1-http-api-foundation-task-management: done
-  5-2-sse-event-stream-realtime-progress: backlog
+  5-2-sse-event-stream-realtime-progress: done
   5-3-server-command-api-authentication: backlog
   epic-5-retrospective: optional
 

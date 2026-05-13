@@ -23,12 +23,13 @@ struct ServerCommand: AsyncParsableCommand {
         // 1. Load configuration
         let config = try await ConfigManager.loadConfig()
 
-        // 2. Create RunTracker instance
-        let runTracker = RunTracker()
+        // 2. Create EventBroadcaster and RunTracker
+        let eventBroadcaster = EventBroadcaster()
+        let runTracker = RunTracker(eventBroadcaster: eventBroadcaster)
 
         // 3. Create router and register API routes
         let router = Router()
-        AxionAPI.registerRoutes(on: router, runTracker: runTracker, config: config)
+        AxionAPI.registerRoutes(on: router, runTracker: runTracker, eventBroadcaster: eventBroadcaster, config: config)
 
         // 4. Create Hummingbird Application
         let app = Application(

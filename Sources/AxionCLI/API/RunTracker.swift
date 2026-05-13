@@ -12,8 +12,17 @@ actor RunTracker {
     private var runs: [String: TrackedRun] = [:]
     private static let maxTrackedRuns = 1000
 
+    /// Event broadcaster for SSE streaming (Story 5.2).
+    private let eventBroadcaster: EventBroadcaster?
+
     /// SSE extension point (Story 5.2) — callback invoked when run status changes.
     private var onRunStatusChanged: ((String, APIRunStatus) -> Void)?
+
+    // MARK: - Initialization
+
+    init(eventBroadcaster: EventBroadcaster? = nil) {
+        self.eventBroadcaster = eventBroadcaster
+    }
 
     // MARK: - Public API
 
@@ -80,7 +89,7 @@ actor RunTracker {
         steps: [StepSummary],
         durationMs: Int?,
         replanCount: Int
-    ) {
+    ) async {
         guard runs[runId] != nil else {
             print("[RunTracker] Warning: updateRun called with unknown runId '\(runId)'")
             return
@@ -97,7 +106,20 @@ actor RunTracker {
         runs[runId]?.replanCount = replanCount
         runs[runId]?.steps = steps
 
-        // SSE extension point: notify status change for Story 5.2
+        // Emit run_completed event via EventBroadcaster (Story 5.2)
+        if let broadcaster = eventBroadcaster {
+            let runCompletedEvent = SSEEvent.runCompleted(RunCompletedData(
+                runId: runId,
+                finalStatus: status.rawValue,
+                totalSteps: steps.count,
+                durationMs: durationMs,
+                replanCount: replanCount
+            ))
+            await broadcaster.emit(runId: runId, event: runCompletedEvent)
+            await broadcaster.complete(runId: runId)
+        }
+
+        // Legacy callback: notify status change
         onRunStatusChanged?(runId, status)
     }
 

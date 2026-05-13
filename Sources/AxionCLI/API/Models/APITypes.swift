@@ -133,3 +133,87 @@ struct RunOptions: Codable, Equatable, Sendable {
         self.allowForeground = allowForeground
     }
 }
+
+// MARK: - SSE Event Types (Story 5.2)
+
+/// Data payload for a `step_started` SSE event.
+struct StepStartedData: Codable, Equatable, Sendable {
+    let stepIndex: Int
+    let tool: String
+
+    enum CodingKeys: String, CodingKey {
+        case stepIndex = "step_index"
+        case tool
+    }
+}
+
+/// Data payload for a `step_completed` SSE event.
+struct StepCompletedData: Codable, Equatable, Sendable {
+    let stepIndex: Int
+    let tool: String
+    let purpose: String
+    let success: Bool
+    let durationMs: Int?
+
+    enum CodingKeys: String, CodingKey {
+        case stepIndex = "step_index"
+        case tool
+        case purpose
+        case success
+        case durationMs = "duration_ms"
+    }
+}
+
+/// Data payload for a `run_completed` SSE event.
+struct RunCompletedData: Codable, Equatable, Sendable {
+    let runId: String
+    let finalStatus: String
+    let totalSteps: Int
+    let durationMs: Int?
+    let replanCount: Int
+
+    enum CodingKeys: String, CodingKey {
+        case runId = "run_id"
+        case finalStatus = "final_status"
+        case totalSteps = "total_steps"
+        case durationMs = "duration_ms"
+        case replanCount = "replan_count"
+    }
+}
+
+/// SSE event types emitted during agent execution.
+enum SSEEvent: Equatable, Sendable {
+    case stepStarted(StepStartedData)
+    case stepCompleted(StepCompletedData)
+    case runCompleted(RunCompletedData)
+
+    /// The SSE event type name string.
+    var eventType: String {
+        switch self {
+        case .stepStarted: return "step_started"
+        case .stepCompleted: return "step_completed"
+        case .runCompleted: return "run_completed"
+        }
+    }
+
+    /// Encode this event as an SSE-formatted text string.
+    /// - Parameter sequenceId: Sequential event ID for SSE `id:` field.
+    /// - Returns: Formatted SSE text: `event: ...\ndata: ...\nid: ...\n\n`
+    func encodeToSSE(sequenceId: Int) throws -> String {
+        let encoder = JSONEncoder()
+        encoder.outputFormatting = [.sortedKeys]
+
+        let data: Data
+        switch self {
+        case .stepStarted(let d):
+            data = try encoder.encode(d)
+        case .stepCompleted(let d):
+            data = try encoder.encode(d)
+        case .runCompleted(let d):
+            data = try encoder.encode(d)
+        }
+
+        let jsonString = String(data: data, encoding: .utf8) ?? "{}"
+        return "event: \(eventType)\ndata: \(jsonString)\nid: \(sequenceId)\n\n"
+    }
+}

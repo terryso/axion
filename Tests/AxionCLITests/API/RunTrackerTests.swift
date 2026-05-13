@@ -2,6 +2,7 @@ import XCTest
 @testable import AxionCLI
 
 // [P0] ATDD GREEN-PHASE — Story 5.1 AC2/AC3/AC4
+// [P0] ATDD RED-PHASE — Story 5.2 AC1/AC3 (EventBroadcaster integration)
 
 final class RunTrackerTests: XCTestCase {
 
@@ -174,6 +175,62 @@ final class RunTrackerTests: XCTestCase {
         XCTAssertTrue(callbackState.invoked, "onStatusChanged should be invoked when status changes")
         XCTAssertEqual(callbackState.runId, runId)
         XCTAssertEqual(callbackState.status, .done)
+    }
+
+    // MARK: - Story 5.2: EventBroadcaster integration (RED-PHASE)
+
+    func test_updateRun_withEventBroadcaster_emitsRunCompletedEvent() async throws {
+        let broadcaster = EventBroadcaster()
+        let tracker = RunTracker(eventBroadcaster: broadcaster)
+        let runId = await tracker.submitRun(task: "open calculator", options: RunOptions(task: "open calculator"))
+
+        // Subscribe before update to capture the event
+        let stream = await broadcaster.subscribe(runId: runId)
+
+        let step = StepSummary(index: 0, tool: "launch_app", purpose: "Launch Calculator", success: true)
+        await tracker.updateRun(
+            runId: runId,
+            status: .done,
+            steps: [step],
+            durationMs: 5000,
+            replanCount: 0
+        )
+
+        var iterator = stream.makeAsyncIterator()
+        let received = await iterator.next()
+
+        XCTAssertNotNil(received, "EventBroadcaster should emit an event when updateRun is called")
+
+        if case let .runCompleted(data) = received! {
+            XCTAssertEqual(data.runId, runId)
+            XCTAssertEqual(data.finalStatus, "done")
+            XCTAssertEqual(data.totalSteps, 1)
+            XCTAssertEqual(data.durationMs, 5000)
+            XCTAssertEqual(data.replanCount, 0)
+        } else {
+            XCTFail("Expected .runCompleted event, got different event type")
+        }
+    }
+
+    func test_tracker_withEventBroadcaster_backwardCompatible_listRuns() async throws {
+        let broadcaster = EventBroadcaster()
+        let tracker = RunTracker(eventBroadcaster: broadcaster)
+
+        _ = await tracker.submitRun(task: "task 1", options: RunOptions(task: "task 1"))
+        _ = await tracker.submitRun(task: "task 2", options: RunOptions(task: "task 2"))
+
+        let runs = await tracker.listRuns()
+        XCTAssertEqual(runs.count, 2, "listRuns should still work with EventBroadcaster injected")
+    }
+
+    func test_tracker_withEventBroadcaster_backwardCompatible_getRun() async throws {
+        let broadcaster = EventBroadcaster()
+        let tracker = RunTracker(eventBroadcaster: broadcaster)
+        let runId = await tracker.submitRun(task: "open calculator", options: RunOptions(task: "open calculator"))
+
+        let run = await tracker.getRun(runId: runId)
+        XCTAssertNotNil(run, "getRun should still work with EventBroadcaster injected")
+        XCTAssertEqual(run?.task, "open calculator")
     }
 }
 

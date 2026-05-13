@@ -171,12 +171,115 @@ final class AxionAPIRoutesTests: XCTestCase {
         }
     }
 
+    // MARK: - Story 5.2: SSE endpoint tests (RED-PHASE)
+
+    // AC1/AC4: GET /v1/runs/{runId}/events — non-existent runId returns 404
+    func test_sseEndpoint_nonExistentRun_returns404() async throws {
+        let app = try await buildTestApplication()
+
+        try await app.test(.router) { client in
+            try await client.execute(uri: "/v1/runs/nonexistent-id/events", method: .get) { response in
+                XCTAssertEqual(response.status, .notFound, "SSE endpoint should return 404 for non-existent runId")
+
+                let body = try JSONDecoder().decode(APIErrorResponse.self, from: response.body)
+                XCTAssertEqual(body.error, "run_not_found")
+            }
+        }
+    }
+
+    // AC1: GET /v1/runs/{runId}/events — returns text/event-stream content type
+    func test_sseEndpoint_existingRun_returnsEventStreamContentType() async throws {
+        let broadcaster = EventBroadcaster()
+        let tracker = RunTracker(eventBroadcaster: broadcaster)
+        let runId = await tracker.submitRun(task: "open calculator", options: RunOptions(task: "open calculator"))
+
+        // Complete the run so the SSE response is finite (replay path)
+        let step = StepSummary(index: 0, tool: "launch_app", purpose: "Launch Calculator", success: true)
+        await tracker.updateRun(runId: runId, status: .done, steps: [step], durationMs: 5000, replanCount: 0)
+
+        let app = try await buildTestApplication(runTracker: tracker, eventBroadcaster: broadcaster)
+
+        try await app.test(.router) { client in
+            try await client.execute(uri: "/v1/runs/\(runId)/events", method: .get) { response in
+                XCTAssertEqual(response.status, .ok, "SSE endpoint should return 200 for existing run")
+
+                let contentType = response.headers[.contentType]
+                XCTAssertNotNil(contentType, "Response should have content-type header")
+                XCTAssertTrue(
+                    contentType?.contains("text/event-stream") ?? false,
+                    "Content-type should be text/event-stream, got: \(contentType ?? "nil")"
+                )
+            }
+        }
+    }
+
+    // AC1: SSE response has correct cache-control and connection headers
+    func test_sseEndpoint_responseHeaders_areCorrect() async throws {
+        let broadcaster = EventBroadcaster()
+        let tracker = RunTracker(eventBroadcaster: broadcaster)
+        let runId = await tracker.submitRun(task: "open calculator", options: RunOptions(task: "open calculator"))
+
+        // Complete the run so the SSE response is finite (replay path)
+        let step = StepSummary(index: 0, tool: "launch_app", purpose: "Launch Calculator", success: true)
+        await tracker.updateRun(runId: runId, status: .done, steps: [step], durationMs: 5000, replanCount: 0)
+
+        let app = try await buildTestApplication(runTracker: tracker, eventBroadcaster: broadcaster)
+
+        try await app.test(.router) { client in
+            try await client.execute(uri: "/v1/runs/\(runId)/events", method: .get) { response in
+                let cacheControl = response.headers[.cacheControl]
+                XCTAssertNotNil(cacheControl, "SSE response should have cache-control header")
+                XCTAssertTrue(
+                    cacheControl?.contains("no-cache") ?? false,
+                    "Cache-control should be no-cache"
+                )
+            }
+        }
+    }
+
+    // AC4: completed run returns run_completed event and closes
+    func test_sseEndpoint_completedRun_replaysRunCompletedEvent() async throws {
+        let broadcaster = EventBroadcaster()
+        let tracker = RunTracker(eventBroadcaster: broadcaster)
+        let runId = await tracker.submitRun(task: "open calculator", options: RunOptions(task: "open calculator"))
+
+        // Complete the run
+        let step = StepSummary(index: 0, tool: "launch_app", purpose: "Launch Calculator", success: true)
+        await tracker.updateRun(runId: runId, status: .done, steps: [step], durationMs: 5000, replanCount: 0)
+
+        let app = try await buildTestApplication(runTracker: tracker, eventBroadcaster: broadcaster)
+
+        try await app.test(.router) { client in
+            try await client.execute(uri: "/v1/runs/\(runId)/events", method: .get) { response in
+                XCTAssertEqual(response.status, .ok)
+
+                let bodyString = String(buffer: response.body)
+                XCTAssertTrue(
+                    bodyString.contains("event: run_completed"),
+                    "SSE response for completed run should contain 'event: run_completed'"
+                )
+                XCTAssertTrue(
+                    bodyString.contains("\"final_status\":\"done\""),
+                    "SSE replay should contain the final status"
+                )
+                XCTAssertTrue(
+                    bodyString.contains("data: "),
+                    "SSE response should contain 'data: ' lines"
+                )
+            }
+        }
+    }
+
     // MARK: - Helper
 
-    private func buildTestApplication(runTracker: RunTracker? = nil) async throws -> Application<RouterResponder<BasicRequestContext>> {
-        let tracker = runTracker ?? RunTracker()
+    private func buildTestApplication(
+        runTracker: RunTracker? = nil,
+        eventBroadcaster: EventBroadcaster? = nil
+    ) async throws -> Application<RouterResponder<BasicRequestContext>> {
+        let broadcaster = eventBroadcaster ?? EventBroadcaster()
+        let tracker = runTracker ?? RunTracker(eventBroadcaster: broadcaster)
         let router = Router()
-        AxionAPI.registerRoutes(on: router, runTracker: tracker, config: .default)
+        AxionAPI.registerRoutes(on: router, runTracker: tracker, eventBroadcaster: broadcaster, config: .default)
 
         let app = Application(
             router: router,

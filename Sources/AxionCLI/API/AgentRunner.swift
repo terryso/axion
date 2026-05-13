@@ -18,12 +18,17 @@ enum AgentRunner {
     ///   - config: The loaded AxionConfig.
     ///   - task: The task description to execute.
     ///   - options: Run options from the API request.
+    ///   - runId: The run ID assigned by RunTracker (for SSE events).
+    ///   - eventBroadcaster: Optional broadcaster for SSE streaming (nil in CLI mode).
+    ///   - verbose: Whether to enable verbose logging.
     ///   - completion: Callback invoked with execution results.
     /// - Returns: Tuple of execution metrics.
     static func runAgent(
         config: AxionConfig,
         task: String,
         options: RunOptions,
+        runId: String = "",
+        eventBroadcaster: EventBroadcaster? = nil,
         verbose: Bool = false,
         completion: @escaping (String, APIRunStatus, [StepSummary], Int?, Int) -> Void
     ) async -> (totalSteps: Int, durationMs: Int, replanCount: Int, finalStatus: APIRunStatus, stepSummaries: [StepSummary]) {
@@ -128,14 +133,37 @@ enum AgentRunner {
                 totalSteps += 1
                 pendingToolUses[data.toolUseId] = data
 
+                // Emit step_started SSE event (Story 5.2)
+                if let broadcaster = eventBroadcaster, !runId.isEmpty {
+                    let stepIndex = totalSteps - 1
+                    let event = SSEEvent.stepStarted(StepStartedData(
+                        stepIndex: stepIndex,
+                        tool: data.toolName
+                    ))
+                    await broadcaster.emit(runId: runId, event: event)
+                }
+
             case .toolResult(let data):
                 if let toolUse = pendingToolUses.removeValue(forKey: data.toolUseId) {
+                    let stepIndex = stepSummaries.count
                     stepSummaries.append(StepSummary(
-                        index: stepSummaries.count,
+                        index: stepIndex,
                         tool: toolUse.toolName,
                         purpose: extractPurpose(from: toolUse),
                         success: !data.isError
                     ))
+
+                    // Emit step_completed SSE event (Story 5.2)
+                    if let broadcaster = eventBroadcaster, !runId.isEmpty {
+                        let event = SSEEvent.stepCompleted(StepCompletedData(
+                            stepIndex: stepIndex,
+                            tool: toolUse.toolName,
+                            purpose: extractPurpose(from: toolUse),
+                            success: !data.isError,
+                            durationMs: nil
+                        ))
+                        await broadcaster.emit(runId: runId, event: event)
+                    }
                 }
 
             case .result(let data):
