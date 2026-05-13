@@ -1,6 +1,5 @@
 # generated: 2026-05-08
-# last_updated: 2026-05-10 (story 3-8 ready-for-dev)
-# (reviewed and approved 2026-05-09)
+# last_updated: 2026-05-13
 # project: axion
 # project_key: NOKEY
 # tracking_system: file-system
@@ -36,14 +35,19 @@
 # - Dev moves story to 'review', then runs code-review (fresh context, different LLM recommended)
 
 generated: 2026-05-08
-last_updated: 2026-05-10 (story 3-8 ready-for-dev)
+last_updated: 2026-05-13
+project: axion
 project_key: NOKEY
 tracking_system: file-system
 story_location: _bmad-output/implementation-artifacts
 
 development_status:
+  # ============================================================
+  # Phase 1 — 核心功能 (已完成 2026-05-12)
+  # ============================================================
+
   # Epic 1: AxionHelper — macOS 桌面自动化引擎
-  epic-1: in-progress
+  epic-1: done
   1-1-spm-scaffolding-axioncore-models: done
   1-2-helper-mcp-server-foundation: done
   1-3-app-launch-window-management: done
@@ -53,7 +57,7 @@ development_status:
   epic-1-retrospective: optional
 
   # Epic 2: CLI 安装配置与首次运行体验
-  epic-2: in-progress
+  epic-2: done
   2-1-cli-entry-argumentparser-skeleton: done
   2-2-config-system-keychain-storage: done
   2-3-axion-setup-first-time-config: done
@@ -62,7 +66,7 @@ development_status:
   epic-2-retrospective: optional
 
   # Epic 3: 自然语言任务执行
-  epic-3: in-progress
+  epic-3: done
   3-1-helper-process-manager-mcp-client: done
   3-2-prompt-management-planning-engine: done
   3-3-step-execution-placeholder-resolution: done
@@ -72,3 +76,33 @@ development_status:
   3-7-sdk-integration-run-command: done
   3-8-sdk-boundary-doc-e2e-verification: done
   epic-3-retrospective: optional
+
+  # ============================================================
+  # Phase 2 — 成长功能
+  # ============================================================
+
+  # Epic 4: 本地 App Memory — 跨任务学习系统
+  epic-4: backlog
+  4-1-sdk-memorystore-app-memory-extraction: backlog
+  4-2-app-profile-auto-accumulation: backlog
+  4-3-memory-enhanced-planning: backlog
+  epic-4-retrospective: optional
+
+  # Epic 5: HTTP API Server — 外部集成服务
+  epic-5: backlog
+  5-1-http-api-foundation-task-management: backlog
+  5-2-sse-event-stream-realtime-progress: backlog
+  5-3-server-command-api-authentication: backlog
+  epic-5-retrospective: optional
+
+  # Epic 6: MCP Server Mode — Agent 协作
+  epic-6: backlog
+  6-1-sdk-agentmcpserver-expose-axion: backlog
+  6-2-axion-mcp-command-agent-integration: backlog
+  epic-6-retrospective: optional
+
+  # Epic 7: 执行增强 — Takeover 与 Fast Mode
+  epic-7: backlog
+  7-1-sdk-pause-protocol-user-takeover: backlog
+  7-2-fast-mode: backlog
+  epic-7-retrospective: optional

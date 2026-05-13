@@ -4,6 +4,7 @@ stepsCompleted:
   - step-02-design-epics
   - step-03-create-stories
   - step-04-final-validation
+  - step-05-phase2-epics
 inputDocuments:
   - _bmad-output/planning-artifacts/prd.md
   - _bmad-output/planning-artifacts/architecture.md
@@ -16,6 +17,8 @@ requirementsExtracted:
   nfr: 23
   additional: 8
   uxDesign: 0
+phase1Status: complete
+phase2EpicsAdded: 2026-05-12
 ---
 
 # Axion - Epic Breakdown
@@ -781,3 +784,392 @@ So that 后续 SDK 和 Axion 的开发有明确的指导.
 **Given** 浏览器场景
 **When** 运行 `axion run "打开 Safari，访问 example.com"`
 **Then** 成功完成，Safari 打开 example.com
+
+---
+
+# Phase 2 — 成长功能 Epics
+
+> Phase 1（Epic 1–3）已于 2026-05-12 全部完成并通过验证。以下为 PRD Phase 2 成长功能的 Epic 分解。
+>
+> **SDK 依赖说明：** Epic 4（Memory）依赖 OpenAgentSDK Epic 19 Story 19.1（Cross-run Memory Store）；Epic 6（MCP Server）依赖 SDK Epic 19 Story 19.2（Agent-as-MCP-Server）；Epic 7（Takeover）依赖 SDK Epic 19 Story 19.3（Human-in-the-loop Pause）。Axion 是这些 SDK 新能力的第一个消费者。
+
+## Phase 2 Epic List
+
+### Epic 4: 本地 App Memory — 跨任务学习系统
+
+构建跨次运行的学习系统。每次任务执行后，Axion 自动提取 App 操作模式（常用菜单路径、控件位置、操作序列），通过 SDK 的 MemoryStore（FR68）持久化。后续执行同 App 任务时，Planner 利用历史经验生成更精准的计划，减少试错和重规划次数。
+
+**核心价值：** 用得越多越聪明。第一次操作 Finder 可能需要 2 次重规划，第二次就能一步到位。
+**SDK 依赖：** OpenAgentSDK Epic 19 Story 19.1（Cross-run Memory Store）
+
+### Epic 5: HTTP API Server — 外部集成服务
+
+提供 HTTP API 服务模式，外部系统（CI/CD、调度器、其他 Agent）可通过 REST API 提交异步任务、监听 SSE 事件流、查询任务状态和结果。支撑 PRD 旅程三（王强）的核心场景。
+
+**核心价值：** Axion 从 CLI 工具升级为可编程的桌面自动化服务。
+
+### Epic 6: MCP Server Mode — Agent 协作
+
+Axion 通过 SDK 的 AgentMCPServer（FR69）作为 MCP stdio server 运行，暴露桌面操作能力供外部 Agent（如 Claude Code、Cursor Agent）调用。外部 Agent 无需了解 Axion 内部架构，通过标准 MCP 协议即可操控 macOS 桌面。
+
+**核心价值：** Axion 成为 Agent 生态的「macOS 桌面操作插件」。
+**SDK 依赖：** OpenAgentSDK Epic 19 Story 19.2（Agent-as-MCP-Server）
+
+### Epic 7: 执行增强 — Takeover 与 Fast Mode
+
+两个互补的执行增强能力：(1) 用户接管机制 — 基于 SDK 的 pause/resume 协议（FR70），自动化受阻时暂停，用户手动完成后恢复；(2) `--fast` 模式 — 小批量规划 + 本地执行，减少 LLM 调用，提升简单任务的响应速度。
+
+**核心价值：** 不完美的自动化比不自动化好（takeover）；简单任务不该等 LLM（fast mode）。
+**SDK 依赖：** OpenAgentSDK Epic 19 Story 19.3（Human-in-the-loop Pause Protocol）。`--fast` 模式为纯应用层。
+
+---
+
+## Epic 4: 本地 App Memory — 跨任务学习系统
+
+### Story 4.1: 集成 SDK MemoryStore 与 App Memory 提取
+
+As a 系统,
+I want 通过 SDK 的 MemoryStore 积累跨运行的操作经验,
+So that Axion 可以在多次运行之间积累和复用 App 操作模式.
+
+**SDK 依赖：** OpenAgentSDK Epic 19 Story 19.1（Cross-run Memory Store）— 提供 MemoryStore 协议、FileBasedMemoryStore 持久化实现和 ToolContext.memoryStore 访问。
+
+**Acceptance Criteria:**
+
+**Given** 任务执行完成
+**When** RunEngine 结束
+**Then** 自动提取本次运行的 App 操作摘要（目标 App、使用的工具、成功/失败路径），通过 SDK MemoryStore 的 `save(domain:knowledge:)` 持久化
+
+**Given** Memory 文件存在
+**When** 查看 SDK 存储目录
+**Then** 按 App domain 组织（如 domain="com.apple.calculator"），每个 domain 包含该 App 的操作历史和模式
+
+**Given** Memory 存储超过 30 天的记录
+**When** 新任务启动
+**Then** SDK MemoryStore 的 `delete(domain:olderThan:)` 自动清理过期记录
+
+**Given** Memory 文件损坏
+**When** SDK MemoryStore 加载
+**Then** 跳过损坏条目，不阻塞任务执行，记录 warning 日志
+
+**Given** `axion doctor` 运行
+**When** 检查 Memory
+**Then** 报告已积累 Memory 的 domain 数量和总条目数
+
+### Story 4.2: App Profile 自动积累
+
+As a 系统,
+I want 每次任务执行后自动提取 App 操作模式,
+So that 后续同 App 任务可以利用积累的经验.
+
+**Acceptance Criteria:**
+
+**Given** Calculator 任务成功完成
+**When** 提取操作模式
+**Then** 记录：Calculator 的 AX tree 结构特征、常用按钮的 selector 路径、成功操作序列
+
+**Given** 同一 App 积累了多次操作记录
+**When** 分析操作模式
+**Then** 识别高频操作路径（如「打开 Finder → Cmd+Shift+G → 输入路径」是导航到指定目录的可靠路径）
+
+**Given** 操作失败后被重规划修正
+**When** 记录失败经验
+**Then** 标记失败的 selector/坐标为不可靠，记录修正后的成功路径
+
+**Given** Memory 中某 App 积累了 3 次以上成功操作
+**When** 新任务涉及该 App
+**Then** 自动在该 App 的 Memory 中标记为「已熟悉」
+
+### Story 4.3: Memory 增强规划
+
+As a Planner,
+I want 在生成计划时利用历史操作经验,
+So that 计划更精准，减少试错和重规划次数.
+
+**Acceptance Criteria:**
+
+**Given** Memory 中有 Calculator 的操作记录
+**When** Planner 规划 "打开计算器，计算 17 × 23"
+**Then** system prompt 注入 Calculator 的 Memory 上下文（已知控件路径、可靠操作序列）
+
+**Given** Memory 中有某 App 的失败经验
+**When** Planner 规划涉及该 App 的任务
+**Then** prompt 中标注已知不可靠的操作路径，避免重复失败
+
+**Given** Memory 中某 App 标记为「已熟悉」
+**When** Planner 规划该 App 的任务
+**Then** 使用更紧凑的规划策略（减少验证步骤），缩短执行时间
+
+**Given** 运行 `axion run "任务" --no-memory`
+**When** Planner 规划
+**Then** 不注入任何 Memory 上下文，行为等同于 Phase 1
+
+**Given** 运行 `axion memory list`
+**When** 查看 Memory
+**Then** 显示已积累 Memory 的 App 列表和每个 App 的操作次数、最近使用时间
+
+**Given** 运行 `axion memory clear --app com.apple.calculator`
+**When** 清除特定 App Memory
+**Then** 删除该 App 的 Memory 文件，其他 App 不受影响
+
+---
+
+## Epic 5: HTTP API Server — 外部集成服务
+
+### Story 5.1: HTTP API 基础与任务管理
+
+As a 外部系统,
+I want 通过 HTTP API 提交和管理桌面自动化任务,
+So that 我可以将 Axion 集成到 CI/CD 管道和调度系统中.
+
+**Acceptance Criteria:**
+
+**Given** 运行 `axion server --port 4242`
+**When** server 启动
+**Then** 监听指定端口，显示 "Axion API server running on port 4242"
+
+**Given** server 运行中
+**When** 发送 `POST /v1/runs` body `{"task": "打开计算器"}`
+**Then** 返回 `{"runId": "20260512-abc123", "status": "running"}`，后台启动任务执行
+
+**Given** 任务已提交
+**When** 发送 `GET /v1/runs/{runId}`
+**Then** 返回任务状态（running / done / failed / cancelled）和已完成的步骤摘要
+
+**Given** 任务已完成
+**When** 发送 `GET /v1/runs/{runId}`
+**Then** 返回完整执行结果（总步数、耗时、重规划次数、最终状态）
+
+**Given** 发送 `POST /v1/runs` 未提供 task 字段
+**When** 请求到达
+**Then** 返回 400 错误，message 说明缺少 task 参数
+
+**Given** server 运行中
+**When** 发送 `GET /v1/health`
+**Then** 返回 `{"status": "ok", "version": "x.y.z"}`
+
+### Story 5.2: SSE 事件流实时进度
+
+As a 外部系统,
+I want 通过 SSE 事件流实时监听任务执行进度,
+So that 我的平台可以实时显示桌面自动化任务的执行状态.
+
+**Acceptance Criteria:**
+
+**Given** 任务正在执行
+**When** 连接 `GET /v1/runs/{runId}/events`（SSE endpoint）
+**Then** 实时推送事件流：`step_started`、`step_completed`、`batch_completed`、`run_completed`
+
+**Given** SSE 事件 `step_completed`
+**When** 解析事件数据
+**Then** 包含 stepIndex、tool、purpose、result（成功/失败）、耗时
+
+**Given** SSE 事件 `run_completed`
+**When** 解析事件数据
+**Then** 包含最终状态、总步数、总耗时、重规划次数
+
+**Given** 连接 SSE 时任务已完成
+**When** 订阅 events
+**Then** 立即收到 `run_completed` 事件（重放最终状态），然后关闭连接
+
+**Given** 多个客户端同时订阅同一任务
+**When** 事件推送
+**Then** 所有客户端都收到相同的事件序列
+
+### Story 5.3: Server 命令与 API 认证
+
+As a 运维人员,
+I want Axion server 有安全认证和优雅的生命周期管理,
+So that API 服务不会被未授权访问，且可以安全启停.
+
+**Acceptance Criteria:**
+
+**Given** `axion server --port 4242 --auth-key mysecret`
+**When** 发送未携带 Authorization header 的请求
+**Then** 返回 401 错误
+
+**Given** server 启用了 auth-key
+**When** 发送 `Authorization: Bearer mysecret` 的请求
+**Then** 正常处理请求
+
+**Given** server 运行中，用户在终端按 Ctrl-C
+**When** 信号触发
+**Then** 等待所有运行中的任务完成（最多 30 秒），然后优雅关闭
+
+**Given** `axion server --port 4242 --max-concurrent 3`
+**When** 已有 3 个任务运行中
+**Then** 新提交的任务排队等待，返回 `{"status": "queued", "position": 1}`
+
+**Given** server 启动
+**When** 检查绑定地址
+**Then** 默认绑定 localhost（127.0.0.1），不暴露到网络。`--host 0.0.0.0` 可选覆盖
+
+---
+
+## Epic 6: MCP Server Mode — Agent 协作
+
+### Story 6.1: 通过 SDK AgentMCPServer 暴露 Axion
+
+As a 外部 Agent（如 Claude Code）,
+I want 通过 MCP stdio 协议调用 Axion 的桌面操作能力,
+So that 我的 Agent 可以操控 macOS 桌面而不需要了解 Axion 的内部架构.
+
+**SDK 依赖：** OpenAgentSDK Epic 19 Story 19.2（Agent-as-MCP-Server）— 提供 AgentMCPServer 类，通过 stdin/stdout 暴露 MCP JSON-RPC 协议，自动处理工具发现和调用路由。
+
+**Acceptance Criteria:**
+
+**Given** 运行 `axion mcp`
+**When** 通过 stdin 发送 MCP initialize 请求
+**Then** 返回正确的 initialize 响应，声明 Axion 作为 MCP server 的能力
+
+**Given** MCP 连接已建立
+**When** 发送 tools/list
+**Then** 返回 Axion 暴露的工具列表（run_task、query_task_status、list_apps 等）
+
+**Given** 外部 Agent 发送 tool_call `run_task`
+**When** 参数包含 `{"task": "打开计算器，计算 1+1"}`
+**Then** Axion 启动任务执行，返回 runId
+
+**Given** 外部 Agent 发送 tool_call `query_task_status`
+**When** 参数包含 runId
+**Then** 返回任务当前状态和已执行步骤摘要
+
+**Given** Axion MCP server 运行中
+**When** stdin 收到 EOF
+**Then** 等待运行中的任务完成后优雅退出
+
+### Story 6.2: `axion mcp` 命令与外部 Agent 集成验证
+
+As a 开发者,
+I want 将 Axion 配置为 Claude Code 的 MCP server,
+So that Claude Code 可以直接调用 Axion 完成桌面操作.
+
+**Acceptance Criteria:**
+
+**Given** Claude Code 的 MCP 配置中添加 Axion
+**When** 配置 `{"mcpServers": {"axion": {"command": "axion", "args": ["mcp"]}}}`
+**Then** Claude Code 可以发现和调用 Axion 的工具
+
+**Given** Claude Code 调用 Axion 的 run_task 工具
+**When** 任务执行完成
+**Then** Claude Code 收到包含执行结果的 tool response
+
+**Given** 运行 `axion mcp --help`
+**When** 查看帮助
+**Then** 显示 MCP server 模式的用法说明
+
+**Given** `axion mcp` 启动
+**When** 检查日志
+**Then** 不输出任何 stdout 内容（仅通过 MCP 协议通信），日志写入 stderr
+
+---
+
+## Epic 7: 执行增强 — Takeover 与 Fast Mode
+
+### Story 7.1: 基于 SDK Pause Protocol 的用户接管机制
+
+As a 用户,
+I want 在自动化受阻时暂停、手动完成后恢复,
+So that 不完美的自动化仍然可以完成任务，而不是直接报错退出.
+
+**SDK 依赖：** OpenAgentSDK Epic 19 Story 19.3（Human-in-the-loop Pause Protocol）— 提供 `Agent.pause(reason:)`、`Agent.resume(context:)`、`Agent.abort()` 和内置 `pause_for_human` 工具。Axion 在 SDK 协议之上实现终端交互（stdin 等待用户输入）。
+
+**Acceptance Criteria:**
+
+**Given** 任务执行遇到 `blocked` 状态
+**When** RunEngine 检测到不可自动恢复的阻塞
+**Then** 调用 SDK 的 `Agent.pause(reason: "任务受阻：{阻塞原因}")`，SDK 发出 `.paused` 消息，Axion 在终端显示接管提示
+
+**Given** Agent 处于 SDK paused 状态
+**When** 终端显示提示
+**Then** 输出 "任务受阻：{阻塞原因}。手动完成后按 Enter 继续，或输入 'skip' 跳过此步骤，或输入 'abort' 终止任务"
+
+**Given** 用户按 Enter
+**When** 恢复执行
+**Then** 调用 SDK 的 `Agent.resume(context: "用户已完成手动操作")`，截取当前屏幕状态，Verifier 重新评估
+
+**Given** 用户输入 'skip'
+**When** 跳过当前步骤
+**Then** 调用 SDK 的 `Agent.resume(context: "skip")`，标记当前步骤为 skipped，继续执行后续步骤
+
+**Given** 用户输入 'abort'
+**When** 终止任务
+**Then** 调用 SDK 的 `Agent.abort()`，进入 `cancelled` 状态，显示已完成的步骤摘要
+
+**Given** SDK paused 超过 5 分钟无用户输入
+**When** 超时
+**Then** SDK 发出 `.pausedTimeout` 消息，Axion 进入 `failed` 状态，输出超时提示
+
+**Given** `--allow-foreground` 模式
+**When** 任务受阻进入 takeover
+**Then** 前台操作限制暂时解除，用户可以手动操作桌面
+
+### Story 7.2: `--fast` 模式
+
+As a 用户,
+I want 用 `--fast` 模式快速执行简单任务,
+So that 简单操作不需要等待完整的 LLM 规划循环.
+
+**Acceptance Criteria:**
+
+**Given** 运行 `axion run "打开计算器" --fast`
+**When** fast 模式启动
+**Then** 使用轻量规划策略：单步规划 + 立即执行 + 简化验证，减少 LLM 调用次数
+
+**Given** fast 模式的 LLM 规划
+**When** 生成计划
+**Then** prompt 明确指示生成最小步骤计划（1-3 步），不请求截图和完整 AX tree
+
+**Given** fast 模式执行
+**When** 每步执行后
+**Then** 简化验证：只检查工具调用是否成功（ToolResult.isError == false），不额外截图验证
+
+**Given** fast 模式下步骤执行失败
+**When** 失败检测
+**Then** 不触发重规划，直接报告失败并建议用户去掉 `--fast` 重新尝试
+
+**Given** fast 模式执行成功
+**When** 任务完成
+**Then** 显示 "Fast mode 完成。N 步，耗时 X 秒。" 以及提示 "如需更精确执行，可去掉 --fast 重试"
+
+**Given** 运行 `axion run "打开计算器，计算 17 乘以 23" --fast`
+**When** 完整流程执行
+**Then** 成功完成，响应时间显著短于标准模式（目标：减少 50% 以上 LLM 调用）
+
+---
+
+## Phase 2 FR 追溯
+
+| FR | 来源 | Epic | SDK 依赖 | 说明 |
+|----|------|------|----------|------|
+| FR35 (JSON 输出) | PRD Phase 2 | 已在 Story 3.5 完成 | 无 | `--json` 标志已实现 |
+| FR42 (Memory 提取) | Phase 2 新增 | Epic 4 | SDK FR68 (MemoryStore) | 跨任务学习 |
+| FR43 (Memory 增强规划) | Phase 2 新增 | Epic 4 | SDK FR68 | 利用经验优化计划 |
+| FR44 (Memory 管理 CLI) | Phase 2 新增 | Epic 4 | SDK FR68 | axion memory list/clear |
+| FR45 (HTTP API) | Phase 2 新增 | Epic 5 | 无 | 外部集成服务 |
+| FR46 (SSE 事件流) | Phase 2 新增 | Epic 5 | 无 | 实时进度推送 |
+| FR47 (MCP Server) | Phase 2 新增 | Epic 6 | SDK FR69 (AgentMCPServer) | Agent 协作 |
+| FR48 (Takeover) | Phase 2 新增 | Epic 7 | SDK FR70 (Pause Protocol) | 人机协作 |
+| FR49 (--fast 模式) | Phase 2 新增 | Epic 7 | 无 | 快速执行 |
+
+## Phase 2 新增 NFR
+
+- NFR24: HTTP API 请求响应时间 < 100ms（不含任务执行时间）
+- NFR25: SSE 事件推送延迟 < 500ms（从事件发生到客户端收到）
+- NFR26: MCP server 工具调用响应时间 < 200ms（不含任务执行时间）
+- NFR27: Memory 存储占用磁盘空间 < 10MB（自动清理后）
+- NFR28: `--fast` 模式下 LLM 调用次数比标准模式减少 50% 以上
+- NFR29: Server 模式支持至少 10 个并发 SSE 连接
+
+## Phase 2 优先级与 SDK 依赖
+
+| 优先级 | Epic | SDK 依赖 | 理由 |
+|--------|------|----------|------|
+| P0 | Epic 7 (Takeover & Fast) | SDK Story 19.3 (Pause Protocol) | 提升核心体验，--fast 无 SDK 依赖可先行 |
+| P1 | Epic 4 (Memory) | SDK Story 19.1 (MemoryStore) | 产品差异化的核心，用得越多越聪明 |
+| P2 | Epic 5 (HTTP API) | 无 | 解锁外部集成场景，纯应用层可独立推进 |
+| P3 | Epic 6 (MCP Server) | SDK Story 19.2 (AgentMCPServer) | Agent 生态位，依赖 SDK 新能力 |
+
+**实施前提：** OpenAgentSDK 的 Epic 19 需先于 Axion Phase 2 完成。建议 SDK 和 Axion 并行开发：Axion 先做 Epic 5（HTTP API，无 SDK 依赖）和 Epic 7 的 --fast 部分，SDK Epic 19 完成后再做 Memory、Takeover 和 MCP Server 集成。
+
+**建议实施顺序：Epic 5（无 SDK 依赖）→ SDK Epic 19 → Epic 7 → Epic 4 → Epic 6**
