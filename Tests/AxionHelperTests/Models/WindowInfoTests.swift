@@ -10,7 +10,8 @@ final class WindowInfoTests: XCTestCase {
             title: "Main Window",
             appName: "Safari",
             bundleId: "com.apple.Safari",
-            bounds: WindowBounds(x: 0, y: 0, width: 800, height: 600)
+            bounds: WindowBounds(x: 0, y: 0, width: 800, height: 600),
+            zOrder: 3
         )
         let data = try JSONEncoder().encode(original)
         let decoded = try JSONDecoder().decode(WindowInfo.self, from: data)
@@ -24,7 +25,8 @@ final class WindowInfoTests: XCTestCase {
             title: nil,
             appName: nil,
             bundleId: nil,
-            bounds: WindowBounds(x: 10, y: 20, width: 300, height: 200)
+            bounds: WindowBounds(x: 10, y: 20, width: 300, height: 200),
+            zOrder: 0
         )
         let data = try JSONEncoder().encode(original)
         let decoded = try JSONDecoder().decode(WindowInfo.self, from: data)
@@ -44,7 +46,8 @@ final class WindowInfoTests: XCTestCase {
         let info = WindowInfo(
             windowId: 42, pid: 1234,
             title: "Test", appName: "Safari", bundleId: "com.apple.Safari",
-            bounds: WindowBounds(x: 0, y: 0, width: 800, height: 600)
+            bounds: WindowBounds(x: 0, y: 0, width: 800, height: 600),
+            zOrder: 5
         )
         let data = try JSONEncoder().encode(info)
         let json = try JSONSerialization.jsonObject(with: data) as! [String: Any]
@@ -53,10 +56,12 @@ final class WindowInfoTests: XCTestCase {
         XCTAssertNotNil(json["window_id"])
         XCTAssertNotNil(json["app_name"])
         XCTAssertNotNil(json["bundle_id"])
+        XCTAssertNotNil(json["z_order"])
         // NOT camelCase
         XCTAssertNil(json["windowId"])
         XCTAssertNil(json["appName"])
         XCTAssertNil(json["bundleId"])
+        XCTAssertNil(json["zOrder"])
     }
 
     // MARK: - Equality
@@ -64,11 +69,11 @@ final class WindowInfoTests: XCTestCase {
     func testEquality_same() {
         let a = WindowInfo(
             windowId: 1, pid: 100, title: "W", appName: "A", bundleId: "com.a",
-            bounds: WindowBounds(x: 0, y: 0, width: 100, height: 100)
+            bounds: WindowBounds(x: 0, y: 0, width: 100, height: 100), zOrder: 2
         )
         let b = WindowInfo(
             windowId: 1, pid: 100, title: "W", appName: "A", bundleId: "com.a",
-            bounds: WindowBounds(x: 0, y: 0, width: 100, height: 100)
+            bounds: WindowBounds(x: 0, y: 0, width: 100, height: 100), zOrder: 2
         )
         XCTAssertEqual(a, b)
     }
@@ -82,6 +87,32 @@ final class WindowInfoTests: XCTestCase {
     func testEquality_differentBounds() {
         let a = WindowInfo(windowId: 1, pid: 100, title: nil, appName: nil, bundleId: nil, bounds: WindowBounds(x: 0, y: 0, width: 100, height: 100))
         let b = WindowInfo(windowId: 1, pid: 100, title: nil, appName: nil, bundleId: nil, bounds: WindowBounds(x: 0, y: 0, width: 200, height: 200))
+        XCTAssertNotEqual(a, b)
+    }
+
+    // MARK: - zOrder field
+
+    func testZOrder_defaultValue() throws {
+        let info = WindowInfo(
+            windowId: 1, pid: 100, title: nil, appName: nil, bundleId: nil,
+            bounds: WindowBounds(x: 0, y: 0, width: 100, height: 100)
+        )
+        XCTAssertEqual(info.zOrder, 0)
+    }
+
+    func testZOrder_backwardCompatibility_missingField() throws {
+        let json = """
+        {"window_id": 1, "pid": 100, "bounds": {"x": 0, "y": 0, "width": 100, "height": 100}}
+        """
+        let data = Data(json.utf8)
+        let decoded = try JSONDecoder().decode(WindowInfo.self, from: data)
+        XCTAssertEqual(decoded.zOrder, 0)
+        XCTAssertEqual(decoded.windowId, 1)
+    }
+
+    func testZOrder_differentValues_notEqual() {
+        let a = WindowInfo(windowId: 1, pid: 100, title: nil, appName: nil, bundleId: nil, bounds: WindowBounds(x: 0, y: 0, width: 0, height: 0), zOrder: 0)
+        let b = WindowInfo(windowId: 1, pid: 100, title: nil, appName: nil, bundleId: nil, bounds: WindowBounds(x: 0, y: 0, width: 0, height: 0), zOrder: 1)
         XCTAssertNotEqual(a, b)
     }
 

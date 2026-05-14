@@ -325,7 +325,7 @@ final class SDKBoundaryAuditTests: XCTestCase {
     func test_toolNames_allToolNames_containsAllRegisteredTools() {
         let allNames = ToolNames.allToolNames
 
-        XCTAssertEqual(allNames.count, 21, "ToolNames.allToolNames should contain exactly 21 tool names")
+        XCTAssertEqual(allNames.count, 22, "ToolNames.allToolNames should contain exactly 22 tool names")
 
         // 验证关键工具名存在
         let expectedTools = [

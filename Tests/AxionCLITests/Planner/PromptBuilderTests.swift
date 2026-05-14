@@ -185,4 +185,62 @@ final class PromptBuilderTests: XCTestCase {
 
         XCTAssertEqual(result, "Hello Alice, your {{unknown_var}} is ready.")
     }
+
+    // MARK: - Story 8.2 Cross-Application Prompt Content
+
+    func test_plannerPrompt_containsCrossAppWorkflowPatterns() async throws {
+        let promptDir = PromptBuilder.resolvePromptDirectory()
+        let content = try PromptBuilder.load(
+            name: "planner-system",
+            variables: ["tools": "test", "max_steps": "20"],
+            fromDirectory: promptDir
+        )
+        XCTAssertTrue(content.contains("Cross-Application Workflow Patterns"),
+            "Planner prompt should contain Cross-Application Workflow Patterns section")
+    }
+
+    func test_plannerPrompt_containsClipboardVerification() async throws {
+        let promptDir = PromptBuilder.resolvePromptDirectory()
+        let content = try PromptBuilder.load(
+            name: "planner-system",
+            variables: ["tools": "test", "max_steps": "20"],
+            fromDirectory: promptDir
+        )
+        XCTAssertTrue(content.contains("Clipboard verification"),
+            "Planner prompt should contain clipboard verification guidance")
+    }
+
+    func test_plannerPrompt_containsCrossAppFailureRecovery() async throws {
+        let promptDir = PromptBuilder.resolvePromptDirectory()
+        let content = try PromptBuilder.load(
+            name: "planner-system",
+            variables: ["tools": "test", "max_steps": "20"],
+            fromDirectory: promptDir
+        )
+        XCTAssertTrue(content.contains("Cross-app failure"),
+            "Planner prompt should contain cross-app failure recovery guidance")
+        XCTAssertTrue(content.contains("Application not found"),
+            "Planner prompt should contain application not found guidance")
+    }
+
+    // MARK: - Story 8.3 Window Layout Prompt Content
+
+    func test_plannerPrompt_containsWindowLayoutGuidance() async throws {
+        let promptDir = PromptBuilder.resolvePromptDirectory()
+        let content = try PromptBuilder.load(
+            name: "planner-system",
+            variables: ["tools": "test", "max_steps": "20"],
+            fromDirectory: promptDir
+        )
+        XCTAssertTrue(content.contains("arrange_windows"),
+            "Planner prompt should reference arrange_windows tool")
+        XCTAssertTrue(content.contains("tile-left-right"),
+            "Planner prompt should describe tile-left-right layout")
+        XCTAssertTrue(content.contains("tile-top-bottom"),
+            "Planner prompt should describe tile-top-bottom layout")
+        XCTAssertTrue(content.contains("cascade"),
+            "Planner prompt should describe cascade layout")
+        XCTAssertTrue(content.contains("resize_window"),
+            "Planner prompt should reference resize_window tool")
+    }
 }

@@ -716,7 +716,7 @@ final class SDKIntegrationATDDTests: XCTestCase {
         try skipUntilSDKIntegrated()
 
         let allNames = ToolNames.allToolNames
-        XCTAssertEqual(allNames.count, 21, "Should have 21 tool names")
+        XCTAssertEqual(allNames.count, 22, "Should have 22 tool names")
         XCTAssertTrue(allNames.contains("launch_app"))
         XCTAssertTrue(allNames.contains("click"))
         XCTAssertTrue(allNames.contains("screenshot"))

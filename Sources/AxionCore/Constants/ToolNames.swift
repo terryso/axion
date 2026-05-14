@@ -22,6 +22,7 @@ public enum ToolNames {
     public static let openUrl = "open_url"
     public static let getFileInfo = "get_file_info"
     public static let validateWindow = "validate_window"
+    public static let arrangeWindows = "arrange_windows"
 
     /// All available tool names for prompt building.
     public static let allToolNames: [String] = [
@@ -29,7 +30,7 @@ public enum ToolNames {
         getWindowState, moveWindow, resizeWindow, click, doubleClick,
         rightClick, typeText, pressKey, hotkey, scroll, drag,
         screenshot, getAccessibilityTree, openUrl, getFileInfo,
-        validateWindow
+        validateWindow, arrangeWindows
     ]
 
     /// Tools that require foreground interaction and are blocked in shared seat mode.

@@ -52,6 +52,12 @@ struct MockAccessibilityEngine: @unchecked Sendable, WindowManaging {
     func resolveSelector(windowId: Int, query: SelectorQuery) throws -> AccessibilityEngineService.SelectorMatchResult {
         try resolveSelectorHandler(windowId, query)
     }
+
+    var setWindowBoundsHandler: @Sendable (Int, Int?, Int?, Int?, Int?) throws -> Void = { _, _, _, _, _ in }
+
+    func setWindowBounds(windowId: Int, x: Int?, y: Int?, width: Int?, height: Int?) throws {
+        try setWindowBoundsHandler(windowId, x, y, width, height)
+    }
 }
 
 /// Mock implementation of `ScreenshotCapturing` for unit testing.

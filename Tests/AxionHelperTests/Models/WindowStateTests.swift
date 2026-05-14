@@ -20,7 +20,8 @@ final class WindowStateTests: XCTestCase {
             bounds: WindowBounds(x: 100, y: 100, width: 200, height: 300),
             isMinimized: false,
             isFocused: true,
-            axTree: tree
+            axTree: tree,
+            appName: "Calculator"
         )
         let data = try JSONEncoder().encode(original)
         let decoded = try JSONDecoder().decode(WindowState.self, from: data)
@@ -157,5 +158,57 @@ final class WindowStateTests: XCTestCase {
         let jsonString = String(data: data, encoding: .utf8)!
         // When axTree is nil, the custom encoder should produce "ax_tree": null
         XCTAssertTrue(jsonString.contains("\"ax_tree\":null"), "ax_tree should be null in JSON when nil")
+    }
+
+    // MARK: - appName field
+
+    func testAppName_roundTrip() throws {
+        let original = WindowState(
+            windowId: 1, pid: 99, title: "Doc",
+            bounds: WindowBounds(x: 0, y: 0, width: 100, height: 100),
+            isMinimized: false, isFocused: true, axTree: nil,
+            appName: "TextEdit"
+        )
+        let data = try JSONEncoder().encode(original)
+        let decoded = try JSONDecoder().decode(WindowState.self, from: data)
+        XCTAssertEqual(decoded.appName, "TextEdit")
+    }
+
+    func testAppName_snakeCaseKey() throws {
+        let state = WindowState(
+            windowId: 1, pid: 99, title: "Doc",
+            bounds: WindowBounds(x: 0, y: 0, width: 100, height: 100),
+            isMinimized: false, isFocused: false, axTree: nil,
+            appName: "Safari"
+        )
+        let data = try JSONEncoder().encode(state)
+        let json = try JSONSerialization.jsonObject(with: data) as! [String: Any]
+        XCTAssertEqual(json["app_name"] as? String, "Safari")
+        XCTAssertNil(json["appName"])
+    }
+
+    func testAppName_backwardCompatibility_missingField() throws {
+        let json = """
+        {"window_id": 1, "pid": 99, "bounds": {"x": 0, "y": 0, "width": 100, "height": 100}, "is_minimized": false, "is_focused": false, "ax_tree": null}
+        """
+        let data = Data(json.utf8)
+        let decoded = try JSONDecoder().decode(WindowState.self, from: data)
+        XCTAssertNil(decoded.appName)
+    }
+
+    func testAppName_equality_differentAppName() {
+        let a = WindowState(
+            windowId: 1, pid: 99, title: "W",
+            bounds: WindowBounds(x: 0, y: 0, width: 100, height: 100),
+            isMinimized: false, isFocused: true, axTree: nil,
+            appName: "Safari"
+        )
+        let b = WindowState(
+            windowId: 1, pid: 99, title: "W",
+            bounds: WindowBounds(x: 0, y: 0, width: 100, height: 100),
+            isMinimized: false, isFocused: true, axTree: nil,
+            appName: "Chrome"
+        )
+        XCTAssertNotEqual(a, b)
     }
 }

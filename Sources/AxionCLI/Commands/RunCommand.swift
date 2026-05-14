@@ -425,16 +425,34 @@ struct RunCommand: AsyncParsableCommand {
                 "stopReason": data.stopReason
             ])
         case .toolUse(let data):
-            await tracer.record(event: "tool_use", payload: [
+            var payload: [String: Any] = [
                 "tool": data.toolName,
                 "toolUseId": data.toolUseId
-            ])
+            ]
+            if let inputObj = try? JSONSerialization.jsonObject(with: Data(data.input.utf8)) as? [String: Any] {
+                if let windowId = inputObj["window_id"] {
+                    payload["window_id"] = windowId
+                }
+                if let pid = inputObj["pid"] {
+                    payload["pid"] = pid
+                }
+            }
+            await tracer.record(event: "tool_use", payload: payload)
         case .toolResult(let data):
-            await tracer.record(event: "tool_result", payload: [
+            var payload: [String: Any] = [
                 "toolUseId": data.toolUseId,
                 "isError": data.isError,
                 "content": String(data.content.prefix(200))
-            ])
+            ]
+            if let resultObj = try? JSONSerialization.jsonObject(with: Data(data.content.utf8)) as? [String: Any] {
+                if let appName = resultObj["app_name"] as? String {
+                    payload["app_name"] = appName
+                }
+                if let windowId = resultObj["window_id"] as? Int {
+                    payload["window_id"] = windowId
+                }
+            }
+            await tracer.record(event: "tool_result", payload: payload)
         case .result(let data):
             await tracer.record(event: "result", payload: [
                 "subtype": data.subtype.rawValue,

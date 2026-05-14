@@ -76,7 +76,7 @@ def cmd_build_state_doc(args: list[str]) -> int:
         text,
     )
     custom_instructions = json.dumps(config.get("customInstructions", ""))
-    text = re.sub(r"(?m)^customInstructions:.*$", f"customInstructions: {custom_instructions}", text)
+    text = re.sub(r"(?m)^customInstructions:.*$", lambda m: f"customInstructions: {custom_instructions}", text)
     agent_config = config.get("agentConfig")
     if isinstance(agent_config, dict):
         lines = [
@@ -118,7 +118,7 @@ def cmd_build_state_doc(args: list[str]) -> int:
         block = "\n".join(lines) + "\n"
         text = re.sub(r"(?m)^agentConfig:\n(?:(?:\s{2}.*\n)*)", block, text)
     for key, value in replacements.items():
-        text = re.sub(rf"(?m)^{re.escape(key)}:.*$", f"{key}: {json.dumps(value)}", text)
+        text = re.sub(rf"(?m)^{re.escape(key)}:.*$", lambda m, k=key, v=value: f"{k}: {json.dumps(v)}", text)
     story_range = [item for item in config.get("storyRange", []) if isinstance(item, str)]
     progress_rows = "\n".join(f"| {story_id} | ⏳ | ⏳ | ⏳ | ⏳ | ⏳ | pending |" for story_id in story_range)
     body = {

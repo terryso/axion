@@ -71,7 +71,7 @@ struct AccessibilityEngineService: WindowManaging {
             appLookup[app.processIdentifier] = (app.bundleIdentifier, app.localizedName)
         }
 
-        return windowList.compactMap { info -> WindowInfo? in
+        return windowList.enumerated().compactMap { (index, info) -> WindowInfo? in
             guard let ownerPID = info[kCGWindowOwnerPID as String] as? Int32 else { return nil }
             if let pid, ownerPID != pid { return nil }
             guard let windowID = info[kCGWindowNumber as String] as? Int else { return nil }
@@ -98,7 +98,8 @@ struct AccessibilityEngineService: WindowManaging {
                 title: title,
                 appName: appName,
                 bundleId: bundleId,
-                bounds: bounds
+                bounds: bounds,
+                zOrder: index
             )
         }
     }
@@ -131,6 +132,8 @@ struct AccessibilityEngineService: WindowManaging {
         }
         let axTree = axState?.axTree
 
+        let appName = NSWorkspace.shared.runningApplications.first(where: { $0.processIdentifier == ownerPID })?.localizedName
+
         return WindowState(
             windowId: windowId,
             pid: ownerPID,
@@ -138,8 +141,52 @@ struct AccessibilityEngineService: WindowManaging {
             bounds: cgBounds,
             isMinimized: isMinimized,
             isFocused: isFocused,
-            axTree: axTree
+            axTree: axTree,
+            appName: appName
         )
+    }
+
+    func setWindowBounds(windowId: Int, x: Int? = nil, y: Int? = nil, width: Int? = nil, height: Int? = nil) throws {
+        let windowList = CGWindowListCopyWindowInfo(.optionAll, kCGNullWindowID) as? [[String: Any]] ?? []
+
+        guard let cgWindow = windowList.first(where: {
+            $0[kCGWindowNumber as String] as? Int == windowId
+        }) else {
+            throw AccessibilityEngineError.windowNotFound(windowId: windowId)
+        }
+
+        guard let ownerPID = cgWindow[kCGWindowOwnerPID as String] as? Int32 else {
+            throw AccessibilityEngineError.windowNotFound(windowId: windowId)
+        }
+
+        let currentBounds = parseCGBounds(cgWindow["kCGWindowBounds"] as? [String: Any])
+        let newX = x ?? currentBounds.x
+        let newY = y ?? currentBounds.y
+        let newWidth = width ?? currentBounds.width
+        let newHeight = height ?? currentBounds.height
+
+        let axApp = AXUIElementCreateApplication(ownerPID)
+        let title = cgWindow[kCGWindowName as String] as? String
+        var windowsRef: AnyObject?
+        let axResult = AXUIElementCopyAttributeValue(axApp, kAXWindowsAttribute as CFString, &windowsRef)
+
+        guard axResult == .success, let axWindows = windowsRef as? [AXUIElement] else {
+            throw AccessibilityEngineError.axTreeBuildFailed(reason: "No AX windows found for pid \(ownerPID)")
+        }
+
+        guard let matchedWindow = matchAXWindow(axWindows: axWindows, title: title) else {
+            throw AccessibilityEngineError.axTreeBuildFailed(reason: "Cannot match AX window for window_id \(windowId)")
+        }
+
+        var position = CGPoint(x: CGFloat(newX), y: CGFloat(newY))
+        if let posValue = AXValueCreate(.cgPoint, &position) {
+            AXUIElementSetAttributeValue(matchedWindow, kAXPositionAttribute as CFString, posValue)
+        }
+
+        var size = CGSize(width: CGFloat(newWidth), height: CGFloat(newHeight))
+        if let sizeValue = AXValueCreate(.cgSize, &size) {
+            AXUIElementSetAttributeValue(matchedWindow, kAXSizeAttribute as CFString, sizeValue)
+        }
     }
 
     func activateWindow(pid: Int32, windowId: Int? = nil) throws {

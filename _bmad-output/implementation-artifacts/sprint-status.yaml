@@ -1,6 +1,10 @@
 # generated: 2026-05-08
 # last_updated: 2026-05-14
 # retro-epic-4: 2026-05-14
+# retro-epic-5: 2026-05-14
+# retro-epic-6: 2026-05-14
+# retro-epic-7: 2026-05-14
+# retro-epic-8: 2026-05-14
 # project: axion
 # project_key: NOKEY
 # tracking_system: file-system
@@ -79,7 +83,7 @@ development_status:
   epic-3-retrospective: optional
 
   # ============================================================
-  # Phase 2 — 成长功能
+  # Phase 2 — 成长功能 (已完成 2026-05-14)
   # ============================================================
 
   # Epic 4: 本地 App Memory — 跨任务学习系统
@@ -90,7 +94,7 @@ development_status:
   epic-4-retrospective: done
 
   # Epic 5: HTTP API Server — 外部集成服务
-  epic-5: in-progress
+  epic-5: done
   5-1-http-api-foundation-task-management: done
   5-2-sse-event-stream-realtime-progress: done
   5-3-server-command-api-authentication: done
@@ -107,3 +111,35 @@ development_status:
   7-1-sdk-pause-protocol-user-takeover: done
   7-2-fast-mode: done
   epic-7-retrospective: done
+
+  # ============================================================
+  # Phase 3 — 愿景功能
+  # ============================================================
+
+  # Epic 8: 多窗口、多 App 工作流
+  epic-8: in-progress
+  8-1-multi-window-state-tracking-context-management: done
+  8-2-cross-app-workflow-orchestration: done
+  8-3-window-layout-management: done
+  epic-8-retrospective: optional
+
+  # Epic 9: 录制 → 编译 → 技能复用
+  epic-9: backlog
+  9-1-operation-recording-engine: backlog
+  9-2-recording-compile-reusable-skill: backlog
+  9-3-skill-library-management-execution: backlog
+  epic-9-retrospective: optional
+
+  # Epic 10: macOS 菜单栏 UI
+  epic-10: backlog
+  10-1-menubar-status-service-communication: backlog
+  10-2-task-management-realtime-panel: backlog
+  10-3-global-hotkey-skill-quick-trigger: backlog
+  epic-10-retrospective: optional
+
+  # Epic 11: 第三方 SDK 生态
+  epic-11: backlog
+  11-1-agent-project-template-scaffold-cli: backlog
+  11-2-plugin-tool-registration-agent-extension: backlog
+  11-3-developer-documentation-examples: backlog
+  epic-11-retrospective: optional

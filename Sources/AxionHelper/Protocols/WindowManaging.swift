@@ -6,5 +6,6 @@ protocol WindowManaging: Sendable {
     func getAXTree(windowId: Int, maxNodes: Int) throws -> AXElement
     func activateWindow(pid: Int32, windowId: Int?) throws
     func validateWindow(windowId: Int) -> ValidateWindowResult
+    func setWindowBounds(windowId: Int, x: Int?, y: Int?, width: Int?, height: Int?) throws
     func resolveSelector(windowId: Int, query: SelectorQuery) throws -> AccessibilityEngineService.SelectorMatchResult
 }

@@ -9,6 +9,14 @@ import XCTest
 // These tests do NOT interact with real macOS windows — all system interaction is mocked.
 // Priority: P0 (core tool wiring)
 
+final class ThreadSafeArray<T>: @unchecked Sendable {
+    private var items: [T] = []
+    private let lock = NSLock()
+    func append(_ item: T) { lock.withLock { items.append(item) } }
+    var count: Int { lock.withLock { items.count } }
+    subscript(index: Int) -> T { lock.withLock { items[index] } }
+}
+
 @MainActor
 final class WindowManagementToolTests: XCTestCase {
 
@@ -226,5 +234,194 @@ final class WindowManagementToolTests: XCTestCase {
         XCTAssertNotNil(bounds["y"])
         XCTAssertNotNil(bounds["width"])
         XCTAssertNotNil(bounds["height"])
+    }
+
+    // MARK: - resize_window (Story 8.3)
+
+    func test_resizeWindow_returnsUpdatedBounds() async throws {
+        let restore = ServiceContainerFixture.apply(
+            accessibilityEngine: MockAccessibilityEngine(
+                listWindowsHandler: { _ in [] },
+                getWindowStateHandler: { _ in WindowState(
+                    windowId: 42, pid: 1234, title: "Test",
+                    bounds: WindowBounds(x: 0, y: 0, width: 800, height: 600),
+                    isMinimized: false, isFocused: true, axTree: nil
+                ) },
+                getAXTreeHandler: { _, _ in AXElement(role: "AXWindow", title: nil, value: nil, bounds: nil, children: []) },
+                setWindowBoundsHandler: { windowId, x, y, width, height in
+                    XCTAssertEqual(windowId, 42)
+                    XCTAssertEqual(x, 100)
+                    XCTAssertEqual(y, 200)
+                    XCTAssertNil(width)
+                    XCTAssertNil(height)
+                }
+            )
+        )
+        defer { restore() }
+
+        let server = try await makeRegisteredServer()
+        let result = try await server.toolRegistry.execute(
+            "resize_window",
+            arguments: ["window_id": .int(42), "x": .int(100), "y": .int(200)],
+            context: makeTestContext()
+        )
+
+        let text = textContent(result)
+        let json = try JSONSerialization.jsonObject(with: text.data(using: .utf8)!) as? [String: Any]
+        XCTAssertEqual(json?["success"] as? Bool, true)
+        XCTAssertEqual(json?["window_id"] as? Int, 42)
+    }
+
+    // MARK: - arrange_windows (Story 8.3)
+
+    func test_arrangeWindows_tileLeftRight() async throws {
+        let setBoundsCalls = ThreadSafeArray<(windowId: Int, x: Int?, y: Int?, width: Int?, height: Int?)>()
+        let restore = ServiceContainerFixture.apply(
+            accessibilityEngine: MockAccessibilityEngine(
+                listWindowsHandler: { _ in [] },
+                getWindowStateHandler: { wid in WindowState(
+                    windowId: wid, pid: 1234, title: "Test",
+                    bounds: WindowBounds(x: 0, y: 0, width: 960, height: 1080),
+                    isMinimized: false, isFocused: true, axTree: nil
+                ) },
+                getAXTreeHandler: { _, _ in AXElement(role: "AXWindow", title: nil, value: nil, bounds: nil, children: []) },
+                setWindowBoundsHandler: { windowId, x, y, width, height in
+                    setBoundsCalls.append((windowId, x, y, width, height))
+                }
+            )
+        )
+        defer { restore() }
+
+        let server = try await makeRegisteredServer()
+        let result = try await server.toolRegistry.execute(
+            "arrange_windows",
+            arguments: ["layout": .string("tile-left-right"), "window_ids": .array([.int(1), .int(2)])],
+            context: makeTestContext()
+        )
+
+        let text = textContent(result)
+        let json = try JSONSerialization.jsonObject(with: text.data(using: .utf8)!) as? [String: Any]
+        XCTAssertEqual(json?["success"] as? Bool, true)
+        XCTAssertEqual(json?["layout"] as? String, "tile-left-right")
+        XCTAssertEqual(setBoundsCalls.count, 2)
+        XCTAssertEqual(setBoundsCalls[0].windowId, 1)
+        XCTAssertEqual(setBoundsCalls[1].windowId, 2)
+    }
+
+    func test_arrangeWindows_unknownLayout_returnsError() async throws {
+        let restore = ServiceContainerFixture.apply(
+            accessibilityEngine: MockAccessibilityEngine(
+                listWindowsHandler: { _ in [] },
+                getWindowStateHandler: { _ in fatalError("should not be called") },
+                getAXTreeHandler: { _, _ in fatalError("should not be called") }
+            )
+        )
+        defer { restore() }
+
+        let server = try await makeRegisteredServer()
+        let result = try await server.toolRegistry.execute(
+            "arrange_windows",
+            arguments: ["layout": .string("circular"), "window_ids": .array([.int(1), .int(2)])],
+            context: makeTestContext()
+        )
+
+        let text = textContent(result)
+        let json = try JSONSerialization.jsonObject(with: text.data(using: .utf8)!) as? [String: Any]
+        XCTAssertEqual(json?["error"] as? String, "invalid_layout")
+    }
+
+    func test_arrangeWindows_tileTopBottom() async throws {
+        let setBoundsCalls = ThreadSafeArray<(windowId: Int, x: Int?, y: Int?, width: Int?, height: Int?)>()
+        let restore = ServiceContainerFixture.apply(
+            accessibilityEngine: MockAccessibilityEngine(
+                listWindowsHandler: { _ in [] },
+                getWindowStateHandler: { wid in WindowState(
+                    windowId: wid, pid: 1234, title: "Test",
+                    bounds: WindowBounds(x: 0, y: 0, width: 1920, height: 540),
+                    isMinimized: false, isFocused: true, axTree: nil
+                ) },
+                getAXTreeHandler: { _, _ in AXElement(role: "AXWindow", title: nil, value: nil, bounds: nil, children: []) },
+                setWindowBoundsHandler: { windowId, x, y, width, height in
+                    setBoundsCalls.append((windowId, x, y, width, height))
+                }
+            )
+        )
+        defer { restore() }
+
+        let server = try await makeRegisteredServer()
+        let result = try await server.toolRegistry.execute(
+            "arrange_windows",
+            arguments: ["layout": .string("tile-top-bottom"), "window_ids": .array([.int(10), .int(20)])],
+            context: makeTestContext()
+        )
+
+        let text = textContent(result)
+        let json = try JSONSerialization.jsonObject(with: text.data(using: .utf8)!) as? [String: Any]
+        XCTAssertEqual(json?["success"] as? Bool, true)
+        XCTAssertEqual(json?["layout"] as? String, "tile-top-bottom")
+        XCTAssertEqual(setBoundsCalls.count, 2)
+        XCTAssertEqual(setBoundsCalls[0].windowId, 10)
+        XCTAssertEqual(setBoundsCalls[1].windowId, 20)
+    }
+
+    func test_arrangeWindows_cascade() async throws {
+        let setBoundsCalls = ThreadSafeArray<(windowId: Int, x: Int?, y: Int?, width: Int?, height: Int?)>()
+        let restore = ServiceContainerFixture.apply(
+            accessibilityEngine: MockAccessibilityEngine(
+                listWindowsHandler: { _ in [] },
+                getWindowStateHandler: { wid in WindowState(
+                    windowId: wid, pid: 1234, title: "Test",
+                    bounds: WindowBounds(x: 0, y: 0, width: 800, height: 600),
+                    isMinimized: false, isFocused: true, axTree: nil
+                ) },
+                getAXTreeHandler: { _, _ in AXElement(role: "AXWindow", title: nil, value: nil, bounds: nil, children: []) },
+                setWindowBoundsHandler: { windowId, x, y, width, height in
+                    setBoundsCalls.append((windowId, x, y, width, height))
+                }
+            )
+        )
+        defer { restore() }
+
+        let server = try await makeRegisteredServer()
+        let result = try await server.toolRegistry.execute(
+            "arrange_windows",
+            arguments: ["layout": .string("cascade"), "window_ids": .array([.int(1), .int(2), .int(3)])],
+            context: makeTestContext()
+        )
+
+        let text = textContent(result)
+        let json = try JSONSerialization.jsonObject(with: text.data(using: .utf8)!) as? [String: Any]
+        XCTAssertEqual(json?["success"] as? Bool, true)
+        XCTAssertEqual(json?["layout"] as? String, "cascade")
+        XCTAssertEqual(setBoundsCalls.count, 3)
+        // Cascade offsets each window by 30px
+        XCTAssertEqual(setBoundsCalls[0].x, 0)
+        XCTAssertEqual(setBoundsCalls[1].x, 30)
+        XCTAssertEqual(setBoundsCalls[2].x, 60)
+        XCTAssertEqual(setBoundsCalls[0].y, 0)
+        XCTAssertEqual(setBoundsCalls[1].y, 30)
+        XCTAssertEqual(setBoundsCalls[2].y, 60)
+    }
+
+    func test_arrangeWindows_insufficientWindows_returnsError() async throws {
+        let restore = ServiceContainerFixture.apply(
+            accessibilityEngine: MockAccessibilityEngine(
+                listWindowsHandler: { _ in [] },
+                getWindowStateHandler: { _ in fatalError("should not be called") },
+                getAXTreeHandler: { _, _ in fatalError("should not be called") }
+            )
+        )
+        defer { restore() }
+
+        let server = try await makeRegisteredServer()
+        let result = try await server.toolRegistry.execute(
+            "arrange_windows",
+            arguments: ["layout": .string("tile-left-right"), "window_ids": .array([.int(1)])],
+            context: makeTestContext()
+        )
+
+        let text = textContent(result)
+        let json = try JSONSerialization.jsonObject(with: text.data(using: .utf8)!) as? [String: Any]
+        XCTAssertEqual(json?["error"] as? String, "invalid_params")
     }
 }

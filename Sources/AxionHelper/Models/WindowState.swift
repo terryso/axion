@@ -9,6 +9,7 @@ struct WindowState: Codable, Equatable {
     let isMinimized: Bool
     let isFocused: Bool
     let axTree: AXElement?
+    let appName: String?
 
     enum CodingKeys: String, CodingKey {
         case windowId = "window_id"
@@ -18,6 +19,30 @@ struct WindowState: Codable, Equatable {
         case isMinimized = "is_minimized"
         case isFocused = "is_focused"
         case axTree = "ax_tree"
+        case appName = "app_name"
+    }
+
+    init(windowId: Int, pid: Int32, title: String?, bounds: WindowBounds, isMinimized: Bool, isFocused: Bool, axTree: AXElement?, appName: String? = nil) {
+        self.windowId = windowId
+        self.pid = pid
+        self.title = title
+        self.bounds = bounds
+        self.isMinimized = isMinimized
+        self.isFocused = isFocused
+        self.axTree = axTree
+        self.appName = appName
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        windowId = try container.decode(Int.self, forKey: .windowId)
+        pid = try container.decode(Int32.self, forKey: .pid)
+        title = try container.decodeIfPresent(String.self, forKey: .title)
+        bounds = try container.decode(WindowBounds.self, forKey: .bounds)
+        isMinimized = try container.decode(Bool.self, forKey: .isMinimized)
+        isFocused = try container.decode(Bool.self, forKey: .isFocused)
+        axTree = try container.decodeIfPresent(AXElement.self, forKey: .axTree)
+        appName = try container.decodeIfPresent(String.self, forKey: .appName)
     }
 
     /// Custom encode to ensure `ax_tree` is always present (null instead of omitted).
@@ -35,5 +60,6 @@ struct WindowState: Codable, Equatable {
         } else {
             try container.encodeNil(forKey: .axTree)
         }
+        try container.encodeIfPresent(appName, forKey: .appName)
     }
 }
