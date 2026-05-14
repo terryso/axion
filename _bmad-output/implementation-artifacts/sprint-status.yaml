@@ -1,5 +1,7 @@
 # generated: 2026-05-08
 # last_updated: 2026-05-15
+# story-11.1-created: 2026-05-15
+# retro-epic-10: 2026-05-15
 # story-10.1-created: 2026-05-15
 # story-10.2-created: 2026-05-15
 # story-10.3-created: 2026-05-15
@@ -135,15 +137,15 @@ development_status:
   epic-9-retrospective: done
 
   # Epic 10: macOS 菜单栏 UI
-  epic-10: in-progress
+  epic-10: done
   10-1-menubar-status-service-communication: done
   10-2-task-management-realtime-panel: done
   10-3-global-hotkey-skill-quick-trigger: done
-  epic-10-retrospective: optional
+  epic-10-retrospective: done
 
   # Epic 11: 第三方 SDK 生态
-  epic-11: backlog
-  11-1-agent-project-template-scaffold-cli: backlog
+  epic-11: in-progress
+  11-1-agent-project-template-scaffold-cli: done
   11-2-plugin-tool-registration-agent-extension: backlog
   11-3-developer-documentation-examples: backlog
   epic-11-retrospective: optional

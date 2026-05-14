@@ -836,6 +836,31 @@ axion/
 │           ├── WindowState.swift              # 窗口状态模型
 │           └── AXElement.swift                # AX 元素模型
 │
+│   ├── AxionBar/                              # Epic 10: 菜单栏 App（独立 executable）
+│       ├── App.swift                          # @main, MenuBarExtra 生命周期
+│       ├── StatusBarController.swift          # NSStatusItem + ConnectionState
+│       ├── Models/
+│       │   ├── ConnectionState.swift          # .disconnected / .connected / .running
+│       │   ├── HealthCheckResponse.swift
+│       │   ├── RunModels.swift                # Bar 前缀 API 模型
+│       │   ├── SkillModels.swift
+│       │   └── HotkeyConfig.swift
+│       ├── Services/
+│       │   ├── BackendHealthChecker.swift     # 5 秒轮询 GET /v1/health
+│       │   ├── ServerProcessManager.swift     # Process 启动/停止 axion server
+│       │   ├── TaskSubmissionService.swift
+│       │   ├── SSEEventClient.swift           # URLSession bytes stream SSE
+│       │   ├── RunHistoryService.swift
+│       │   ├── SkillService.swift
+│       │   └── GlobalHotkeyService.swift      # NSEvent 全局热键
+│       ├── Views/
+│       │   ├── QuickRunWindow.swift
+│       │   ├── TaskDetailPanel.swift
+│       │   ├── RunHistoryWindow.swift
+│       │   └── SettingsWindow.swift
+│       └── MenuBar/
+│           └── MenuBarBuilder.swift
+│
 ├── Prompts/                                   # D6: 外部 Prompt 文件
 │   ├── planner-system.md                      # Planner system prompt
 │   ├── verifier-system.md                     # Verifier system prompt
@@ -869,6 +894,23 @@ axion/
 │   │   │   ├── AppProfileAnalyzerTests.swift
 │   │   │   ├── FamiliarityTrackerTests.swift
 │   │   │   └── MemoryContextProviderTests.swift
+│   ├── AxionBarTests/                                # Epic 10: 菜单栏 App 测试
+│   │   ├── Models/
+│   │   │   ├── RunModelsTests.swift
+│   │   │   ├── SkillModelsTests.swift
+│   │   │   └── HotkeyConfigTests.swift
+│   │   ├── Services/
+│   │   │   ├── BackendHealthCheckerTests.swift
+│   │   │   ├── ServerProcessManagerTests.swift
+│   │   │   ├── TaskSubmissionServiceTests.swift
+│   │   │   ├── SSEEventClientTests.swift
+│   │   │   ├── RunHistoryServiceTests.swift
+│   │   │   ├── SkillServiceTests.swift
+│   │   │   └── GlobalHotkeyServiceTests.swift
+│   │   ├── StatusBar/
+│   │   │   └── StatusBarControllerTests.swift
+│   │   └── MenuBar/
+│   │       └── MenuBarBuilderTests.swift
 │   └── AxionHelperTests/
 │       ├── Services/
 │       │   ├── AccessibilityEngineTests.swift
@@ -896,7 +938,8 @@ axion/
 │  AxionCLI → ArgumentParser（直接 import）                  │
 │  AxionCLI ↛ AxionHelper（禁止直接 import）                 │
 │                                                         │
-│  唯一通信通道：MCP stdio（stdin/stdout JSON-RPC）          │
+│  与 Helper 通信：MCP stdio（stdin/stdout JSON-RPC）       │
+│  与 AxionBar 通信：HTTP API（localhost:4242）              │
 ├─────────────────────────────────────────────────────────┤
 │ AxionHelper 进程                                        │
 │                                                         │
@@ -904,6 +947,15 @@ axion/
 │  AxionHelper → mcp-swift-sdk（直接 import）               │
 │  AxionHelper ↛ OpenAgentSDK（不需要）                     │
 │  AxionHelper ↛ AxionCLI（禁止）                          │
+├─────────────────────────────────────────────────────────┤
+│ AxionBar 进程（Epic 10 — 独立 macOS App）                │
+│                                                         │
+│  AxionBar → AxionCore（直接 import）                      │
+│  AxionBar → SwiftUI + AppKit（系统框架）                  │
+│  AxionBar ↛ AxionCLI（禁止 — 通过 HTTP API 通信）         │
+│  AxionBar ↛ OpenAgentSDK（不需要）                        │
+│                                                         │
+│  与 CLI 通信：HTTP API（localhost:4242 REST + SSE）       │
 └─────────────────────────────────────────────────────────┘
 ```
 
@@ -912,9 +964,11 @@ axion/
 ```
 AxionCore ← 无外部依赖（纯模型 + 协议 + 常量）
     ↑
-AxionCLI ← OpenAgentSDK + ArgumentParser
+AxionCLI ← OpenAgentSDK + ArgumentParser + Hummingbird
     ↑ (MCP stdio, 非 import)
 AxionHelper ← mcp-swift-sdk
+    ↑ (HTTP API, 非 import)
+AxionBar ← SwiftUI + AppKit（独立 macOS App）
 ```
 
 ### 需求到结构的映射
