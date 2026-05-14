@@ -1,10 +1,21 @@
 import SwiftUI
+import UserNotifications
 
 // MARK: - AppDelegate (LSUIElement = no Dock icon)
 
-final class AppDelegate: NSObject, NSApplicationDelegate {
+final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDelegate {
     func applicationDidFinishLaunching(_: Notification) {
         NSApp.setActivationPolicy(.accessory)
+
+        UNUserNotificationCenter.current().delegate = self
+        UNUserNotificationCenter.current().requestAuthorization(options: [.alert, .sound]) { _, _ in }
+    }
+
+    func userNotificationCenter(
+        _: UNUserNotificationCenter,
+        willPresent _: UNNotification
+    ) async -> UNNotificationPresentationOptions {
+        [.banner, .sound]
     }
 }
 
@@ -27,16 +38,32 @@ struct AxionBarMenuContent: View {
     @ObservedObject var controller: StatusBarController
 
     var body: some View {
-        Button("快速执行...") {}
-            .disabled(true)
+        Button("快速执行...") {
+            controller.quickRunWindow.show(controller: controller)
+        }
+        .disabled(controller.connectionState == .disconnected)
 
         Menu("技能列表") {
             Text("（即将支持）")
         }
         .disabled(true)
 
-        Button("任务历史...") {}
-            .disabled(true)
+        if controller.connectionState == .running, let task = controller.currentTask {
+            Divider()
+
+            Button("运行中: \(task) \(controller.stepProgressText ?? "")") {
+                if let runId = controller.currentRunId {
+                    controller.taskDetailPanel.show(runId: runId, task: task, controller: controller)
+                }
+            }
+        }
+
+        Divider()
+
+        Button("任务历史...") {
+            controller.runHistoryWindow.show(controller: controller)
+        }
+        .disabled(controller.connectionState == .disconnected)
 
         Divider()
 

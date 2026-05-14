@@ -11,13 +11,14 @@ final class MenuBarBuilder {
     func buildMenu() -> NSMenu {
         let menu = NSMenu()
 
-        // 快速执行 (disabled placeholder)
+        // 快速执行
         let quickRun = NSMenuItem(
             title: "快速执行...",
-            action: nil,
+            action: #selector(showQuickRun),
             keyEquivalent: ""
         )
-        quickRun.isEnabled = false
+        quickRun.target = self
+        quickRun.isEnabled = controller.connectionState != .disconnected
         menu.addItem(quickRun)
 
         // 技能列表 (disabled placeholder)
@@ -32,13 +33,30 @@ final class MenuBarBuilder {
         skillList.submenu = skillSubMenu
         menu.addItem(skillList)
 
-        // 任务历史 (disabled placeholder)
+        // Running task section
+        if controller.connectionState == .running, let task = controller.currentTask {
+            menu.addItem(NSMenuItem.separator())
+
+            let progress = controller.stepProgressText ?? ""
+            let runningItem = NSMenuItem(
+                title: "运行中: \(task) \(progress)",
+                action: #selector(showTaskDetail),
+                keyEquivalent: ""
+            )
+            runningItem.target = self
+            menu.addItem(runningItem)
+        }
+
+        menu.addItem(NSMenuItem.separator())
+
+        // 任务历史
         let taskHistory = NSMenuItem(
             title: "任务历史...",
-            action: nil,
+            action: #selector(showTaskHistory),
             keyEquivalent: ""
         )
-        taskHistory.isEnabled = false
+        taskHistory.target = self
+        taskHistory.isEnabled = controller.connectionState != .disconnected
         menu.addItem(taskHistory)
 
         menu.addItem(NSMenuItem.separator())
@@ -105,6 +123,19 @@ final class MenuBarBuilder {
         menu.addItem(quitItem)
 
         return menu
+    }
+
+    @objc private func showQuickRun() {
+        controller.quickRunWindow.show(controller: controller)
+    }
+
+    @objc private func showTaskDetail() {
+        guard let runId = controller.currentRunId, let task = controller.currentTask else { return }
+        controller.taskDetailPanel.show(runId: runId, task: task, controller: controller)
+    }
+
+    @objc private func showTaskHistory() {
+        controller.runHistoryWindow.show(controller: controller)
     }
 
     @objc private func startServer() {

@@ -50,6 +50,41 @@ enum AxionAPI {
             v1Authed = v1.group()
         }
 
+        // GET /v1/runs — list runs (Story 10.2)
+        v1Authed.get("runs") { request, context in
+            let limitParam = request.uri.queryParameters["limit"].map { String($0) } ?? "20"
+            let limit = Int(limitParam) ?? 20
+
+            let allRuns = await runTracker.listRuns()
+            let sortedRuns = allRuns
+                .sorted { $0.submittedAt > $1.submittedAt }
+                .prefix(limit)
+
+            let responses = sortedRuns.map { run in
+                RunStatusResponse(
+                    runId: run.runId,
+                    status: run.status.rawValue,
+                    task: run.task,
+                    totalSteps: run.totalSteps,
+                    durationMs: run.durationMs,
+                    replanCount: run.replanCount,
+                    submittedAt: run.submittedAt,
+                    completedAt: run.completedAt,
+                    steps: run.steps
+                )
+            }
+
+            let encoder = JSONEncoder()
+            encoder.outputFormatting = [.sortedKeys]
+            let data = try encoder.encode(responses)
+            let body = ByteBuffer(data: data)
+            return Response(
+                status: .ok,
+                headers: [.contentType: "application/json"],
+                body: .init(byteBuffer: body)
+            )
+        }
+
         // POST /v1/runs
         v1Authed.post("runs") { request, context in
             // Read raw body first (can only be consumed once)

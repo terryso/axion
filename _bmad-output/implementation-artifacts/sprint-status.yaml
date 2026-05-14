@@ -1,6 +1,7 @@
 # generated: 2026-05-08
 # last_updated: 2026-05-15
 # story-10.1-created: 2026-05-15
+# story-10.2-created: 2026-05-15
 # retro-epic-4: 2026-05-14
 # retro-epic-5: 2026-05-14
 # retro-epic-6: 2026-05-14
@@ -135,7 +136,7 @@ development_status:
   # Epic 10: macOS 菜单栏 UI
   epic-10: in-progress
   10-1-menubar-status-service-communication: done
-  10-2-task-management-realtime-panel: backlog
+  10-2-task-management-realtime-panel: done
   10-3-global-hotkey-skill-quick-trigger: backlog
   epic-10-retrospective: optional
 
