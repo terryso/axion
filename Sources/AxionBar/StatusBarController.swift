@@ -11,6 +11,7 @@ final class StatusBarController: ObservableObject {
     @Published var currentTask: String?
     @Published var currentStep: Int = 0
     @Published var totalSteps: Int = 0
+    @Published var availableSkills: [BarSkillSummary] = []
 
     private let healthChecker = BackendHealthChecker()
     private let processManager = ServerProcessManager()
@@ -19,14 +20,20 @@ final class StatusBarController: ObservableObject {
     let taskSubmissionService = TaskSubmissionService()
     let sseEventClient = SSEEventClient()
     let runHistoryService = RunHistoryService()
+    let skillService = SkillService()
 
     let quickRunWindow = QuickRunWindow()
     let taskDetailPanel = TaskDetailPanel()
     let runHistoryWindow = RunHistoryWindow()
+    let settingsWindow = SettingsWindow()
+
+    let hotkeyConfigManager = HotkeyConfigManager()
+    let hotkeyService = GlobalHotkeyService()
 
     // Separate SSE client for internal run monitoring (independent from view subscriptions)
     private let monitoringSSEClient = SSEEventClient()
     private var runMonitoringTask: Task<Void, Never>?
+    private var cancellables = Set<AnyCancellable>()
 
     var statusIcon: String {
         switch connectionState {
@@ -61,6 +68,25 @@ final class StatusBarController: ObservableObject {
 
         healthChecker.$serverVersion
             .assign(to: &$serverVersion)
+
+        // Load hotkey config
+        hotkeyConfigManager.load()
+        hotkeyService.onHotkeyTriggered = { [weak self] binding in
+            self?.handleHotkeyTriggered(binding)
+        }
+        hotkeyService.start(configManager: hotkeyConfigManager)
+
+        // Watch for connection state changes to load skills
+        $connectionState
+            .removeDuplicates()
+            .sink { [weak self] state in
+                if state == .connected {
+                    Task { await self?.loadSkills() }
+                } else if state == .disconnected {
+                    self?.availableSkills = []
+                }
+            }
+            .store(in: &cancellables)
 
         startHealthChecking()
     }
@@ -138,6 +164,58 @@ final class StatusBarController: ObservableObject {
         runMonitoringTask = nil
         monitoringSSEClient.disconnect()
         sseEventClient.disconnect()
+
+        // Reload skills after run completes
+        Task { await loadSkills() }
+    }
+
+    // MARK: - Skill Management
+
+    func loadSkills() async {
+        guard connectionState != .disconnected else { return }
+        do {
+            availableSkills = try await skillService.fetchSkills()
+        } catch {
+            logger.debug("Failed to load skills: \(error.localizedDescription)")
+        }
+    }
+
+    func runSkill(name: String) async {
+        guard connectionState != .disconnected else { return }
+        do {
+            let response = try await skillService.runSkill(name: name)
+            currentRunId = response.runId
+            currentTask = "技能: \(name)"
+            connectionState = .running
+            startRunMonitoring(runId: response.runId)
+        } catch {
+            logger.error("Failed to run skill '\(name)': \(error.localizedDescription)")
+        }
+    }
+
+    // MARK: - Hotkey Management
+
+    func restartHotkeyService() {
+        hotkeyService.start(configManager: hotkeyConfigManager)
+    }
+
+    private func handleHotkeyTriggered(_ binding: HotkeyBinding) {
+        switch binding.action {
+        case .skill(let name):
+            Task { await runSkill(name: name) }
+        case .task(let description):
+            Task {
+                do {
+                    let response = try await submitTask(task: description)
+                    currentRunId = response.runId
+                    currentTask = description
+                    connectionState = .running
+                    startRunMonitoring(runId: response.runId)
+                } catch {
+                    logger.error("Hotkey task submission failed: \(error.localizedDescription)")
+                }
+            }
+        }
     }
 
     private func sendNotification(title: String, body: String) {

@@ -380,6 +380,225 @@ enum AxionAPI {
                 )
             }
         }
+
+        // MARK: - Skill API Routes (Story 10.3)
+
+        // GET /v1/skills — list all skills
+        v1Authed.get("skills") { _, _ in
+            let summaries = Self.loadSkillSummaries()
+            let encoder = JSONEncoder()
+            encoder.outputFormatting = [.sortedKeys]
+            let data = try encoder.encode(summaries)
+            let body = ByteBuffer(data: data)
+            return Response(
+                status: .ok,
+                headers: [.contentType: "application/json"],
+                body: .init(byteBuffer: body)
+            )
+        }
+
+        // GET /v1/skills/:name — skill detail
+        v1Authed.get("skills/:name") { _, context in
+            guard let name = context.parameters.get("name") else {
+                throw AxionAPIError(
+                    status: .badRequest,
+                    error: APIErrorResponse(
+                        error: "missing_skill_name",
+                        message: "Skill name is required."
+                    )
+                )
+            }
+
+            guard let detail = Self.loadSkillDetail(name: name) else {
+                throw AxionAPIError(
+                    status: .notFound,
+                    error: APIErrorResponse(
+                        error: "skill_not_found",
+                        message: "Skill '\(name)' not found."
+                    )
+                )
+            }
+
+            return EditedResponse(
+                headers: [.contentType: "application/json"],
+                response: detail
+            )
+        }
+
+        // POST /v1/skills/:name/run — execute a skill
+        v1Authed.post("skills/:name/run") { request, context in
+            guard let name = context.parameters.get("name") else {
+                throw AxionAPIError(
+                    status: .badRequest,
+                    error: APIErrorResponse(
+                        error: "missing_skill_name",
+                        message: "Skill name is required."
+                    )
+                )
+            }
+
+            let safeName = RecordCommand.sanitizeFileName(name)
+            let skillsDir = SkillCompileCommand.skillsDirectory()
+            let skillPath = (skillsDir as NSString).appendingPathComponent("\(safeName).json")
+
+            guard FileManager.default.fileExists(atPath: skillPath) else {
+                throw AxionAPIError(
+                    status: .notFound,
+                    error: APIErrorResponse(
+                        error: "skill_not_found",
+                        message: "Skill '\(name)' not found."
+                    )
+                )
+            }
+
+            // Load skill
+            let skillData = try Data(contentsOf: URL(fileURLWithPath: skillPath))
+            let decoder = JSONDecoder()
+            decoder.dateDecodingStrategy = .iso8601
+            let skill: Skill
+            do {
+                skill = try decoder.decode(Skill.self, from: skillData)
+            } catch {
+                throw AxionAPIError(
+                    status: .badRequest,
+                    error: APIErrorResponse(
+                        error: "invalid_skill",
+                        message: "Failed to parse skill file."
+                    )
+                )
+            }
+
+            // Parse optional params from request body
+            var paramValues: [String: String] = [:]
+            let buffer = try await request.body.collect(upTo: context.maxUploadSize)
+            let bodyData = Data(buffer: buffer)
+            if !bodyData.isEmpty {
+                if let runRequest = try? JSONDecoder().decode(SkillRunRequest.self, from: bodyData) {
+                    paramValues = runRequest.params ?? [:]
+                }
+            }
+
+            // Validate required parameters
+            for param in skill.parameters where param.defaultValue == nil {
+                guard paramValues[param.name] != nil else {
+                    throw AxionAPIError(
+                        status: .badRequest,
+                        error: APIErrorResponse(
+                            error: "missing_parameter",
+                            message: "Missing required parameter: \(param.name)"
+                        )
+                    )
+                }
+            }
+
+            // Submit run via RunTracker — skill execution in background
+            let taskDescription = "技能: \(skill.name)"
+            let runId = await runTracker.submitRun(
+                task: taskDescription,
+                options: RunOptions(task: taskDescription)
+            )
+
+            let capturedConfig = config
+            let capturedSkill = skill
+            _ = Task.detached {
+                let result = await SkillAPIRunner.runSkill(
+                    config: capturedConfig,
+                    skill: capturedSkill,
+                    paramValues: paramValues,
+                    runId: runId,
+                    eventBroadcaster: eventBroadcaster
+                )
+                await runTracker.updateRun(
+                    runId: runId,
+                    status: result.finalStatus,
+                    steps: result.stepSummaries,
+                    durationMs: result.durationMs,
+                    replanCount: result.replanCount
+                )
+
+                // Update skill metadata on success
+                if result.finalStatus == .done {
+                    Self.updateSkillMetadata(skillPath: skillPath, skill: capturedSkill)
+                }
+            }
+
+            let response = SkillRunResponse(runId: runId, status: "running")
+            var resp = try context.responseEncoder.encode(response, from: request, context: context)
+            resp.status = .accepted
+            return resp
+        }
+    }
+
+    // MARK: - Skill Helpers
+
+    private static func loadSkillSummaries() -> [SkillSummaryResponse] {
+        let skillsDir = SkillCompileCommand.skillsDirectory()
+        let fm = FileManager.default
+
+        guard let fileNames = try? fm.contentsOfDirectory(atPath: skillsDir) else {
+            return []
+        }
+
+        let jsonFiles = fileNames.filter { $0.hasSuffix(".json") }
+        let decoder = JSONDecoder()
+        decoder.dateDecodingStrategy = .iso8601
+
+        let dateFormatter = ISO8601DateFormatter()
+        dateFormatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+
+        var summaries: [SkillSummaryResponse] = []
+        for fileName in jsonFiles {
+            let filePath = (skillsDir as NSString).appendingPathComponent(fileName)
+            guard let data = fm.contents(atPath: filePath),
+                  let skill = try? decoder.decode(Skill.self, from: data) else { continue }
+            summaries.append(SkillSummaryResponse(
+                name: skill.name,
+                description: skill.description,
+                parameterCount: skill.parameters.count,
+                stepCount: skill.steps.count,
+                lastUsedAt: skill.lastUsedAt.map { dateFormatter.string(from: $0) },
+                executionCount: skill.executionCount
+            ))
+        }
+
+        return summaries.sorted { $0.name < $1.name }
+    }
+
+    private static func loadSkillDetail(name: String) -> SkillDetailResponse? {
+        let safeName = RecordCommand.sanitizeFileName(name)
+        let skillsDir = SkillCompileCommand.skillsDirectory()
+        let skillPath = (skillsDir as NSString).appendingPathComponent("\(safeName).json")
+
+        guard let data = FileManager.default.contents(atPath: skillPath) else { return nil }
+        let decoder = JSONDecoder()
+        decoder.dateDecodingStrategy = .iso8601
+        guard let skill = try? decoder.decode(Skill.self, from: data) else { return nil }
+
+        let dateFormatter = ISO8601DateFormatter()
+        dateFormatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+
+        return SkillDetailResponse(
+            name: skill.name,
+            description: skill.description,
+            version: skill.version,
+            parameters: skill.parameters.map { p in
+                SkillParameterResponse(name: p.name, defaultValue: p.defaultValue, description: p.description)
+            },
+            stepCount: skill.steps.count,
+            lastUsedAt: skill.lastUsedAt.map { dateFormatter.string(from: $0) },
+            executionCount: skill.executionCount
+        )
+    }
+
+    private static func updateSkillMetadata(skillPath: String, skill: Skill) {
+        var updated = skill
+        updated.lastUsedAt = Date()
+        updated.executionCount += 1
+        let encoder = JSONEncoder()
+        encoder.outputFormatting = [.sortedKeys, .prettyPrinted]
+        encoder.dateEncodingStrategy = .iso8601
+        guard let data = try? encoder.encode(updated) else { return }
+        try? data.write(to: URL(fileURLWithPath: skillPath))
     }
 }
 

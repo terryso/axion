@@ -1,7 +1,7 @@
 import AppKit
 
 @MainActor
-final class MenuBarBuilder {
+final class MenuBarBuilder: NSObject {
     private let controller: StatusBarController
 
     init(controller: StatusBarController) {
@@ -21,15 +21,36 @@ final class MenuBarBuilder {
         quickRun.isEnabled = controller.connectionState != .disconnected
         menu.addItem(quickRun)
 
-        // 技能列表 (disabled placeholder)
+        // 技能列表 (enabled, dynamic)
         let skillList = NSMenuItem(
             title: "技能列表",
             action: nil,
             keyEquivalent: ""
         )
-        skillList.isEnabled = false
         let skillSubMenu = NSMenu()
-        skillSubMenu.addItem(NSMenuItem(title: "（即将支持）", action: nil, keyEquivalent: ""))
+        skillSubMenu.delegate = self
+
+        if controller.connectionState == .disconnected {
+            skillList.isEnabled = false
+            skillSubMenu.addItem(NSMenuItem(title: "（未连接）", action: nil, keyEquivalent: ""))
+        } else if controller.availableSkills.isEmpty {
+            skillList.isEnabled = true
+            let emptyItem = NSMenuItem(title: "（暂无技能）", action: nil, keyEquivalent: "")
+            emptyItem.isEnabled = false
+            skillSubMenu.addItem(emptyItem)
+        } else {
+            skillList.isEnabled = true
+            for skill in controller.availableSkills {
+                let item = NSMenuItem(
+                    title: "\(skill.name) (\(skill.stepCount)步)",
+                    action: #selector(runSkill(_:)),
+                    keyEquivalent: ""
+                )
+                item.target = self
+                item.representedObject = skill.name
+                skillSubMenu.addItem(item)
+            }
+        }
         skillList.submenu = skillSubMenu
         menu.addItem(skillList)
 
@@ -148,9 +169,19 @@ final class MenuBarBuilder {
     }
 
     @objc private func openSettings() {
-        let configDir = FileManager.default.homeDirectoryForCurrentUser
-            .appendingPathComponent(".axion")
-        let configFile = configDir.appendingPathComponent("config.json")
-        NSWorkspace.shared.open(configFile)
+        controller.settingsWindow.show(controller: controller)
+    }
+
+    @objc private func runSkill(_ sender: NSMenuItem) {
+        guard let skillName = sender.representedObject as? String else { return }
+        Task { await controller.runSkill(name: skillName) }
+    }
+}
+
+// MARK: - NSMenuDelegate
+
+extension MenuBarBuilder: NSMenuDelegate {
+    func menuNeedsUpdate(_ menu: NSMenu) {
+        // Skills list is rebuilt each time the menu opens via buildMenu()
     }
 }

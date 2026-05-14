@@ -283,4 +283,90 @@ final class APITypesTests: XCTestCase {
         XCTAssertNil(decoded.maxBatches)
         XCTAssertNil(decoded.allowForeground)
     }
+
+    // MARK: - Skill API Types (Story 10.3)
+
+    func test_skillSummaryResponse_codable_roundTrip() throws {
+        let summary = SkillSummaryResponse(
+            name: "open_calculator",
+            description: "打开计算器",
+            parameterCount: 1,
+            stepCount: 3,
+            lastUsedAt: "2026-05-15T10:00:00.000Z",
+            executionCount: 5
+        )
+        let data = try JSONEncoder().encode(summary)
+        let decoded = try JSONDecoder().decode(SkillSummaryResponse.self, from: data)
+        XCTAssertEqual(decoded.name, "open_calculator")
+        XCTAssertEqual(decoded.parameterCount, 1)
+        XCTAssertEqual(decoded.stepCount, 3)
+        XCTAssertEqual(decoded.executionCount, 5)
+    }
+
+    func test_skillSummaryResponse_decodesSnakeCase() throws {
+        let json = """
+        {"name":"test","description":"desc","parameter_count":2,"step_count":4,"last_used_at":null,"execution_count":0}
+        """
+        let data = json.data(using: .utf8)!
+        let decoded = try JSONDecoder().decode(SkillSummaryResponse.self, from: data)
+        XCTAssertEqual(decoded.name, "test")
+        XCTAssertEqual(decoded.parameterCount, 2)
+        XCTAssertNil(decoded.lastUsedAt)
+    }
+
+    func test_skillDetailResponse_codable_roundTrip() throws {
+        let detail = SkillDetailResponse(
+            name: "open_browser",
+            description: "打开浏览器",
+            version: 1,
+            parameters: [SkillParameterResponse(name: "url", defaultValue: nil, description: "URL")],
+            stepCount: 2,
+            lastUsedAt: nil,
+            executionCount: 0
+        )
+        let data = try JSONEncoder().encode(detail)
+        let decoded = try JSONDecoder().decode(SkillDetailResponse.self, from: data)
+        XCTAssertEqual(decoded.name, "open_browser")
+        XCTAssertEqual(decoded.parameters.count, 1)
+        XCTAssertEqual(decoded.parameters[0].name, "url")
+    }
+
+    func test_skillParameterResponse_decodesSnakeCase() throws {
+        let json = #"{"name":"url","default_value":"https://example.com","description":"URL param"}"#
+        let data = json.data(using: .utf8)!
+        let decoded = try JSONDecoder().decode(SkillParameterResponse.self, from: data)
+        XCTAssertEqual(decoded.name, "url")
+        XCTAssertEqual(decoded.defaultValue, "https://example.com")
+    }
+
+    func test_skillRunRequest_encodesParams() throws {
+        let req = SkillRunRequest(params: ["key": "value"])
+        let data = try JSONEncoder().encode(req)
+        let json = try XCTUnwrap(String(data: data, encoding: .utf8))
+        XCTAssertTrue(json.contains("\"params\""))
+        XCTAssertTrue(json.contains("\"key\""))
+    }
+
+    func test_skillRunRequest_encodesNilParams() throws {
+        let req = SkillRunRequest(params: nil)
+        let data = try JSONEncoder().encode(req)
+        let json = try XCTUnwrap(String(data: data, encoding: .utf8))
+        // Optional fields with nil are omitted by JSONEncoder
+        XCTAssertTrue(json == "{}", "Nil params should be omitted from JSON")
+    }
+
+    func test_skillRunResponse_codable_roundTrip() throws {
+        let resp = SkillRunResponse(runId: "20260515-abc", status: "running")
+        let data = try JSONEncoder().encode(resp)
+        let decoded = try JSONDecoder().decode(SkillRunResponse.self, from: data)
+        XCTAssertEqual(decoded.runId, "20260515-abc")
+        XCTAssertEqual(decoded.status, "running")
+    }
+
+    func test_skillRunResponse_decodesSnakeCase() throws {
+        let json = #"{"run_id":"20260515-xyz","status":"done"}"#
+        let data = json.data(using: .utf8)!
+        let decoded = try JSONDecoder().decode(SkillRunResponse.self, from: data)
+        XCTAssertEqual(decoded.runId, "20260515-xyz")
+    }
 }

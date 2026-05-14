@@ -150,8 +150,28 @@ struct StatusBarControllerTests {
         let _ = controller.taskSubmissionService
         let _ = controller.sseEventClient
         let _ = controller.runHistoryService
+        let _ = controller.skillService
         let _ = controller.quickRunWindow
         let _ = controller.taskDetailPanel
         let _ = controller.runHistoryWindow
+        let _ = controller.settingsWindow
+        let _ = controller.hotkeyConfigManager
+        let _ = controller.hotkeyService
+    }
+
+    // MARK: - Skill Management (Story 10.3)
+
+    @Test("availableSkills starts empty")
+    func availableSkillsStartsEmpty() {
+        let controller = StatusBarController()
+        #expect(controller.availableSkills.isEmpty)
+    }
+
+    @Test("loadSkills does nothing when disconnected")
+    func loadSkillsDisconnected() async {
+        let controller = StatusBarController()
+        controller.connectionState = .disconnected
+        await controller.loadSkills()
+        #expect(controller.availableSkills.isEmpty)
     }
 }

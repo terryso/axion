@@ -115,7 +115,7 @@ struct MenuBarBuilderTests {
         #expect(versionTitles.isEmpty)
     }
 
-    @Test("技能列表 has submenu with placeholder")
+    @Test("技能列表 has submenu with disconnected placeholder")
     func skillListSubmenu() {
         let controller = StatusBarController()
         let builder = MenuBarBuilder(controller: controller)
@@ -124,7 +124,7 @@ struct MenuBarBuilderTests {
         #expect(skillItem != nil)
         #expect(skillItem?.submenu != nil)
         let subTitles = skillItem?.submenu?.items.compactMap { $0.title } ?? []
-        #expect(subTitles.contains("（即将支持）"))
+        #expect(subTitles.contains("（未连接）"))
     }
 
     @Test("设置 item has keyboard shortcut comma")

@@ -44,9 +44,19 @@ struct AxionBarMenuContent: View {
         .disabled(controller.connectionState == .disconnected)
 
         Menu("技能列表") {
-            Text("（即将支持）")
+            if controller.connectionState == .disconnected {
+                Text("（未连接）")
+            } else if controller.availableSkills.isEmpty {
+                Text("（暂无技能）")
+            } else {
+                ForEach(controller.availableSkills, id: \.name) { skill in
+                    Button("\(skill.name) (\(skill.stepCount)步)") {
+                        Task { await controller.runSkill(name: skill.name) }
+                    }
+                }
+            }
         }
-        .disabled(true)
+        .disabled(controller.connectionState == .disconnected)
 
         if controller.connectionState == .running, let task = controller.currentTask {
             Divider()
@@ -87,10 +97,7 @@ struct AxionBarMenuContent: View {
         Divider()
 
         Button("设置...") {
-            let configDir = FileManager.default.homeDirectoryForCurrentUser
-                .appendingPathComponent(".axion")
-            let configFile = configDir.appendingPathComponent("config.json")
-            NSWorkspace.shared.open(configFile)
+            controller.settingsWindow.show(controller: controller)
         }
 
         if let version = controller.serverVersion {
