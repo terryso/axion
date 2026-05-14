@@ -5,6 +5,7 @@
 # retro-epic-6: 2026-05-14
 # retro-epic-7: 2026-05-14
 # retro-epic-8: 2026-05-14
+# retro-epic-9: 2026-05-15
 # project: axion
 # project_key: NOKEY
 # tracking_system: file-system
@@ -124,11 +125,11 @@ development_status:
   epic-8-retrospective: done
 
   # Epic 9: 录制 → 编译 → 技能复用
-  epic-9: in-progress
+  epic-9: done
   9-1-operation-recording-engine: done
   9-2-recording-compile-reusable-skill: done
   9-3-skill-library-management-execution: done
-  epic-9-retrospective: optional
+  epic-9-retrospective: done
 
   # Epic 10: macOS 菜单栏 UI
   epic-10: backlog

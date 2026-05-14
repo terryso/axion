@@ -1629,9 +1629,9 @@ So that 我可以快速上手并避免踩坑.
 
 **关键技术决策（Phase 3 实施前需确定）：**
 
-| 决策 | 说明 | 影响 |
-|------|------|------|
-| D9: 录制引擎实现方式 | AX Observer（系统事件监听）vs 辅助功能监听 vs 轮询 | 录制精度、CPU 开销、权限要求 |
-| D10: 菜单栏 App 架构 | 独立 App vs Framework + App Extension | 进程模型、通信方式、分发策略 |
-| D11: 技能文件格式 | 纯 JSON vs DSL（YAML/Markdown）vs Swift Codable | 可读性、可编辑性、参数化能力 |
-| D12: 跨应用数据传递机制 | 剪贴板 vs 临时文件 vs AX 值提取 | 可靠性、数据类型支持、隐私 |
+| 决策 | 说明 | 影响 | 状态 |
+|------|------|------|------|
+| D9: 录制引擎实现方式 | AX Observer（系统事件监听）vs 辅助功能监听 vs 轮询 | 录制精度、CPU 开销、权限要求 | ✅ 已决定：CGEvent Tap (listen-only) + NSWorkspace Notification（Epic 9） |
+| D10: 菜单栏 App 架构 | 独立 App vs Framework + App Extension | 进程模型、通信方式、分发策略 | ⏳ 待决定 |
+| D11: 技能文件格式 | 纯 JSON vs DSL（YAML/Markdown）vs Swift Codable | 可读性、可编辑性、参数化能力 | ✅ 已决定：纯 JSON + Codable（Epic 9） |
+| D12: 跨应用数据传递机制 | 剪贴板 vs 临时文件 vs AX 值提取 | 可靠性、数据类型支持、隐私 | ✅ 已决定：剪贴板（Epic 8） |

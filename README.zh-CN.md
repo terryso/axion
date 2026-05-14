@@ -120,6 +120,26 @@ axion run --dryrun "打开计算器并计算 123 + 456"
 axion run --max-steps 10 "在备忘录中创建一条新笔记"
 ```
 
+### 录制与技能复用
+
+录制一次操作，之后可反复回放，无需 LLM 规划：
+
+```bash
+# 录制你的操作
+axion record "打开计算器"
+# ... 执行桌面操作 ...
+# 按 Ctrl-C 结束录制
+
+# 将录制编译为可复用技能
+axion skill compile 打开计算器
+
+# 执行技能（不需要 LLM —— 快速且确定性）
+axion skill run 打开计算器
+
+# 列出所有已保存的技能
+axion skill list
+```
+
 ### 作为 MCP Server 使用
 
 AxionHelper 可作为独立的 MCP 服务端运行，供任意 MCP 客户端调用：

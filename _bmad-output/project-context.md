@@ -335,6 +335,64 @@ Sources/AxionCLI/Memory/
 
 ---
 
+## 录制与技能系统（Epic 9）
+
+用户演示操作 → Axion 录制 → 编译为可复用技能 → 一键回放（无需 LLM）。
+
+**存储路径：**
+- 录制文件：`~/.axion/recordings/{name}.json`
+- 技能文件：`~/.axion/skills/{name}.json`
+
+**核心模型（AxionCore）：**
+```
+Sources/AxionCore/Models/
+├── RecordedEvent.swift     # Recording, RecordedEvent, WindowContext, WindowSnapshot, JSONValue
+└── Skill.swift             # Skill, SkillStep, SkillParameter, SkillExecutionResult
+```
+
+**核心服务（AxionCLI）：**
+```
+Sources/AxionCLI/Services/
+├── RecordingCompiler.swift  # 录制→技能编译（纯数据转换，不需要 Helper）
+└── SkillExecutor.swift      # 技能执行引擎（通过 MCP 调用 Helper）
+```
+
+**CLI 命令：**
+- `axion record "任务名"` — 启动录制模式，Ctrl-C 停止并保存
+- `axion skill compile <name> [--param name ...]` — 编译录制为技能
+- `axion skill run <name> [--param key=value ...]` — 执行技能（不需要 LLM）
+- `axion skill list` — 列出所有已保存技能
+- `axion skill delete <name>` — 删除技能
+
+**Helper 端 MCP 工具：**
+- `start_recording` — 激活 CGEvent Tap（listen-only）+ NSWorkspace 监听
+- `stop_recording` — 停止监听，返回录制事件和窗口快照
+
+**关键设计决策：**
+- D9：CGEvent Tap (listen-only) + NSWorkspace Notification — 精确捕获所有输入事件，CPU < 5%
+- D11：纯 JSON + Codable — 可读、可编辑、Swift 原生支持
+- 窗口上下文通过 500ms 定时器采样，不在 CGEvent 回调中查询 AX tree
+- compile 是纯数据转换（不需要 Helper），run 需要通过 MCP 调用 Helper
+- SkillExecutor 不走 PlaceholderResolver/SafetyChecker 管线 — 技能步骤是确定性序列
+- SkillStep.arguments 值均为 String 类型，执行时负责类型转换为 Value
+- 文件名必须使用 `RecordCommand.sanitizeFileName()` 进行路径安全处理
+- 录制引擎 Helper 工具必须在 SafetyChecker.backgroundSafeTools 中注册
+
+**技能文件格式（JSON）：**
+```json
+{
+  "name": "open_calculator",
+  "description": "操作录制: open_calculator",
+  "version": 1,
+  "parameters": [{ "name": "url", "default_value": null }],
+  "steps": [
+    { "tool": "launch_app", "arguments": { "app_name": "Calculator" }, "wait_after_seconds": 0.5 }
+  ]
+}
+```
+
+---
+
 ## 执行循环状态机
 
 ```
@@ -593,6 +651,84 @@ RunCommand (fast=true)
   完成。      --fast"   --fast"
   N步,耗时
   X秒。"
+```
+
+---
+
+### 录制数据流（Epic 9）
+
+```
+axion record "打开计算器"
+    │
+    ▼
+RecordCommand.run()
+    │
+    ├── ConfigManager.loadConfig()
+    ├── HelperProcessManager.start()
+    │
+    ├── MCP call: start_recording → Helper
+    │       │
+    │       ▼
+    │   EventRecorderService.startRecording()
+    │       ├── CGEventTap.activate() (listen-only)
+    │       ├── NSWorkspace.addObserver (app switch)
+    │       └── 500ms timer: sampleWindowContext()
+    │
+    ├── "录制中... 按 Ctrl-C 结束录制"
+    │
+    └── SIGINT handler:
+            │
+            ├── MCP call: stop_recording → Helper
+            │       → [RecordedEvent] + [WindowSnapshot]
+            ├── Save ~/.axion/recordings/{name}.json
+            └── Display recording summary
+```
+
+### 技能编译数据流（Epic 9）
+
+```
+axion skill compile open_calculator [--param url]
+    │
+    ▼
+SkillCompileCommand.run()
+    │
+    ├── Load ~/.axion/recordings/open_calculator.json → Recording
+    │
+    ├── RecordingCompiler.compile(recording:paramNames:)
+    │       ├── Event → SkillStep mapping (5 types)
+    │       ├── Auto parameter detection (URL/path/long text)
+    │       ├── Manual --param override
+    │       └── Redundancy optimization (merge, dedup, remove)
+    │
+    ├── Save ~/.axion/skills/open_calculator.json → Skill JSON
+    └── Display compilation summary
+```
+
+### 技能执行数据流（Epic 9）
+
+```
+axion skill run open_calculator --param url=https://example.com
+    │
+    ▼
+SkillRunCommand.run()
+    │
+    ├── Load ~/.axion/skills/open_calculator.json → Skill
+    ├── Validate required parameters
+    │
+    ├── HelperProcessManager.start()
+    ├── HelperMCPClientAdapter(manager) → MCPClientProtocol
+    │
+    ├── SkillExecutor(client).execute(skill:paramValues:)
+    │       │
+    │       ▼ (每个 SkillStep)
+    │   resolveParams()     — {{param}} → value/default
+    │   toStringValueDict() — String → Value (.int() or .string())
+    │   MCP callTool()      — 调用 Helper 执行操作
+    │   Retry once on failure
+    │
+    ├── Update skill file (lastUsedAt, executionCount)
+    ├── HelperProcessManager.stop()
+    └── Display execution summary
 ```
 
 ---

@@ -120,6 +120,26 @@ axion run --dryrun "Open Calculator and compute 123 + 456"
 axion run --max-steps 10 "Create a new note in Notes"
 ```
 
+### Record and Replay Skills
+
+Record a workflow once, replay it anytime without LLM planning:
+
+```bash
+# Record your actions
+axion record "open_calculator"
+# ... perform desktop operations ...
+# Press Ctrl-C to stop recording
+
+# Compile recording into a reusable skill
+axion skill compile open_calculator
+
+# Run the skill (no LLM needed — fast and deterministic)
+axion skill run open_calculator
+
+# List all saved skills
+axion skill list
+```
+
 ### Use as an MCP Server
 
 AxionHelper can run as a standalone MCP server for any MCP client:

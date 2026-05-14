@@ -15,7 +15,7 @@ struct SkillRunCommand: AsyncParsableCommand {
     var param: [String] = []
 
     @Flag(name: .long, help: "允许前台操作")
-    var allowForeground: Bool = true
+    var allowForeground: Bool = false
 
     mutating func run() async throws {
         let safeName = RecordCommand.sanitizeFileName(name)
