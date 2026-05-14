@@ -145,4 +145,90 @@ struct SkillTests {
         #expect(decoded.parameters.isEmpty)
         #expect(decoded.steps.isEmpty)
     }
+
+    // MARK: - Execution Metadata
+
+    @Test("Skill with lastUsedAt and executionCount round-trip")
+    func test_skill_executionMetadata_roundTrip() throws {
+        let original = Skill(
+            name: "test_skill",
+            description: "test",
+            createdAt: Date(timeIntervalSince1970: 1_715_658_000),
+            sourceRecording: "test",
+            steps: [],
+            lastUsedAt: Date(timeIntervalSince1970: 1_715_660_000),
+            executionCount: 5
+        )
+        let encoder = JSONEncoder()
+        encoder.outputFormatting = [.sortedKeys, .prettyPrinted]
+        encoder.dateEncodingStrategy = .iso8601
+        let data = try encoder.encode(original)
+
+        let decoder = JSONDecoder()
+        decoder.dateDecodingStrategy = .iso8601
+        let decoded = try decoder.decode(Skill.self, from: data)
+        #expect(decoded == original)
+        #expect(decoded.executionCount == 5)
+        #expect(decoded.lastUsedAt != nil)
+    }
+
+    @Test("Skill defaults executionCount to 0 and lastUsedAt to nil when missing")
+    func test_skill_backwardCompatibility() throws {
+        // JSON without last_used_at or execution_count fields
+        let json = """
+        {
+            "name": "old_skill",
+            "description": "old",
+            "version": 1,
+            "created_at": "2024-05-14T00:00:00Z",
+            "source_recording": "old",
+            "parameters": [],
+            "steps": []
+        }
+        """
+        let data = try #require(json.data(using: .utf8))
+        let decoder = JSONDecoder()
+        decoder.dateDecodingStrategy = .iso8601
+        let decoded = try decoder.decode(Skill.self, from: data)
+        #expect(decoded.executionCount == 0)
+        #expect(decoded.lastUsedAt == nil)
+    }
+
+    @Test("Skill execution metadata uses snake_case keys in JSON")
+    func test_skill_executionMetadata_snakeCaseKeys() throws {
+        let skill = Skill(
+            name: "test",
+            description: "test",
+            createdAt: Date(),
+            sourceRecording: "test",
+            steps: [],
+            lastUsedAt: Date(),
+            executionCount: 3
+        )
+        let encoder = JSONEncoder()
+        encoder.outputFormatting = [.sortedKeys, .prettyPrinted]
+        encoder.dateEncodingStrategy = .iso8601
+        let data = try encoder.encode(skill)
+        let json = try JSONSerialization.jsonObject(with: data) as! [String: Any]
+        #expect(json["last_used_at"] != nil)
+        #expect(json["execution_count"] != nil)
+    }
+
+    @Test("Skill executionCount and lastUsedAt are mutable")
+    func test_skill_executionMetadata_mutable() {
+        var skill = Skill(
+            name: "test",
+            description: "test",
+            createdAt: Date(),
+            sourceRecording: "test",
+            steps: []
+        )
+        #expect(skill.executionCount == 0)
+        #expect(skill.lastUsedAt == nil)
+
+        skill.executionCount = 1
+        skill.lastUsedAt = Date()
+        #expect(skill.executionCount == 1)
+        #expect(skill.lastUsedAt != nil)
+    }
 }

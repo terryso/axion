@@ -9,12 +9,16 @@ public struct Skill: Codable, Equatable, Sendable {
     public let sourceRecording: String
     public let parameters: [SkillParameter]
     public let steps: [SkillStep]
+    public var lastUsedAt: Date?
+    public var executionCount: Int
 
     enum CodingKeys: String, CodingKey {
         case name, description, version
         case createdAt = "created_at"
         case sourceRecording = "source_recording"
         case parameters, steps
+        case lastUsedAt = "last_used_at"
+        case executionCount = "execution_count"
     }
 
     public init(
@@ -24,7 +28,9 @@ public struct Skill: Codable, Equatable, Sendable {
         createdAt: Date,
         sourceRecording: String,
         parameters: [SkillParameter] = [],
-        steps: [SkillStep]
+        steps: [SkillStep],
+        lastUsedAt: Date? = nil,
+        executionCount: Int = 0
     ) {
         self.name = name
         self.description = description
@@ -33,6 +39,21 @@ public struct Skill: Codable, Equatable, Sendable {
         self.sourceRecording = sourceRecording
         self.parameters = parameters
         self.steps = steps
+        self.lastUsedAt = lastUsedAt
+        self.executionCount = executionCount
+    }
+
+    public init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        name = try container.decode(String.self, forKey: .name)
+        description = try container.decode(String.self, forKey: .description)
+        version = try container.decode(Int.self, forKey: .version)
+        createdAt = try container.decode(Date.self, forKey: .createdAt)
+        sourceRecording = try container.decode(String.self, forKey: .sourceRecording)
+        parameters = try container.decode([SkillParameter].self, forKey: .parameters)
+        steps = try container.decode([SkillStep].self, forKey: .steps)
+        lastUsedAt = try container.decodeIfPresent(Date.self, forKey: .lastUsedAt)
+        executionCount = try container.decodeIfPresent(Int.self, forKey: .executionCount) ?? 0
     }
 }
 

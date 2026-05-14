@@ -1,5 +1,5 @@
 # generated: 2026-05-08
-# last_updated: 2026-05-14
+# last_updated: 2026-05-15
 # retro-epic-4: 2026-05-14
 # retro-epic-5: 2026-05-14
 # retro-epic-6: 2026-05-14
@@ -40,7 +40,7 @@
 # - Dev moves story to 'review', then runs code-review (fresh context, different LLM recommended)
 
 generated: 2026-05-08
-last_updated: 2026-05-14
+last_updated: 2026-05-15
 project: axion
 project_key: NOKEY
 tracking_system: file-system
@@ -127,7 +127,7 @@ development_status:
   epic-9: in-progress
   9-1-operation-recording-engine: done
   9-2-recording-compile-reusable-skill: done
-  9-3-skill-library-management-execution: backlog
+  9-3-skill-library-management-execution: done
   epic-9-retrospective: optional
 
   # Epic 10: macOS 菜单栏 UI
