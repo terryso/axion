@@ -142,4 +142,71 @@ final class ConcurrencyLimiterTests: XCTestCase {
         let count = await limiter.activeRunCount
         XCTAssertEqual(count, 0, "Releasing on empty limiter should not go negative")
     }
+
+    // MARK: - Story 5.3 AC3: tryAcquire / cancelAll / queueDepth (graceful shutdown)
+
+    func test_tryAcquire_belowLimit_returnsTrue() async throws {
+        let limiter = ConcurrencyLimiter(maxConcurrent: 2)
+        let result = await limiter.tryAcquire()
+        XCTAssertTrue(result, "tryAcquire should succeed when below limit")
+        let count = await limiter.activeRunCount
+        XCTAssertEqual(count, 1)
+    }
+
+    func test_tryAcquire_atLimit_returnsFalse() async throws {
+        let limiter = ConcurrencyLimiter(maxConcurrent: 1)
+        _ = await limiter.tryAcquire()
+        let result = await limiter.tryAcquire()
+        XCTAssertFalse(result, "tryAcquire should fail when at limit")
+    }
+
+    func test_queueDepth_reflectsWaitingCount() async throws {
+        let limiter = ConcurrencyLimiter(maxConcurrent: 1)
+        _ = await limiter.acquire()
+        let depth0 = await limiter.queueDepth
+        XCTAssertEqual(depth0, 0)
+
+        _ = Task { await limiter.acquire() }
+        try await Task.sleep(for: .milliseconds(50))
+        let depth1 = await limiter.queueDepth
+        XCTAssertEqual(depth1, 1, "One task should be queued")
+
+        _ = Task { await limiter.acquire() }
+        try await Task.sleep(for: .milliseconds(50))
+        let depth2 = await limiter.queueDepth
+        XCTAssertEqual(depth2, 2, "Two tasks should be queued")
+    }
+
+    func test_cancelAll_resumesQueuedWithMinusOne() async throws {
+        let limiter = ConcurrencyLimiter(maxConcurrent: 1)
+        _ = await limiter.acquire()
+
+        let task1 = Task { await limiter.acquire() }
+        let task2 = Task { await limiter.acquire() }
+        try await Task.sleep(for: .milliseconds(50))
+
+        let depthBefore = await limiter.queueDepth
+        XCTAssertEqual(depthBefore, 2)
+        await limiter.cancelAll()
+        let depthAfter = await limiter.queueDepth
+        XCTAssertEqual(depthAfter, 0)
+
+        let pos1 = try await task1.value
+        let pos2 = try await task2.value
+        XCTAssertEqual(pos1, -1, "Cancelled waiter should receive -1")
+        XCTAssertEqual(pos2, -1, "Cancelled waiter should receive -1")
+    }
+
+    func test_cancelAll_doesNotAffectActiveRuns() async throws {
+        let limiter = ConcurrencyLimiter(maxConcurrent: 2)
+        _ = await limiter.acquire()
+        _ = await limiter.acquire()
+
+        _ = Task { await limiter.acquire() }
+        try await Task.sleep(for: .milliseconds(50))
+
+        await limiter.cancelAll()
+        let activeCount = await limiter.activeRunCount
+        XCTAssertEqual(activeCount, 2, "cancelAll should not affect active runs")
+    }
 }

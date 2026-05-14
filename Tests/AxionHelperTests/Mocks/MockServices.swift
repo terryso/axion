@@ -137,7 +137,8 @@ enum ServiceContainerFixture {
         accessibilityEngine: (any WindowManaging)? = nil,
         inputSimulation: (any InputSimulating)? = nil,
         screenshotCapture: (any ScreenshotCapturing)? = nil,
-        urlOpener: (any URLOpening)? = nil
+        urlOpener: (any URLOpening)? = nil,
+        eventRecorder: (any EventRecording)? = nil
     ) -> @Sendable () -> Void {
         let original = ServiceContainer.shared
         ServiceContainer.shared = ServiceContainer(
@@ -145,7 +146,8 @@ enum ServiceContainerFixture {
             accessibilityEngine: accessibilityEngine ?? original.accessibilityEngine,
             inputSimulation: inputSimulation ?? original.inputSimulation,
             screenshotCapture: screenshotCapture ?? original.screenshotCapture,
-            urlOpener: urlOpener ?? original.urlOpener
+            urlOpener: urlOpener ?? original.urlOpener,
+            eventRecorder: eventRecorder ?? original.eventRecorder
         )
         return { ServiceContainer.shared = original }
     }
