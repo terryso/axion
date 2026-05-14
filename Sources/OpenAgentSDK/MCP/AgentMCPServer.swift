@@ -103,8 +103,11 @@ public actor AgentMCPServer {
     /// - Parameter agent: The Agent to expose via the `agent_prompt` tool.
     public func run(agent: Agent) async throws {
         self.agent = agent
-        let server = await getOrCreateMCPServer()
-        try await server.run(transport: .stdio)
+        let mcpServer = await getOrCreateMCPServer()
+        let session = await mcpServer.createSession()
+        let transport = StdioTransport()
+        try await session.start(transport: transport)
+        await session.waitUntilCompleted()
     }
 
     /// Runs the MCP server with stdio transport, exposing only the registered tools.
@@ -112,8 +115,11 @@ public actor AgentMCPServer {
     /// The `agent_prompt` tool is registered but returns an error when called,
     /// since no agent is configured. Use ``run(agent:)`` to enable full agent execution.
     public func run() async throws {
-        let server = await getOrCreateMCPServer()
-        try await server.run(transport: .stdio)
+        let mcpServer = await getOrCreateMCPServer()
+        let session = await mcpServer.createSession()
+        let transport = StdioTransport()
+        try await session.start(transport: transport)
+        await session.waitUntilCompleted()
     }
 
     // MARK: - Private Helpers
