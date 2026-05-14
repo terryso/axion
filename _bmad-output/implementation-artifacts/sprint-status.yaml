@@ -126,7 +126,7 @@ development_status:
   # Epic 9: 录制 → 编译 → 技能复用
   epic-9: in-progress
   9-1-operation-recording-engine: done
-  9-2-recording-compile-reusable-skill: backlog
+  9-2-recording-compile-reusable-skill: done
   9-3-skill-library-management-execution: backlog
   epic-9-retrospective: optional
 
