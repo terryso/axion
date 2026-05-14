@@ -271,7 +271,7 @@ struct RunCommand: AsyncParsableCommand {
 
                     // Save profile as a KnowledgeEntry (only if there's meaningful data)
                     if profile.totalRuns > 0 {
-                        let profileContent = buildProfileContent(profile: profile)
+                        let profileContent = Self.buildProfileContent(profile: profile)
                         let profileEntry = KnowledgeEntry(
                             id: UUID().uuidString,
                             content: profileContent,
@@ -380,7 +380,8 @@ struct RunCommand: AsyncParsableCommand {
     }
 
     /// Build a text content string from an AppProfile for storage as KnowledgeEntry.
-    private func buildProfileContent(profile: AppProfile) -> String {
+    /// Internal to allow unit testing (Story 4.3 Planner depends on this format).
+    static func buildProfileContent(profile: AppProfile) -> String {
         var lines: [String] = []
         lines.append("App Profile: \(profile.domain)")
         lines.append("总运行次数: \(profile.totalRuns)")

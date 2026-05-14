@@ -36,6 +36,12 @@ struct MemoryClearCommand: AsyncParsableCommand {
     ///   - memoryDir: The filesystem path to the Memory directory.
     /// - Returns: A `ClearResult` indicating whether the deletion succeeded.
     static func clearDomain(_ domain: String, memoryDir: String) async throws -> ClearResult {
+        guard isValidDomain(domain) else {
+            return ClearResult(
+                success: false,
+                message: "Invalid domain: '\(domain)'. Domain must not contain path separators or '..'."
+            )
+        }
         let filePath = (memoryDir as NSString).appendingPathComponent("\(domain).json")
         let fm = FileManager.default
 
@@ -66,5 +72,16 @@ struct MemoryClearCommand: AsyncParsableCommand {
     private func resolveMemoryDir() -> String {
         let configDir = ConfigManager.defaultConfigDirectory
         return (configDir as NSString).appendingPathComponent("memory")
+    }
+
+    /// Validate that a domain string is safe to use as a filename component.
+    /// Rejects domains containing path separators or parent-directory references.
+    private static func isValidDomain(_ domain: String) -> Bool {
+        guard !domain.isEmpty else { return false }
+        let forbidden = ["/", "\\", ".."]
+        for segment in forbidden {
+            if domain.contains(segment) { return false }
+        }
+        return true
     }
 }

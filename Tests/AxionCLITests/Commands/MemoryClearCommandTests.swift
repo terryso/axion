@@ -142,6 +142,20 @@ final class MemoryClearCommandTests: XCTestCase {
 
     // MARK: - P1: Edge cases
 
+    func test_clear_pathTraversal_rejected() async throws {
+        let tempDir = try createTempMemoryDir()
+        defer { try? FileManager.default.removeItem(atPath: tempDir) }
+
+        let maliciousDomains = ["../../../etc/passwd", "foo/bar", "foo\\bar", ".."]
+        for domain in maliciousDomains {
+            let result = try await MemoryClearCommand.clearDomain(domain, memoryDir: tempDir)
+            XCTAssertFalse(result.success,
+                "Should reject path-traversal domain: '\(domain)'")
+            XCTAssertTrue(result.message.contains("Invalid"),
+                "Should report invalid domain for: '\(domain)'")
+        }
+    }
+
     func test_clear_emptyMemoryDir_doesNotCrash() async throws {
         let tempDir = try createTempMemoryDir()
         defer { try? FileManager.default.removeItem(atPath: tempDir) }

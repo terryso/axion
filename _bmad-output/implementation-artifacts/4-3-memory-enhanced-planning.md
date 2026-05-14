@@ -42,28 +42,28 @@ So that 计划更精准，减少试错和重规划次数.
 
 ## Tasks / Subtasks
 
-- [ ] Task 1: 创建 MemoryContextProvider 服务 (AC: #1, #2, #3)
-  - [ ] 1.1 创建 `Sources/AxionCLI/Memory/MemoryContextProvider.swift`
-  - [ ] 1.2 实现 `buildMemoryContext(task:store:) async throws -> String?` 方法：解析任务描述中涉及的 App domain，查询对应 Memory，组装 prompt 片段
-  - [ ] 1.3 实现 domain 推断逻辑：从任务描述中匹配已知 App 名（Calculator、Finder、TextEdit、Safari、Chrome 等），再从 Memory 中查找对应的 domain
-  - [ ] 1.4 实现 prompt 片段组装：读取 profile entries 和 familiar 标记，格式化为 Planner 可消费的 Memory 上下文文本
+- [x] Task 1: 创建 MemoryContextProvider 服务 (AC: #1, #2, #3)
+  - [x] 1.1 创建 `Sources/AxionCLI/Memory/MemoryContextProvider.swift`
+  - [x] 1.2 实现 `buildMemoryContext(task:store:) async throws -> String?` 方法：解析任务描述中涉及的 App domain，查询对应 Memory，组装 prompt 片段
+  - [x] 1.3 实现 domain 推断逻辑：从任务描述中匹配已知 App 名（Calculator、Finder、TextEdit、Safari、Chrome 等），再从 Memory 中查找对应的 domain
+  - [x] 1.4 实现 prompt 片段组装：读取 profile entries 和 familiar 标记，格式化为 Planner 可消费的 Memory 上下文文本
 
-- [ ] Task 2: 在 RunCommand 中集成 Memory 上下文注入 (AC: #1, #2, #3, #4)
-  - [ ] 2.1 在 `RunCommand` 添加 `@Flag(name: .long, help: "禁用 Memory 上下文注入") var noMemory: Bool = false`
-  - [ ] 2.2 在 `buildFullSystemPrompt` 方法中，如果 `noMemory == false` 且 memoryStore 已创建，调用 MemoryContextProvider 获取上下文
-  - [ ] 2.3 将 Memory 上下文追加到 system prompt 末尾，以清晰的 section header 分隔（如 `\n\n# App Memory Context\n`）
-  - [ ] 2.4 保留现有 system prompt 构建逻辑不变，Memory 上下文是纯追加
+- [x] Task 2: 在 RunCommand 中集成 Memory 上下文注入 (AC: #1, #2, #3, #4)
+  - [x] 2.1 在 `RunCommand` 添加 `@Flag(name: .long, help: "禁用 Memory 上下文注入") var noMemory: Bool = false`
+  - [x] 2.2 在 `buildFullSystemPrompt` 方法中，如果 `noMemory == false` 且 memoryStore 已创建，调用 MemoryContextProvider 获取上下文
+  - [x] 2.3 将 Memory 上下文追加到 system prompt 末尾，以清晰的 section header 分隔（如 `\n\n# App Memory Context\n`）
+  - [x] 2.4 保留现有 system prompt 构建逻辑不变，Memory 上下文是纯追加
 
-- [ ] Task 3: 创建 `axion memory` 命令组 (AC: #5, #6)
-  - [ ] 3.1 创建 `Sources/AxionCLI/Commands/MemoryCommand.swift` — 命令组入口
-  - [ ] 3.2 创建 `Sources/AxionCLI/Commands/MemoryListCommand.swift` — `axion memory list` 子命令
-  - [ ] 3.3 创建 `Sources/AxionCLI/Commands/MemoryClearCommand.swift` — `axion memory clear --app <domain>` 子命令
-  - [ ] 3.4 在 `AxionCommand.swift`（或 main.swift）中注册 `memory` 子命令
+- [x] Task 3: 创建 `axion memory` 命令组 (AC: #5, #6)
+  - [x] 3.1 创建 `Sources/AxionCLI/Commands/MemoryCommand.swift` — 命令组入口
+  - [x] 3.2 创建 `Sources/AxionCLI/Commands/MemoryListCommand.swift` — `axion memory list` 子命令
+  - [x] 3.3 创建 `Sources/AxionCLI/Commands/MemoryClearCommand.swift` — `axion memory clear --app <domain>` 子命令
+  - [x] 3.4 在 `AxionCommand.swift`（或 main.swift）中注册 `memory` 子命令
 
-- [ ] Task 4: 单元测试 (AC: #1–#6)
-  - [ ] 4.1 `Tests/AxionCLITests/Memory/MemoryContextProviderTests.swift` — 测试 domain 推断、上下文组装、熟悉 App 紧凑策略
-  - [ ] 4.2 `Tests/AxionCLITests/Commands/MemoryListCommandTests.swift` — 测试 list 输出格式
-  - [ ] 4.3 `Tests/AxionCLITests/Commands/MemoryClearCommandTests.swift` — 测试 clear 逻辑
+- [x] Task 4: 单元测试 (AC: #1–#6)
+  - [x] 4.1 `Tests/AxionCLITests/Memory/MemoryContextProviderTests.swift` — 测试 domain 推断、上下文组装、熟悉 App 紧凑策略
+  - [x] 4.2 `Tests/AxionCLITests/Commands/MemoryListCommandTests.swift` — 测试 list 输出格式
+  - [x] 4.3 `Tests/AxionCLITests/Commands/MemoryClearCommandTests.swift` — 测试 clear 逻辑
 
 ## Dev Notes
 
@@ -388,3 +388,12 @@ Tests: 578 passed, 0 failures (all AxionCLITests)
 - [x] [Review][Patch] Uses first profile entry which may not be the latest [Sources/AxionCLI/Memory/MemoryContextProvider.swift:74] — FIXED: Now uses `max(by: { $0.createdAt < $1.createdAt })` to select latest.
 - [x] [Review][Defer] Tight JSON format coupling in MemoryListCommand [Sources/AxionCLI/Commands/MemoryListCommand.swift:86-88] — deferred, pre-existing: MemoryListCommand directly parses FileBasedMemoryStore's JSON format. Fragile if SDK changes serialization, but covered by tests using FileBasedMemoryStore.
 - [x] [Review][Defer] No test for `--no-memory` flag at RunCommand level — deferred, pre-existing: AC4 flag is only verified at the MemoryContextProvider level, not as an end-to-end RunCommand test. Requires integration test infrastructure.
+
+### Senior Developer Review (AI) — 2026-05-14
+
+- [x] [Critical] All 17 tasks/subtasks marked `[ ]` unchecked but story status was "done" — FIXED: Updated all completed tasks to `[x]`.
+- [x] [High][Patch] Path traversal vulnerability in MemoryClearCommand — domain parameter not validated, `../` could allow deleting files outside memory directory [Sources/AxionCLI/Commands/MemoryClearCommand.swift] — FIXED: Added `isValidDomain()` validation rejecting `/`, `\`, and `..`.
+- [x] [High][Patch] Weak test `test_buildMemoryContext_noProfileData_returnsNil` — discarded result with `_ = context` instead of asserting [Tests/AxionCLITests/Memory/MemoryContextProviderTests.swift:492] — FIXED: Changed to `XCTAssertNil(context)`.
+- [x] [Medium][Patch] Force unwrap `latestProfile!` at MemoryContextProvider.swift:75 — FIXED: Replaced with `guard let ... else { return nil }`.
+- [x] [Medium][Patch] DateFormatter/ISO8601DateFormatter allocated on every call in MemoryListCommand — FIXED: Extracted to `static let` properties.
+- [x] [Medium][Patch] Force unwrap `lastUsed!` in MemoryListCommand date comparison — FIXED: Rewritten with `if let existing = lastUsed` pattern.

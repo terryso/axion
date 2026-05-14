@@ -294,6 +294,44 @@ try await withTaskCancellationHandler {
 6. **AxionCLI 直接 import AxionHelper** — 两者仅通过 MCP stdio 通信
 7. **在 MCP 工具名中使用 camelCase 或 PascalCase** — 必须是 snake_case
 8. **创建新的错误类型体系** — 统一使用 `AxionError` 枚举
+9. **测试中硬编码字符串而非调用真实方法** — 测试必须调用被测方法/函数，不允许测试纯字面量（bogus test）
+10. **JSON 输出使用手动字符串拼接** — 必须使用 JSONEncoder + Codable struct
+
+---
+
+## Memory 系统（Epic 4）
+
+Axion 的跨任务学习系统，基于 SDK FileBasedMemoryStore 实现。
+
+**存储路径：** `~/.axion/memory/`（自定义路径，非 SDK 默认的 `~/.agent/memory/`）
+
+**目录结构：**
+```
+Sources/AxionCLI/Memory/
+├── AppMemoryExtractor.swift       # 从 SDK 消息流提取 App 操作摘要
+├── MemoryCleanupService.swift     # 30 天过期清理
+├── AppProfileAnalyzer.swift       # 模式识别 + 高频路径 + 失败经验
+├── FamiliarityTracker.swift       # 熟悉度追踪（>= 3 次成功标记 familiar）
+└── MemoryContextProvider.swift    # 构建 Planner prompt 中的 Memory 上下文
+```
+
+**CLI 命令：**
+- `axion memory list` — 显示已积累 Memory 的 App 列表
+- `axion memory clear --app <domain>` — 清除指定 App 的 Memory
+- `axion run "任务" --no-memory` — 禁用 Memory 上下文注入
+
+**关键设计决策：**
+- Memory 操作失败不阻塞任务执行（do/catch 防护 + warning 日志）
+- Memory 上下文注入到 system prompt 末尾（`buildFullSystemPrompt`），不在 user prompt
+- Domain 使用 App bundle identifier（如 `com.apple.calculator`）
+- KnowledgeEntry content 使用中文标签，状态标签用英文（success/failure）
+- 熟悉 App 使用紧凑规划策略（减少 list_windows/get_window_state 验证步骤）
+
+**SDK 依赖：**
+- `FileBasedMemoryStore(memoryDir:)` — 自定义存储路径
+- `KnowledgeEntry` — 存储单元（id, content, tags, createdAt, sourceRunId）
+- `MemoryStoreProtocol` — save/query/delete/listDomains
+- `AgentOptions.memoryStore` — 注入到 ToolContext（memoryStore 参数必须在 hookRegistry 之前）
 
 ---
 
@@ -491,6 +529,72 @@ MCPServerRunner.run()                            # 编排器
              └── tool_call "query_task_status" → RunTracker.getRun(runId)
 ```
 
+### Takeover 数据流（Epic 7）
+
+```
+Agent Loop 执行中 → 工具调用受阻
+    │
+    ▼
+Agent 调用 pause_for_human 工具 → SDK 内部 Agent.pause(reason:)
+    │
+    ▼
+SDK 发出 .system(.paused, PausedData) SDKMessage
+    │
+    ▼
+RunCommand stream 循环收到 .paused 消息
+    │
+    ├──► TakeoverIO.displayTakeoverPrompt()     # 显示阻塞原因和操作选项
+    │         │
+    │         ▼ (用户输入)
+    │    TakeoverIO.readTakeoverAction()
+    │         │
+    │    ┌────┼────┐
+    │    ▼    ▼    ▼
+    │  Enter  skip  abort
+    │    │    │     │
+    │    ▼    ▼     ▼
+    │ resume skip  interrupt()
+    │ (context:   (context:  → .cancelled
+    │  "用户已    "skip")
+    │  完成手动
+    │  操作")
+    │    │    │
+    │    ▼    ▼
+    └──► Agent 继续执行
+         │
+    (超时 5 分钟)
+         ▼
+    SDK 发出 .system(.pausedTimeout) → 任务 failed
+```
+
+### Fast Mode 数据流（Epic 7）
+
+```
+axion run "打开计算器" --fast
+    │
+    ▼
+RunCommand (fast=true)
+    │
+    ├──► buildFullSystemPrompt(fast: true)       # 追加 FAST mode 指令
+    │    "生成最小步骤(1-3步)，跳过 discovery，不调用 screenshot 验证"
+    │
+    ├──► computeEffectiveMaxSteps(fast: true)    # min(userValue, 5)
+    ├──► computeEffectiveMaxTokens(fast: true)   # 2048 (vs 标准 4096)
+    │
+    └──► createAgent + agent.stream(task)        # 标准 Agent Loop，参数调优
+         │
+         ▼ (执行结果)
+    ┌────┼────┐
+    ▼    ▼    ▼
+  成功  失败  maxTurns
+    │    │     │
+    ▼    ▼     ▼
+ "Fast mode  "建议去掉  "建议去掉
+  完成。      --fast"   --fast"
+  N步,耗时
+  X秒。"
+```
+
 ---
 
 ## OpenAgentSDK 参考路径
@@ -507,6 +611,7 @@ SDK 本地路径：`/Users/nick/CascadeProjects/open-agent-sdk-swift`
 | Session 管理 | `Examples/CompatSessions/` | Story 3.6 |
 | 自定义 System Prompt | `Examples/CustomSystemPromptExample/` | Story 3.2 |
 | AgentMCPServer | `Sources/OpenAgentSDK/MCP/AgentMCPServer.swift` | Story 6.1 |
+| PauseForHumanTool | `Sources/OpenAgentSDK/Tools/Core/PauseForHumanTool.swift` | Story 7.1 |
 | MemoryStore | `Sources/OpenAgentSDK/Memory/` | Story 4.1 |
 
 ---

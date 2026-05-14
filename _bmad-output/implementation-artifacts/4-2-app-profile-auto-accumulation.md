@@ -346,8 +346,8 @@ GLM-5.1
 - Added failure marker extraction from isError=true ToolPairs and workaround inference from subsequent successful operations
 - Added tool parameter summaries (click coordinates, type_text content, hotkey combos) in tool sequence display
 - Integrated profile analysis flow in RunCommand after existing memory extraction, with do/catch protection for non-blocking operation
-- All 51 new/updated unit tests pass (22 AppProfileAnalyzer + 10 FamiliarityTracker + 19 AppMemoryExtractor)
-- Full regression suite: 662 tests pass with 0 failures
+- All 54 new/updated unit tests pass (24 AppProfileAnalyzer + 10 FamiliarityTracker + 20 AppMemoryExtractor)
+- Full regression suite: 928 tests pass with 0 failures
 
 ### File List
 
@@ -355,13 +355,17 @@ GLM-5.1
 - Sources/AxionCLI/Memory/FamiliarityTracker.swift [NEW]
 - Sources/AxionCLI/Memory/AppMemoryExtractor.swift [MODIFIED]
 - Sources/AxionCLI/Commands/RunCommand.swift [MODIFIED]
-- Tests/AxionCLITests/Memory/AppProfileAnalyzerTests.swift [MODIFIED]
+- Tests/AxionCLITests/Memory/AppProfileAnalyzerTests.swift [NEW]
+- Tests/AxionCLITests/Memory/FamiliarityTrackerTests.swift [NEW]
+- Tests/AxionCLITests/Memory/AppMemoryExtractorTests.swift [MODIFIED]
+- Tests/AxionCLITests/Commands/RunCommandProfileContentTests.swift [NEW]
 - _bmad-output/implementation-artifacts/sprint-status.yaml [MODIFIED]
 
 ## Change Log
 
 - 2026-05-13: Story 4.2 implementation complete — AppProfile auto-accumulation with AX tree extraction, failure markers, familiarity tracking
 - 2026-05-13: Code review — 4 patches applied, 2 deferred, 1 dismissed
+- 2026-05-14: Automated review — 3 patches applied (buildProfileContent tests, extractWorkaround same-type preference, File List correction)
 
 ### Review Findings
 
@@ -371,3 +375,6 @@ GLM-5.1
 - [x] [Review][Patch] Profile entries accumulate without cleanup [RunCommand.swift:200-209] — noted: SDK lacks tag-based delete; mitigated by totalRuns fix
 - [x] [Review][Defer] Brittle keyword matching for failure reason classification [AppProfileAnalyzer.swift:254-263] — deferred, functional but fragile
 - [x] [Review][Defer] Unbounded recursion in AX tree traversal [AppMemoryExtractor.swift:357-376] — deferred, defensive concern only
+- [x] [Auto-Review][Patch] buildProfileContent untested [RunCommand.swift:383] — fixed: made static internal, added 11 tests in RunCommandProfileContentTests.swift
+- [x] [Auto-Review][Patch] extractWorkaround picks unrelated tool type [AppMemoryExtractor.swift:409-437] — fixed: prefer same tool type match, fallback to first success
+- [x] [Auto-Review][Patch] File List incomplete — corrected: added FamiliarityTrackerTests.swift, fixed AppProfileAnalyzerTests [NEW] label, added RunCommandProfileContentTests.swift

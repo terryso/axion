@@ -1,5 +1,6 @@
 # generated: 2026-05-08
 # last_updated: 2026-05-14
+# retro-epic-4: 2026-05-14
 # project: axion
 # project_key: NOKEY
 # tracking_system: file-system
@@ -82,11 +83,11 @@ development_status:
   # ============================================================
 
   # Epic 4: 本地 App Memory — 跨任务学习系统
-  epic-4: in-progress
+  epic-4: done
   4-1-sdk-memorystore-app-memory-extraction: done
   4-2-app-profile-auto-accumulation: done
   4-3-memory-enhanced-planning: done
-  epic-4-retrospective: optional
+  epic-4-retrospective: done
 
   # Epic 5: HTTP API Server — 外部集成服务
   epic-5: in-progress
@@ -102,7 +103,7 @@ development_status:
   epic-6-retrospective: done
 
   # Epic 7: 执行增强 — Takeover 与 Fast Mode
-  epic-7: in-progress
+  epic-7: done
   7-1-sdk-pause-protocol-user-takeover: done
   7-2-fast-mode: done
-  epic-7-retrospective: optional
+  epic-7-retrospective: done

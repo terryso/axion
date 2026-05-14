@@ -28,6 +28,18 @@ struct MemoryListCommand: AsyncParsableCommand {
         let lastUsed: Date?
     }
 
+    private static let displayDateFormatter: DateFormatter = {
+        let f = DateFormatter()
+        f.dateFormat = "yyyy-MM-dd"
+        return f
+    }()
+
+    private nonisolated(unsafe) static let isoFormatter: ISO8601DateFormatter = {
+        let f = ISO8601DateFormatter()
+        f.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+        return f
+    }()
+
     /// List all Memory domains and their summaries from the given directory.
     ///
     /// - Parameter memoryDir: The filesystem path to the Memory directory.
@@ -41,13 +53,10 @@ struct MemoryListCommand: AsyncParsableCommand {
 
         var lines: [String] = ["App Memory:"]
 
-        let dateFormatter = DateFormatter()
-        dateFormatter.dateFormat = "yyyy-MM-dd"
-
         for summary in summaries.sorted(by: { $0.domain < $1.domain }) {
             let dateStr: String
             if let date = summary.lastUsed {
-                dateStr = dateFormatter.string(from: date)
+                dateStr = Self.displayDateFormatter.string(from: date)
             } else {
                 dateStr = "unknown"
             }
@@ -75,9 +84,6 @@ struct MemoryListCommand: AsyncParsableCommand {
 
         var summaries: [DomainSummary] = []
 
-        let isoFormatter = ISO8601DateFormatter()
-        isoFormatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
-
         for fileName in fileNames {
             guard fileName.hasSuffix(".json") else { continue }
             let domain = String(fileName.dropLast(5)) // Remove ".json"
@@ -92,8 +98,10 @@ struct MemoryListCommand: AsyncParsableCommand {
 
             for entry in jsonArray {
                 if let dateStr = entry["createdAt"] as? String,
-                   let date = isoFormatter.date(from: dateStr) {
-                    if lastUsed == nil || date > lastUsed! {
+                   let date = Self.isoFormatter.date(from: dateStr) {
+                    if let existing = lastUsed {
+                        if date > existing { lastUsed = date }
+                    } else {
                         lastUsed = date
                     }
                 }

@@ -121,7 +121,7 @@ Axion 的技术架构分两层：CLI 主进程负责规划、执行、记忆和 
 
 - 本地 App Memory（跨次运行的学习系统）
 - HTTP API server + MCP server（外部集成）
-- `--fast` 模式（小批量规划 + 本地执行，不走 Agent SDK）
+- `--fast` 模式（简化规划 + 参数调优，减少 LLM 调用次数）
 - 用户接管（takeover）机制
 - 更多 App 支持（基于 memory 积累）
 
@@ -319,7 +319,7 @@ curl -X POST http://localhost:4242/v1/runs \
 | HTTP API server | 异步任务提交 + SSE 事件流 |
 | MCP server 模式 | 供外部 Agent 通过 stdio 调用 Axion |
 | 用户接管 | 自动化受阻时暂停，用户手动完成后继续 |
-| `--fast` 模式 | 小批量规划 + 本地执行，减少 LLM 调用 |
+| `--fast` 模式 | 简化规划 + 参数调优（maxTurns≤5, maxTokens=2048），减少 LLM 调用 |
 | JSON 输出 | `--json` 标志，脚本化调用 |
 
 ### Phase 3 — 愿景

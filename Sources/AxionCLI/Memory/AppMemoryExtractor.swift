@@ -6,15 +6,14 @@ import OpenAgentSDK
 ///
 /// Used by ``RunCommand`` after a task completes to persist cross-run
 /// experience into the SDK's MemoryStore.
-///
-/// Enhanced in Story 4.2 to include AX tree structure features, failure markers,
-/// and workaround inference in extracted content.
 struct AppMemoryExtractor {
 
     // MARK: - Types
 
     /// A paired toolUse + toolResult from the SDK message stream.
     typealias ToolPair = (toolUse: SDKMessage.ToolUseData, toolResult: SDKMessage.ToolResultData)
+
+    private static let mcpPrefix = "mcp__axion-helper__"
 
     // MARK: - Public API
 
@@ -32,126 +31,31 @@ struct AppMemoryExtractor {
     ) async throws -> [KnowledgeEntry] {
         guard !pairs.isEmpty else { return [] }
 
-        // Group pairs by App domain
         let appGroups = groupByAppDomain(pairs: pairs)
 
         var entries: [KnowledgeEntry] = []
 
         for (domain, groupPairs) in appGroups {
-            let toolNames = groupPairs.map { stripMcpPrefix($0.toolUse.toolName) }
-            let hasError = groupPairs.contains { $0.toolResult.isError }
-            let stepCount = groupPairs.count
             let appName = extractAppName(from: groupPairs) ?? domain
             let bundleId = extractBundleId(from: groupPairs)
-
-            let successLabel = hasError ? "failure" : "success"
-
-            // Extract tool parameters for enhanced sequence display
-            let toolSequenceWithParams = groupPairs.map { pair -> String in
-                let name = stripMcpPrefix(pair.toolUse.toolName)
-                let param = extractToolParamSummary(name: name, input: pair.toolUse.input)
-                return param != nil ? "\(name)(\(param!))" : name
-            }.joined(separator: " -> ")
-
-            // Extract AX tree features
-            let axSummary = extractAxTreeSummary(from: groupPairs)
-            let keyControls = extractKeyControls(from: groupPairs)
-
-            // Extract failure markers and workaround
-            let failureMarker = extractFailureMarker(from: groupPairs)
-            let workaround = extractWorkaround(from: groupPairs)
-
-            // Build enhanced content
-            var content = """
-            App: \(appName)\(bundleId != nil ? " (\(bundleId!))" : "")
-            任务: \(task)
-            结果: \(successLabel)
-            工具序列: \(toolSequenceWithParams)
-            步骤数: \(stepCount)
-            """
-
-            if !axSummary.isEmpty {
-                content += "\nAX特征: \(axSummary)"
-            }
-            if !keyControls.isEmpty {
-                content += "\n关键控件: \(keyControls)"
-            }
-            if let failure = failureMarker {
-                content += "\n失败标记: \(failure)"
-            }
-            if let workaround {
-                content += "\n修正路径: \(workaround)"
-            }
-
-            let tags = buildTags(
+            entries.append(buildEntry(
+                pairs: groupPairs,
+                task: task,
+                runId: runId,
                 appName: appName,
-                bundleId: bundleId,
-                toolNames: toolNames,
-                hasError: hasError
-            )
-
-            let entry = KnowledgeEntry(
-                id: UUID().uuidString,
-                content: content,
-                tags: tags,
-                createdAt: Date(),
-                sourceRunId: runId
-            )
-            entries.append(entry)
+                bundleId: bundleId
+            ))
         }
 
         // If no app-specific domain was found (no launch_app), create a single
         // generic entry so the tool sequence is still captured.
-        if entries.isEmpty && !pairs.isEmpty {
-            let toolNames = pairs.map { stripMcpPrefix($0.toolUse.toolName) }
-            let hasError = pairs.contains { $0.toolResult.isError }
-            let successLabel = hasError ? "failure" : "success"
-
-            let toolSequenceWithParams = pairs.map { pair -> String in
-                let name = stripMcpPrefix(pair.toolUse.toolName)
-                let param = extractToolParamSummary(name: name, input: pair.toolUse.input)
-                return param != nil ? "\(name)(\(param!))" : name
-            }.joined(separator: " -> ")
-
-            // Extract AX tree features
-            let axSummary = extractAxTreeSummary(from: pairs)
-            let keyControls = extractKeyControls(from: pairs)
-            let failureMarker = extractFailureMarker(from: pairs)
-            let workaround = extractWorkaround(from: pairs)
-
-            var content = """
-            任务: \(task)
-            结果: \(successLabel)
-            工具序列: \(toolSequenceWithParams)
-            步骤数: \(pairs.count)
-            """
-
-            if !axSummary.isEmpty {
-                content += "\nAX特征: \(axSummary)"
-            }
-            if !keyControls.isEmpty {
-                content += "\n关键控件: \(keyControls)"
-            }
-            if let failure = failureMarker {
-                content += "\n失败标记: \(failure)"
-            }
-            if let workaround {
-                content += "\n修正路径: \(workaround)"
-            }
-
-            let tags = buildTags(
-                appName: "unknown",
-                bundleId: nil,
-                toolNames: toolNames,
-                hasError: hasError
-            )
-
-            entries.append(KnowledgeEntry(
-                id: UUID().uuidString,
-                content: content,
-                tags: tags,
-                createdAt: Date(),
-                sourceRunId: runId
+        if entries.isEmpty {
+            entries.append(buildEntry(
+                pairs: pairs,
+                task: task,
+                runId: runId,
+                appName: nil,
+                bundleId: nil
             ))
         }
 
@@ -162,12 +66,13 @@ struct AppMemoryExtractor {
 
     /// Group tool pairs by the App domain extracted from launch_app results.
     ///
-    /// Pairs that are NOT launch_app are associated with the most recently
-    /// seen app domain (or dropped if no app has been launched yet).
+    /// Tools that appear before the first `launch_app` are attached to the
+    /// first domain when it appears. If no `launch_app` exists, returns empty.
     private func groupByAppDomain(pairs: [ToolPair]) -> [(String, [ToolPair])] {
         var groups: [(domain: String, pairs: [ToolPair])] = []
         var domainIndex: [String: Int] = [:]
         var currentDomain: String?
+        var orphanPairs: [ToolPair] = []
 
         for pair in pairs {
             let toolName = stripMcpPrefix(pair.toolUse.toolName)
@@ -178,17 +83,90 @@ struct AppMemoryExtractor {
                     ?? "unknown"
                 currentDomain = domain
                 if let idx = domainIndex[domain] {
+                    groups[idx].pairs.append(contentsOf: orphanPairs)
                     groups[idx].pairs.append(pair)
                 } else {
                     domainIndex[domain] = groups.count
-                    groups.append((domain: domain, pairs: [pair]))
+                    var groupPairs = orphanPairs
+                    groupPairs.append(pair)
+                    groups.append((domain: domain, pairs: groupPairs))
                 }
+                orphanPairs = []
             } else if let domain = currentDomain, let idx = domainIndex[domain] {
                 groups[idx].pairs.append(pair)
+            } else {
+                orphanPairs.append(pair)
             }
         }
 
         return groups.map { ($0.domain, $0.pairs) }
+    }
+
+    /// Build a single KnowledgeEntry from a set of tool pairs.
+    private func buildEntry(
+        pairs: [ToolPair],
+        task: String,
+        runId: String,
+        appName: String?,
+        bundleId: String?
+    ) -> KnowledgeEntry {
+        let toolNames = pairs.map { stripMcpPrefix($0.toolUse.toolName) }
+        let hasError = pairs.contains { $0.toolResult.isError }
+        let stepCount = pairs.count
+        let effectiveAppName = appName ?? "unknown"
+        let successLabel = hasError ? "failure" : "success"
+
+        let toolSequenceWithParams = pairs.map { pair -> String in
+            let name = stripMcpPrefix(pair.toolUse.toolName)
+            let param = extractToolParamSummary(name: name, input: pair.toolUse.input)
+            return param != nil ? "\(name)(\(param!))" : name
+        }.joined(separator: " -> ")
+
+        var content = ""
+        if let appName, let bundleId {
+            content += "App: \(appName) (\(bundleId))\n"
+        } else if let appName {
+            content += "App: \(appName)\n"
+        }
+        content += """
+        任务: \(task)
+        结果: \(successLabel)
+        工具序列: \(toolSequenceWithParams)
+        步骤数: \(stepCount)
+        """
+
+        let axSummary = extractAxTreeSummary(from: pairs)
+        let keyControls = extractKeyControls(from: pairs)
+        let failureMarker = extractFailureMarker(from: pairs)
+        let workaround = extractWorkaround(from: pairs)
+
+        if !axSummary.isEmpty {
+            content += "\nAX特征: \(axSummary)"
+        }
+        if !keyControls.isEmpty {
+            content += "\n关键控件: \(keyControls)"
+        }
+        if let failure = failureMarker {
+            content += "\n失败标记: \(failure)"
+        }
+        if let workaround {
+            content += "\n修正路径: \(workaround)"
+        }
+
+        let tags = buildTags(
+            appName: effectiveAppName,
+            bundleId: bundleId,
+            toolNames: toolNames,
+            hasError: hasError
+        )
+
+        return KnowledgeEntry(
+            id: UUID().uuidString,
+            content: content,
+            tags: tags,
+            createdAt: Date(),
+            sourceRunId: runId
+        )
     }
 
     /// Extract bundle identifier from a launch_app tool result JSON.
@@ -250,15 +228,15 @@ struct AppMemoryExtractor {
         return tags
     }
 
-    /// Strip the MCP prefix `mcp__axion-helper__` from tool names.
+    /// Strip the MCP prefix from tool names.
     private func stripMcpPrefix(_ toolName: String) -> String {
-        if toolName.hasPrefix("mcp__axion-helper__") {
-            return String(toolName.dropFirst("mcp__axion-helper__".count))
+        if toolName.hasPrefix(Self.mcpPrefix) {
+            return String(toolName.dropFirst(Self.mcpPrefix.count))
         }
         return toolName
     }
 
-    // MARK: - Story 4.2: AX Tree & Failure Extraction
+    // MARK: - AX Tree & Failure Extraction
 
     /// Extract a brief parameter summary for a tool call.
     private func extractToolParamSummary(name: String, input: String) -> String? {
@@ -428,8 +406,10 @@ struct AppMemoryExtractor {
     }
 
     /// Extract workaround when a failed tool is followed by a successful tool.
+    /// Prefers a successful tool of the same type as the failed tool, falling back
+    /// to the first successful tool of any type.
     private func extractWorkaround(from pairs: [ToolPair]) -> String? {
-        // Find first error pair and the next successful pair
+        // Find first error pair
         var errorIndex: Int?
         for (i, pair) in pairs.enumerated() {
             if pair.toolResult.isError {
@@ -440,22 +420,34 @@ struct AppMemoryExtractor {
 
         guard let errorIdx = errorIndex else { return nil }
 
-        // Look for the next successful pair after the failure
+        let failedTool = stripMcpPrefix(pairs[errorIdx].toolUse.toolName)
+        var firstSuccessFallback: String?
+
+        // Look for a successful pair after the failure, preferring same tool type
         for i in (errorIdx + 1)..<pairs.count {
             let nextPair = pairs[i]
             if !nextPair.toolResult.isError {
                 let nextTool = stripMcpPrefix(nextPair.toolUse.toolName)
                 let nextParam = extractToolParamSummary(name: nextTool, input: nextPair.toolUse.input)
+                let desc = nextParam != nil ? "\(nextTool)(\(nextParam!))" : nextTool
 
-                if let nextParam {
-                    return "使用 \(nextTool)(\(nextParam)) 代替失败的操作"
-                } else {
-                    return "使用 \(nextTool) 重新尝试"
+                if nextTool == failedTool {
+                    // Same tool type — best match
+                    return nextParam != nil
+                        ? "使用 \(nextTool)(\(nextParam!)) 代替失败的操作"
+                        : "使用 \(nextTool) 重新尝试"
+                }
+
+                // Remember first successful tool as fallback
+                if firstSuccessFallback == nil {
+                    firstSuccessFallback = nextParam != nil
+                        ? "使用 \(desc) 代替失败的操作"
+                        : "使用 \(nextTool) 重新尝试"
                 }
             }
         }
 
-        return nil
+        return firstSuccessFallback
     }
 
     /// Extract error message from tool result content.

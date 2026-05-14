@@ -100,11 +100,19 @@ final class AppMemoryExtractorTests: XCTestCase {
         )
 
         XCTAssertFalse(entries.isEmpty)
-        // The content should reference the tools used
+        // The content should reference ALL tools used
         let combinedContent = entries.map { $0.content }.joined(separator: " ")
         XCTAssertTrue(
-            combinedContent.contains("launch_app") || combinedContent.contains("click") || combinedContent.contains("type_text"),
-            "Content should reference tools used in the operation"
+            combinedContent.contains("launch_app"),
+            "Content should include launch_app in tool sequence"
+        )
+        XCTAssertTrue(
+            combinedContent.contains("click"),
+            "Content should include click in tool sequence"
+        )
+        XCTAssertTrue(
+            combinedContent.contains("type_text"),
+            "Content should include type_text in tool sequence"
         )
     }
 
@@ -254,10 +262,14 @@ final class AppMemoryExtractorTests: XCTestCase {
         )
 
         XCTAssertFalse(entries.isEmpty)
-        let allTags = entries.flatMap { $0.tags }
+        let allTags = entries.flatMap { $0.tags }.joined(separator: ",")
         XCTAssertTrue(
-            allTags.contains(where: { $0.contains("tools:") || $0.contains("launch_app") || $0.contains("click") }),
-            "Tags should include tool type information, got: \(allTags)"
+            allTags.contains("launch_app"),
+            "Tags should include launch_app in tools list, got: \(allTags)"
+        )
+        XCTAssertTrue(
+            allTags.contains("click"),
+            "Tags should include click in tools list, got: \(allTags)"
         )
     }
 
@@ -317,8 +329,9 @@ final class AppMemoryExtractorTests: XCTestCase {
         )
 
         // Should still produce entries even without launch_app
-        // The domain might be generic or derived from context
-        XCTAssertNotNil(entries, "Should handle non-app-tool-only sequences")
+        XCTAssertFalse(entries.isEmpty, "Should produce entries even without launch_app")
+        let content = entries.first!.content
+        XCTAssertTrue(content.contains("click"), "Generic entry should reference the tools used")
     }
 
     func test_extract_multipleApps_producesMultipleDomains() async throws {
@@ -341,8 +354,17 @@ final class AppMemoryExtractorTests: XCTestCase {
             runId: "20260513-multi"
         )
 
-        // Should produce entries for both apps
-        XCTAssertTrue(entries.count >= 1, "Should produce at least one entry for multiple apps")
+        // Should produce separate entries for both apps
+        XCTAssertEqual(entries.count, 2, "Should produce separate entries for each launched app")
+        let allTags = entries.flatMap { $0.tags }
+        XCTAssertTrue(
+            allTags.contains(where: { $0.contains("calculator") }),
+            "Should have calculator domain in tags"
+        )
+        XCTAssertTrue(
+            allTags.contains(where: { $0.contains("textedit") }),
+            "Should have textedit domain in tags"
+        )
     }
 
     func test_extract_stepCountIncluded() async throws {
@@ -507,6 +529,54 @@ final class AppMemoryExtractorTests: XCTestCase {
             content.contains("修正路径") || content.contains("workaround"),
             "Content should include workaround when failure is followed by success, got: \(content)"
         )
+    }
+
+    // MARK: - P1 Story 4.2: Workaround prefers same tool type match
+
+    func test_extract_workaroundPrefersSameToolType_overUnrelatedSuccess() async throws {
+        let extractor = AppMemoryExtractor()
+
+        let toolPairs: [(toolUse: SDKMessage.ToolUseData, toolResult: SDKMessage.ToolResultData)] = [
+            (
+                makeToolUse(toolName: "mcp__axion-helper__launch_app", toolUseId: "tu-1", input: "{\"app_name\": \"Calculator\"}"),
+                makeToolResult(toolUseId: "tu-1", content: "{\"success\": true, \"bundle_id\": \"com.apple.calculator\"}")
+            ),
+            (
+                // Failed: coordinate-based click
+                makeToolUse(toolName: "mcp__axion-helper__click", toolUseId: "tu-2", input: "{\"x\": 300, \"y\": 400}"),
+                makeToolResult(toolUseId: "tu-2", content: "{\"error\": \"click failed\"}", isError: true)
+            ),
+            (
+                // Unrelated success: type_text (should NOT be used as workaround)
+                makeToolUse(toolName: "mcp__axion-helper__type_text", toolUseId: "tu-3", input: "{\"text\": \"hello\"}"),
+                makeToolResult(toolUseId: "tu-3", content: "typed")
+            ),
+            (
+                // Matching success: AX selector-based click (should be preferred)
+                makeToolUse(toolName: "mcp__axion-helper__click", toolUseId: "tu-4", input: "{\"ax_selector\": \"AXButton[title=\\\"=\\\"]\"}"),
+                makeToolResult(toolUseId: "tu-4", content: "clicked")
+            ),
+        ]
+
+        let entries = try await extractor.extract(
+            from: toolPairs,
+            task: "Click equals in Calculator",
+            runId: "20260513-prefer-same-type"
+        )
+
+        XCTAssertFalse(entries.isEmpty)
+        let content = entries.first!.content
+
+        // Extract the workaround line specifically
+        let workaroundLine = content.components(separatedBy: "\n")
+            .first { $0.contains("修正路径:") }
+
+        XCTAssertNotNil(workaroundLine,
+            "Should include workaround line, got: \(content)")
+        XCTAssertTrue(workaroundLine!.contains("click") && workaroundLine!.contains("AXButton"),
+            "Workaround should prefer same tool type (click with AX selector), got: \(workaroundLine!)")
+        XCTAssertFalse(workaroundLine!.contains("type_text"),
+            "Workaround should NOT reference unrelated tool type (type_text), got: \(workaroundLine!)")
     }
 
     func test_extract_toolSequenceIncludesParameters_inContent() async throws {

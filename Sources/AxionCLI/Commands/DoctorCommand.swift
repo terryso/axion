@@ -236,6 +236,8 @@ struct DoctorCommand: ParsableCommand {
         }
     }
 
+    // Intentionally reads raw files instead of using MemoryStoreProtocol —
+    // doctor is a diagnostic tool that should work without initializing the SDK store.
     private static func checkMemory(at memoryDir: String) -> CheckResult {
         let fm = FileManager.default
 

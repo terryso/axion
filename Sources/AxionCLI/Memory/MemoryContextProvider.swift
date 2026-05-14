@@ -71,8 +71,10 @@ struct MemoryContextProvider {
             }
 
             // 4. Parse profile content and assemble prompt — use the latest entry
-            let latestProfile = profileEntries.max(by: { $0.createdAt < $1.createdAt })
-            let profileContent = latestProfile!.content
+            guard let latestProfile = profileEntries.max(by: { $0.createdAt < $1.createdAt }) else {
+                return nil
+            }
+            let profileContent = latestProfile.content
             return assembleContext(
                 domain: domain,
                 profileContent: profileContent,

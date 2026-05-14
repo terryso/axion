@@ -107,13 +107,14 @@ axion/
 ├── Sources/
 │   ├── AxionCLI/                    # CLI 主程序（可执行目标）
 │   │   ├── main.swift               # 入口，ArgumentParser 根命令
-│   │   ├── Commands/                # 子命令：RunCommand, SetupCommand, DoctorCommand, ServerCommand, McpCommand
+│   │   ├── Commands/                # 子命令：RunCommand, SetupCommand, DoctorCommand, ServerCommand, McpCommand, MemoryCommand
 │   │   ├── Planner/                 # 规划引擎：LLM 调用、plan 解析、prompt 管理
 │   │   ├── Executor/                # 执行引擎：步骤执行、MCP 调用、占位符解析
 │   │   ├── Verifier/                # 验证引擎：截图/AX 验证、stopWhen 评估
 │   │   ├── Config/                  # 配置管理：读写 ~/.axion/config.json
 │   │   ├── Trace/                   # Trace 记录器：运行轨迹持久化
-│   │   └── Output/                  # 输出格式化：终端进度、JSON 输出
+│   │   ├── Output/                  # 输出格式化：终端进度、JSON 输出
+│   │   ├── Memory/                  # App Memory 系统（Epic 4）：跨任务学习
 │   ├── AxionHelper/                 # Helper App（可执行目标，独立 macOS App）
 │   │   ├── main.swift               # 入口，启动 MCP Server
 │   │   ├── MCP/                     # MCP Server 实现：工具注册、JSON-RPC 处理
@@ -772,7 +773,10 @@ axion/
 │   │   │   ├── SetupCommand.swift             # FR2: axion setup
 │   │   │   ├── DoctorCommand.swift            # FR3: axion doctor
 │   │   │   ├── ServerCommand.swift            # FR45–FR46: axion server（Epic 5）
-│   │   │   └── McpCommand.swift               # FR47: axion mcp（Epic 6）
+│   │   │   ├── McpCommand.swift               # FR47: axion mcp（Epic 6）
+│   │   │   ├── MemoryCommand.swift            # FR44: axion memory 命令组（Epic 4）
+│   │   │   ├── MemoryListCommand.swift        # FR44: axion memory list
+│   │   │   └── MemoryClearCommand.swift       # FR44: axion memory clear --app
 │   │   ├── Planner/
 │   │   │   ├── LLMPlanner.swift               # FR11–FR14: 调用 LLM 生成 Plan
 │   │   │   ├── PlanParser.swift               # FR14–FR15: 解析 LLM 输出为 Plan
@@ -796,6 +800,12 @@ axion/
 │   │   └── Output/
 │   │       ├── TerminalOutput.swift            # FR33–FR34: 终端实时输出
 │   │       └── JSONOutput.swift               # FR35: JSON 结构化输出
+│   │   ├── Memory/                              # Epic 4: App Memory 系统
+│   │   │   ├── AppMemoryExtractor.swift        # 从消息流提取 App 操作摘要
+│   │   │   ├── MemoryCleanupService.swift      # 30 天过期清理
+│   │   │   ├── AppProfileAnalyzer.swift        # 模式识别 + 高频路径 + 失败经验
+│   │   │   ├── FamiliarityTracker.swift        # 熟悉度追踪（>= 3 次成功标记 familiar）
+│   │   │   └── MemoryContextProvider.swift      # 构建 Planner Memory 上下文
 │   │   ├── API/                                # Epic 5: HTTP API Server
 │   │   │   ├── AgentRunner.swift              # Agent 执行封装
 │   │   │   ├── RunTracker.swift               # 任务状态追踪
@@ -853,6 +863,12 @@ axion/
 │   │   │   └── StopConditionEvaluatorTests.swift
 │   │   └── Engine/
 │   │       └── RunEngineTests.swift
+│   │   ├── Memory/                                # Epic 4: Memory 测试
+│   │   │   ├── AppMemoryExtractorTests.swift
+│   │   │   ├── MemoryCleanupServiceTests.swift
+│   │   │   ├── AppProfileAnalyzerTests.swift
+│   │   │   ├── FamiliarityTrackerTests.swift
+│   │   │   └── MemoryContextProviderTests.swift
 │   └── AxionHelperTests/
 │       ├── Services/
 │       │   ├── AccessibilityEngineTests.swift
@@ -925,6 +941,9 @@ AxionHelper ← mcp-swift-sdk
 | FR33–FR35 | TerminalOutput.swift + JSONOutput.swift | 输出格式 |
 | FR36–FR40 | RunEngine.swift + SDK 集成 | SDK 使用 |
 | FR41 | 本文档 + SDK 边界文档 | 边界记录 |
+| FR42 | AppMemoryExtractor.swift + MemoryCleanupService.swift | Memory 提取（Epic 4） |
+| FR43 | AppProfileAnalyzer.swift + MemoryContextProvider.swift | Memory 增强规划（Epic 4） |
+| FR44 | MemoryCommand.swift + MemoryListCommand.swift + MemoryClearCommand.swift | Memory 管理 CLI（Epic 4） |
 
 **跨切关注点到位置的映射：**
 
@@ -936,6 +955,7 @@ AxionHelper ← mcp-swift-sdk
 | 安全策略 | AxionCLI/Executor/SafetyChecker.swift | 共享座椅模式 |
 | 可观测性 | AxionCLI/Trace/TraceRecorder.swift | JSONL trace |
 | 输出格式 | AxionCLI/Output/ | 终端 + JSON 双输出 |
+| Memory 系统 | AxionCLI/Memory/ | App 操作经验积累 + Planner 上下文注入 |
 
 ### 集成点
 

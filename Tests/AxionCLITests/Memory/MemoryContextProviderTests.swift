@@ -484,12 +484,8 @@ final class MemoryContextProviderTests: XCTestCase {
             store: store
         )
 
-        // Without profile data, provider should still try to build context from run entries
-        // or return nil — either is acceptable. The key is no crash.
-        // The story says profile entries are the main source, so nil is expected.
-        // If the provider also builds context from raw run entries, that's also fine.
-        // The test verifies no crash and correct return type.
-        _ = context
+        XCTAssertNil(context,
+            "Should return nil when only raw run entries exist without profile data")
     }
 
     // MARK: - P0: MemoryStore error handling (safe degradation)
