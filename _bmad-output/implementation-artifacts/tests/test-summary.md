@@ -1,6 +1,127 @@
-# Test Automation Summary — Story 8.1, 8.2 & 8.3
+# Test Automation Summary
 
-Generated: 2026-05-14
+Generated: 2026-05-15
+
+---
+
+## Story 10.1: 菜单栏常驻状态与服务通信 (NEW)
+
+**Total Tests:** 45 (was 17, +28 new)
+
+### Model Tests (NEW)
+
+`Tests/AxionBarTests/Models/ConnectionStateTests.swift`:
+- [x] disconnected raw value
+- [x] connected raw value
+- [x] running raw value
+- [x] init from raw value
+- [x] all three cases are distinct
+
+`Tests/AxionBarTests/Models/HealthCheckResponseTests.swift`:
+- [x] decodes valid JSON
+- [x] decodes with different status values
+- [x] fails to decode missing version
+- [x] fails to decode missing status
+- [x] equatable conformance
+
+### StatusBarController Tests (expanded)
+
+`Tests/AxionBarTests/StatusBar/StatusBarControllerTests.swift` (was 4, now 11):
+- [x] initial state is disconnected
+- [x] statusIcon maps disconnected to circle.dashed
+- [x] statusTooltip maps disconnected
+- [x] isServerManagedByUs starts false
+- [x] statusIcon maps connected to circle.fill *(NEW)*
+- [x] statusIcon maps running to circle.circle *(NEW)*
+- [x] statusTooltip maps connected *(NEW)*
+- [x] statusTooltip maps running *(NEW)*
+- [x] serverVersion can be set *(NEW)*
+- [x] state transition from disconnected to connected updates icon *(NEW)*
+
+### BackendHealthChecker Tests (expanded)
+
+`Tests/AxionBarTests/Services/BackendHealthCheckerTests.swift` (was 4, now 8):
+- [x] initial state is disconnected
+- [x] checkInterval defaults to 5 seconds
+- [x] checkOnce returns false when no server running
+- [x] stopChecking resets isChecking flag
+- [x] startChecking is idempotent *(NEW)*
+- [x] checkOnce after stopChecking returns false *(NEW)*
+- [x] serverVersion stays nil without server *(NEW)*
+
+### ServerProcessManager Tests (expanded)
+
+`Tests/AxionBarTests/Services/ServerProcessManagerTests.swift` (was 3, now 5):
+- [x] isServerManagedByUs starts as false
+- [x] findAxionCLI returns nil when axion not in PATH
+- [x] stopServer when no process does nothing
+- [x] startServer does not crash when no server *(NEW)*
+- [x] double stopServer does not crash *(NEW)*
+
+### MenuBarBuilder Tests (expanded)
+
+`Tests/AxionBarTests/MenuBar/MenuBarBuilderTests.swift` (was 6, now 13):
+- [x] buildMenu returns non-empty menu when disconnected
+- [x] menu contains 启动服务 when disconnected
+- [x] menu contains 退出 AxionBar
+- [x] menu contains 设置
+- [x] placeholder items are disabled
+- [x] menu has separators
+- [x] menu contains 重启服务 when connected *(NEW)*
+- [x] menu contains 重启服务 when running *(NEW)*
+- [x] menu shows version when serverVersion is set *(NEW)*
+- [x] menu hides version when serverVersion is nil *(NEW)*
+- [x] 技能列表 has submenu with placeholder *(NEW)*
+- [x] 设置 item has keyboard shortcut comma *(NEW)*
+- [x] 退出 item has keyboard shortcut q *(NEW)*
+
+### AC Coverage (Story 10.1)
+
+| AC | Description | Tests | Status |
+|----|-------------|-------|--------|
+| AC1 | 菜单栏图标显示 | ConnectionStateTests, StatusBarControllerTests (icon mapping all 3 states) | ✅ |
+| AC2 | 后端连接检测 | BackendHealthCheckerTests (checkOnce, checkInterval, idempotency) | ✅ |
+| AC3 | 启动后端服务 | ServerProcessManagerTests (startServer, isServerManagedByUs, stopServer) | ✅ |
+| AC4 | 下拉菜单结构 | MenuBarBuilderTests (启动/重启, 设置, 退出, placeholder, version, shortcuts) | ✅ |
+| AC5 | 后端断连处理 | BackendHealthCheckerTests (checkOnce returns false, stays disconnected) | ✅ |
+
+### Gap Analysis (Story 10.1)
+
+| Gap Found | Fix Applied |
+|-----------|-------------|
+| ConnectionState enum had no unit tests | Added 5 tests covering raw values, init, distinctness |
+| HealthCheckResponse had no Codable tests | Added 5 tests for decode, missing fields, equatable |
+| Only disconnected state icon/tooltip tested | Added connected + running icon + tooltip tests |
+| No state transition test | Added disconnected→connected→running→disconnected flow |
+| Connected menu shows 重启服务 not tested | Added test for connected and running states |
+| Version display conditional not tested | Added show + hide version tests |
+| 技能列表 submenu not tested | Added submenu content test |
+| Keyboard shortcuts not tested | Added 设置 (,) and 退出 (q) shortcut tests |
+| startChecking idempotency not tested | Added double-start test |
+| serverVersion lifecycle not tested | Added nil persistence test |
+
+### Test Results
+
+```
+AxionBarTests: 45 tests in 6 suites passed (0.119s)
+Full regression: 191 tests in 18 suites passed
+```
+
+### New Files Created
+
+- Tests/AxionBarTests/Models/ConnectionStateTests.swift
+- Tests/AxionBarTests/Models/HealthCheckResponseTests.swift
+
+### Files Modified
+
+- Tests/AxionBarTests/StatusBar/StatusBarControllerTests.swift (+7 tests)
+- Tests/AxionBarTests/Services/BackendHealthCheckerTests.swift (+4 tests)
+- Tests/AxionBarTests/Services/ServerProcessManagerTests.swift (+2 tests)
+- Tests/AxionBarTests/MenuBar/MenuBarBuilderTests.swift (+7 tests)
+
+---
+
+## Story 8.1, 8.2 & 8.3 (2026-05-14)
 
 ---
 

@@ -10,6 +10,7 @@ let package = Package(
     products: [
         .executable(name: "AxionCLI", targets: ["AxionCLI"]),
         .executable(name: "AxionHelper", targets: ["AxionHelper"]),
+        .executable(name: "AxionBar", targets: ["AxionBar"]),
         .library(name: "AxionCore", targets: ["AxionCore"]),
     ],
     dependencies: [
@@ -53,6 +54,13 @@ let package = Package(
             ],
             path: "Sources/AxionHelper"
         ),
+        .executableTarget(
+            name: "AxionBar",
+            dependencies: [
+                "AxionCore",
+            ],
+            path: "Sources/AxionBar"
+        ),
         .target(
             name: "AxionCore",
             path: "Sources/AxionCore"
@@ -61,6 +69,11 @@ let package = Package(
             name: "AxionCoreTests",
             dependencies: ["AxionCore"],
             path: "Tests/AxionCoreTests"
+        ),
+        .testTarget(
+            name: "AxionBarTests",
+            dependencies: ["AxionBar", "AxionCore"],
+            path: "Tests/AxionBarTests"
         ),
         .testTarget(
             name: "AxionCLITests",
