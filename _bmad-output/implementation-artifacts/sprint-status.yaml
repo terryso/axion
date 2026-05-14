@@ -121,7 +121,7 @@ development_status:
   8-1-multi-window-state-tracking-context-management: done
   8-2-cross-app-workflow-orchestration: done
   8-3-window-layout-management: done
-  epic-8-retrospective: optional
+  epic-8-retrospective: done
 
   # Epic 9: 录制 → 编译 → 技能复用
   epic-9: backlog

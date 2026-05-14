@@ -16,7 +16,7 @@ macOS 桌面自动化 CLI，通过 LLM 驱动的 Plan-Execute-Verify 循环和 M
 
 ## 概述
 
-Axion 是一个基于 Swift 的 macOS 桌面自动化工具，能够通过自然语言描述任务，自动规划、执行并验证桌面操作。它通过 MCP（Model Context Protocol）暴露 16 个原生工具，可被任何 MCP 客户端调用，也可以通过内置 CLI 直接使用。
+Axion 是一个基于 Swift 的 macOS 桌面自动化工具，能够通过自然语言描述任务，自动规划、执行并验证桌面操作。它通过 MCP（Model Context Protocol）暴露 22 个原生工具，可被任何 MCP 客户端调用，也可以通过内置 CLI 直接使用。
 
 ## 架构
 
@@ -28,23 +28,33 @@ Axion 是一个基于 Swift 的 macOS 桌面自动化工具，能够通过自然
 ├──────────────────┬──────────────────────────┤
 │    AxionCore     │      AxionHelper          │
 │  Models, Protocols│  MCP Server (stdio)       │
-│  Config, Errors  │  16 Native macOS Tools    │
+│  Config, Errors  │  22 Native macOS Tools    │
 └──────────────────┴──────────────────────────┘
 ```
 
 - **AxionCLI** — 命令行入口，包含 LLM 交互、任务规划和执行引擎
 - **AxionCore** — 共享模型层（Plan, Step, RunState）和协议定义
-- **AxionHelper** — MCP 服务端进程，通过 stdio 协议提供 16 个原生 macOS 自动化工具
+- **AxionHelper** — MCP 服务端进程，通过 stdio 协议提供 22 个原生 macOS 自动化工具
 
-## MCP 工具（16 个）
+## MCP 工具（22 个）
 
 ### 应用管理
 | 工具 | 说明 |
 |------|------|
 | `launch_app` | 按名称启动 macOS 应用 |
 | `list_apps` | 列出所有正在运行的应用 |
+| `quit_app` | 退出正在运行的应用 |
+| `activate_window` | 激活（置顶）指定窗口 |
+
+### 窗口管理
+| 工具 | 说明 |
+|------|------|
 | `list_windows` | 列出窗口（可按进程 ID 过滤） |
 | `get_window_state` | 获取指定窗口的状态 |
+| `move_window` | 移动窗口到新位置 |
+| `resize_window` | 调整窗口大小和位置 |
+| `validate_window` | 检查窗口是否存在且可操作 |
+| `arrange_windows` | 排列多个窗口（并排、级联） |
 
 ### 鼠标操作
 | 工具 | 说明 |
@@ -68,6 +78,7 @@ Axion 是一个基于 Swift 的 macOS 桌面自动化工具，能够通过自然
 | `screenshot` | 截屏（全屏或指定窗口） |
 | `get_accessibility_tree` | 获取窗口的无障碍树 |
 | `open_url` | 在默认浏览器中打开 URL |
+| `get_file_info` | 获取文件或目录信息 |
 
 ## 快速开始
 

@@ -16,7 +16,7 @@ macOS desktop automation CLI powered by an LLM-driven Plan-Execute-Verify loop a
 
 ## Overview
 
-Axion is a Swift-based macOS desktop automation tool that takes natural language task descriptions and autonomously plans, executes, and verifies desktop operations. It exposes 16 native tools via MCP (Model Context Protocol) that any MCP client can call, or you can use the built-in CLI directly.
+Axion is a Swift-based macOS desktop automation tool that takes natural language task descriptions and autonomously plans, executes, and verifies desktop operations. It exposes 22 native tools via MCP (Model Context Protocol) that any MCP client can call, or you can use the built-in CLI directly.
 
 ## Architecture
 
@@ -28,23 +28,33 @@ Axion is a Swift-based macOS desktop automation tool that takes natural language
 ├──────────────────┬──────────────────────────┤
 │    AxionCore     │      AxionHelper          │
 │  Models, Protocols│  MCP Server (stdio)       │
-│  Config, Errors  │  16 Native macOS Tools    │
+│  Config, Errors  │  22 Native macOS Tools    │
 └──────────────────┴──────────────────────────┘
 ```
 
 - **AxionCLI** — CLI entry point with LLM interaction, task planning, and execution engine
 - **AxionCore** — Shared model layer (Plan, Step, RunState) and protocol definitions
-- **AxionHelper** — MCP server process providing 16 native macOS automation tools via stdio
+- **AxionHelper** — MCP server process providing 22 native macOS automation tools via stdio
 
-## MCP Tools (16)
+## MCP Tools (22)
 
 ### App Management
 | Tool | Description |
 |------|-------------|
 | `launch_app` | Launch a macOS app by name |
 | `list_apps` | List all running applications |
+| `quit_app` | Quit a running application |
+| `activate_window` | Activate (bring to front) a specific window |
+
+### Window Management
+| Tool | Description |
+|------|-------------|
 | `list_windows` | List windows (filterable by process ID) |
 | `get_window_state` | Get the state of a specific window |
+| `move_window` | Move a window to a new position |
+| `resize_window` | Resize a window (position and dimensions) |
+| `validate_window` | Check if a window exists and is actionable |
+| `arrange_windows` | Arrange multiple windows (tile, cascade) |
 
 ### Mouse Operations
 | Tool | Description |
@@ -68,6 +78,7 @@ Axion is a Swift-based macOS desktop automation tool that takes natural language
 | `screenshot` | Take a screenshot (full screen or specific window) |
 | `get_accessibility_tree` | Get the accessibility tree of a window |
 | `open_url` | Open a URL in the default browser |
+| `get_file_info` | Get information about a file or directory |
 
 ## Quick Start
 
