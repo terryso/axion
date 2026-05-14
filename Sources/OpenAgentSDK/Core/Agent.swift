@@ -812,7 +812,7 @@ public class Agent: CustomStringConvertible, CustomDebugStringConvertible, @unch
     /// For `.sdk` config types, tools are extracted directly without MCP protocol overhead.
     ///
     /// - Returns: A tuple of (assembled tools, MCPClientManager or nil).
-    func assembleFullToolPool() async -> ([ToolProtocol], MCPClientManager?) {
+    public func assembleFullToolPool() async -> ([ToolProtocol], MCPClientManager?) {
         let baseTools = options.tools ?? []
 
         guard let mcpServers = options.mcpServers, !mcpServers.isEmpty else {
