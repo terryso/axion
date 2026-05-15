@@ -27,51 +27,56 @@ struct RecordCommand: AsyncParsableCommand {
         _ = try await helperManager.callTool(name: "start_recording", arguments: [:])
         output.write("[axion] 录制中... 按 Ctrl-C 结束录制")
 
-        // 3. Capture context for SIGINT handler
+        // 3. Set up SIGINT signal handler
         let startTime = Date()
         let recordingName = name
-        nonisolated(unsafe) let write = output.write
 
-        // 4. Use withTaskCancellationHandler for clean shutdown
-        try await withTaskCancellationHandler {
-            // Keep running until cancelled (Ctrl-C)
-            try await _Concurrency.Task.sleep(nanoseconds: UInt64(Int64.max))
-        } onCancel: {
-            _Concurrency.Task {
-                let elapsed = Date().timeIntervalSince(startTime)
-                write("[axion] 正在停止录制...")
+        // Use DispatchSource to catch SIGINT
+        signal(SIGINT, SIG_IGN)
+        let source = DispatchSource.makeSignalSource(signal: SIGINT, queue: .main)
+        source.resume()
 
-                do {
-                    let stopResult = try await helperManager.callTool(name: "stop_recording", arguments: [:])
-                    let events = Self.parseRecordingEvents(from: stopResult)
-                    let snapshots = Self.parseWindowSnapshots(from: stopResult)
-                    let recording = Recording(
-                        name: recordingName,
-                        createdAt: startTime,
-                        durationSeconds: elapsed,
-                        events: events,
-                        windowSnapshots: snapshots
-                    )
-
-                    let recordingsDir = Self.recordingsDirectory()
-                    try FileManager.default.createDirectory(atPath: recordingsDir, withIntermediateDirectories: true)
-
-                    let filePath = (recordingsDir as NSString).appendingPathComponent("\(Self.sanitizeFileName(recordingName)).json")
-                    let encoder = JSONEncoder()
-                    encoder.outputFormatting = [.sortedKeys, .prettyPrinted]
-                    encoder.dateEncodingStrategy = .iso8601
-                    let data = try encoder.encode(recording)
-                    try data.write(to: URL(fileURLWithPath: filePath))
-
-                    write("[axion] 录制已保存: \(filePath)")
-                    write("[axion] 录制摘要: \(events.count) 个事件，耗时 \(String(format: "%.1f", elapsed)) 秒")
-                } catch {
-                    write("[axion] 保存录制失败: \(error.localizedDescription)")
-                }
-
-                await helperManager.stop()
+        // 4. Wait for SIGINT
+        await withCheckedContinuation { (continuation: CheckedContinuation<Void, Never>) in
+            source.setEventHandler {
+                source.cancel()
+                continuation.resume()
             }
         }
+
+        // 5. Stop recording and save
+        output.write("[axion] 正在停止录制...")
+
+        do {
+            let stopResult = try await helperManager.callTool(name: "stop_recording", arguments: [:])
+            let events = Self.parseRecordingEvents(from: stopResult)
+            let snapshots = Self.parseWindowSnapshots(from: stopResult)
+            let elapsed = Date().timeIntervalSince(startTime)
+            let recording = Recording(
+                name: recordingName,
+                createdAt: startTime,
+                durationSeconds: elapsed,
+                events: events,
+                windowSnapshots: snapshots
+            )
+
+            let recordingsDir = Self.recordingsDirectory()
+            try FileManager.default.createDirectory(atPath: recordingsDir, withIntermediateDirectories: true)
+
+            let filePath = (recordingsDir as NSString).appendingPathComponent("\(Self.sanitizeFileName(recordingName)).json")
+            let encoder = JSONEncoder()
+            encoder.outputFormatting = [.sortedKeys, .prettyPrinted]
+            encoder.dateEncodingStrategy = .iso8601
+            let data = try encoder.encode(recording)
+            try data.write(to: URL(fileURLWithPath: filePath))
+
+            output.write("[axion] 录制已保存: \(filePath)")
+            output.write("[axion] 录制摘要: \(events.count) 个事件，耗时 \(String(format: "%.1f", elapsed)) 秒")
+        } catch {
+            output.write("[axion] 保存录制失败: \(error.localizedDescription)")
+        }
+
+        await helperManager.stop()
     }
 
     // MARK: - Internal Helpers (testable)
