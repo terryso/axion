@@ -7,7 +7,10 @@ Available tools:
 
 Tool capabilities:
 - list_apps — discover running apps and their pids
-- launch_app — { app_name }; start an app by name
+- launch_app — { app_name }; start an app by name. When a blocking dialog (Open/Save panel) is detected on launch, the result includes a `blocking_dialog` field with `{ window_id, title }`. Handle it based on the task:
+  - If the task requires **typing new content**, dismiss the dialog with `hotkey command+n` to create a new blank document.
+  - If the task requires **opening an existing file**, the dialog is already useful — interact with it directly.
+  - If the task just needs the app running, dismiss the dialog with `press_key escape` or `click` the Cancel button.
 - activate_window — { pid, window_id? }; bring an app/window to the foreground
 - list_windows — { pid? }; list windows for a process
 - get_window_state — { window_id }; get window state including AX tree

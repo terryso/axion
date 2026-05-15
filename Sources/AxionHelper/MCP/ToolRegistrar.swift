@@ -12,6 +12,44 @@ private struct ToolErrorPayload: Codable {
     let suggestion: String
 }
 
+// MARK: - Blocking Dialog Detection (Epic 8)
+
+/// Information about a blocking dialog detected after launching an app.
+/// Follows OpenClick's approach: detect and report to the Planner so it can
+/// decide whether to dismiss or interact with the dialog.
+struct BlockingDialogInfo: Codable {
+    let windowId: Int
+    let title: String
+
+    enum CodingKeys: String, CodingKey {
+        case windowId = "window_id"
+        case title
+    }
+}
+
+/// Checks the window list for a topmost window that looks like a blocking
+/// open/save/import dialog. Detection is based on window title keywords and
+/// minimum size, not app-specific logic.
+private func detectBlockingDialog(windows: [WindowInfo], appPid: Int32) -> BlockingDialogInfo? {
+    // Filter to windows belonging to the launched app, on-screen, with
+    // meaningful size (not menu bar strips at 37px height).
+    let candidates = windows
+        .filter { $0.pid == appPid }
+        .filter { $0.bounds.width >= 200 && $0.bounds.height >= 120 }
+        .sorted { $0.zOrder < $1.zOrder } // lower zOrder = more frontmost
+
+    guard let top = candidates.first,
+          let title = top.title?.trimmingCharacters(in: .whitespaces),
+          !title.isEmpty else { return nil }
+
+    // Match common open/save dialog title patterns (locale-aware)
+    let dialogKeywords = ["open", "save", "import", "export", "place", "choose", "select", "打开", "存储", "导入", "导出"]
+    let lowerTitle = title.lowercased()
+    guard dialogKeywords.contains(where: { lowerTitle.contains($0) || lowerTitle.contains($0.lowercased()) }) else { return nil }
+
+    return BlockingDialogInfo(windowId: top.windowId, title: title)
+}
+
 // MARK: - Tool Result Types (Story 1.4)
 
 private struct CoordinateActionResult: Codable {
@@ -126,10 +164,44 @@ struct LaunchAppTool {
     func perform() async throws -> String {
         do {
             let appInfo = try await ServiceContainer.shared.appLauncher.launchApp(name: appName)
+
+            // Detect blocking dialogs (open/save panels) that the app may have
+            // shown on launch. This follows OpenClick's approach: detect and
+            // report to the Planner, letting it decide whether to dismiss.
+            // Wait briefly for the app to present its initial UI.
+            try? await Task.sleep(nanoseconds: 1_500_000_000) // 1.5s
+            let windows = ServiceContainer.shared.accessibilityEngine.listWindows(pid: appInfo.pid)
+            let blocker = detectBlockingDialog(windows: windows, appPid: appInfo.pid)
+
             let encoder = JSONEncoder()
             encoder.outputFormatting = [.sortedKeys]
-            let data = try encoder.encode(appInfo)
-            return String(data: data, encoding: .utf8) ?? "{}"
+
+            if let blocker {
+                struct LaunchResult: Codable {
+                    let pid: Int32
+                    let appName: String
+                    let bundleId: String?
+                    let blockingDialog: BlockingDialogInfo
+
+                    enum CodingKeys: String, CodingKey {
+                        case pid
+                        case appName = "app_name"
+                        case bundleId = "bundle_id"
+                        case blockingDialog = "blocking_dialog"
+                    }
+                }
+                let result = LaunchResult(
+                    pid: appInfo.pid,
+                    appName: appInfo.appName,
+                    bundleId: appInfo.bundleId,
+                    blockingDialog: blocker
+                )
+                let data = try encoder.encode(result)
+                return String(data: data, encoding: .utf8) ?? "{}"
+            } else {
+                let data = try encoder.encode(appInfo)
+                return String(data: data, encoding: .utf8) ?? "{}"
+            }
         } catch let error as AppLauncherError {
             let payload = ToolErrorPayload(
                 error: error.errorCode,
