@@ -7,6 +7,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
     func applicationDidFinishLaunching(_: Notification) {
         NSApp.setActivationPolicy(.accessory)
 
+        // UNUserNotificationCenter.current() requires a proper .app bundle.
+        // Skip notification setup when running from the debug build directory.
+        guard Bundle.main.bundleURL.pathExtension == "app" else { return }
+
         UNUserNotificationCenter.current().delegate = self
         UNUserNotificationCenter.current().requestAuthorization(options: [.alert, .sound]) { _, _ in }
     }
