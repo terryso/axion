@@ -3,6 +3,27 @@ import Combine
 import UserNotifications
 import os.log
 
+protocol NotificationSending {
+    func send(title: String, body: String)
+}
+
+final class UserNotificationSender: NotificationSending {
+    func send(title: String, body: String) {
+        let content = UNMutableNotificationContent()
+        content.title = title
+        content.body = body
+        content.sound = .default
+
+        let request = UNNotificationRequest(
+            identifier: UUID().uuidString,
+            content: content,
+            trigger: nil
+        )
+
+        UNUserNotificationCenter.current().add(request)
+    }
+}
+
 @MainActor
 final class StatusBarController: ObservableObject {
     @Published var connectionState: ConnectionState = .disconnected
@@ -15,6 +36,7 @@ final class StatusBarController: ObservableObject {
 
     private let healthChecker = BackendHealthChecker()
     private let processManager = ServerProcessManager()
+    let notificationSender: NotificationSending
     private let logger = Logger(subsystem: "com.axion.AxionBar", category: "StatusBarController")
 
     let taskSubmissionService = TaskSubmissionService()
@@ -62,7 +84,8 @@ final class StatusBarController: ObservableObject {
         return "步骤 \(currentStep)/\(totalSteps)"
     }
 
-    init() {
+    init(notificationSender: NotificationSending = UserNotificationSender()) {
+        self.notificationSender = notificationSender
         healthChecker.$connectionState
             .assign(to: &$connectionState)
 
@@ -219,17 +242,6 @@ final class StatusBarController: ObservableObject {
     }
 
     private func sendNotification(title: String, body: String) {
-        let content = UNMutableNotificationContent()
-        content.title = title
-        content.body = body
-        content.sound = .default
-
-        let request = UNNotificationRequest(
-            identifier: UUID().uuidString,
-            content: content,
-            trigger: nil
-        )
-
-        UNUserNotificationCenter.current().add(request)
+        notificationSender.send(title: title, body: body)
     }
 }

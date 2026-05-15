@@ -1,5 +1,6 @@
 # generated: 2026-05-08
 # last_updated: 2026-05-15
+# retro-epic-11: 2026-05-15
 # story-11.3-created: 2026-05-15
 # story-11.2-created: 2026-05-15
 # story-11.1-created: 2026-05-15
@@ -125,7 +126,7 @@ development_status:
   # ============================================================
 
   # Epic 8: 多窗口、多 App 工作流
-  epic-8: in-progress
+  epic-8: done
   8-1-multi-window-state-tracking-context-management: done
   8-2-cross-app-workflow-orchestration: done
   8-3-window-layout-management: done
@@ -146,8 +147,8 @@ development_status:
   epic-10-retrospective: done
 
   # Epic 11: 第三方 SDK 生态
-  epic-11: in-progress
+  epic-11: done
   11-1-agent-project-template-scaffold-cli: done
   11-2-plugin-tool-registration-agent-extension: done
   11-3-developer-documentation-examples: done
-  epic-11-retrospective: optional
+  epic-11-retrospective: done

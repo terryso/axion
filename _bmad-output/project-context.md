@@ -468,6 +468,53 @@ Sources/AxionBar/
 
 ---
 
+## SDK 生态（Epic 11 — 第三方 SDK 生态）
+
+Axion 作为 OpenAgentSDK 的旗舰参考实现，ScaffoldCLI 提供项目模板和脚手架 CLI。
+
+### ScaffoldCLI（位于 OpenAgentSDK 仓库）
+
+```
+Sources/ScaffoldCLI/
+├── ScaffoldCLI.swift              # ArgumentParser CLI 入口
+├── TemplateGenerator.swift        # 文件生成逻辑
+└── Templates/
+    ├── BasicMainTemplate.swift    # basic 和 mcp-integration main.swift 模板
+    ├── ToolTemplates.swift        # HelloWorld/Calculator/SystemInfo/Config 工具模板
+    ├── HookTemplates.swift        # Hooks 安全策略示例模板
+    ├── PromptTemplates.swift      # System prompt 和 .env.example 模板
+    └── ReadmeTemplate.swift       # README.md 模板
+```
+
+**关键规则：**
+- 模板代码只使用 SDK 公共 API，不引用 Axion 特有模块
+- 工具数组类型使用 `ToolProtocol`（不是不存在的 `AnyTool`）
+- 模板字符串中的 Swift 插值需要双重转义：`\\()` 在模板源码中 → `\()` 在生成输出中
+- `defineTool` 有 4 种重载，模板应展示多种模式
+- `AgentOptions` 的字段名是 `allowedTools`/`disallowedTools`（不是 `allowed`/`disallowed`）
+- `canUseTool` 回调签名：`(ToolProtocol, Any, ToolContext) async -> CanUseToolResult?`
+
+### Axion 关键模块内联文档（Story 11.3）
+
+以下文件包含设计决策注释，第三方开发者应参考：
+- `Sources/AxionCLI/Commands/RunCommand.swift` — Agent 创建和配置
+- `Sources/AxionCLI/MCP/MCPServerRunner.swift` — Agent-as-MCP-Server 模式
+- `Sources/AxionCLI/Memory/MemoryContextProvider.swift` — Memory 系统设计
+- `Sources/AxionCLI/API/AgentRunner.swift` — API Agent 执行
+
+### SDK 开发者文档（位于 OpenAgentSDK 仓库）
+
+| 文档 | 内容 |
+|------|------|
+| `docs/getting-started.md` | 5 分钟快速开始 |
+| `docs/tool-development-guide.md` | defineTool 4 种模式 |
+| `docs/mcp-integration-guide.md` | MCP 协议和集成 |
+| `docs/agent-customization-guide.md` | AgentOptions、PermissionMode、Hooks |
+| `docs/session-memory-guide.md` | Session 和 Memory 使用 |
+| `docs/packaging-distribution-guide.md` | SPM/Homebrew/签名/AX 权限 |
+
+---
+
 ## 执行循环状态机
 
 ```
