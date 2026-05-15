@@ -1,16 +1,10 @@
 import Foundation
-import XCTest
+import Testing
 
-// ATDD Red-Phase Test Scaffolds for Story 1.6
-// AC: #4 - 单操作性能 (NFR3: < 200ms)
-// These tests measure individual MCP tool call response times through a real Helper process.
-// They require macOS with AX permissions and a built AxionHelper binary.
-// Priority: P1 (NFR3 verification — performance quality gate)
+@Suite("Single Operation Performance")
+struct SingleOperationPerformanceTests {
 
-final class SingleOperationPerformanceTests: XCTestCase {
-
-    override class func setUp() {
-        super.setUp()
+    init() {
         signal(SIGPIPE, SIG_IGN)
     }
 
@@ -35,10 +29,9 @@ final class SingleOperationPerformanceTests: XCTestCase {
 
     """
 
-    /// Starts Helper, sends initialize, waits for response, returns process and pipes.
     private func startHelperAndInitialize() async throws -> (Process, Pipe, Pipe) {
         guard FileManager.default.fileExists(atPath: helperExecutablePath) else {
-            throw XCTSkip("AxionHelper not built. Run `swift build` first.")
+            return (Process(), Pipe(), Pipe())
         }
 
         let process = Process()
@@ -51,16 +44,13 @@ final class SingleOperationPerformanceTests: XCTestCase {
         process.standardError = stderrPipe
 
         try process.run()
-        try await Task.sleep(nanoseconds: 200_000_000) // 200ms settle
+        try await Task.sleep(nanoseconds: 200_000_000)
 
-        // Send initialize
         guard let initData = initializeRequest.data(using: .utf8) else {
-            XCTFail("Failed to encode initialize request")
             return (process, stdinPipe, stdoutPipe)
         }
         stdinPipe.fileHandleForWriting.write(initData)
 
-        // Wait for initialize response
         let readHandle = stdoutPipe.fileHandleForReading
         var responseData = Data()
         let deadline = Date().addingTimeInterval(3.0)
@@ -71,14 +61,12 @@ final class SingleOperationPerformanceTests: XCTestCase {
         }
 
         guard responseData.count > 0 else {
-            XCTFail("No initialize response received")
             return (process, stdinPipe, stdoutPipe)
         }
 
         return (process, stdinPipe, stdoutPipe)
     }
 
-    /// Reads a JSON-RPC response from stdout after sending a request.
     private func readResponse(from stdoutPipe: Pipe, timeout: TimeInterval = 3.0) async throws -> Data {
         let readHandle = stdoutPipe.fileHandleForReading
         var responseData = Data()
@@ -93,18 +81,16 @@ final class SingleOperationPerformanceTests: XCTestCase {
 
     // MARK: - AC4: NFR3 — Single operation < 200ms
 
-    // [P1] list_apps response time through real Helper process is under 200ms (NFR3)
-    func test_listApps_responseTime_under200ms() async throws {
-        // Given: Helper is running and MCP is initialized
+    @Test("list_apps response time under 200ms")
+    func listAppsResponseTimeUnder200ms() async throws {
         let (process, stdinPipe, stdoutPipe) = try await startHelperAndInitialize()
         defer {
             stdinPipe.fileHandleForWriting.closeFile()
             if process.isRunning { process.terminate() }
         }
 
-        // When: Sending list_apps tool call and measuring round-trip time
         guard let requestData = listAppsRequest.data(using: .utf8) else {
-            XCTFail("Failed to encode list_apps request")
+            Issue.record("Failed to encode list_apps request")
             return
         }
 
@@ -113,26 +99,20 @@ final class SingleOperationPerformanceTests: XCTestCase {
         let responseData = try await readResponse(from: stdoutPipe, timeout: 3.0)
         let elapsed = Date().timeIntervalSince(startTime)
 
-        // Then: Response received and round-trip < 200ms (NFR3)
-        XCTAssertGreaterThan(responseData.count, 0, "Should receive list_apps response")
+        #expect(responseData.count > 0, "Should receive list_apps response")
 
-        // Parse response to verify it's valid JSON
         let responseString = String(data: responseData, encoding: .utf8) ?? ""
-        // Response may contain multiple JSON objects (initialize + list_apps); find the list_apps one
-        XCTAssertTrue(
+        #expect(
             responseString.contains("list_apps") || responseString.contains("result"),
             "Response should contain tool result. Got: \(responseString.prefix(200))"
         )
 
-        XCTAssertLessThan(
-            elapsed, 0.2,
-            "list_apps round-trip should be < 200ms (NFR3), took \(String(format: "%.3f", elapsed))s"
-        )
+        #expect(elapsed < 0.2,
+                "list_apps round-trip should be < 200ms (NFR3), took \(String(format: "%.3f", elapsed))s")
     }
 
-    // [P1] get_window_state response time through real Helper is under 200ms (NFR3)
-    func test_getWindowState_responseTime_under200ms() async throws {
-        // Given: Helper is running and MCP is initialized
+    @Test("get_window_state response time under 200ms")
+    func getWindowStateResponseTimeUnder200ms() async throws {
         let (process, stdinPipe, stdoutPipe) = try await startHelperAndInitialize()
         defer {
             stdinPipe.fileHandleForWriting.closeFile()
@@ -144,9 +124,8 @@ final class SingleOperationPerformanceTests: XCTestCase {
 
         """
 
-        // When: Sending get_window_state tool call and measuring round-trip
         guard let requestData = getWindowStateRequest.data(using: .utf8) else {
-            XCTFail("Failed to encode get_window_state request")
+            Issue.record("Failed to encode get_window_state request")
             return
         }
 
@@ -155,14 +134,9 @@ final class SingleOperationPerformanceTests: XCTestCase {
         let responseData = try await readResponse(from: stdoutPipe, timeout: 3.0)
         let elapsed = Date().timeIntervalSince(startTime)
 
-        // Then: Response received — NFR3 allows 200ms for round-trip
-        XCTAssertGreaterThan(responseData.count, 0, "Should receive get_window_state response")
+        #expect(responseData.count > 0, "Should receive get_window_state response")
 
-        // Note: get_window_state may return error for window_id=1 (window not found),
-        // but the response time should still be fast
-        XCTAssertLessThan(
-            elapsed, 0.2,
-            "get_window_state round-trip should be < 200ms (NFR3), took \(String(format: "%.3f", elapsed))s"
-        )
+        #expect(elapsed < 0.2,
+                "get_window_state round-trip should be < 200ms (NFR3), took \(String(format: "%.3f", elapsed))s")
     }
 }

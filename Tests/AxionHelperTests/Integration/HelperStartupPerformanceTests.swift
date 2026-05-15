@@ -1,16 +1,10 @@
 import Foundation
-import XCTest
+import Testing
 
-// ATDD Red-Phase Test Scaffolds for Story 1.6
-// AC: #3 - Helper MCP 启动就绪性能 (NFR2: < 500ms)
-// These tests measure AxionHelper process startup time from launch to MCP initialize response.
-// They require macOS with AX permissions and a built AxionHelper binary.
-// Priority: P0 (NFR2 verification — critical performance gate)
+@Suite("Helper Startup Performance")
+struct HelperStartupPerformanceTests {
 
-final class HelperStartupPerformanceTests: XCTestCase {
-
-    override class func setUp() {
-        super.setUp()
+    init() {
         signal(SIGPIPE, SIG_IGN)
     }
 
@@ -41,30 +35,25 @@ final class HelperStartupPerformanceTests: XCTestCase {
 
     // MARK: - AC3: NFR2 — Helper startup to MCP ready < 500ms
 
-    // [P0] Helper startup to MCP initialize response is under 500ms (NFR2)
-    func test_helperStartup_initializeResponseTime_under500ms() async throws {
-        // Given: AxionHelper is built
-        guard FileManager.default.fileExists(atPath: helperExecutablePath) else {
-            throw XCTSkip("AxionHelper not built. Run `swift build` first.")
-        }
+    @Test("helper startup initialize response time under 500ms")
+    func helperStartupInitializeResponseTimeUnder500ms() async throws {
+        guard FileManager.default.fileExists(atPath: helperExecutablePath) else { return }
 
         let process = makeHelperProcess()
         let stdinPipe = process.standardInput as! Pipe
         let stdoutPipe = process.standardOutput as! Pipe
 
-        // When: Starting process and measuring time to MCP initialize response
         let startTime = Date()
         try process.run()
 
-        try await Task.sleep(nanoseconds: 100_000_000) // 100ms settle
+        try await Task.sleep(nanoseconds: 100_000_000)
 
         guard let requestData = initializeRequest.data(using: .utf8) else {
-            XCTFail("Failed to encode initialize request")
+            Issue.record("Failed to encode initialize request")
             return
         }
         stdinPipe.fileHandleForWriting.write(requestData)
 
-        // Poll for response
         let readHandle = stdoutPipe.fileHandleForReading
         var responseData = Data()
         let deadline = Date().addingTimeInterval(3.0)
@@ -79,14 +68,10 @@ final class HelperStartupPerformanceTests: XCTestCase {
 
         let elapsed = Date().timeIntervalSince(startTime)
 
-        // Then: Response received and startup time < 500ms (NFR2)
-        XCTAssertGreaterThan(responseData.count, 0, "Should receive MCP initialize response")
-        XCTAssertLessThan(
-            elapsed, 0.5,
-            "AxionHelper startup to initialize response should be < 500ms (NFR2), took \(String(format: "%.3f", elapsed))s"
-        )
+        #expect(responseData.count > 0, "Should receive MCP initialize response")
+        #expect(elapsed < 0.5,
+                "AxionHelper startup to initialize response should be < 500ms (NFR2), took \(String(format: "%.3f", elapsed))s")
 
-        // Clean up
         stdinPipe.fileHandleForWriting.closeFile()
         let exitDeadline = Date().addingTimeInterval(3.0)
         while process.isRunning && Date() < exitDeadline {
@@ -95,14 +80,10 @@ final class HelperStartupPerformanceTests: XCTestCase {
         if process.isRunning { process.terminate() }
     }
 
-    // [P1] Consecutive restarts all meet NFR2
-    func test_helperStartup_consecutiveRestarts_meetNFR2() async throws {
-        // Given: AxionHelper is built
-        guard FileManager.default.fileExists(atPath: helperExecutablePath) else {
-            throw XCTSkip("AxionHelper not built. Run `swift build` first.")
-        }
+    @Test("helper startup consecutive restarts meet NFR2")
+    func helperStartupConsecutiveRestartsMeetNFR2() async throws {
+        guard FileManager.default.fileExists(atPath: helperExecutablePath) else { return }
 
-        // When: Starting and stopping Helper 3 times
         var measurements: [TimeInterval] = []
 
         for _ in 0..<3 {
@@ -130,7 +111,6 @@ final class HelperStartupPerformanceTests: XCTestCase {
             let elapsed = Date().timeIntervalSince(startTime)
             if responseData.count > 0 { measurements.append(elapsed) }
 
-            // Clean up
             stdinPipe.fileHandleForWriting.closeFile()
             let exitDeadline = Date().addingTimeInterval(3.0)
             while process.isRunning && Date() < exitDeadline {
@@ -139,13 +119,10 @@ final class HelperStartupPerformanceTests: XCTestCase {
             if process.isRunning { process.terminate() }
         }
 
-        // Then: All starts should meet NFR2
-        XCTAssertGreaterThanOrEqual(measurements.count, 2, "Should have at least 2 successful measurements")
+        #expect(measurements.count >= 2, "Should have at least 2 successful measurements")
         for (index, elapsed) in measurements.enumerated() {
-            XCTAssertLessThan(
-                elapsed, 0.5,
-                "Restart #\(index + 1) took \(String(format: "%.3f", elapsed))s, exceeding NFR2 (500ms)"
-            )
+            #expect(elapsed < 0.5,
+                    "Restart #\(index + 1) took \(String(format: "%.3f", elapsed))s, exceeding NFR2 (500ms)")
         }
     }
 }

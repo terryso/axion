@@ -1,80 +1,137 @@
-import XCTest
+import Testing
 @testable import AxionHelper
 
-/// Tests that directly call real URLOpenerService.openURL to exercise
-/// the URL validation logic (scheme check, host check, NSWorkspace call).
-final class URLOpenerServiceRealTests: XCTestCase {
+@Suite("URLOpenerService Real")
+struct URLOpenerServiceRealTests {
 
     private let service = URLOpenerService()
 
     // MARK: - Invalid URLs
 
-    func test_openURL_emptyString_throwsInvalidURL() {
-        XCTAssertThrowsError(try service.openURL("")) { error in
-            guard let e = error as? URLOpenerError, case .invalidURL = e else {
-                XCTFail("Expected invalidURL"); return
+    @Test("openURL empty string throws invalidURL")
+    func openURLEmptyStringThrowsInvalidURL() {
+        do {
+            try service.openURL("")
+            Issue.record("Expected invalidURL error")
+        } catch let error as URLOpenerError {
+            if case .invalidURL = error {
+                // expected
+            } else {
+                Issue.record("Expected invalidURL, got \(error)")
             }
+        } catch {
+            Issue.record("Unexpected error: \(error)")
         }
     }
 
-    func test_openURL_plainText_throwsInvalidURL() {
-        XCTAssertThrowsError(try service.openURL("not a url")) { error in
-            guard let e = error as? URLOpenerError, case .invalidURL = e else {
-                XCTFail("Expected invalidURL"); return
+    @Test("openURL plain text throws invalidURL")
+    func openURLPlainTextThrowsInvalidURL() {
+        do {
+            try service.openURL("not a url")
+            Issue.record("Expected invalidURL error")
+        } catch let error as URLOpenerError {
+            if case .invalidURL = error {
+                // expected
+            } else {
+                Issue.record("Expected invalidURL, got \(error)")
             }
+        } catch {
+            Issue.record("Unexpected error: \(error)")
         }
     }
 
     // MARK: - Unsupported schemes
 
-    func test_openURL_ftp_throwsUnsupportedScheme() {
-        XCTAssertThrowsError(try service.openURL("ftp://example.com")) { error in
-            guard let e = error as? URLOpenerError, case .unsupportedScheme = e else {
-                XCTFail("Expected unsupportedScheme"); return
+    @Test("openURL ftp throws unsupportedScheme")
+    func openURLFtpThrowsUnsupportedScheme() {
+        do {
+            try service.openURL("ftp://example.com")
+            Issue.record("Expected unsupportedScheme error")
+        } catch let error as URLOpenerError {
+            if case .unsupportedScheme = error {
+                // expected
+            } else {
+                Issue.record("Expected unsupportedScheme, got \(error)")
             }
+        } catch {
+            Issue.record("Unexpected error: \(error)")
         }
     }
 
-    func test_openURL_file_throwsUnsupportedScheme() {
-        XCTAssertThrowsError(try service.openURL("file:///tmp/test")) { error in
-            guard let e = error as? URLOpenerError, case .unsupportedScheme = e else {
-                XCTFail("Expected unsupportedScheme"); return
+    @Test("openURL file throws unsupportedScheme")
+    func openURLFileThrowsUnsupportedScheme() {
+        do {
+            try service.openURL("file:///tmp/test")
+            Issue.record("Expected unsupportedScheme error")
+        } catch let error as URLOpenerError {
+            if case .unsupportedScheme = error {
+                // expected
+            } else {
+                Issue.record("Expected unsupportedScheme, got \(error)")
             }
+        } catch {
+            Issue.record("Unexpected error: \(error)")
         }
     }
 
-    func test_openURL_javascript_throwsUnsupportedScheme() {
-        XCTAssertThrowsError(try service.openURL("javascript:alert(1)")) { error in
-            guard let e = error as? URLOpenerError, case .unsupportedScheme = e else {
-                XCTFail("Expected unsupportedScheme"); return
+    @Test("openURL javascript throws unsupportedScheme")
+    func openURLJavascriptThrowsUnsupportedScheme() {
+        do {
+            try service.openURL("javascript:alert(1)")
+            Issue.record("Expected unsupportedScheme error")
+        } catch let error as URLOpenerError {
+            if case .unsupportedScheme = error {
+                // expected
+            } else {
+                Issue.record("Expected unsupportedScheme, got \(error)")
             }
+        } catch {
+            Issue.record("Unexpected error: \(error)")
         }
     }
 
-    func test_openURL_data_throwsUnsupportedScheme() {
-        XCTAssertThrowsError(try service.openURL("data:text/html,<h1>test</h1>")) { error in
-            guard let e = error as? URLOpenerError, case .unsupportedScheme = e else {
-                XCTFail("Expected unsupportedScheme"); return
+    @Test("openURL data throws unsupportedScheme")
+    func openURLDataThrowsUnsupportedScheme() {
+        do {
+            try service.openURL("data:text/html,<h1>test</h1>")
+            Issue.record("Expected unsupportedScheme error")
+        } catch let error as URLOpenerError {
+            if case .unsupportedScheme = error {
+                // expected
+            } else {
+                Issue.record("Expected unsupportedScheme, got \(error)")
             }
+        } catch {
+            Issue.record("Unexpected error: \(error)")
         }
     }
 
     // MARK: - URL without host
 
-    func test_openURL_httpsNoHost_throwsError() {
-        XCTAssertThrowsError(try service.openURL("https://"))
+    @Test("openURL https with no host throws error")
+    func openURLHttpsNoHost() {
+        do {
+            try service.openURL("https://")
+            Issue.record("Expected error")
+        } catch {
+            // Expected
+        }
     }
 
-    func test_openURL_httpNoHost_throwsError() {
-        XCTAssertThrowsError(try service.openURL("http://"))
+    @Test("openURL http with no host throws error")
+    func openURLHttpNoHost() {
+        do {
+            try service.openURL("http://")
+            Issue.record("Expected error")
+        } catch {
+            // Expected
+        }
     }
 
     // MARK: - Valid URL (may fail in headless CI)
 
-    func test_openURL_validHttps_exercisesValidationCode() {
-        // This exercises the full validation path:
-        // URL parsing, scheme check, host check
-        // In CI it may throw failedToOpen or succeed — both exercise the code
+    @Test("openURL valid https exercises validation code")
+    func openURLValidHttpsExercisesCode() {
         do {
             try service.openURL("https://example.com")
         } catch URLOpenerError.failedToOpen {

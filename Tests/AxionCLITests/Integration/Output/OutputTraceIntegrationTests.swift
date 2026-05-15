@@ -1,18 +1,10 @@
-import XCTest
+import Foundation
+import Testing
 @testable import AxionCLI
 @testable import AxionCore
 
-/// Integration tests for Story 3-5: Output, Trace & Progress Display.
-///
-/// Tests TerminalOutput, JSONOutput, and TraceRecorder wired into the real execution
-/// pipeline (StepExecutor + TaskVerifier) with live Helper process and real MCP calls.
-///
-/// Prerequisites:
-/// - AxionHelper.app built at .build/AxionHelper.app
-/// - macOS Accessibility permissions granted to Terminal/iTerm
-/// - Screen Recording permission granted (for screenshots)
-/// - Run with: AXION_HELPER_PATH="$(pwd)/.build/AxionHelper.app/Contents/MacOS/AxionHelper" swift test --filter "AxionCLIIntegrationTests.OutputTraceIntegrationTests"
-final class OutputTraceIntegrationTests: XCTestCase {
+@Suite("Output & Trace Integration")
+struct OutputTraceIntegrationTests {
 
     // MARK: - Helper -> MCPClientProtocol Adapter
 
@@ -52,54 +44,37 @@ final class OutputTraceIntegrationTests: XCTestCase {
         let reason: String
     }
 
-    // MARK: - Properties
+    // MARK: - Setup Helper
 
-    private var manager: HelperProcessManager?
-    private var mcpClient: RealMCPAdapter?
-    private var tempDir: URL?
-
-    // MARK: - Setup / Teardown
-
-    override func setUp() async throws {
-        try await super.setUp()
-
+    private func setUpMCPClient() async throws -> (HelperProcessManager, RealMCPAdapter, URL) {
         let mgr = HelperProcessManager()
         do {
             try await mgr.start()
         } catch {
-            throw XCTSkip("AxionHelper not available — build it first or set AXION_HELPER_PATH.")
+            throw NSError(domain: "AxionHelper not available", code: 1)
         }
 
         let running = await mgr.isRunning()
-        XCTAssertTrue(running, "Helper should be running after start()")
+        #expect(running, "Helper should be running after start()")
 
-        self.manager = mgr
-        self.mcpClient = RealMCPAdapter(manager: mgr)
+        let mcpClient = RealMCPAdapter(manager: mgr)
 
-        self.tempDir = FileManager.default.temporaryDirectory
+        let tempDir = FileManager.default.temporaryDirectory
             .appendingPathComponent("OutputTraceIntegrationTests-\(UUID().uuidString)")
-        try FileManager.default.createDirectory(at: tempDir!, withIntermediateDirectories: true)
-    }
+        try FileManager.default.createDirectory(at: tempDir, withIntermediateDirectories: true)
 
-    override func tearDown() async throws {
-        if let manager {
-            await manager.stop()
-        }
-        self.manager = nil
-        self.mcpClient = nil
-
-        if let tempDir {
-            try? FileManager.default.removeItem(at: tempDir)
-        }
-        self.tempDir = nil
-
-        try await super.tearDown()
+        return (mgr, mcpClient, tempDir)
     }
 
     // MARK: - AC1-AC4: StepExecutor + TerminalOutput
 
-    func test_real_stepExecutor_withTerminalOutput() async throws {
-        guard let mcpClient else { throw XCTSkip("AxionHelper not available — build it first or set AXION_HELPER_PATH.") }
+    @Test("real stepExecutor with TerminalOutput")
+    func realStepExecutorWithTerminalOutput() async throws {
+        let (manager, mcpClient, tempDir) = try await setUpMCPClient()
+        defer {
+            Task { await manager.stop() }
+            try? FileManager.default.removeItem(at: tempDir)
+        }
 
         var capturedOutput: [String] = []
         let output = TerminalOutput { capturedOutput.append($0) }
@@ -133,23 +108,18 @@ final class OutputTraceIntegrationTests: XCTestCase {
 
         let combined = capturedOutput.joined(separator: "\n")
 
-        // AC1: Run start info
-        XCTAssertTrue(combined.contains("[axion]"),
-            "All output should have [axion] prefix. Got: \(capturedOutput)")
-        XCTAssertTrue(combined.contains("20260510-integ01"),
-            "Should contain run ID. Got: \(capturedOutput)")
+        #expect(combined.contains("[axion]"),
+                "All output should have [axion] prefix. Got: \(capturedOutput)")
+        #expect(combined.contains("20260510-integ01"),
+                "Should contain run ID. Got: \(capturedOutput)")
+        #expect(combined.contains("1/1") || combined.contains("1/?"),
+                "Should show step progress. Got: \(capturedOutput)")
 
-        // AC2: Step progress
-        XCTAssertTrue(combined.contains("1/1") || combined.contains("1/?"),
-            "Should show step progress. Got: \(capturedOutput)")
-
-        // AC3: Step result
         if executedStep.success {
-            XCTAssertTrue(combined.contains("ok"),
-                "Successful step should show 'ok'. Got: \(capturedOutput)")
+            #expect(combined.contains("ok"),
+                    "Successful step should show 'ok'. Got: \(capturedOutput)")
         }
 
-        // Cleanup
         if let pid = extractPid(from: executedStep.result) {
             _ = try? await mcpClient.callTool(name: ToolNames.quitApp, arguments: ["pid": .int(pid)])
         }
@@ -157,8 +127,13 @@ final class OutputTraceIntegrationTests: XCTestCase {
 
     // MARK: - AC5: StepExecutor + JSONOutput
 
-    func test_real_stepExecutor_withJSONOutput() async throws {
-        guard let mcpClient else { throw XCTSkip("AxionHelper not available — build it first or set AXION_HELPER_PATH.") }
+    @Test("real stepExecutor with JSONOutput")
+    func realStepExecutorWithJSONOutput() async throws {
+        let (manager, mcpClient, tempDir) = try await setUpMCPClient()
+        defer {
+            Task { await manager.stop() }
+            try? FileManager.default.removeItem(at: tempDir)
+        }
 
         let output = JSONOutput()
 
@@ -196,33 +171,29 @@ final class OutputTraceIntegrationTests: XCTestCase {
         let json = output.finalize()
         let dict = parseJSON(json)
 
-        // AC5: JSON structure
-        XCTAssertNotNil(dict, "finalize() must produce valid JSON: \(json)")
-        XCTAssertEqual(dict?["runId"] as? String, "20260510-json01",
-            "JSON must contain correct runId")
-        XCTAssertEqual(dict?["task"] as? String, "Launch Calculator",
-            "JSON must contain correct task")
-        XCTAssertEqual(dict?["mode"] as? String, "plan_execute",
-            "JSON must contain correct mode")
+        #expect(dict != nil, "finalize() must produce valid JSON: \(json)")
+        #expect(dict?["runId"] as? String == "20260510-json01",
+                "JSON must contain correct runId")
+        #expect(dict?["task"] as? String == "Launch Calculator",
+                "JSON must contain correct task")
+        #expect(dict?["mode"] as? String == "plan_execute",
+                "JSON must contain correct mode")
 
-        // Steps array
         let steps = dict?["steps"] as? [[String: Any]]
-        XCTAssertNotNil(steps, "JSON must contain steps array")
-        XCTAssertEqual(steps?.count, 1, "Should have 1 step")
-        XCTAssertEqual(steps?.first?["tool"] as? String, ToolNames.launchApp,
-            "Step tool should be launch_app")
-        XCTAssertEqual(steps?.first?["success"] as? Bool, true,
-            "Step should be successful")
+        #expect(steps != nil, "JSON must contain steps array")
+        #expect(steps?.count == 1, "Should have 1 step")
+        #expect(steps?.first?["tool"] as? String == ToolNames.launchApp,
+                "Step tool should be launch_app")
+        #expect(steps?.first?["success"] as? Bool == true,
+                "Step should be successful")
 
-        // Summary
         let summary = dict?["summary"] as? [String: Any]
-        XCTAssertNotNil(summary, "JSON must contain summary")
-        XCTAssertEqual(summary?["totalSteps"] as? Int, 1,
-            "Summary should report 1 total step")
-        XCTAssertEqual(summary?["successfulSteps"] as? Int, 1,
-            "Summary should report 1 successful step")
+        #expect(summary != nil, "JSON must contain summary")
+        #expect(summary?["totalSteps"] as? Int == 1,
+                "Summary should report 1 total step")
+        #expect(summary?["successfulSteps"] as? Int == 1,
+                "Summary should report 1 successful step")
 
-        // Cleanup
         if let pid = extractPid(from: executedStep.result) {
             _ = try? await mcpClient.callTool(name: ToolNames.quitApp, arguments: ["pid": .int(pid)])
         }
@@ -230,14 +201,18 @@ final class OutputTraceIntegrationTests: XCTestCase {
 
     // MARK: - AC6-AC7: StepExecutor + TraceRecorder
 
-    func test_real_stepExecutor_withTraceRecorder() async throws {
-        guard let mcpClient else { throw XCTSkip("AxionHelper not available — build it first or set AXION_HELPER_PATH.") }
+    @Test("real stepExecutor with TraceRecorder")
+    func realStepExecutorWithTraceRecorder() async throws {
+        let (manager, mcpClient, tempDir) = try await setUpMCPClient()
+        defer {
+            Task { await manager.stop() }
+            try? FileManager.default.removeItem(at: tempDir)
+        }
 
         var config = AxionConfig.default
         config.traceEnabled = true
         let recorder = try TraceRecorder(runId: "20260510-trace01", config: config, baseURL: tempDir)
 
-        // Collect data from synchronous callbacks, then write to TraceRecorder
         var collectedStarts: [CollectedStepStart] = []
         var collectedDones: [CollectedStepDone] = []
 
@@ -256,7 +231,6 @@ final class OutputTraceIntegrationTests: XCTestCase {
             ))
         }
 
-        // Record run_start
         await recorder.recordRunStart(runId: "20260510-trace01", task: "Launch Calculator", mode: "plan_execute")
 
         let plan = Plan(
@@ -276,7 +250,6 @@ final class OutputTraceIntegrationTests: XCTestCase {
 
         let executedStep = try await executor.executeStep(plan.steps[0], context: context)
 
-        // Flush collected data to TraceRecorder
         for s in collectedStarts {
             await recorder.recordStepStart(index: s.index, tool: s.tool, purpose: s.purpose)
         }
@@ -284,56 +257,48 @@ final class OutputTraceIntegrationTests: XCTestCase {
             await recorder.recordStepDone(index: d.index, tool: d.tool, success: d.success, resultSnippet: d.resultSnippet)
         }
 
-        // Record run_done
         await recorder.recordRunDone(totalSteps: 1, durationMs: 0, replanCount: 0)
         await recorder.close()
 
-        // Read and verify trace file
-        let traceURL = tempDir!.appendingPathComponent("20260510-trace01/trace.jsonl")
-        XCTAssertTrue(FileManager.default.fileExists(atPath: traceURL.path),
-            "Trace file should exist at \(traceURL.path)")
+        let traceURL = tempDir.appendingPathComponent("20260510-trace01/trace.jsonl")
+        #expect(FileManager.default.fileExists(atPath: traceURL.path),
+                "Trace file should exist at \(traceURL.path)")
 
         let content = try String(contentsOf: traceURL, encoding: .utf8)
         let lines = content.components(separatedBy: "\n").filter { !$0.isEmpty }
 
-        // AC6: Trace events recorded
-        XCTAssertGreaterThanOrEqual(lines.count, 3,
-            "Should have at least 3 events (run_start, step_start, step_done, run_done). Got \(lines.count)")
+        #expect(lines.count >= 3,
+                "Should have at least 3 events (run_start, step_start, step_done, run_done). Got \(lines.count)")
 
-        // AC7: Each line is valid JSON with ts and event
         var eventTypes: [String] = []
         for (index, line) in lines.enumerated() {
             let json = parseJSONLine(line)
-            XCTAssertNotNil(json, "Line \(index) must be valid JSON: \(line)")
-            XCTAssertNotNil(json?["ts"], "Line \(index) must have 'ts' field")
+            #expect(json != nil, "Line \(index) must be valid JSON: \(line)")
+            #expect(json?["ts"] != nil, "Line \(index) must have 'ts' field")
             let event = json?["event"] as? String ?? ""
             eventTypes.append(event)
 
-            // Verify snake_case
             let snakePattern = "^[a-z][a-z0-9_]*$"
             let regex = try NSRegularExpression(pattern: snakePattern)
             let range = NSRange(event.startIndex..., in: event)
-            XCTAssertGreaterThan(regex.numberOfMatches(in: event, range: range), 0,
-                "Event '\(event)' should be snake_case")
+            #expect(regex.numberOfMatches(in: event, range: range) > 0,
+                    "Event '\(event)' should be snake_case")
         }
 
-        // Verify expected event sequence
-        XCTAssertTrue(eventTypes.contains("run_start"), "Should have run_start event")
-        XCTAssertTrue(eventTypes.contains("step_start"), "Should have step_start event")
-        XCTAssertTrue(eventTypes.contains("step_done"), "Should have step_done event")
-        XCTAssertTrue(eventTypes.contains("run_done"), "Should have run_done event")
+        #expect(eventTypes.contains("run_start"), "Should have run_start event")
+        #expect(eventTypes.contains("step_start"), "Should have step_start event")
+        #expect(eventTypes.contains("step_done"), "Should have step_done event")
+        #expect(eventTypes.contains("run_done"), "Should have run_done event")
 
-        // Verify step_done has real data
         let stepDoneLine = lines.first { line in
             (parseJSONLine(line)?["event"] as? String) == "step_done"
         }
         let stepDoneJson = stepDoneLine.flatMap { parseJSONLine($0) }
-        XCTAssertEqual(stepDoneJson?["tool"] as? String, ToolNames.launchApp,
-            "step_done should record launch_app tool")
-        XCTAssertEqual(stepDoneJson?["success"] as? Bool, true,
-            "step_done should record success=true")
+        #expect(stepDoneJson?["tool"] as? String == ToolNames.launchApp,
+                "step_done should record launch_app tool")
+        #expect(stepDoneJson?["success"] as? Bool == true,
+                "step_done should record success=true")
 
-        // Cleanup
         if let pid = extractPid(from: executedStep.result) {
             _ = try? await mcpClient.callTool(name: ToolNames.quitApp, arguments: ["pid": .int(pid)])
         }
@@ -341,13 +306,16 @@ final class OutputTraceIntegrationTests: XCTestCase {
 
     // MARK: - AC1-AC7: TaskVerifier + Output + Trace
 
-    func test_real_taskVerifier_withOutputAndTrace() async throws {
-        guard let mcpClient else { throw XCTSkip("AxionHelper not available — build it first or set AXION_HELPER_PATH.") }
+    @Test("real taskVerifier with output and trace")
+    func realTaskVerifierWithOutputAndTrace() async throws {
+        let (manager, mcpClient, tempDir) = try await setUpMCPClient()
+        defer {
+            Task { await manager.stop() }
+            try? FileManager.default.removeItem(at: tempDir)
+        }
 
-        // Launch Calculator first
-        let (pid, _, windowTitle) = try await launchCalculator()
+        let (pid, _, windowTitle) = try await launchCalculator(mcpClient: mcpClient)
 
-        // Setup TerminalOutput + TraceRecorder
         var capturedOutput: [String] = []
         let output = TerminalOutput { capturedOutput.append($0) }
 
@@ -355,11 +323,9 @@ final class OutputTraceIntegrationTests: XCTestCase {
         traceConfig.traceEnabled = true
         let recorder = try TraceRecorder(runId: "20260510-verify01", config: traceConfig, baseURL: tempDir)
 
-        // Record run start
         output.displayRunStart(runId: "20260510-verify01", task: "Verify Calculator", mode: "plan_execute")
         await recorder.recordRunStart(runId: "20260510-verify01", task: "Verify Calculator", mode: "plan_execute")
 
-        // Collect verification results from callback
         var collectedVerifications: [CollectedVerification] = []
 
         let mockLLM = OutputIntegrationMockLLMClient(promptResult: """
@@ -401,54 +367,51 @@ final class OutputTraceIntegrationTests: XCTestCase {
         output.displayStateChange(from: .executing, to: .verifying)
         await recorder.recordStateChange(from: "executing", to: "verifying")
 
-        // Run verification
         _ = try await verifier.verify(plan: plan, executedSteps: executedSteps, context: context)
 
-        // Flush collected verifications to TraceRecorder
         for v in collectedVerifications {
             await recorder.recordVerificationResult(state: v.state, reason: v.reason)
         }
 
-        // Record run_done
         await recorder.recordRunDone(totalSteps: 1, durationMs: 0, replanCount: 0)
         await recorder.close()
 
-        // Verify TerminalOutput
         let combinedOutput = capturedOutput.joined(separator: "\n")
-        XCTAssertTrue(combinedOutput.contains("[axion]"),
-            "All output should have [axion] prefix")
-        XCTAssertTrue(combinedOutput.contains("验证"),
-            "Output should contain verification text")
+        #expect(combinedOutput.contains("[axion]"),
+                "All output should have [axion] prefix")
+        #expect(combinedOutput.contains("验证"),
+                "Output should contain verification text")
 
-        // Verify TraceRecorder
-        let traceURL = tempDir!.appendingPathComponent("20260510-verify01/trace.jsonl")
+        let traceURL = tempDir.appendingPathComponent("20260510-verify01/trace.jsonl")
         let traceContent = try String(contentsOf: traceURL, encoding: .utf8)
         let traceLines = traceContent.components(separatedBy: "\n").filter { !$0.isEmpty }
 
         let eventTypes = traceLines.compactMap { parseJSONLine($0)?["event"] as? String }
-        XCTAssertTrue(eventTypes.contains("run_start"), "Trace should have run_start")
-        XCTAssertTrue(eventTypes.contains("state_change"), "Trace should have state_change")
-        XCTAssertTrue(eventTypes.contains("verification_result"), "Trace should have verification_result")
-        XCTAssertTrue(eventTypes.contains("run_done"), "Trace should have run_done")
+        #expect(eventTypes.contains("run_start"), "Trace should have run_start")
+        #expect(eventTypes.contains("state_change"), "Trace should have state_change")
+        #expect(eventTypes.contains("verification_result"), "Trace should have verification_result")
+        #expect(eventTypes.contains("run_done"), "Trace should have run_done")
 
-        // Verify verification_result event
         let verificationLine = traceLines.first { line in
             (parseJSONLine(line)?["event"] as? String) == "verification_result"
         }
         let verificationJson = verificationLine.flatMap { parseJSONLine($0) }
-        XCTAssertEqual(verificationJson?["state"] as? String, RunState.done.rawValue,
-            "verification_result should have state=done")
+        #expect(verificationJson?["state"] as? String == RunState.done.rawValue,
+                "verification_result should have state=done")
 
-        // Cleanup
         _ = try? await mcpClient.callTool(name: ToolNames.quitApp, arguments: ["pid": .int(pid)])
     }
 
     // MARK: - AC1-AC7: Full Pipeline (Execute + Verify)
 
-    func test_real_fullPipeline_executeAndVerify() async throws {
-        guard let mcpClient else { throw XCTSkip("AxionHelper not available — build it first or set AXION_HELPER_PATH.") }
+    @Test("real full pipeline execute and verify")
+    func realFullPipelineExecuteAndVerify() async throws {
+        let (manager, mcpClient, tempDir) = try await setUpMCPClient()
+        defer {
+            Task { await manager.stop() }
+            try? FileManager.default.removeItem(at: tempDir)
+        }
 
-        // Setup all components
         var capturedOutput: [String] = []
         let output = TerminalOutput { capturedOutput.append($0) }
 
@@ -458,11 +421,9 @@ final class OutputTraceIntegrationTests: XCTestCase {
 
         let runId = "20260510-full01"
 
-        // Display run start
         output.displayRunStart(runId: runId, task: "Launch and verify Calculator", mode: "plan_execute")
         await recorder.recordRunStart(runId: runId, task: "Launch and verify Calculator", mode: "plan_execute")
 
-        // Create plan
         let plan = Plan(
             id: UUID(), task: "Launch and verify Calculator",
             steps: [
@@ -476,7 +437,6 @@ final class OutputTraceIntegrationTests: XCTestCase {
         output.displayPlan(plan)
         await recorder.recordPlanCreated(stepCount: plan.steps.count, stopWhenCount: plan.stopWhen.count)
 
-        // Collect data from callbacks
         var collectedStarts: [CollectedStepStart] = []
         var collectedDones: [CollectedStepDone] = []
         var collectedVerifications: [CollectedVerification] = []
@@ -497,7 +457,6 @@ final class OutputTraceIntegrationTests: XCTestCase {
             ))
         }
 
-        // Execute
         output.displayStateChange(from: .planning, to: .executing)
         await recorder.recordStateChange(from: "planning", to: "executing")
 
@@ -509,7 +468,6 @@ final class OutputTraceIntegrationTests: XCTestCase {
         let executedStep = try await executor.executeStep(plan.steps[0], context: context)
         context.executedSteps = [executedStep]
 
-        // Flush step trace data
         for s in collectedStarts {
             await recorder.recordStepStart(index: s.index, tool: s.tool, purpose: s.purpose)
         }
@@ -517,7 +475,6 @@ final class OutputTraceIntegrationTests: XCTestCase {
             await recorder.recordStepDone(index: d.index, tool: d.tool, success: d.success, resultSnippet: d.resultSnippet)
         }
 
-        // Verify
         output.displayStateChange(from: .executing, to: .verifying)
         await recorder.recordStateChange(from: "executing", to: "verifying")
 
@@ -546,12 +503,10 @@ final class OutputTraceIntegrationTests: XCTestCase {
 
         let verifyResult = try await verifier.verify(plan: verifyPlan, executedSteps: context.executedSteps, context: context)
 
-        // Flush verification trace data
         for v in collectedVerifications {
             await recorder.recordVerificationResult(state: v.state, reason: v.reason)
         }
 
-        // Summary
         output.displaySummary(context: RunContext(
             planId: plan.id, currentState: verifyResult.state,
             currentStepIndex: 1, executedSteps: [executedStep],
@@ -563,41 +518,33 @@ final class OutputTraceIntegrationTests: XCTestCase {
         // === Verify TerminalOutput ===
         let combinedOutput = capturedOutput.joined(separator: "\n")
 
-        // AC1: Run start
-        XCTAssertTrue(combinedOutput.contains(runId), "Should contain run ID")
-        // AC2: Plan
-        XCTAssertTrue(combinedOutput.contains("1 个步骤") || combinedOutput.contains("1"),
-            "Should show step count from plan")
-        // AC3: Step result
-        XCTAssertTrue(combinedOutput.contains("ok"), "Should show ok for successful step")
-        // AC4: Summary
-        XCTAssertTrue(combinedOutput.contains("完成"), "Should show completion summary")
+        #expect(combinedOutput.contains(runId), "Should contain run ID")
+        #expect(combinedOutput.contains("1 个步骤") || combinedOutput.contains("1"),
+                "Should show step count from plan")
+        #expect(combinedOutput.contains("ok"), "Should show ok for successful step")
+        #expect(combinedOutput.contains("完成"), "Should show completion summary")
 
-        // Verify every line has [axion] prefix
         for line in capturedOutput where !line.trimmingCharacters(in: .whitespaces).isEmpty {
-            XCTAssertTrue(line.contains("[axion]"),
-                "Output line missing [axion] prefix: '\(line)'")
+            #expect(line.contains("[axion]"),
+                    "Output line missing [axion] prefix: '\(line)'")
         }
 
         // === Verify TraceRecorder ===
-        let traceURL = tempDir!.appendingPathComponent("20260510-full01/trace.jsonl")
+        let traceURL = tempDir.appendingPathComponent("20260510-full01/trace.jsonl")
         let traceContent = try String(contentsOf: traceURL, encoding: .utf8)
         let traceLines = traceContent.components(separatedBy: "\n").filter { !$0.isEmpty }
 
-        // Should have: run_start, plan_created, state_change, step_start, step_done,
-        //              state_change, verification_result, run_done
-        XCTAssertGreaterThanOrEqual(traceLines.count, 7,
-            "Should have at least 7 trace events, got \(traceLines.count)")
+        #expect(traceLines.count >= 7,
+                "Should have at least 7 trace events, got \(traceLines.count)")
 
         let eventTypes = traceLines.compactMap { parseJSONLine($0)?["event"] as? String }
-        XCTAssertTrue(eventTypes.contains("run_start"), "Missing run_start")
-        XCTAssertTrue(eventTypes.contains("plan_created"), "Missing plan_created")
-        XCTAssertTrue(eventTypes.contains("step_start"), "Missing step_start")
-        XCTAssertTrue(eventTypes.contains("step_done"), "Missing step_done")
-        XCTAssertTrue(eventTypes.contains("verification_result"), "Missing verification_result")
-        XCTAssertTrue(eventTypes.contains("run_done"), "Missing run_done")
+        #expect(eventTypes.contains("run_start"), "Missing run_start")
+        #expect(eventTypes.contains("plan_created"), "Missing plan_created")
+        #expect(eventTypes.contains("step_start"), "Missing step_start")
+        #expect(eventTypes.contains("step_done"), "Missing step_done")
+        #expect(eventTypes.contains("verification_result"), "Missing verification_result")
+        #expect(eventTypes.contains("run_done"), "Missing run_done")
 
-        // Cleanup
         if let pid = extractPid(from: executedStep.result) {
             _ = try? await mcpClient.callTool(name: ToolNames.quitApp, arguments: ["pid": .int(pid)])
         }
@@ -605,15 +552,13 @@ final class OutputTraceIntegrationTests: XCTestCase {
 
     // MARK: - Helpers
 
-    private func launchCalculator() async throws -> (pid: Int, windowId: Int, windowTitle: String) {
-        guard let mcpClient else { throw NSError(domain: "No MCP client", code: 1) }
-
+    private func launchCalculator(mcpClient: RealMCPAdapter) async throws -> (pid: Int, windowId: Int, windowTitle: String) {
         let launchResult = try await mcpClient.callTool(
             name: ToolNames.launchApp,
             arguments: ["app_name": .string("Calculator")]
         )
         guard let pid = extractPid(from: launchResult) else {
-            XCTFail("Should get pid from launch_app: \(launchResult)")
+            Issue.record("Should get pid from launch_app: \(launchResult)")
             throw NSError(domain: "No pid", code: 2)
         }
 
@@ -625,7 +570,7 @@ final class OutputTraceIntegrationTests: XCTestCase {
         )
 
         guard let (windowId, windowTitle) = extractMainWindow(from: windowsResult) else {
-            XCTFail("Should get window from list_windows: \(windowsResult)")
+            Issue.record("Should get window from list_windows: \(windowsResult)")
             throw NSError(domain: "No window_id", code: 3)
         }
 
