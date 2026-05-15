@@ -1,13 +1,9 @@
 import Foundation
 import MCP
 import MCPTool
-import XCTest
+import Testing
 @testable import AxionHelper
 @testable import AxionCore
-
-// Unit tests for list_windows and get_window_state tools using mock services.
-// These tests do NOT interact with real macOS windows — all system interaction is mocked.
-// Priority: P0 (core tool wiring)
 
 final class ThreadSafeArray<T>: @unchecked Sendable {
     private var items: [T] = []
@@ -18,9 +14,9 @@ final class ThreadSafeArray<T>: @unchecked Sendable {
 }
 
 @MainActor
-final class WindowManagementToolTests: XCTestCase {
-
-    // MARK: - Helpers
+extension ToolsTests {
+@Suite("WindowManagementTool")
+struct WindowManagementToolTests {
 
     private func makeRegisteredServer() async throws -> MCPServer {
         let server = MCPServer(name: "AxionHelper", version: "0.1.0")
@@ -70,9 +66,8 @@ final class WindowManagementToolTests: XCTestCase {
         axTree: AXElement(role: "AXWindow", title: "Calculator", value: nil, bounds: nil, children: [])
     )
 
-    // MARK: - list_windows
-
-    func test_listWindows_returnsJsonArray() async throws {
+    @Test("list windows returns JSON array")
+    func listWindowsReturnsJsonArray() async throws {
         let window = Self.sampleWindow
         let restore = ServiceContainerFixture.apply(
             accessibilityEngine: MockAccessibilityEngine(
@@ -94,11 +89,12 @@ final class WindowManagementToolTests: XCTestCase {
         let data = text.data(using: .utf8)!
         let windows = try JSONSerialization.jsonObject(with: data) as? [[String: Any]]
 
-        XCTAssertEqual(windows?.count, 1)
-        XCTAssertEqual(windows?[0]["window_id"] as? Int, 42)
+        #expect(windows?.count == 1)
+        #expect(windows?[0]["window_id"] as? Int == 42)
     }
 
-    func test_listWindows_filterByPid() async throws {
+    @Test("list windows filter by pid")
+    func listWindowsFilterByPid() async throws {
         let restore = ServiceContainerFixture.apply(
             accessibilityEngine: MockAccessibilityEngine(
                 listWindowsHandler: { pid in
@@ -122,7 +118,8 @@ final class WindowManagementToolTests: XCTestCase {
         )
     }
 
-    func test_listWindows_eachWindowHasRequiredFields() async throws {
+    @Test("list windows each window has required fields")
+    func listWindowsEachWindowHasRequiredFields() async throws {
         let window = Self.sampleWindow
         let restore = ServiceContainerFixture.apply(
             accessibilityEngine: MockAccessibilityEngine(
@@ -145,14 +142,13 @@ final class WindowManagementToolTests: XCTestCase {
         let windows = try JSONSerialization.jsonObject(with: data) as? [[String: Any]] ?? []
 
         for window in windows {
-            XCTAssertNotNil(window["window_id"], "Each window should have window_id")
-            XCTAssertNotNil(window["bounds"], "Each window should have bounds")
+            #expect(window["window_id"] != nil)
+            #expect(window["bounds"] != nil)
         }
     }
 
-    // MARK: - get_window_state
-
-    func test_getWindowState_returnsCompleteState() async throws {
+    @Test("get window state returns complete state")
+    func getWindowStateReturnsCompleteState() async throws {
         let state = Self.sampleState
         let restore = ServiceContainerFixture.apply(
             accessibilityEngine: MockAccessibilityEngine(
@@ -176,13 +172,14 @@ final class WindowManagementToolTests: XCTestCase {
         let text = textContent(result)
         let json = try JSONSerialization.jsonObject(with: text.data(using: .utf8)!) as? [String: Any]
 
-        XCTAssertNotNil(json?["bounds"])
-        XCTAssertNotNil(json?["is_minimized"])
-        XCTAssertNotNil(json?["is_focused"])
-        XCTAssertNotNil(json?["ax_tree"])
+        #expect(json?["bounds"] != nil)
+        #expect(json?["is_minimized"] != nil)
+        #expect(json?["is_focused"] != nil)
+        #expect(json?["ax_tree"] != nil)
     }
 
-    func test_getWindowState_invalidWindowId_returnsErrorJson() async throws {
+    @Test("get window state invalid window id returns error JSON")
+    func getWindowStateInvalidWindowIdReturnsErrorJson() async throws {
         let restore = ServiceContainerFixture.apply(
             accessibilityEngine: MockAccessibilityEngine(
                 listWindowsHandler: { _ in [] },
@@ -204,11 +201,12 @@ final class WindowManagementToolTests: XCTestCase {
         let text = textContent(result)
         let json = try JSONSerialization.jsonObject(with: text.data(using: .utf8)!) as? [String: Any]
 
-        XCTAssertEqual(json?["error"] as? String, "window_not_found")
-        XCTAssertNotNil(json?["suggestion"])
+        #expect(json?["error"] as? String == "window_not_found")
+        #expect(json?["suggestion"] != nil)
     }
 
-    func test_getWindowState_boundsContainsPositionAndSize() async throws {
+    @Test("get window state bounds contains position and size")
+    func getWindowStateBoundsContainsPositionAndSize() async throws {
         let state = Self.sampleState
         let restore = ServiceContainerFixture.apply(
             accessibilityEngine: MockAccessibilityEngine(
@@ -228,17 +226,16 @@ final class WindowManagementToolTests: XCTestCase {
 
         let text = textContent(result)
         let json = try JSONSerialization.jsonObject(with: text.data(using: .utf8)!) as? [String: Any]
-        let bounds = try XCTUnwrap(json?["bounds"] as? [String: Any])
+        let bounds = try #require(json?["bounds"] as? [String: Any])
 
-        XCTAssertNotNil(bounds["x"])
-        XCTAssertNotNil(bounds["y"])
-        XCTAssertNotNil(bounds["width"])
-        XCTAssertNotNil(bounds["height"])
+        #expect(bounds["x"] != nil)
+        #expect(bounds["y"] != nil)
+        #expect(bounds["width"] != nil)
+        #expect(bounds["height"] != nil)
     }
 
-    // MARK: - resize_window (Story 8.3)
-
-    func test_resizeWindow_returnsUpdatedBounds() async throws {
+    @Test("resize window returns updated bounds")
+    func resizeWindowReturnsUpdatedBounds() async throws {
         let restore = ServiceContainerFixture.apply(
             accessibilityEngine: MockAccessibilityEngine(
                 listWindowsHandler: { _ in [] },
@@ -249,11 +246,11 @@ final class WindowManagementToolTests: XCTestCase {
                 ) },
                 getAXTreeHandler: { _, _ in AXElement(role: "AXWindow", title: nil, value: nil, bounds: nil, children: []) },
                 setWindowBoundsHandler: { windowId, x, y, width, height in
-                    XCTAssertEqual(windowId, 42)
-                    XCTAssertEqual(x, 100)
-                    XCTAssertEqual(y, 200)
-                    XCTAssertNil(width)
-                    XCTAssertNil(height)
+                    #expect(windowId == 42)
+                    #expect(x == 100)
+                    #expect(y == 200)
+                    #expect(width == nil)
+                    #expect(height == nil)
                 }
             )
         )
@@ -268,13 +265,12 @@ final class WindowManagementToolTests: XCTestCase {
 
         let text = textContent(result)
         let json = try JSONSerialization.jsonObject(with: text.data(using: .utf8)!) as? [String: Any]
-        XCTAssertEqual(json?["success"] as? Bool, true)
-        XCTAssertEqual(json?["window_id"] as? Int, 42)
+        #expect(json?["success"] as? Bool == true)
+        #expect(json?["window_id"] as? Int == 42)
     }
 
-    // MARK: - arrange_windows (Story 8.3)
-
-    func test_arrangeWindows_tileLeftRight() async throws {
+    @Test("arrange windows tile left right")
+    func arrangeWindowsTileLeftRight() async throws {
         let setBoundsCalls = ThreadSafeArray<(windowId: Int, x: Int?, y: Int?, width: Int?, height: Int?)>()
         let restore = ServiceContainerFixture.apply(
             accessibilityEngine: MockAccessibilityEngine(
@@ -301,14 +297,15 @@ final class WindowManagementToolTests: XCTestCase {
 
         let text = textContent(result)
         let json = try JSONSerialization.jsonObject(with: text.data(using: .utf8)!) as? [String: Any]
-        XCTAssertEqual(json?["success"] as? Bool, true)
-        XCTAssertEqual(json?["layout"] as? String, "tile-left-right")
-        XCTAssertEqual(setBoundsCalls.count, 2)
-        XCTAssertEqual(setBoundsCalls[0].windowId, 1)
-        XCTAssertEqual(setBoundsCalls[1].windowId, 2)
+        #expect(json?["success"] as? Bool == true)
+        #expect(json?["layout"] as? String == "tile-left-right")
+        #expect(setBoundsCalls.count == 2)
+        #expect(setBoundsCalls[0].windowId == 1)
+        #expect(setBoundsCalls[1].windowId == 2)
     }
 
-    func test_arrangeWindows_unknownLayout_returnsError() async throws {
+    @Test("arrange windows unknown layout returns error")
+    func arrangeWindowsUnknownLayoutReturnsError() async throws {
         let restore = ServiceContainerFixture.apply(
             accessibilityEngine: MockAccessibilityEngine(
                 listWindowsHandler: { _ in [] },
@@ -327,10 +324,11 @@ final class WindowManagementToolTests: XCTestCase {
 
         let text = textContent(result)
         let json = try JSONSerialization.jsonObject(with: text.data(using: .utf8)!) as? [String: Any]
-        XCTAssertEqual(json?["error"] as? String, "invalid_layout")
+        #expect(json?["error"] as? String == "invalid_layout")
     }
 
-    func test_arrangeWindows_tileTopBottom() async throws {
+    @Test("arrange windows tile top bottom")
+    func arrangeWindowsTileTopBottom() async throws {
         let setBoundsCalls = ThreadSafeArray<(windowId: Int, x: Int?, y: Int?, width: Int?, height: Int?)>()
         let restore = ServiceContainerFixture.apply(
             accessibilityEngine: MockAccessibilityEngine(
@@ -357,14 +355,15 @@ final class WindowManagementToolTests: XCTestCase {
 
         let text = textContent(result)
         let json = try JSONSerialization.jsonObject(with: text.data(using: .utf8)!) as? [String: Any]
-        XCTAssertEqual(json?["success"] as? Bool, true)
-        XCTAssertEqual(json?["layout"] as? String, "tile-top-bottom")
-        XCTAssertEqual(setBoundsCalls.count, 2)
-        XCTAssertEqual(setBoundsCalls[0].windowId, 10)
-        XCTAssertEqual(setBoundsCalls[1].windowId, 20)
+        #expect(json?["success"] as? Bool == true)
+        #expect(json?["layout"] as? String == "tile-top-bottom")
+        #expect(setBoundsCalls.count == 2)
+        #expect(setBoundsCalls[0].windowId == 10)
+        #expect(setBoundsCalls[1].windowId == 20)
     }
 
-    func test_arrangeWindows_cascade() async throws {
+    @Test("arrange windows cascade")
+    func arrangeWindowsCascade() async throws {
         let setBoundsCalls = ThreadSafeArray<(windowId: Int, x: Int?, y: Int?, width: Int?, height: Int?)>()
         let restore = ServiceContainerFixture.apply(
             accessibilityEngine: MockAccessibilityEngine(
@@ -391,19 +390,19 @@ final class WindowManagementToolTests: XCTestCase {
 
         let text = textContent(result)
         let json = try JSONSerialization.jsonObject(with: text.data(using: .utf8)!) as? [String: Any]
-        XCTAssertEqual(json?["success"] as? Bool, true)
-        XCTAssertEqual(json?["layout"] as? String, "cascade")
-        XCTAssertEqual(setBoundsCalls.count, 3)
-        // Cascade offsets each window by 30px
-        XCTAssertEqual(setBoundsCalls[0].x, 0)
-        XCTAssertEqual(setBoundsCalls[1].x, 30)
-        XCTAssertEqual(setBoundsCalls[2].x, 60)
-        XCTAssertEqual(setBoundsCalls[0].y, 0)
-        XCTAssertEqual(setBoundsCalls[1].y, 30)
-        XCTAssertEqual(setBoundsCalls[2].y, 60)
+        #expect(json?["success"] as? Bool == true)
+        #expect(json?["layout"] as? String == "cascade")
+        #expect(setBoundsCalls.count == 3)
+        #expect(setBoundsCalls[0].x == 0)
+        #expect(setBoundsCalls[1].x == 30)
+        #expect(setBoundsCalls[2].x == 60)
+        #expect(setBoundsCalls[0].y == 0)
+        #expect(setBoundsCalls[1].y == 30)
+        #expect(setBoundsCalls[2].y == 60)
     }
 
-    func test_arrangeWindows_insufficientWindows_returnsError() async throws {
+    @Test("arrange windows insufficient windows returns error")
+    func arrangeWindowsInsufficientWindowsReturnsError() async throws {
         let restore = ServiceContainerFixture.apply(
             accessibilityEngine: MockAccessibilityEngine(
                 listWindowsHandler: { _ in [] },
@@ -422,12 +421,11 @@ final class WindowManagementToolTests: XCTestCase {
 
         let text = textContent(result)
         let json = try JSONSerialization.jsonObject(with: text.data(using: .utf8)!) as? [String: Any]
-        XCTAssertEqual(json?["error"] as? String, "invalid_params")
+        #expect(json?["error"] as? String == "invalid_params")
     }
 
-    // MARK: - resize_window additional coverage (Story 8.3)
-
-    func test_resizeWindow_allParameters_updatesAllFields() async throws {
+    @Test("resize window all parameters updates all fields")
+    func resizeWindowAllParametersUpdatesAllFields() async throws {
         let setBoundsCalls = ThreadSafeArray<(windowId: Int, x: Int?, y: Int?, width: Int?, height: Int?)>()
         let restore = ServiceContainerFixture.apply(
             accessibilityEngine: MockAccessibilityEngine(
@@ -460,16 +458,17 @@ final class WindowManagementToolTests: XCTestCase {
 
         let text = textContent(result)
         let json = try JSONSerialization.jsonObject(with: text.data(using: .utf8)!) as? [String: Any]
-        XCTAssertEqual(json?["success"] as? Bool, true)
-        XCTAssertEqual(setBoundsCalls.count, 1)
-        XCTAssertEqual(setBoundsCalls[0].windowId, 99)
-        XCTAssertEqual(setBoundsCalls[0].x, 50)
-        XCTAssertEqual(setBoundsCalls[0].y, 60)
-        XCTAssertEqual(setBoundsCalls[0].width, 700)
-        XCTAssertEqual(setBoundsCalls[0].height, 500)
+        #expect(json?["success"] as? Bool == true)
+        #expect(setBoundsCalls.count == 1)
+        #expect(setBoundsCalls[0].windowId == 99)
+        #expect(setBoundsCalls[0].x == 50)
+        #expect(setBoundsCalls[0].y == 60)
+        #expect(setBoundsCalls[0].width == 700)
+        #expect(setBoundsCalls[0].height == 500)
     }
 
-    func test_resizeWindow_onlyDimensions_positionUntouched() async throws {
+    @Test("resize window only dimensions position untouched")
+    func resizeWindowOnlyDimensionsPositionUntouched() async throws {
         let setBoundsCalls = ThreadSafeArray<(windowId: Int, x: Int?, y: Int?, width: Int?, height: Int?)>()
         let restore = ServiceContainerFixture.apply(
             accessibilityEngine: MockAccessibilityEngine(
@@ -496,14 +495,15 @@ final class WindowManagementToolTests: XCTestCase {
 
         let text = textContent(result)
         let json = try JSONSerialization.jsonObject(with: text.data(using: .utf8)!) as? [String: Any]
-        XCTAssertEqual(json?["success"] as? Bool, true)
-        XCTAssertEqual(setBoundsCalls[0].x, nil)
-        XCTAssertEqual(setBoundsCalls[0].y, nil)
-        XCTAssertEqual(setBoundsCalls[0].width, 400)
-        XCTAssertEqual(setBoundsCalls[0].height, 300)
+        #expect(json?["success"] as? Bool == true)
+        #expect(setBoundsCalls[0].x == nil)
+        #expect(setBoundsCalls[0].y == nil)
+        #expect(setBoundsCalls[0].width == 400)
+        #expect(setBoundsCalls[0].height == 300)
     }
 
-    func test_resizeWindow_windowNotFound_returnsError() async throws {
+    @Test("resize window window not found returns error")
+    func resizeWindowWindowNotFoundReturnsError() async throws {
         let restore = ServiceContainerFixture.apply(
             accessibilityEngine: MockAccessibilityEngine(
                 listWindowsHandler: { _ in [] },
@@ -525,13 +525,12 @@ final class WindowManagementToolTests: XCTestCase {
 
         let text = textContent(result)
         let json = try JSONSerialization.jsonObject(with: text.data(using: .utf8)!) as? [String: Any]
-        XCTAssertEqual(json?["error"] as? String, "window_not_found")
-        XCTAssertNotNil(json?["suggestion"])
+        #expect(json?["error"] as? String == "window_not_found")
+        #expect(json?["suggestion"] != nil)
     }
 
-    // MARK: - arrange_windows coordinate validation (Story 8.3)
-
-    func test_arrangeWindows_tileLeftRight_validatesCoordinates() async throws {
+    @Test("arrange windows tile left right validates coordinates")
+    func arrangeWindowsTileLeftRightValidatesCoordinates() async throws {
         let setBoundsCalls = ThreadSafeArray<(windowId: Int, x: Int?, y: Int?, width: Int?, height: Int?)>()
         let restore = ServiceContainerFixture.apply(
             accessibilityEngine: MockAccessibilityEngine(
@@ -556,16 +555,15 @@ final class WindowManagementToolTests: XCTestCase {
             context: makeTestContext()
         )
 
-        XCTAssertEqual(setBoundsCalls.count, 2)
-        // Left window: x=screen.origin.x, full height
-        XCTAssertEqual(setBoundsCalls[0].x, 0)
-        XCTAssertEqual(setBoundsCalls[0].y, 0)
-        // Right window: x > 0, full height
-        XCTAssertGreaterThan(setBoundsCalls[1].x!, 0)
-        XCTAssertEqual(setBoundsCalls[0].height, setBoundsCalls[1].height)
+        #expect(setBoundsCalls.count == 2)
+        #expect(setBoundsCalls[0].x == 0)
+        #expect(setBoundsCalls[0].y == 0)
+        #expect(setBoundsCalls[1].x! > 0)
+        #expect(setBoundsCalls[0].height == setBoundsCalls[1].height)
     }
 
-    func test_arrangeWindows_tileTopBottom_validatesCoordinates() async throws {
+    @Test("arrange windows tile top bottom validates coordinates")
+    func arrangeWindowsTileTopBottomValidatesCoordinates() async throws {
         let setBoundsCalls = ThreadSafeArray<(windowId: Int, x: Int?, y: Int?, width: Int?, height: Int?)>()
         let restore = ServiceContainerFixture.apply(
             accessibilityEngine: MockAccessibilityEngine(
@@ -590,16 +588,15 @@ final class WindowManagementToolTests: XCTestCase {
             context: makeTestContext()
         )
 
-        XCTAssertEqual(setBoundsCalls.count, 2)
-        // Top window: y=screen.origin.y, full width
-        XCTAssertEqual(setBoundsCalls[0].x, 0)
-        XCTAssertEqual(setBoundsCalls[0].y, 0)
-        // Bottom window: y > 0, full width
-        XCTAssertGreaterThan(setBoundsCalls[1].y!, 0)
-        XCTAssertEqual(setBoundsCalls[0].width, setBoundsCalls[1].width)
+        #expect(setBoundsCalls.count == 2)
+        #expect(setBoundsCalls[0].x == 0)
+        #expect(setBoundsCalls[0].y == 0)
+        #expect(setBoundsCalls[1].y! > 0)
+        #expect(setBoundsCalls[0].width == setBoundsCalls[1].width)
     }
 
-    func test_arrangeWindows_emptyWindowIds_returnsError() async throws {
+    @Test("arrange windows empty window ids returns error")
+    func arrangeWindowsEmptyWindowIdsReturnsError() async throws {
         let restore = ServiceContainerFixture.apply(
             accessibilityEngine: MockAccessibilityEngine(
                 listWindowsHandler: { _ in [] },
@@ -618,10 +615,11 @@ final class WindowManagementToolTests: XCTestCase {
 
         let text = textContent(result)
         let json = try JSONSerialization.jsonObject(with: text.data(using: .utf8)!) as? [String: Any]
-        XCTAssertEqual(json?["error"] as? String, "invalid_params")
+        #expect(json?["error"] as? String == "invalid_params")
     }
 
-    func test_arrangeWindows_responseContainsWindowsArray() async throws {
+    @Test("arrange windows response contains windows array")
+    func arrangeWindowsResponseContainsWindowsArray() async throws {
         let restore = ServiceContainerFixture.apply(
             accessibilityEngine: MockAccessibilityEngine(
                 listWindowsHandler: { _ in [] },
@@ -645,22 +643,21 @@ final class WindowManagementToolTests: XCTestCase {
 
         let text = textContent(result)
         let json = try JSONSerialization.jsonObject(with: text.data(using: .utf8)!) as? [String: Any]
-        XCTAssertEqual(json?["success"] as? Bool, true)
-        let windows = try XCTUnwrap(json?["windows"] as? [[String: Any]])
-        XCTAssertEqual(windows.count, 2)
-        XCTAssertEqual(windows[0]["window_id"] as? Int, 5)
-        XCTAssertEqual(windows[1]["window_id"] as? Int, 6)
+        #expect(json?["success"] as? Bool == true)
+        let windows = try #require(json?["windows"] as? [[String: Any]])
+        #expect(windows.count == 2)
+        #expect(windows[0]["window_id"] as? Int == 5)
+        #expect(windows[1]["window_id"] as? Int == 6)
         for win in windows {
-            XCTAssertNotNil(win["x"])
-            XCTAssertNotNil(win["y"])
-            XCTAssertNotNil(win["width"])
-            XCTAssertNotNil(win["height"])
+            #expect(win["x"] != nil)
+            #expect(win["y"] != nil)
+            #expect(win["width"] != nil)
+            #expect(win["height"] != nil)
         }
     }
 
-    // MARK: - Multi-step workflow (Story 8.3)
-
-    func test_workflow_resizeThenArrange() async throws {
+    @Test("workflow resize then arrange")
+    func workflowResizeThenArrange() async throws {
         let setBoundsCalls = ThreadSafeArray<(windowId: Int, x: Int?, y: Int?, width: Int?, height: Int?)>()
         let restore = ServiceContainerFixture.apply(
             accessibilityEngine: MockAccessibilityEngine(
@@ -680,7 +677,6 @@ final class WindowManagementToolTests: XCTestCase {
 
         let server = try await makeRegisteredServer()
 
-        // Step 1: resize a single window
         let resizeResult = try await server.toolRegistry.execute(
             "resize_window",
             arguments: ["window_id": .int(1), "width": .int(640), "height": .int(480)],
@@ -688,10 +684,9 @@ final class WindowManagementToolTests: XCTestCase {
         )
         let resizeText = textContent(resizeResult)
         let resizeJson = try JSONSerialization.jsonObject(with: resizeText.data(using: .utf8)!) as? [String: Any]
-        XCTAssertEqual(resizeJson?["success"] as? Bool, true)
+        #expect(resizeJson?["success"] as? Bool == true)
 
-        // Step 2: arrange both windows
-        setBoundsCalls.append((-1, nil, nil, nil, nil)) // sentinel separator
+        setBoundsCalls.append((-1, nil, nil, nil, nil))
         let arrangeResult = try await server.toolRegistry.execute(
             "arrange_windows",
             arguments: ["layout": .string("tile-left-right"), "window_ids": .array([.int(1), .int(2)])],
@@ -699,13 +694,12 @@ final class WindowManagementToolTests: XCTestCase {
         )
         let arrangeText = textContent(arrangeResult)
         let arrangeJson = try JSONSerialization.jsonObject(with: arrangeText.data(using: .utf8)!) as? [String: Any]
-        XCTAssertEqual(arrangeJson?["success"] as? Bool, true)
-        XCTAssertEqual(arrangeJson?["layout"] as? String, "tile-left-right")
+        #expect(arrangeJson?["success"] as? Bool == true)
+        #expect(arrangeJson?["layout"] as? String == "tile-left-right")
     }
 
-    // MARK: - Story 8.1: z_order in list_windows (AC1)
-
-    func test_listWindows_returnsZOrder() async throws {
+    @Test("list windows returns z order")
+    func listWindowsReturnsZOrder() async throws {
         let windows = [
             WindowInfo(windowId: 1, pid: 100, title: "Safari", appName: "Safari", bundleId: "com.apple.Safari", bounds: WindowBounds(x: 0, y: 0, width: 800, height: 600), zOrder: 0),
             WindowInfo(windowId: 2, pid: 200, title: "TextEdit", appName: "TextEdit", bundleId: "com.apple.TextEdit", bounds: WindowBounds(x: 100, y: 100, width: 400, height: 300), zOrder: 1),
@@ -730,12 +724,13 @@ final class WindowManagementToolTests: XCTestCase {
         let data = text.data(using: .utf8)!
         let windowsJson = try JSONSerialization.jsonObject(with: data) as? [[String: Any]] ?? []
 
-        XCTAssertEqual(windowsJson.count, 2)
-        XCTAssertEqual(windowsJson[0]["z_order"] as? Int, 0)
-        XCTAssertEqual(windowsJson[1]["z_order"] as? Int, 1)
+        #expect(windowsJson.count == 2)
+        #expect(windowsJson[0]["z_order"] as? Int == 0)
+        #expect(windowsJson[1]["z_order"] as? Int == 1)
     }
 
-    func test_listWindows_multipleApps_returnsAllWindowsWithDifferentZOrders() async throws {
+    @Test("list windows multiple apps returns all windows with different z orders")
+    func listWindowsMultipleAppsReturnsAllWindowsWithDifferentZOrders() async throws {
         let windows = [
             WindowInfo(windowId: 10, pid: 100, title: "Chrome", appName: "Chrome", bundleId: nil, bounds: WindowBounds(x: 0, y: 0, width: 1920, height: 1080), zOrder: 0),
             WindowInfo(windowId: 20, pid: 200, title: "Notes", appName: "Notes", bundleId: nil, bounds: WindowBounds(x: 50, y: 50, width: 600, height: 400), zOrder: 1),
@@ -761,18 +756,15 @@ final class WindowManagementToolTests: XCTestCase {
         let data = text.data(using: .utf8)!
         let windowsJson = try JSONSerialization.jsonObject(with: data) as? [[String: Any]] ?? []
 
-        XCTAssertEqual(windowsJson.count, 3)
-        // z_order ascending — frontmost first
+        #expect(windowsJson.count == 3)
         let zOrders = windowsJson.compactMap { $0["z_order"] as? Int }
-        XCTAssertEqual(zOrders, [0, 1, 2])
-        // Each has app_name
-        XCTAssertEqual(windowsJson[0]["app_name"] as? String, "Chrome")
-        XCTAssertEqual(windowsJson[1]["app_name"] as? String, "Notes")
+        #expect(zOrders == [0, 1, 2])
+        #expect(windowsJson[0]["app_name"] as? String == "Chrome")
+        #expect(windowsJson[1]["app_name"] as? String == "Notes")
     }
 
-    // MARK: - Story 8.1: app_name in get_window_state (AC5)
-
-    func test_getWindowState_returnsAppName() async throws {
+    @Test("get window state returns app name")
+    func getWindowStateReturnsAppName() async throws {
         let state = WindowState(
             windowId: 42, pid: 1234, title: "Calculator",
             bounds: WindowBounds(x: 100, y: 100, width: 300, height: 400),
@@ -799,11 +791,12 @@ final class WindowManagementToolTests: XCTestCase {
         let text = textContent(result)
         let json = try JSONSerialization.jsonObject(with: text.data(using: .utf8)!) as? [String: Any]
 
-        XCTAssertEqual(json?["app_name"] as? String, "Calculator")
-        XCTAssertNil(json?["appName"], "Should use snake_case key, not camelCase")
+        #expect(json?["app_name"] as? String == "Calculator")
+        #expect(json?["appName"] == nil)
     }
 
-    func test_getWindowState_minimizedWindow_returnsStateWithAppName() async throws {
+    @Test("get window state minimized window returns state with app name")
+    func getWindowStateMinimizedWindowReturnsStateWithAppName() async throws {
         let state = WindowState(
             windowId: 99, pid: 5678, title: "Notes",
             bounds: WindowBounds(x: 0, y: 0, width: 600, height: 400),
@@ -830,8 +823,9 @@ final class WindowManagementToolTests: XCTestCase {
         let text = textContent(result)
         let json = try JSONSerialization.jsonObject(with: text.data(using: .utf8)!) as? [String: Any]
 
-        XCTAssertEqual(json?["is_minimized"] as? Bool, true)
-        XCTAssertEqual(json?["app_name"] as? String, "Notes")
-        XCTAssertEqual(json?["window_id"] as? Int, 99)
+        #expect(json?["is_minimized"] as? Bool == true)
+        #expect(json?["app_name"] as? String == "Notes")
+        #expect(json?["window_id"] as? Int == 99)
     }
+}
 }

@@ -1,14 +1,13 @@
 import Foundation
 import MCP
 import MCPTool
-import XCTest
+import Testing
 @testable import AxionHelper
 
-// Unit tests for mouse/keyboard/drag/scroll MCP tools via mock services.
-// All tools are tested through ToolRegistrar → MCPServer → execute pattern.
-
 @MainActor
-final class InputToolsTests: XCTestCase {
+extension ToolsTests {
+@Suite("InputTools")
+struct InputToolsTests {
 
     private func makeRegisteredServer() async throws -> MCPServer {
         let server = MCPServer(name: "AxionHelper", version: "0.1.0")
@@ -43,9 +42,8 @@ final class InputToolsTests: XCTestCase {
         )
     }
 
-    // MARK: - click
-
-    func test_click_success_returnsCoordinateResult() async throws {
+    @Test("click success returns coordinate result")
+    func clickSuccessReturnsCoordinateResult() async throws {
         let restore = ServiceContainerFixture.apply(
             inputSimulation: mockInput()
         )
@@ -57,13 +55,14 @@ final class InputToolsTests: XCTestCase {
         )
 
         let json = try JSONSerialization.jsonObject(with: textContent(result).data(using: .utf8)!) as! [String: Any]
-        XCTAssertEqual(json["success"] as? Bool, true)
-        XCTAssertEqual(json["action"] as? String, "click")
-        XCTAssertEqual(json["x"] as? Int, 100)
-        XCTAssertEqual(json["y"] as? Int, 200)
+        #expect(json["success"] as? Bool == true)
+        #expect(json["action"] as? String == "click")
+        #expect(json["x"] as? Int == 100)
+        #expect(json["y"] as? Int == 200)
     }
 
-    func test_click_error_returnsErrorPayload() async throws {
+    @Test("click error returns error payload")
+    func clickErrorReturnsErrorPayload() async throws {
         let restore = ServiceContainerFixture.apply(
             inputSimulation: MockInputSimulation(
                 clickHandler: { _, _ in throw InputSimulationError.coordinatesOutOfBounds(x: 9999, y: 9999) },
@@ -84,14 +83,13 @@ final class InputToolsTests: XCTestCase {
         )
 
         let json = try JSONSerialization.jsonObject(with: textContent(result).data(using: .utf8)!) as! [String: Any]
-        XCTAssertEqual(json["error"] as? String, "coordinates_out_of_bounds")
-        XCTAssertNotNil(json["message"])
-        XCTAssertNotNil(json["suggestion"])
+        #expect(json["error"] as? String == "coordinates_out_of_bounds")
+        #expect(json["message"] != nil)
+        #expect(json["suggestion"] != nil)
     }
 
-    // MARK: - double_click
-
-    func test_doubleClick_success() async throws {
+    @Test("double click success")
+    func doubleClickSuccess() async throws {
         let restore = ServiceContainerFixture.apply(inputSimulation: mockInput())
         defer { restore() }
 
@@ -101,13 +99,12 @@ final class InputToolsTests: XCTestCase {
         )
 
         let json = try JSONSerialization.jsonObject(with: textContent(result).data(using: .utf8)!) as! [String: Any]
-        XCTAssertEqual(json["action"] as? String, "double_click")
-        XCTAssertEqual(json["success"] as? Bool, true)
+        #expect(json["action"] as? String == "double_click")
+        #expect(json["success"] as? Bool == true)
     }
 
-    // MARK: - right_click
-
-    func test_rightClick_success() async throws {
+    @Test("right click success")
+    func rightClickSuccess() async throws {
         let restore = ServiceContainerFixture.apply(inputSimulation: mockInput())
         defer { restore() }
 
@@ -117,13 +114,12 @@ final class InputToolsTests: XCTestCase {
         )
 
         let json = try JSONSerialization.jsonObject(with: textContent(result).data(using: .utf8)!) as! [String: Any]
-        XCTAssertEqual(json["action"] as? String, "right_click")
-        XCTAssertEqual(json["success"] as? Bool, true)
+        #expect(json["action"] as? String == "right_click")
+        #expect(json["success"] as? Bool == true)
     }
 
-    // MARK: - type_text
-
-    func test_typeText_success() async throws {
+    @Test("type text success")
+    func typeTextSuccess() async throws {
         let restore = ServiceContainerFixture.apply(inputSimulation: mockInput())
         defer { restore() }
 
@@ -133,11 +129,12 @@ final class InputToolsTests: XCTestCase {
         )
 
         let json = try JSONSerialization.jsonObject(with: textContent(result).data(using: .utf8)!) as! [String: Any]
-        XCTAssertEqual(json["action"] as? String, "type_text")
-        XCTAssertEqual(json["text"] as? String, "hello")
+        #expect(json["action"] as? String == "type_text")
+        #expect(json["text"] as? String == "hello")
     }
 
-    func test_typeText_error_returnsErrorPayload() async throws {
+    @Test("type text error returns error payload")
+    func typeTextErrorReturnsErrorPayload() async throws {
         let restore = ServiceContainerFixture.apply(
             inputSimulation: MockInputSimulation(
                 clickHandler: { _, _ in },
@@ -158,12 +155,11 @@ final class InputToolsTests: XCTestCase {
         )
 
         let json = try JSONSerialization.jsonObject(with: textContent(result).data(using: .utf8)!) as! [String: Any]
-        XCTAssertEqual(json["error"] as? String, "invalid_key_name")
+        #expect(json["error"] as? String == "invalid_key_name")
     }
 
-    // MARK: - press_key
-
-    func test_pressKey_success() async throws {
+    @Test("press key success")
+    func pressKeySuccess() async throws {
         let restore = ServiceContainerFixture.apply(inputSimulation: mockInput())
         defer { restore() }
 
@@ -173,13 +169,12 @@ final class InputToolsTests: XCTestCase {
         )
 
         let json = try JSONSerialization.jsonObject(with: textContent(result).data(using: .utf8)!) as! [String: Any]
-        XCTAssertEqual(json["action"] as? String, "press_key")
-        XCTAssertEqual(json["key"] as? String, "return")
+        #expect(json["action"] as? String == "press_key")
+        #expect(json["key"] as? String == "return")
     }
 
-    // MARK: - hotkey
-
-    func test_hotkey_success() async throws {
+    @Test("hotkey success")
+    func hotkeySuccess() async throws {
         let restore = ServiceContainerFixture.apply(inputSimulation: mockInput())
         defer { restore() }
 
@@ -189,11 +184,12 @@ final class InputToolsTests: XCTestCase {
         )
 
         let json = try JSONSerialization.jsonObject(with: textContent(result).data(using: .utf8)!) as! [String: Any]
-        XCTAssertEqual(json["action"] as? String, "hotkey")
-        XCTAssertEqual(json["keys"] as? String, "command+c")
+        #expect(json["action"] as? String == "hotkey")
+        #expect(json["keys"] as? String == "command+c")
     }
 
-    func test_hotkey_invalidFormat_returnsError() async throws {
+    @Test("hotkey invalid format returns error")
+    func hotkeyInvalidFormatReturnsError() async throws {
         let restore = ServiceContainerFixture.apply(
             inputSimulation: MockInputSimulation(
                 clickHandler: { _, _ in },
@@ -214,12 +210,11 @@ final class InputToolsTests: XCTestCase {
         )
 
         let json = try JSONSerialization.jsonObject(with: textContent(result).data(using: .utf8)!) as! [String: Any]
-        XCTAssertEqual(json["error"] as? String, "invalid_hotkey_format")
+        #expect(json["error"] as? String == "invalid_hotkey_format")
     }
 
-    // MARK: - scroll
-
-    func test_scroll_success() async throws {
+    @Test("scroll success")
+    func scrollSuccess() async throws {
         let restore = ServiceContainerFixture.apply(inputSimulation: mockInput())
         defer { restore() }
 
@@ -229,12 +224,13 @@ final class InputToolsTests: XCTestCase {
         )
 
         let json = try JSONSerialization.jsonObject(with: textContent(result).data(using: .utf8)!) as! [String: Any]
-        XCTAssertEqual(json["action"] as? String, "scroll")
-        XCTAssertEqual(json["direction"] as? String, "down")
-        XCTAssertEqual(json["amount"] as? Int, 3)
+        #expect(json["action"] as? String == "scroll")
+        #expect(json["direction"] as? String == "down")
+        #expect(json["amount"] as? Int == 3)
     }
 
-    func test_scroll_invalidDirection_returnsError() async throws {
+    @Test("scroll invalid direction returns error")
+    func scrollInvalidDirectionReturnsError() async throws {
         let restore = ServiceContainerFixture.apply(
             inputSimulation: MockInputSimulation(
                 clickHandler: { _, _ in },
@@ -255,12 +251,11 @@ final class InputToolsTests: XCTestCase {
         )
 
         let json = try JSONSerialization.jsonObject(with: textContent(result).data(using: .utf8)!) as! [String: Any]
-        XCTAssertEqual(json["error"] as? String, "invalid_direction")
+        #expect(json["error"] as? String == "invalid_direction")
     }
 
-    // MARK: - drag
-
-    func test_drag_success() async throws {
+    @Test("drag success")
+    func dragSuccess() async throws {
         let restore = ServiceContainerFixture.apply(inputSimulation: mockInput())
         defer { restore() }
 
@@ -272,9 +267,10 @@ final class InputToolsTests: XCTestCase {
         )
 
         let json = try JSONSerialization.jsonObject(with: textContent(result).data(using: .utf8)!) as! [String: Any]
-        XCTAssertEqual(json["action"] as? String, "drag")
-        XCTAssertEqual(json["success"] as? Bool, true)
-        XCTAssertEqual(json["from_x"] as? Int, 0)
-        XCTAssertEqual(json["to_y"] as? Int, 100)
+        #expect(json["action"] as? String == "drag")
+        #expect(json["success"] as? Bool == true)
+        #expect(json["from_x"] as? Int == 0)
+        #expect(json["to_y"] as? Int == 100)
     }
+}
 }

@@ -1,7 +1,8 @@
 import Testing
 @testable import AxionHelper
 
-@Suite("ServiceContainer", .serialized)
+extension ToolsTests {
+@Suite("ServiceContainer")
 struct ServiceContainerTests {
 
     // MARK: - Shared Instance
@@ -116,4 +117,5 @@ struct ServiceContainerTests {
         #expect(ServiceContainer.shared.screenshotCapture is MockScreenshotCapture)
         #expect(ServiceContainer.shared.urlOpener is MockURLOpener)
     }
+}
 }
