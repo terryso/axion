@@ -1,5 +1,6 @@
 # generated: 2026-05-08
 # last_updated: 2026-05-15
+# story-11.2-created: 2026-05-15
 # story-11.1-created: 2026-05-15
 # retro-epic-10: 2026-05-15
 # story-10.1-created: 2026-05-15
@@ -146,6 +147,6 @@ development_status:
   # Epic 11: 第三方 SDK 生态
   epic-11: in-progress
   11-1-agent-project-template-scaffold-cli: done
-  11-2-plugin-tool-registration-agent-extension: backlog
+  11-2-plugin-tool-registration-agent-extension: done
   11-3-developer-documentation-examples: backlog
   epic-11-retrospective: optional
