@@ -742,6 +742,20 @@ swift run CompatSandbox
 
 所有示例都已作为可执行目标定义在 `Package.swift` 中 — 无需额外配置。
 
+## 核心场景快速索引
+
+每个开发者都应掌握的五个核心场景，附对应示例和运行命令：
+
+| # | 核心场景 | 示例 | 快速运行 |
+|---|---------|------|---------|
+| 1 | **基础 Agent** — 创建、prompt、stream | `BasicAgent/`、`StreamingAgent/` | `swift run BasicAgent` |
+| 2 | **自定义工具** — defineTool、Codable 输入 | `CustomTools/`、`MultiToolExample/` | `swift run CustomTools` |
+| 3 | **MCP 集成** — 外部工具服务器 | `MCPIntegration/`、`AdvancedMCPExample/`、`AgentMCPServerExample/` | `swift run MCPIntegration` |
+| 4 | **Session 管理** — save、load、fork | `CompatSessions/`、`SessionsAndHooks/`、`MultiTurnExample/` | `swift run SessionsAndHooks` |
+| 5 | **Memory（跨任务学习）** — store、query、domain | `MemoryStoreExample/` | `swift run MemoryStoreExample` |
+
+> **提示：** 从场景 1（BasicAgent）开始，按顺序探索每个场景。下方的完整学习路径覆盖全部 30+ 示例。
+
 ## 推荐学习路径
 
 ```

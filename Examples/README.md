@@ -742,6 +742,20 @@ swift run CompatSandbox
 
 All examples are defined as executable targets in `Package.swift` — no additional configuration needed.
 
+## Core Scenario Quick Index
+
+Five essential scenarios every developer should understand. Each links to the relevant example(s):
+
+| # | Core Scenario | Example(s) | Quick Run |
+|---|--------------|-----------|-----------|
+| 1 | **Basic Agent** — create, prompt, stream | `BasicAgent/`, `StreamingAgent/` | `swift run BasicAgent` |
+| 2 | **Custom Tools** — defineTool, Codable input | `CustomTools/`, `MultiToolExample/` | `swift run CustomTools` |
+| 3 | **MCP Integration** — external tool servers | `MCPIntegration/`, `AdvancedMCPExample/`, `AgentMCPServerExample/` | `swift run MCPIntegration` |
+| 4 | **Session Management** — save, load, fork | `CompatSessions/`, `SessionsAndHooks/`, `MultiTurnExample/` | `swift run SessionsAndHooks` |
+| 5 | **Memory (Cross-Task Learning)** — store, query, domain-based | `MemoryStoreExample/` | `swift run MemoryStoreExample` |
+
+> **Tip:** Start with scenario 1 (BasicAgent), then explore each scenario in order. The full learning path below covers all 30+ examples.
+
 ## Recommended Learning Path
 
 ```

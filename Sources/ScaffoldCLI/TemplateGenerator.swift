@@ -44,6 +44,12 @@ struct TemplateGenerator {
         let package = Package(
             name: "\(projectName)",
             platforms: [.macOS(.v14)],
+            dependencies: [
+                .package(
+                    url: "https://github.com/terryso/open-agent-sdk-swift",
+                    from: "0.1.0"
+                )
+            ],
             targets: [
                 .executableTarget(
                     name: "\(projectName)",
@@ -57,12 +63,6 @@ struct TemplateGenerator {
                     dependencies: ["\(projectName)"],
                     path: "Tests/\(projectName)Tests"
                 ),
-            ],
-            dependencies: [
-                .package(
-                    url: "https://github.com/terryso/open-agent-sdk-swift",
-                    from: "0.1.0"
-                )
             ]
         )
         """
