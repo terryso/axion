@@ -1,9 +1,6 @@
-import XCTest
+import Testing
 @testable import AxionCLI
 
-// [P0] ATDD GREEN-PHASE — Story 6.1 AC3 (TaskQueue serialization)
-
-/// Actor to safely track test execution state across concurrent closures.
 actor TestCounter {
     private var value = 0
     func increment() -> Int {
@@ -20,11 +17,11 @@ actor OrderTracker {
     var values: [Int] { items }
 }
 
-final class TaskQueueTests: XCTestCase {
+@Suite("TaskQueue")
+struct TaskQueueTests {
 
-    // MARK: - Serial execution
-
-    func test_taskQueue_executesSingleTask() async throws {
+    @Test("executes single task")
+    func executesSingleTask() async throws {
         let queue = TaskQueue()
         let counter = TestCounter()
 
@@ -34,10 +31,11 @@ final class TaskQueueTests: XCTestCase {
 
         try await Task.sleep(for: .milliseconds(100))
         let count = await counter.current
-        XCTAssertEqual(count, 1)
+        #expect(count == 1)
     }
 
-    func test_taskQueue_executesMultipleTasksInOrder() async throws {
+    @Test("executes multiple tasks in order")
+    func executesMultipleTasksInOrder() async throws {
         let queue = TaskQueue()
         let tracker = OrderTracker()
 
@@ -47,12 +45,11 @@ final class TaskQueueTests: XCTestCase {
 
         try await Task.sleep(for: .milliseconds(300))
         let order = await tracker.values
-        XCTAssertEqual(order, [1, 2, 3])
+        #expect(order == [1, 2, 3])
     }
 
-    // MARK: - Concurrency
-
-    func test_taskQueue_serializesConcurrentRequests() async throws {
+    @Test("serializes concurrent requests")
+    func serializesConcurrentRequests() async throws {
         let queue = TaskQueue()
         let activeCount = TestCounter()
         let maxTracker = MaxTracker()
@@ -78,12 +75,11 @@ final class TaskQueueTests: XCTestCase {
 
         try await Task.sleep(for: .milliseconds(600))
         let maxActive = await maxTracker.value
-        XCTAssertEqual(maxActive, 1, "Only one task should execute at a time")
+        #expect(maxActive == 1)
     }
 
-    // MARK: - Graceful shutdown
-
-    func test_taskQueue_gracefulShutdown_waitsForRunningTask() async throws {
+    @Test("graceful shutdown waits for running task")
+    func gracefulShutdownWaitsForRunningTask() async throws {
         let queue = TaskQueue()
         let counter = TestCounter()
 
@@ -92,17 +88,16 @@ final class TaskQueueTests: XCTestCase {
             let _ = await counter.increment()
         }
 
-        // Give the enqueued task time to start executing
         try await Task.sleep(for: .milliseconds(50))
 
-        // Shutdown should wait for the running task to complete
         await queue.gracefulShutdown()
 
         let count = await counter.current
-        XCTAssertEqual(count, 1, "Running task should complete before shutdown returns")
+        #expect(count == 1)
     }
 
-    func test_taskQueue_gracefulShutdown_cancelsPendingTasks() async throws {
+    @Test("graceful shutdown cancels pending tasks")
+    func gracefulShutdownCancelsPendingTasks() async throws {
         let queue = TaskQueue()
         let tracker = OrderTracker()
 
@@ -114,13 +109,11 @@ final class TaskQueueTests: XCTestCase {
             await tracker.append(2)
         }
 
-        // Shutdown immediately — first task is running, second is pending
         await queue.gracefulShutdown()
 
-        // Give extra time to ensure pending task doesn't run
         try await Task.sleep(for: .milliseconds(200))
         let order = await tracker.values
-        XCTAssertEqual(order, [1], "Only the running task should complete; pending should be cancelled")
+        #expect(order == [1])
     }
 }
 

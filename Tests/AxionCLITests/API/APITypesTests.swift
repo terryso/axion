@@ -1,39 +1,37 @@
-import XCTest
+import Testing
+import Foundation
 @testable import AxionCLI
 
-// [P0] ATDD GREEN-PHASE — Story 5.1 AC2-AC6
-// All tests now validate the implemented API types.
+@Suite("APITypes")
+struct APITypesTests {
 
-final class APITypesTests: XCTestCase {
-
-    // MARK: - AC6: HealthResponse
-
-    func test_healthResponse_codable_roundTrip_preservesAllFields() throws {
+    @Test("HealthResponse codable round trip preserves all fields")
+    func healthResponseCodableRoundTripPreservesAllFields() throws {
         let response = HealthResponse(status: "ok", version: "0.1.0")
 
         let encoder = JSONEncoder()
         let data = try encoder.encode(response)
         let decoded = try JSONDecoder().decode(HealthResponse.self, from: data)
 
-        XCTAssertEqual(decoded.status, "ok")
-        XCTAssertEqual(decoded.version, "0.1.0")
+        #expect(decoded.status == "ok")
+        #expect(decoded.version == "0.1.0")
     }
 
-    func test_healthResponse_jsonKeys_areSnakeCase() throws {
+    @Test("HealthResponse JSON keys are snake case")
+    func healthResponseJsonKeysAreSnakeCase() throws {
         let response = HealthResponse(status: "ok", version: "0.1.0")
 
         let encoder = JSONEncoder()
         encoder.outputFormatting = [.sortedKeys]
         let data = try encoder.encode(response)
-        let json = try XCTUnwrap(String(data: data, encoding: .utf8))
+        let json = try #require(String(data: data, encoding: .utf8))
 
-        XCTAssertTrue(json.contains("\"status\""), "HealthResponse JSON should contain 'status' key")
-        XCTAssertTrue(json.contains("\"version\""), "HealthResponse JSON should contain 'version' key")
+        #expect(json.contains("\"status\""))
+        #expect(json.contains("\"version\""))
     }
 
-    // MARK: - AC2: CreateRunRequest
-
-    func test_createRunRequest_codable_roundTrip_preservesAllFields() throws {
+    @Test("CreateRunRequest codable round trip preserves all fields")
+    func createRunRequestCodableRoundTripPreservesAllFields() throws {
         let request = CreateRunRequest(
             task: "open calculator",
             maxSteps: 20,
@@ -44,25 +42,27 @@ final class APITypesTests: XCTestCase {
         let data = try JSONEncoder().encode(request)
         let decoded = try JSONDecoder().decode(CreateRunRequest.self, from: data)
 
-        XCTAssertEqual(decoded.task, "open calculator")
-        XCTAssertEqual(decoded.maxSteps, 20)
-        XCTAssertEqual(decoded.maxBatches, 6)
-        XCTAssertFalse(decoded.allowForeground!)
+        #expect(decoded.task == "open calculator")
+        #expect(decoded.maxSteps == 20)
+        #expect(decoded.maxBatches == 6)
+        #expect(decoded.allowForeground == false)
     }
 
-    func test_createRunRequest_optionalFields_defaultToNil() throws {
+    @Test("CreateRunRequest optional fields default to nil")
+    func createRunRequestOptionalFieldsDefaultToNil() throws {
         let request = CreateRunRequest(task: "open calculator")
 
         let data = try JSONEncoder().encode(request)
         let decoded = try JSONDecoder().decode(CreateRunRequest.self, from: data)
 
-        XCTAssertEqual(decoded.task, "open calculator")
-        XCTAssertNil(decoded.maxSteps)
-        XCTAssertNil(decoded.maxBatches)
-        XCTAssertNil(decoded.allowForeground)
+        #expect(decoded.task == "open calculator")
+        #expect(decoded.maxSteps == nil)
+        #expect(decoded.maxBatches == nil)
+        #expect(decoded.allowForeground == nil)
     }
 
-    func test_createRunRequest_jsonKeys_areSnakeCase() throws {
+    @Test("CreateRunRequest JSON keys are snake case")
+    func createRunRequestJsonKeysAreSnakeCase() throws {
         let request = CreateRunRequest(
             task: "open calculator",
             maxSteps: 20,
@@ -73,41 +73,40 @@ final class APITypesTests: XCTestCase {
         let encoder = JSONEncoder()
         encoder.outputFormatting = [.sortedKeys]
         let data = try encoder.encode(request)
-        let json = try XCTUnwrap(String(data: data, encoding: .utf8))
+        let json = try #require(String(data: data, encoding: .utf8))
 
-        XCTAssertTrue(json.contains("\"task\""), "CreateRunRequest JSON should contain 'task' key")
-        XCTAssertTrue(json.contains("\"max_steps\""), "CreateRunRequest JSON should contain 'max_steps' key")
-        XCTAssertTrue(json.contains("\"max_batches\""), "CreateRunRequest JSON should contain 'max_batches' key")
-        XCTAssertTrue(json.contains("\"allow_foreground\""), "CreateRunRequest JSON should contain 'allow_foreground' key")
+        #expect(json.contains("\"task\""))
+        #expect(json.contains("\"max_steps\""))
+        #expect(json.contains("\"max_batches\""))
+        #expect(json.contains("\"allow_foreground\""))
     }
 
-    // MARK: - AC2: CreateRunResponse
-
-    func test_createRunResponse_codable_roundTrip_preservesAllFields() throws {
+    @Test("CreateRunResponse codable round trip preserves all fields")
+    func createRunResponseCodableRoundTripPreservesAllFields() throws {
         let response = CreateRunResponse(runId: "20260513-abc123", status: "running")
 
         let data = try JSONEncoder().encode(response)
         let decoded = try JSONDecoder().decode(CreateRunResponse.self, from: data)
 
-        XCTAssertEqual(decoded.runId, "20260513-abc123")
-        XCTAssertEqual(decoded.status, "running")
+        #expect(decoded.runId == "20260513-abc123")
+        #expect(decoded.status == "running")
     }
 
-    func test_createRunResponse_jsonKeys_areSnakeCase() throws {
+    @Test("CreateRunResponse JSON keys are snake case")
+    func createRunResponseJsonKeysAreSnakeCase() throws {
         let response = CreateRunResponse(runId: "20260513-abc123", status: "running")
 
         let encoder = JSONEncoder()
         encoder.outputFormatting = [.sortedKeys]
         let data = try encoder.encode(response)
-        let json = try XCTUnwrap(String(data: data, encoding: .utf8))
+        let json = try #require(String(data: data, encoding: .utf8))
 
-        XCTAssertTrue(json.contains("\"run_id\""), "CreateRunResponse JSON should contain 'run_id' key")
-        XCTAssertTrue(json.contains("\"status\""), "CreateRunResponse JSON should contain 'status' key")
+        #expect(json.contains("\"run_id\""))
+        #expect(json.contains("\"status\""))
     }
 
-    // MARK: - AC3/AC4: RunStatusResponse
-
-    func test_runStatusResponse_codable_roundTrip_preservesAllFields() throws {
+    @Test("RunStatusResponse codable round trip preserves all fields")
+    func runStatusResponseCodableRoundTripPreservesAllFields() throws {
         let step = StepSummary(index: 0, tool: "launch_app", purpose: "Launch Calculator", success: true)
         let response = RunStatusResponse(
             runId: "20260513-abc123",
@@ -124,17 +123,18 @@ final class APITypesTests: XCTestCase {
         let data = try JSONEncoder().encode(response)
         let decoded = try JSONDecoder().decode(RunStatusResponse.self, from: data)
 
-        XCTAssertEqual(decoded.runId, "20260513-abc123")
-        XCTAssertEqual(decoded.status, "done")
-        XCTAssertEqual(decoded.task, "open calculator")
-        XCTAssertEqual(decoded.totalSteps, 3)
-        XCTAssertEqual(decoded.durationMs, 8200)
-        XCTAssertEqual(decoded.replanCount, 0)
-        XCTAssertEqual(decoded.steps.count, 1)
-        XCTAssertEqual(decoded.steps[0].tool, "launch_app")
+        #expect(decoded.runId == "20260513-abc123")
+        #expect(decoded.status == "done")
+        #expect(decoded.task == "open calculator")
+        #expect(decoded.totalSteps == 3)
+        #expect(decoded.durationMs == 8200)
+        #expect(decoded.replanCount == 0)
+        #expect(decoded.steps.count == 1)
+        #expect(decoded.steps[0].tool == "launch_app")
     }
 
-    func test_runStatusResponse_jsonKeys_areSnakeCase() throws {
+    @Test("RunStatusResponse JSON keys are snake case")
+    func runStatusResponseJsonKeysAreSnakeCase() throws {
         let response = RunStatusResponse(
             runId: "20260513-abc123",
             status: "done",
@@ -150,64 +150,63 @@ final class APITypesTests: XCTestCase {
         let encoder = JSONEncoder()
         encoder.outputFormatting = [.sortedKeys]
         let data = try encoder.encode(response)
-        let json = try XCTUnwrap(String(data: data, encoding: .utf8))
+        let json = try #require(String(data: data, encoding: .utf8))
 
-        XCTAssertTrue(json.contains("\"run_id\""), "RunStatusResponse JSON should contain 'run_id' key")
-        XCTAssertTrue(json.contains("\"total_steps\""), "RunStatusResponse JSON should contain 'total_steps' key")
-        XCTAssertTrue(json.contains("\"duration_ms\""), "RunStatusResponse JSON should contain 'duration_ms' key")
-        XCTAssertTrue(json.contains("\"replan_count\""), "RunStatusResponse JSON should contain 'replan_count' key")
-        XCTAssertTrue(json.contains("\"submitted_at\""), "RunStatusResponse JSON should contain 'submitted_at' key")
-        XCTAssertTrue(json.contains("\"completed_at\""), "RunStatusResponse JSON should contain 'completed_at' key")
+        #expect(json.contains("\"run_id\""))
+        #expect(json.contains("\"total_steps\""))
+        #expect(json.contains("\"duration_ms\""))
+        #expect(json.contains("\"replan_count\""))
+        #expect(json.contains("\"submitted_at\""))
+        #expect(json.contains("\"completed_at\""))
     }
 
-    // MARK: - StepSummary
-
-    func test_stepSummary_codable_roundTrip_preservesAllFields() throws {
+    @Test("StepSummary codable round trip preserves all fields")
+    func stepSummaryCodableRoundTripPreservesAllFields() throws {
         let summary = StepSummary(index: 1, tool: "click", purpose: "Input expression", success: true)
 
         let data = try JSONEncoder().encode(summary)
         let decoded = try JSONDecoder().decode(StepSummary.self, from: data)
 
-        XCTAssertEqual(decoded.index, 1)
-        XCTAssertEqual(decoded.tool, "click")
-        XCTAssertEqual(decoded.purpose, "Input expression")
-        XCTAssertTrue(decoded.success)
+        #expect(decoded.index == 1)
+        #expect(decoded.tool == "click")
+        #expect(decoded.purpose == "Input expression")
+        #expect(decoded.success == true)
     }
 
-    // MARK: - AC5: APIErrorResponse
-
-    func test_apiErrorResponse_codable_roundTrip_preservesAllFields() throws {
+    @Test("APIErrorResponse codable round trip preserves all fields")
+    func apiErrorResponseCodableRoundTripPreservesAllFields() throws {
         let error = APIErrorResponse(error: "missing_task", message: "Request body must include a 'task' field.")
 
         let data = try JSONEncoder().encode(error)
         let decoded = try JSONDecoder().decode(APIErrorResponse.self, from: data)
 
-        XCTAssertEqual(decoded.error, "missing_task")
-        XCTAssertEqual(decoded.message, "Request body must include a 'task' field.")
+        #expect(decoded.error == "missing_task")
+        #expect(decoded.message == "Request body must include a 'task' field.")
     }
 
-    func test_apiErrorResponse_jsonKeys_areCorrect() throws {
+    @Test("APIErrorResponse JSON keys are correct")
+    func apiErrorResponseJsonKeysAreCorrect() throws {
         let error = APIErrorResponse(error: "run_not_found", message: "Run 'nonexistent-id' not found.")
 
         let encoder = JSONEncoder()
         encoder.outputFormatting = [.sortedKeys]
         let data = try encoder.encode(error)
-        let json = try XCTUnwrap(String(data: data, encoding: .utf8))
+        let json = try #require(String(data: data, encoding: .utf8))
 
-        XCTAssertTrue(json.contains("\"error\""), "APIErrorResponse JSON should contain 'error' key")
-        XCTAssertTrue(json.contains("\"message\""), "APIErrorResponse JSON should contain 'message' key")
+        #expect(json.contains("\"error\""))
+        #expect(json.contains("\"message\""))
     }
 
-    // MARK: - AC2/AC3: APIRunStatus
-
-    func test_apiRunStatus_rawValues_matchExpectedStrings() {
-        XCTAssertEqual(APIRunStatus.running.rawValue, "running")
-        XCTAssertEqual(APIRunStatus.done.rawValue, "done")
-        XCTAssertEqual(APIRunStatus.failed.rawValue, "failed")
-        XCTAssertEqual(APIRunStatus.cancelled.rawValue, "cancelled")
+    @Test("APIRunStatus raw values match expected strings")
+    func apiRunStatusRawValuesMatchExpectedStrings() {
+        #expect(APIRunStatus.running.rawValue == "running")
+        #expect(APIRunStatus.done.rawValue == "done")
+        #expect(APIRunStatus.failed.rawValue == "failed")
+        #expect(APIRunStatus.cancelled.rawValue == "cancelled")
     }
 
-    func test_apiRunStatus_decodesFromValidStrings() throws {
+    @Test("APIRunStatus decodes from valid strings")
+    func apiRunStatusDecodesFromValidStrings() throws {
         let statuses: [(String, APIRunStatus)] = [
             ("\"running\"", .running),
             ("\"done\"", .done),
@@ -218,18 +217,20 @@ final class APITypesTests: XCTestCase {
         for (jsonString, expected) in statuses {
             let data = jsonString.data(using: .utf8)!
             let decoded = try JSONDecoder().decode(APIRunStatus.self, from: data)
-            XCTAssertEqual(decoded, expected, "Failed to decode \(jsonString) to \(expected)")
+            #expect(decoded == expected)
         }
     }
 
-    func test_apiRunStatus_decodingInvalidString_throwsError() {
+    @Test("APIRunStatus decoding invalid string throws error")
+    func apiRunStatusDecodingInvalidStringThrowsError() {
         let data = "\"unknown_status\"".data(using: .utf8)!
-        XCTAssertThrowsError(try JSONDecoder().decode(APIRunStatus.self, from: data))
+        #expect(throws: DecodingError.self) {
+            try JSONDecoder().decode(APIRunStatus.self, from: data)
+        }
     }
 
-    // MARK: - TrackedRun
-
-    func test_trackedRun_codable_roundTrip_preservesAllFields() throws {
+    @Test("TrackedRun codable round trip preserves all fields")
+    func trackedRunCodableRoundTripPreservesAllFields() throws {
         let step = StepSummary(index: 0, tool: "launch_app", purpose: "Launch app", success: true)
         let run = TrackedRun(
             runId: "20260513-abc123",
@@ -246,16 +247,15 @@ final class APITypesTests: XCTestCase {
         let data = try JSONEncoder().encode(run)
         let decoded = try JSONDecoder().decode(TrackedRun.self, from: data)
 
-        XCTAssertEqual(decoded.runId, "20260513-abc123")
-        XCTAssertEqual(decoded.task, "open calculator")
-        XCTAssertEqual(decoded.status, .running)
-        XCTAssertEqual(decoded.totalSteps, 1)
-        XCTAssertEqual(decoded.steps.count, 1)
+        #expect(decoded.runId == "20260513-abc123")
+        #expect(decoded.task == "open calculator")
+        #expect(decoded.status == .running)
+        #expect(decoded.totalSteps == 1)
+        #expect(decoded.steps.count == 1)
     }
 
-    // MARK: - RunOptions
-
-    func test_runOptions_codable_roundTrip_preservesAllFields() throws {
+    @Test("RunOptions codable round trip preserves all fields")
+    func runOptionsCodableRoundTripPreservesAllFields() throws {
         let options = RunOptions(
             task: "open calculator",
             maxSteps: 10,
@@ -266,27 +266,27 @@ final class APITypesTests: XCTestCase {
         let data = try JSONEncoder().encode(options)
         let decoded = try JSONDecoder().decode(RunOptions.self, from: data)
 
-        XCTAssertEqual(decoded.task, "open calculator")
-        XCTAssertEqual(decoded.maxSteps, 10)
-        XCTAssertEqual(decoded.maxBatches, 3)
-        XCTAssertTrue(decoded.allowForeground!)
+        #expect(decoded.task == "open calculator")
+        #expect(decoded.maxSteps == 10)
+        #expect(decoded.maxBatches == 3)
+        #expect(decoded.allowForeground == true)
     }
 
-    func test_runOptions_optionalFields_defaultToNil() throws {
+    @Test("RunOptions optional fields default to nil")
+    func runOptionsOptionalFieldsDefaultToNil() throws {
         let options = RunOptions(task: "open calculator")
 
         let data = try JSONEncoder().encode(options)
         let decoded = try JSONDecoder().decode(RunOptions.self, from: data)
 
-        XCTAssertEqual(decoded.task, "open calculator")
-        XCTAssertNil(decoded.maxSteps)
-        XCTAssertNil(decoded.maxBatches)
-        XCTAssertNil(decoded.allowForeground)
+        #expect(decoded.task == "open calculator")
+        #expect(decoded.maxSteps == nil)
+        #expect(decoded.maxBatches == nil)
+        #expect(decoded.allowForeground == nil)
     }
 
-    // MARK: - Skill API Types (Story 10.3)
-
-    func test_skillSummaryResponse_codable_roundTrip() throws {
+    @Test("SkillSummaryResponse codable round trip")
+    func skillSummaryResponseCodableRoundTrip() throws {
         let summary = SkillSummaryResponse(
             name: "open_calculator",
             description: "打开计算器",
@@ -297,24 +297,26 @@ final class APITypesTests: XCTestCase {
         )
         let data = try JSONEncoder().encode(summary)
         let decoded = try JSONDecoder().decode(SkillSummaryResponse.self, from: data)
-        XCTAssertEqual(decoded.name, "open_calculator")
-        XCTAssertEqual(decoded.parameterCount, 1)
-        XCTAssertEqual(decoded.stepCount, 3)
-        XCTAssertEqual(decoded.executionCount, 5)
+        #expect(decoded.name == "open_calculator")
+        #expect(decoded.parameterCount == 1)
+        #expect(decoded.stepCount == 3)
+        #expect(decoded.executionCount == 5)
     }
 
-    func test_skillSummaryResponse_decodesSnakeCase() throws {
+    @Test("SkillSummaryResponse decodes snake case")
+    func skillSummaryResponseDecodesSnakeCase() throws {
         let json = """
         {"name":"test","description":"desc","parameter_count":2,"step_count":4,"last_used_at":null,"execution_count":0}
         """
         let data = json.data(using: .utf8)!
         let decoded = try JSONDecoder().decode(SkillSummaryResponse.self, from: data)
-        XCTAssertEqual(decoded.name, "test")
-        XCTAssertEqual(decoded.parameterCount, 2)
-        XCTAssertNil(decoded.lastUsedAt)
+        #expect(decoded.name == "test")
+        #expect(decoded.parameterCount == 2)
+        #expect(decoded.lastUsedAt == nil)
     }
 
-    func test_skillDetailResponse_codable_roundTrip() throws {
+    @Test("SkillDetailResponse codable round trip")
+    func skillDetailResponseCodableRoundTrip() throws {
         let detail = SkillDetailResponse(
             name: "open_browser",
             description: "打开浏览器",
@@ -326,47 +328,51 @@ final class APITypesTests: XCTestCase {
         )
         let data = try JSONEncoder().encode(detail)
         let decoded = try JSONDecoder().decode(SkillDetailResponse.self, from: data)
-        XCTAssertEqual(decoded.name, "open_browser")
-        XCTAssertEqual(decoded.parameters.count, 1)
-        XCTAssertEqual(decoded.parameters[0].name, "url")
+        #expect(decoded.name == "open_browser")
+        #expect(decoded.parameters.count == 1)
+        #expect(decoded.parameters[0].name == "url")
     }
 
-    func test_skillParameterResponse_decodesSnakeCase() throws {
+    @Test("SkillParameterResponse decodes snake case")
+    func skillParameterResponseDecodesSnakeCase() throws {
         let json = #"{"name":"url","default_value":"https://example.com","description":"URL param"}"#
         let data = json.data(using: .utf8)!
         let decoded = try JSONDecoder().decode(SkillParameterResponse.self, from: data)
-        XCTAssertEqual(decoded.name, "url")
-        XCTAssertEqual(decoded.defaultValue, "https://example.com")
+        #expect(decoded.name == "url")
+        #expect(decoded.defaultValue == "https://example.com")
     }
 
-    func test_skillRunRequest_encodesParams() throws {
+    @Test("SkillRunRequest encodes params")
+    func skillRunRequestEncodesParams() throws {
         let req = SkillRunRequest(params: ["key": "value"])
         let data = try JSONEncoder().encode(req)
-        let json = try XCTUnwrap(String(data: data, encoding: .utf8))
-        XCTAssertTrue(json.contains("\"params\""))
-        XCTAssertTrue(json.contains("\"key\""))
+        let json = try #require(String(data: data, encoding: .utf8))
+        #expect(json.contains("\"params\""))
+        #expect(json.contains("\"key\""))
     }
 
-    func test_skillRunRequest_encodesNilParams() throws {
+    @Test("SkillRunRequest encodes nil params")
+    func skillRunRequestEncodesNilParams() throws {
         let req = SkillRunRequest(params: nil)
         let data = try JSONEncoder().encode(req)
-        let json = try XCTUnwrap(String(data: data, encoding: .utf8))
-        // Optional fields with nil are omitted by JSONEncoder
-        XCTAssertTrue(json == "{}", "Nil params should be omitted from JSON")
+        let json = try #require(String(data: data, encoding: .utf8))
+        #expect(json == "{}")
     }
 
-    func test_skillRunResponse_codable_roundTrip() throws {
+    @Test("SkillRunResponse codable round trip")
+    func skillRunResponseCodableRoundTrip() throws {
         let resp = SkillRunResponse(runId: "20260515-abc", status: "running")
         let data = try JSONEncoder().encode(resp)
         let decoded = try JSONDecoder().decode(SkillRunResponse.self, from: data)
-        XCTAssertEqual(decoded.runId, "20260515-abc")
-        XCTAssertEqual(decoded.status, "running")
+        #expect(decoded.runId == "20260515-abc")
+        #expect(decoded.status == "running")
     }
 
-    func test_skillRunResponse_decodesSnakeCase() throws {
+    @Test("SkillRunResponse decodes snake case")
+    func skillRunResponseDecodesSnakeCase() throws {
         let json = #"{"run_id":"20260515-xyz","status":"done"}"#
         let data = json.data(using: .utf8)!
         let decoded = try JSONDecoder().decode(SkillRunResponse.self, from: data)
-        XCTAssertEqual(decoded.runId, "20260515-xyz")
+        #expect(decoded.runId == "20260515-xyz")
     }
 }

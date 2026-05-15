@@ -1,41 +1,42 @@
-import XCTest
+import Testing
 @testable import AxionCLI
 
-final class ConcurrencyLimiterTests: XCTestCase {
+@Suite("ConcurrencyLimiter")
+struct ConcurrencyLimiterTests {
 
-    // MARK: - Basic acquire/release
-
-    func test_acquire_belowLimit_returnsZero() async throws {
+    @Test("Acquire below limit returns zero")
+    func acquireBelowLimitReturnsZero() async throws {
         let limiter = ConcurrencyLimiter(maxConcurrent: 3)
         let position = await limiter.acquire()
-        XCTAssertEqual(position, 0, "Below limit should return position 0")
+        #expect(position == 0)
     }
 
-    func test_acquire_release_decrementsCount() async throws {
+    @Test("Acquire and release decrements count")
+    func acquireReleaseDecrementsCount() async throws {
         let limiter = ConcurrencyLimiter(maxConcurrent: 3)
         _ = await limiter.acquire()
         let count1 = await limiter.activeRunCount
-        XCTAssertEqual(count1, 1)
+        #expect(count1 == 1)
         await limiter.release()
         let count2 = await limiter.activeRunCount
-        XCTAssertEqual(count2, 0)
+        #expect(count2 == 0)
     }
 
-    func test_isAvailable_reflectsState() async throws {
+    @Test("isAvailable reflects state")
+    func isAvailableReflectsState() async throws {
         let limiter = ConcurrencyLimiter(maxConcurrent: 2)
         let avail1 = await limiter.isAvailable
-        XCTAssertTrue(avail1)
+        #expect(avail1)
         _ = await limiter.acquire()
         let avail2 = await limiter.isAvailable
-        XCTAssertTrue(avail2)
+        #expect(avail2)
         _ = await limiter.acquire()
         let avail3 = await limiter.isAvailable
-        XCTAssertFalse(avail3)
+        #expect(!avail3)
     }
 
-    // MARK: - Queueing when full
-
-    func test_acquire_atLimit_queues() async throws {
+    @Test("Acquire at limit queues")
+    func acquireAtLimitQueues() async throws {
         let limiter = ConcurrencyLimiter(maxConcurrent: 1)
         _ = await limiter.acquire()
 
@@ -45,16 +46,17 @@ final class ConcurrencyLimiterTests: XCTestCase {
 
         try await Task.sleep(for: .milliseconds(50))
         let activeCount = await limiter.activeRunCount
-        XCTAssertEqual(activeCount, 1, "Only one should be active")
+        #expect(activeCount == 1)
 
         await limiter.release()
 
-        let position = try await queued.value
+        let _ = await queued.value
         let finalCount = await limiter.activeRunCount
-        XCTAssertEqual(finalCount, 1, "Should be back to 1 after release+acquire")
+        #expect(finalCount == 1)
     }
 
-    func test_release_wakesNextWaiter() async throws {
+    @Test("Release wakes next waiter")
+    func releaseWakesNextWaiter() async throws {
         let limiter = ConcurrencyLimiter(maxConcurrent: 1)
         _ = await limiter.acquire()
 
@@ -65,13 +67,12 @@ final class ConcurrencyLimiterTests: XCTestCase {
         try await Task.sleep(for: .milliseconds(50))
         await limiter.release()
 
-        let position = try await queuedTask.value
-        XCTAssertGreaterThanOrEqual(position, 0, "Queued task should be woken")
+        let position = await queuedTask.value
+        #expect(position >= 0)
     }
 
-    // MARK: - Concurrent safety
-
-    func test_concurrentAcquire_doesNotExceedLimit() async throws {
+    @Test("Concurrent acquire does not exceed limit")
+    func concurrentAcquireDoesNotExceedLimit() async throws {
         let limiter = ConcurrencyLimiter(maxConcurrent: 3)
 
         await withTaskGroup(of: Void.self) { group in
@@ -87,36 +88,35 @@ final class ConcurrencyLimiterTests: XCTestCase {
         }
 
         let finalCount = await limiter.activeRunCount
-        XCTAssertEqual(finalCount, 0, "All should be released after completion")
+        #expect(finalCount == 0)
     }
 
-    // MARK: - Story 5.3: Full lifecycle and position tracking
-
-    func test_multipleQueuedTasks_allEventuallyRun() async throws {
+    @Test("Multiple queued tasks all eventually run")
+    func multipleQueuedTasksAllEventuallyRun() async throws {
         let limiter = ConcurrencyLimiter(maxConcurrent: 1)
-        _ = await limiter.acquire() // Fill the slot
+        _ = await limiter.acquire()
 
         let task1 = Task { await limiter.acquire() }
         let task2 = Task { await limiter.acquire() }
 
         try await Task.sleep(for: .milliseconds(50))
         let countBeforeRelease = await limiter.activeRunCount
-        XCTAssertEqual(countBeforeRelease, 1, "Only 1 should be active while queued")
+        #expect(countBeforeRelease == 1)
 
-        // Release sequentially — each release wakes the next waiter
         await limiter.release()
         try await Task.sleep(for: .milliseconds(50))
         await limiter.release()
         try await Task.sleep(for: .milliseconds(50))
 
-        _ = try await task1.value
-        _ = try await task2.value
+        _ = await task1.value
+        _ = await task2.value
 
         let countAfter = await limiter.activeRunCount
-        XCTAssertEqual(countAfter, 1, "One slot active after all queued tasks acquired")
+        #expect(countAfter == 1)
     }
 
-    func test_fullLifecycle_allReleased_countReturnsToZero() async throws {
+    @Test("Full lifecycle all released count returns to zero")
+    func fullLifecycleAllReleasedCountReturnsToZero() async throws {
         let limiter = ConcurrencyLimiter(maxConcurrent: 2)
 
         _ = await limiter.acquire()
@@ -125,59 +125,61 @@ final class ConcurrencyLimiterTests: XCTestCase {
         let queuedTask = Task { await limiter.acquire() }
         try await Task.sleep(for: .milliseconds(50))
 
-        await limiter.release() // wakes queued task
-        _ = try await queuedTask.value
+        await limiter.release()
+        _ = await queuedTask.value
 
         await limiter.release()
         await limiter.release()
 
         let count = await limiter.activeRunCount
-        XCTAssertEqual(count, 0, "All slots should be released")
+        #expect(count == 0)
     }
 
-    func test_release_onEmptyLimiter_doesNotCrash() async throws {
+    @Test("Release on empty limiter does not crash")
+    func releaseOnEmptyLimiterDoesNotCrash() async throws {
         let limiter = ConcurrencyLimiter(maxConcurrent: 3)
-        // Release without acquire — should be a no-op
         await limiter.release()
         let count = await limiter.activeRunCount
-        XCTAssertEqual(count, 0, "Releasing on empty limiter should not go negative")
+        #expect(count == 0)
     }
 
-    // MARK: - Story 5.3 AC3: tryAcquire / cancelAll / queueDepth (graceful shutdown)
-
-    func test_tryAcquire_belowLimit_returnsTrue() async throws {
+    @Test("tryAcquire below limit returns true")
+    func tryAcquireBelowLimitReturnsTrue() async throws {
         let limiter = ConcurrencyLimiter(maxConcurrent: 2)
         let result = await limiter.tryAcquire()
-        XCTAssertTrue(result, "tryAcquire should succeed when below limit")
+        #expect(result)
         let count = await limiter.activeRunCount
-        XCTAssertEqual(count, 1)
+        #expect(count == 1)
     }
 
-    func test_tryAcquire_atLimit_returnsFalse() async throws {
+    @Test("tryAcquire at limit returns false")
+    func tryAcquireAtLimitReturnsFalse() async throws {
         let limiter = ConcurrencyLimiter(maxConcurrent: 1)
         _ = await limiter.tryAcquire()
         let result = await limiter.tryAcquire()
-        XCTAssertFalse(result, "tryAcquire should fail when at limit")
+        #expect(!result)
     }
 
-    func test_queueDepth_reflectsWaitingCount() async throws {
+    @Test("queueDepth reflects waiting count")
+    func queueDepthReflectsWaitingCount() async throws {
         let limiter = ConcurrencyLimiter(maxConcurrent: 1)
         _ = await limiter.acquire()
         let depth0 = await limiter.queueDepth
-        XCTAssertEqual(depth0, 0)
+        #expect(depth0 == 0)
 
         _ = Task { await limiter.acquire() }
         try await Task.sleep(for: .milliseconds(50))
         let depth1 = await limiter.queueDepth
-        XCTAssertEqual(depth1, 1, "One task should be queued")
+        #expect(depth1 == 1)
 
         _ = Task { await limiter.acquire() }
         try await Task.sleep(for: .milliseconds(50))
         let depth2 = await limiter.queueDepth
-        XCTAssertEqual(depth2, 2, "Two tasks should be queued")
+        #expect(depth2 == 2)
     }
 
-    func test_cancelAll_resumesQueuedWithMinusOne() async throws {
+    @Test("cancelAll resumes queued with minus one")
+    func cancelAllResumesQueuedWithMinusOne() async throws {
         let limiter = ConcurrencyLimiter(maxConcurrent: 1)
         _ = await limiter.acquire()
 
@@ -186,18 +188,19 @@ final class ConcurrencyLimiterTests: XCTestCase {
         try await Task.sleep(for: .milliseconds(50))
 
         let depthBefore = await limiter.queueDepth
-        XCTAssertEqual(depthBefore, 2)
+        #expect(depthBefore == 2)
         await limiter.cancelAll()
         let depthAfter = await limiter.queueDepth
-        XCTAssertEqual(depthAfter, 0)
+        #expect(depthAfter == 0)
 
-        let pos1 = try await task1.value
-        let pos2 = try await task2.value
-        XCTAssertEqual(pos1, -1, "Cancelled waiter should receive -1")
-        XCTAssertEqual(pos2, -1, "Cancelled waiter should receive -1")
+        let pos1 = await task1.value
+        let pos2 = await task2.value
+        #expect(pos1 == -1)
+        #expect(pos2 == -1)
     }
 
-    func test_cancelAll_doesNotAffectActiveRuns() async throws {
+    @Test("cancelAll does not affect active runs")
+    func cancelAllDoesNotAffectActiveRuns() async throws {
         let limiter = ConcurrencyLimiter(maxConcurrent: 2)
         _ = await limiter.acquire()
         _ = await limiter.acquire()
@@ -207,6 +210,6 @@ final class ConcurrencyLimiterTests: XCTestCase {
 
         await limiter.cancelAll()
         let activeCount = await limiter.activeRunCount
-        XCTAssertEqual(activeCount, 2, "cancelAll should not affect active runs")
+        #expect(activeCount == 2)
     }
 }

@@ -1,55 +1,53 @@
-import XCTest
+import Testing
+import Foundation
 @testable import AxionCLI
 
-// [P0] ATDD GREEN-PHASE — Story 5.1 AC2/AC3/AC4
-// [P0] ATDD RED-PHASE — Story 5.2 AC1/AC3 (EventBroadcaster integration)
+@Suite("RunTracker")
+struct RunTrackerTests {
 
-final class RunTrackerTests: XCTestCase {
-
-    // MARK: - AC2: submitRun returns valid runId
-
-    func test_submitRun_returnsNonEmptyRunId() async throws {
+    @Test("submitRun returns non-empty runId")
+    func submitRunReturnsNonEmptyRunId() async throws {
         let tracker = RunTracker()
         let runId = await tracker.submitRun(task: "open calculator", options: RunOptions(task: "open calculator"))
 
-        XCTAssertFalse(runId.isEmpty, "submitRun should return a non-empty runId")
+        #expect(!runId.isEmpty)
     }
 
-    func test_submitRun_runIdMatchesExpectedFormat() async throws {
+    @Test("submitRun runId matches expected format")
+    func submitRunRunIdMatchesExpectedFormat() async throws {
         let tracker = RunTracker()
         let runId = await tracker.submitRun(task: "open calculator", options: RunOptions(task: "open calculator"))
 
         let regex = try NSRegularExpression(pattern: #"^\d{8}-[a-z0-9]{6}$"#)
         let range = NSRange(runId.startIndex..., in: runId)
         let match = regex.firstMatch(in: runId, range: range)
-        XCTAssertNotNil(match, "runId should match format YYYYMMDD-{6random}, got: \(runId)")
+        #expect(match != nil)
     }
 
-    // MARK: - AC3: getRun returns submitted task
-
-    func test_getRun_returnsSubmittedRun() async throws {
+    @Test("getRun returns submitted run")
+    func getRunReturnsSubmittedRun() async throws {
         let tracker = RunTracker()
         let runId = await tracker.submitRun(task: "open calculator", options: RunOptions(task: "open calculator"))
 
         let run = await tracker.getRun(runId: runId)
 
-        XCTAssertNotNil(run, "getRun should return a run for a valid runId")
-        XCTAssertEqual(run?.task, "open calculator")
-        XCTAssertEqual(run?.status, .running)
-        XCTAssertEqual(run?.runId, runId)
+        #expect(run != nil)
+        #expect(run?.task == "open calculator")
+        #expect(run?.status == .running)
+        #expect(run?.runId == runId)
     }
 
-    func test_getRun_nonExistentRunId_returnsNil() async throws {
+    @Test("getRun with non-existent runId returns nil")
+    func getRunNonExistentRunIdReturnsNil() async throws {
         let tracker = RunTracker()
 
         let run = await tracker.getRun(runId: "nonexistent-id")
 
-        XCTAssertNil(run, "getRun should return nil for non-existent runId")
+        #expect(run == nil)
     }
 
-    // MARK: - AC4: updateRun correctly updates status
-
-    func test_updateRun_updatesStatusToDone() async throws {
+    @Test("updateRun updates status to done")
+    func updateRunUpdatesStatusToDone() async throws {
         let tracker = RunTracker()
         let runId = await tracker.submitRun(task: "open calculator", options: RunOptions(task: "open calculator"))
 
@@ -63,15 +61,16 @@ final class RunTrackerTests: XCTestCase {
         )
 
         let run = await tracker.getRun(runId: runId)
-        let unwrapped = try XCTUnwrap(run)
-        XCTAssertEqual(unwrapped.status, .done)
-        XCTAssertEqual(unwrapped.totalSteps, 1)
-        XCTAssertEqual(unwrapped.durationMs, 5000)
-        XCTAssertEqual(unwrapped.replanCount, 0)
-        XCTAssertEqual(unwrapped.steps.count, 1)
+        let unwrapped = try #require(run)
+        #expect(unwrapped.status == .done)
+        #expect(unwrapped.totalSteps == 1)
+        #expect(unwrapped.durationMs == 5000)
+        #expect(unwrapped.replanCount == 0)
+        #expect(unwrapped.steps.count == 1)
     }
 
-    func test_updateRun_updatesStatusToFailed() async throws {
+    @Test("updateRun updates status to failed")
+    func updateRunUpdatesStatusToFailed() async throws {
         let tracker = RunTracker()
         let runId = await tracker.submitRun(task: "open calculator", options: RunOptions(task: "open calculator"))
 
@@ -84,11 +83,12 @@ final class RunTrackerTests: XCTestCase {
         )
 
         let run = await tracker.getRun(runId: runId)
-        let unwrapped = try XCTUnwrap(run)
-        XCTAssertEqual(unwrapped.status, .failed)
+        let unwrapped = try #require(run)
+        #expect(unwrapped.status == .failed)
     }
 
-    func test_updateRun_preservesMultipleStepsInOrder() async throws {
+    @Test("updateRun preserves multiple steps in order")
+    func updateRunPreservesMultipleStepsInOrder() async throws {
         let tracker = RunTracker()
         let runId = await tracker.submitRun(task: "open calculator", options: RunOptions(task: "open calculator"))
 
@@ -106,16 +106,15 @@ final class RunTrackerTests: XCTestCase {
         )
 
         let run = await tracker.getRun(runId: runId)
-        let unwrapped = try XCTUnwrap(run)
-        XCTAssertEqual(unwrapped.steps.count, 3)
-        XCTAssertEqual(unwrapped.steps[0].tool, "launch_app")
-        XCTAssertEqual(unwrapped.steps[1].tool, "click")
-        XCTAssertEqual(unwrapped.steps[2].tool, "click")
+        let unwrapped = try #require(run)
+        #expect(unwrapped.steps.count == 3)
+        #expect(unwrapped.steps[0].tool == "launch_app")
+        #expect(unwrapped.steps[1].tool == "click")
+        #expect(unwrapped.steps[2].tool == "click")
     }
 
-    // MARK: - AC3/AC4: listRuns
-
-    func test_listRuns_returnsAllSubmittedRuns() async throws {
+    @Test("listRuns returns all submitted runs")
+    func listRunsReturnsAllSubmittedRuns() async throws {
         let tracker = RunTracker()
         _ = await tracker.submitRun(task: "task 1", options: RunOptions(task: "task 1"))
         _ = await tracker.submitRun(task: "task 2", options: RunOptions(task: "task 2"))
@@ -123,36 +122,35 @@ final class RunTrackerTests: XCTestCase {
 
         let runs = await tracker.listRuns()
 
-        XCTAssertEqual(runs.count, 3, "listRuns should return all submitted runs")
+        #expect(runs.count == 3)
     }
 
-    func test_listRuns_emptyTracker_returnsEmptyArray() async throws {
+    @Test("listRuns on empty tracker returns empty array")
+    func listRunsEmptyTrackerReturnsEmptyArray() async throws {
         let tracker = RunTracker()
 
         let runs = await tracker.listRuns()
 
-        XCTAssertTrue(runs.isEmpty, "listRuns on empty tracker should return empty array")
+        #expect(runs.isEmpty)
     }
 
-    // MARK: - AC2: submitRun initial state
-
-    func test_submitRun_initialState_isCorrect() async throws {
+    @Test("submitRun initial state is correct")
+    func submitRunInitialStateIsCorrect() async throws {
         let tracker = RunTracker()
         let runId = await tracker.submitRun(task: "open calculator", options: RunOptions(task: "open calculator"))
 
         let run = await tracker.getRun(runId: runId)
-        let unwrapped = try XCTUnwrap(run)
+        let unwrapped = try #require(run)
 
-        XCTAssertFalse(unwrapped.submittedAt.isEmpty, "submittedAt should be set")
-        XCTAssertNil(unwrapped.completedAt, "completedAt should be nil for running task")
-        XCTAssertTrue(unwrapped.steps.isEmpty, "steps should be empty for newly submitted run")
-        XCTAssertEqual(unwrapped.totalSteps, 0, "totalSteps should be 0 for newly submitted run")
-        XCTAssertNil(unwrapped.durationMs, "durationMs should be nil for running task")
+        #expect(!unwrapped.submittedAt.isEmpty)
+        #expect(unwrapped.completedAt == nil)
+        #expect(unwrapped.steps.isEmpty)
+        #expect(unwrapped.totalSteps == 0)
+        #expect(unwrapped.durationMs == nil)
     }
 
-    // MARK: - SSE extension point (Story 5.2 prep)
-
-    func test_updateRun_invokesOnStatusChangedCallback() async throws {
+    @Test("updateRun invokes onStatusChanged callback")
+    func updateRunInvokesOnStatusChangedCallback() async throws {
         let tracker = RunTracker()
         let runId = await tracker.submitRun(task: "open calculator", options: RunOptions(task: "open calculator"))
 
@@ -172,19 +170,17 @@ final class RunTrackerTests: XCTestCase {
             replanCount: 0
         )
 
-        XCTAssertTrue(callbackState.invoked, "onStatusChanged should be invoked when status changes")
-        XCTAssertEqual(callbackState.runId, runId)
-        XCTAssertEqual(callbackState.status, .done)
+        #expect(callbackState.invoked)
+        #expect(callbackState.runId == runId)
+        #expect(callbackState.status == .done)
     }
 
-    // MARK: - Story 5.2: EventBroadcaster integration (RED-PHASE)
-
-    func test_updateRun_withEventBroadcaster_emitsRunCompletedEvent() async throws {
+    @Test("updateRun with EventBroadcaster emits runCompleted event")
+    func updateRunWithEventBroadcasterEmitsRunCompletedEvent() async throws {
         let broadcaster = EventBroadcaster()
         let tracker = RunTracker(eventBroadcaster: broadcaster)
         let runId = await tracker.submitRun(task: "open calculator", options: RunOptions(task: "open calculator"))
 
-        // Subscribe before update to capture the event
         let stream = await broadcaster.subscribe(runId: runId)
 
         let step = StepSummary(index: 0, tool: "launch_app", purpose: "Launch Calculator", success: true)
@@ -199,20 +195,21 @@ final class RunTrackerTests: XCTestCase {
         var iterator = stream.makeAsyncIterator()
         let received = await iterator.next()
 
-        XCTAssertNotNil(received, "EventBroadcaster should emit an event when updateRun is called")
+        #expect(received != nil)
 
         if case let .runCompleted(data) = received! {
-            XCTAssertEqual(data.runId, runId)
-            XCTAssertEqual(data.finalStatus, "done")
-            XCTAssertEqual(data.totalSteps, 1)
-            XCTAssertEqual(data.durationMs, 5000)
-            XCTAssertEqual(data.replanCount, 0)
+            #expect(data.runId == runId)
+            #expect(data.finalStatus == "done")
+            #expect(data.totalSteps == 1)
+            #expect(data.durationMs == 5000)
+            #expect(data.replanCount == 0)
         } else {
-            XCTFail("Expected .runCompleted event, got different event type")
+            Issue.record("Expected .runCompleted event, got different event type")
         }
     }
 
-    func test_tracker_withEventBroadcaster_backwardCompatible_listRuns() async throws {
+    @Test("Tracker with EventBroadcaster backward compatible listRuns")
+    func trackerWithEventBroadcasterBackwardCompatibleListRuns() async throws {
         let broadcaster = EventBroadcaster()
         let tracker = RunTracker(eventBroadcaster: broadcaster)
 
@@ -220,17 +217,18 @@ final class RunTrackerTests: XCTestCase {
         _ = await tracker.submitRun(task: "task 2", options: RunOptions(task: "task 2"))
 
         let runs = await tracker.listRuns()
-        XCTAssertEqual(runs.count, 2, "listRuns should still work with EventBroadcaster injected")
+        #expect(runs.count == 2)
     }
 
-    func test_tracker_withEventBroadcaster_backwardCompatible_getRun() async throws {
+    @Test("Tracker with EventBroadcaster backward compatible getRun")
+    func trackerWithEventBroadcasterBackwardCompatibleGetRun() async throws {
         let broadcaster = EventBroadcaster()
         let tracker = RunTracker(eventBroadcaster: broadcaster)
         let runId = await tracker.submitRun(task: "open calculator", options: RunOptions(task: "open calculator"))
 
         let run = await tracker.getRun(runId: runId)
-        XCTAssertNotNil(run, "getRun should still work with EventBroadcaster injected")
-        XCTAssertEqual(run?.task, "open calculator")
+        #expect(run != nil)
+        #expect(run?.task == "open calculator")
     }
 }
 

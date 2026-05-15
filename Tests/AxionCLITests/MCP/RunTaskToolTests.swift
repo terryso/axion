@@ -1,104 +1,103 @@
-import XCTest
+import Testing
 import OpenAgentSDK
 @testable import AxionCLI
 
-// [P0] ATDD GREEN-PHASE — Story 6.1 AC3
+@Suite("RunTaskTool")
+struct RunTaskToolTests {
 
-final class RunTaskToolTests: XCTestCase {
-
-    // MARK: - ToolProtocol properties
-
-    func test_runTaskTool_nameIsCorrect() {
+    @Test("name is correct")
+    func nameIsCorrect() {
         let (tool, _, _) = createTool()
-        XCTAssertEqual(tool.name, "run_task")
+        #expect(tool.name == "run_task")
     }
 
-    func test_runTaskTool_descriptionIsNonEmpty() {
+    @Test("description is non-empty")
+    func descriptionIsNonEmpty() {
         let (tool, _, _) = createTool()
-        XCTAssertFalse(tool.description.isEmpty)
+        #expect(!tool.description.isEmpty)
     }
 
-    func test_runTaskTool_inputSchemaContainsTask() {
+    @Test("inputSchema contains task")
+    func inputSchemaContainsTask() {
         let (tool, _, _) = createTool()
         guard let props = tool.inputSchema["properties"] as? [String: Any] else {
-            XCTFail("inputSchema should have 'properties'")
+            Issue.record("inputSchema should have 'properties'")
             return
         }
-        XCTAssertNotNil(props["task"], "inputSchema should have 'task' property")
+        #expect(props["task"] != nil)
     }
 
-    func test_runTaskTool_inputSchemaRequiresTask() {
+    @Test("inputSchema requires task")
+    func inputSchemaRequiresTask() {
         let (tool, _, _) = createTool()
         guard let required = tool.inputSchema["required"] as? [String] else {
-            XCTFail("inputSchema should have 'required' array")
+            Issue.record("inputSchema should have 'required' array")
             return
         }
-        XCTAssertTrue(required.contains("task"), "'task' should be required")
+        #expect(required.contains("task"))
     }
 
-    func test_runTaskTool_isReadOnlyIsFalse() {
+    @Test("isReadOnly is false")
+    func isReadOnlyIsFalse() {
         let (tool, _, _) = createTool()
-        XCTAssertFalse(tool.isReadOnly)
+        #expect(!tool.isReadOnly)
     }
 
-    // MARK: - call() behavior
-
-    func test_runTaskTool_call_returnsRunId() async throws {
-        let (tool, tracker, _) = createTool()
+    @Test("call returns run_id")
+    func callReturnsRunId() async throws {
+        let (tool, _, _) = createTool()
         let context = ToolContext(cwd: "/tmp", toolUseId: "test-id")
 
         let result = await tool.call(input: ["task": "open calculator"], context: context)
 
-        XCTAssertFalse(result.isError)
-        XCTAssertTrue(result.content.contains("run_id"), "Response should contain run_id")
-        XCTAssertTrue(result.content.contains("running"), "Response should contain 'running' status")
+        #expect(!result.isError)
+        #expect(result.content.contains("run_id"))
+        #expect(result.content.contains("running"))
     }
 
-    func test_runTaskTool_call_missingTask_returnsError() async throws {
+    @Test("call with missing task returns error")
+    func callMissingTaskReturnsError() async throws {
         let (tool, _, _) = createTool()
         let context = ToolContext(cwd: "/tmp", toolUseId: "test-id")
 
         let result = await tool.call(input: [:], context: context)
 
-        XCTAssertTrue(result.isError)
-        XCTAssertTrue(result.content.contains("missing_task"))
+        #expect(result.isError)
+        #expect(result.content.contains("missing_task"))
     }
 
-    func test_runTaskTool_call_emptyTask_returnsError() async throws {
+    @Test("call with empty task returns error")
+    func callEmptyTaskReturnsError() async throws {
         let (tool, _, _) = createTool()
         let context = ToolContext(cwd: "/tmp", toolUseId: "test-id")
 
         let result = await tool.call(input: ["task": ""], context: context)
 
-        XCTAssertTrue(result.isError)
-        XCTAssertTrue(result.content.contains("missing_task"))
+        #expect(result.isError)
+        #expect(result.content.contains("missing_task"))
     }
 
-    func test_runTaskTool_call_submitsRunToTracker() async throws {
+    @Test("call submits run to tracker")
+    func callSubmitsRunToTracker() async throws {
         let (tool, tracker, _) = createTool()
         let context = ToolContext(cwd: "/tmp", toolUseId: "test-id")
 
         let result = await tool.call(input: ["task": "open calculator"], context: context)
 
-        // Extract run_id from JSON response
         let content = result.content
         let range = content.range(of: #"(?<=run_id":")([^"]+)"#, options: .regularExpression)
-        XCTAssertNotNil(range, "Should find run_id in response")
+        #expect(range != nil)
         if let range = range {
             let runId = String(content[range])
             let run = await tracker.getRun(runId: runId)
-            XCTAssertNotNil(run, "Run should be tracked")
-            XCTAssertEqual(run?.task, "open calculator")
+            #expect(run != nil)
+            #expect(run?.task == "open calculator")
         }
     }
-
-    // MARK: - Helpers
 
     private func createTool() -> (RunTaskTool, RunTracker, TaskQueue) {
         let tracker = RunTracker()
         let queue = TaskQueue()
-        // Create a mock agent — for unit tests we don't need a real agent
-        // The RunTaskTool stores the agent but we're only testing immediate response
         let agent = createAgent(options: AgentOptions(
             apiKey: "test-key",
             model: "test-model",

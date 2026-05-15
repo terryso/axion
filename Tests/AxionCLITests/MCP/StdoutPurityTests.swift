@@ -1,69 +1,56 @@
-import XCTest
+import Testing
+import Foundation
 @testable import AxionCLI
 
-// [P1] ATDD — Story 6.2 AC4: stdout 纯净验证
+@Suite("StdoutPurity")
+struct StdoutPurityTests {
 
-final class StdoutPurityTests: XCTestCase {
-
-    // MARK: - AC4: stdout 无非 MCP 内容
-
-    func test_mcpServerRunner_noPrintCalls() async throws {
-        // Verify the REAL MCPServerRunner source code contains no print() calls
+    @Test("MCPServerRunner has no print() calls")
+    func mcpServerRunnerNoPrintCalls() async throws {
         let sourcePath = Self.projectRoot()
             .appendingPathComponent("Sources/AxionCLI/MCP/MCPServerRunner.swift")
         let source = try String(contentsOf: sourcePath, encoding: .utf8)
 
-        // Check no print( calls exist (excluding // comments)
         let lines = source.components(separatedBy: .newlines)
-        for (index, line) in lines.enumerated() {
+        for (_, line) in lines.enumerated() {
             let trimmed = line.trimmingCharacters(in: .whitespaces)
             guard !trimmed.hasPrefix("//") else { continue }
-            XCTAssertFalse(
-                trimmed.contains("print("),
-                "MCPServerRunner.swift:\(index + 1) should not use print() — use fputs(..., stderr) instead"
-            )
+            #expect(!trimmed.contains("print("))
         }
     }
 
-    func test_mcpCommand_run_noDirectStdout() async throws {
-        // Verify the REAL McpCommand source code contains no print() calls
+    @Test("McpCommand has no print() calls")
+    func mcpCommandRunNoDirectStdout() async throws {
         let sourcePath = Self.projectRoot()
             .appendingPathComponent("Sources/AxionCLI/Commands/McpCommand.swift")
         let source = try String(contentsOf: sourcePath, encoding: .utf8)
 
         let lines = source.components(separatedBy: .newlines)
-        for (index, line) in lines.enumerated() {
+        for (_, line) in lines.enumerated() {
             let trimmed = line.trimmingCharacters(in: .whitespaces)
             guard !trimmed.hasPrefix("//") else { continue }
-            XCTAssertFalse(
-                trimmed.contains("print("),
-                "McpCommand.swift:\(index + 1) should not use print() — use fputs(..., stderr) instead"
-            )
+            #expect(!trimmed.contains("print("))
         }
     }
 
-    func test_mcpServerRunner_allOutputUsesStderr() async throws {
-        // Verify every fputs call in MCPServerRunner passes stderr as the stream
+    @Test("MCPServerRunner all output uses stderr")
+    func mcpServerRunnerAllOutputUsesStderr() async throws {
         let sourcePath = Self.projectRoot()
             .appendingPathComponent("Sources/AxionCLI/MCP/MCPServerRunner.swift")
         let source = try String(contentsOf: sourcePath, encoding: .utf8)
 
         let lines = source.components(separatedBy: .newlines)
-        for (index, line) in lines.enumerated() {
+        for (_, line) in lines.enumerated() {
             let trimmed = line.trimmingCharacters(in: .whitespaces)
             guard !trimmed.hasPrefix("//") else { continue }
             guard trimmed.contains("fputs(") else { continue }
 
-            XCTAssertFalse(
-                trimmed.contains("stdout"),
-                "MCPServerRunner.swift:\(index + 1) fputs should use stderr, not stdout"
-            )
+            #expect(!trimmed.contains("stdout"))
         }
     }
 
-    func test_axionMcpProcess_stderrHasOutputOnMissingConfig() async throws {
-        // Launch real `axion mcp` process — without config it exits with error to stderr
-        // Key assertion: stdout should be empty (no leaked output)
+    @Test("axion mcp process stderr has output on missing config")
+    func axionMcpProcessStderrHasOutputOnMissingConfig() async throws {
         let axionBinary = productsBinaryURL()
 
         let process = Process()
@@ -76,7 +63,6 @@ final class StdoutPurityTests: XCTestCase {
 
         try process.run()
 
-        // Give it a moment to produce output and exit
         try await Task.sleep(for: .milliseconds(2000))
 
         let stderrContent = readAvailableData(stderrPipe)
@@ -84,17 +70,13 @@ final class StdoutPurityTests: XCTestCase {
 
         process.terminate()
 
-        // stderr should have some output (error message about missing config)
-        XCTAssertFalse(stderrContent.isEmpty,
-                        "stderr should contain error output when config is missing")
+        #expect(!stderrContent.isEmpty)
 
-        // stdout must be completely empty — no leaked prints, no partial MCP output
-        XCTAssertTrue(stdoutContent.isEmpty,
-                       "stdout must be empty — all output goes to stderr. Got: '\(stdoutContent)'")
+        #expect(stdoutContent.isEmpty)
     }
 
-    func test_axionMcpProcess_stderrContainsErrorOnMissingHelper() async throws {
-        // Even with API key, missing Helper should output error to stderr only
+    @Test("axion mcp process stderr contains error on missing helper")
+    func axionMcpProcessStderrContainsErrorOnMissingHelper() async throws {
         let axionBinary = productsBinaryURL()
 
         let process = Process()
@@ -118,15 +100,10 @@ final class StdoutPurityTests: XCTestCase {
 
         process.terminate()
 
-        // stderr should have error (Helper not found or config missing)
-        XCTAssertFalse(stderrContent.isEmpty, "stderr should contain error output")
+        #expect(!stderrContent.isEmpty)
 
-        // stdout must be empty regardless of which error path is hit
-        XCTAssertTrue(stdoutContent.isEmpty,
-                       "stdout must remain empty even on error. Got: '\(stdoutContent)'")
+        #expect(stdoutContent.isEmpty)
     }
-
-    // MARK: - Helpers
 
     private static func projectRoot() -> URL {
         var url = URL(fileURLWithPath: #file)
@@ -155,7 +132,6 @@ final class StdoutPurityTests: XCTestCase {
             }
         }
 
-        // Return best guess even if not found (test will fail with clear error)
         return candidates[0]
     }
 
