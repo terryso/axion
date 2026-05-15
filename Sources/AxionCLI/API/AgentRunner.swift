@@ -6,6 +6,21 @@ import AxionCore
 /// AgentRunner — independent Agent execution function.
 /// References RunCommand logic but does not modify RunCommand.
 /// Shared between ServerCommand (HTTP API) and RunCommand (CLI).
+///
+/// **Design Decisions:**
+/// - **Deliberate duplication over shared abstraction**: AgentRunner mirrors RunCommand's logic
+///   (config loading, prompt building, tool setup, stream processing) rather than extracting a
+///   shared base class. This prevents CLI/API coupling — each can evolve independently (e.g., API
+///   needs SSE broadcasting, CLI needs TakeoverIO). Common patterns are kept similar by convention.
+/// - **Completion callback pattern**: uses a traditional callback (`completion: @escaping`) alongside
+///   the modern async return value. This bridges the gap with the HTTP API's Task.detached execution
+///   model where the caller needs both immediate return (HTTP 202) and eventual notification.
+/// - **Optional SSE broadcasting**: the `eventBroadcaster` parameter is nil in CLI mode and non-nil
+///   in HTTP API mode. This avoids any runtime cost for CLI users while enabling real-time progress
+///   streaming for API consumers. Events are emitted per tool invocation (step_started/step_completed).
+/// - **Status mapping**: internal SDK `ResultData.Subtype` is mapped to `APIRunStatus` enum, providing
+///   a clean API boundary that abstracts SDK internals. Only `success`/`none` → `.done`; everything
+///   else → `.failed`. Detailed error information lives in `stepSummaries`, not the status field.
 enum AgentRunner {
 
     // MARK: - Public API

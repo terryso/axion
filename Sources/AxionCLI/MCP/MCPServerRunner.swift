@@ -5,6 +5,20 @@ import AxionCore
 
 /// Orchestrator that creates an Agent, assembles tools, and runs
 /// an AgentMCPServer exposing Axion's capabilities via MCP stdio.
+///
+/// **Design Decisions:**
+/// - **MCP Server mode (Epic 6)**: Axion runs as an MCP server (`axion mcp`) so external agents
+///   (Claude Code, Cursor, etc.) can call Axion's desktop automation tools directly. This follows
+///   the "tools as a service" pattern — the MCP consumer decides *what* to do, Axion executes *how*.
+/// - **Tool merging strategy**: the tool pool combines Helper's AX tools (from MCP stdio discovery)
+///   with two Axion-specific tools: `run_task` (queue a task for async execution) and
+///   `query_task_status` (check progress). This gives MCP consumers both synchronous (direct tool
+///   calls) and asynchronous (task submission) access patterns.
+/// - **TaskQueue serialization**: MCP server mode uses a `TaskQueue` to serialize `agent.prompt()`
+///   calls. This prevents concurrent LLM requests from interleaving, which would corrupt the
+///   conversation context. The MCP protocol itself handles concurrent `tools/list` requests fine.
+/// - **Graceful shutdown**: waits for `taskQueue.gracefulShutdown()` before closing the agent,
+///   ensuring in-flight tasks complete rather than being abruptly terminated.
 struct MCPServerRunner {
 
     // MARK: - Properties

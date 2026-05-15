@@ -4,6 +4,23 @@ import OpenAgentSDK
 
 import AxionCore
 
+/// Main entry point for `axion run` — orchestrates the full agent execution pipeline.
+///
+/// **Design Decisions:**
+/// - **Layered configuration** (defaults → config.json → env vars → CLI args): allows users to
+///   configure at different levels of specificity without editing files. See `ConfigManager.loadConfig`.
+/// - **Agent-as-SDK approach**: instead of implementing the agent loop natively, Axion delegates to
+///   OpenAgentSDK's `createAgent` + `agent.stream()`. This avoids duplicating LLM API handling,
+///   tool routing, and message management, while Axion focuses on desktop automation specifics.
+/// - **MCP stdio for Helper**: the Helper process communicates via MCP JSON-RPC over stdio pipes,
+///   not direct function calls. This process isolation ensures AX crashes don't take down the CLI,
+///   and enables the Helper to be replaced or updated independently.
+/// - **Memory as optional, non-fatal augmentation**: all memory operations are wrapped in do/catch
+///   with warning-level logging. Memory failures never block task execution — users get a degraded
+///   experience (no context) rather than a crash.
+/// - **Takeover (pause/resume) via SDK's PauseForHumanTool**: instead of implementing custom pause
+///   logic, Axion uses the SDK's built-in pause protocol. The agent emits `.paused` system messages,
+///   and RunCommand handles the UI interaction (terminal prompt or JSON event).
 struct RunCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
         commandName: "run",

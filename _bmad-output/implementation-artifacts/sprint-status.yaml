@@ -149,5 +149,5 @@ development_status:
   epic-11: in-progress
   11-1-agent-project-template-scaffold-cli: done
   11-2-plugin-tool-registration-agent-extension: done
-  11-3-developer-documentation-examples: in-progress
+  11-3-developer-documentation-examples: done
   epic-11-retrospective: optional

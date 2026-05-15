@@ -7,6 +7,23 @@ import OpenAgentSDK
 /// MemoryContextProvider does NOT write to the MemoryStore — it is purely a
 /// read-and-format service used by ``RunCommand`` to inject App Memory context
 /// into the system prompt before the LLM Planner runs.
+///
+/// **Design Decisions:**
+/// - **Keyword-based domain inference**: uses a static mapping table of common app names
+///   (English + Chinese) to bundle identifiers. This is intentionally simple — keyword matching
+///   covers 90% of desktop automation tasks without requiring LLM calls or complex NLP.
+///   Future: could use embedding similarity or LLM-based inference for ambiguous cases.
+/// - **Safe degradation pattern**: all MemoryStore access is wrapped in do/catch, returning `nil`
+///   on any failure. This ensures memory system issues (corrupted files, permission errors, missing
+///   directories) never prevent task execution. The planner simply runs without memory context.
+/// - **Context structure for LLM consumption**: the assembled context uses markdown headers and
+///   bullet lists optimized for LLM readability. Familiarity status triggers different strategy
+///   suggestions — familiar apps get compact planning (skip verification steps), unfamiliar apps
+///   get full verification recommendations.
+/// - **Profile-content coupling**: the field extraction (`extractField`) depends on specific
+///   prefixes ("AX特征:", "高频路径:", "已知失败:") that must match `RunCommand.buildProfileContent()`.
+///   This textual coupling is intentional — it keeps the memory format human-readable and debuggable
+///   without requiring a structured schema.
 struct MemoryContextProvider {
 
     // MARK: - App Name Mapping
