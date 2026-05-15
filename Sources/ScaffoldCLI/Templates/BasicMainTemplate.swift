@@ -49,8 +49,8 @@ extension TemplateGenerator {
             apiKey: apiKey,
             model: "claude-sonnet-4-6",
             systemPrompt: systemPrompt,
-            tools: tools,
-            permissionMode: .bypassPermissions
+            permissionMode: .bypassPermissions,
+            tools: tools
             // Uncomment to add hooks:
             // hookRegistry: registry
         ))
@@ -141,9 +141,9 @@ extension TemplateGenerator {
             apiKey: apiKey,
             model: "claude-sonnet-4-6",
             systemPrompt: systemPrompt,
+            permissionMode: .bypassPermissions,
             tools: tools,
-            mcpServers: mcpServers,
-            permissionMode: .bypassPermissions
+            mcpServers: mcpServers
             // hookRegistry: registry
         ))
 

@@ -74,21 +74,21 @@ extension TemplateGenerator {
                 "preToolUse": [
                     // Block all delete operations
                     HookDefinition(
-                        matcher: ".*delete.*",
                         handler: { input in
                             HookOutput(
                                 decision: .block,
                                 message: "Delete operations are not allowed"
                             )
-                        }
+                        },
+                        matcher: ".*delete.*"
                     ),
                     // Log all MCP tool calls
                     HookDefinition(
-                        matcher: "mcp__.*",
                         handler: { input in
                             print("[MCP Audit] \\(input.toolName ?? "unknown") called")
                             return nil
-                        }
+                        },
+                        matcher: "mcp__.*"
                     ),
                 ],
                 "sessionStart": [
