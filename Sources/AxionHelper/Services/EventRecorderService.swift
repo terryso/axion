@@ -324,11 +324,18 @@ final class EventRecorderService: EventRecording, @unchecked Sendable {
 
             let appName = app.localizedName ?? "Unknown"
             let pid = app.processIdentifier
+            var params: [String: JSONValue] = [
+                "app_name": .string(appName),
+                "pid": .int(Int(pid)),
+            ]
+            if let bundleId = app.bundleIdentifier {
+                params["bundle_id"] = .string(bundleId)
+            }
 
             self.appendEvent(
                 type: .appSwitch,
                 timestamp: timestamp,
-                parameters: ["app_name": .string(appName), "pid": .int(Int(pid))]
+                parameters: params
             )
 
             // Update context cache immediately on app switch

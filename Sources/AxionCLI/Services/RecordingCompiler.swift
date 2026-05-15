@@ -106,9 +106,16 @@ struct RecordingCompiler {
     }
 
     private func mapAppSwitch(_ event: RecordedEvent) -> SkillStep {
-        SkillStep(
+        // Prefer bundle_id for reliable app resolution across locales
+        let appName: String
+        if let bundleId = event.parameters["bundle_id"], !stringValue(bundleId).isEmpty {
+            appName = stringValue(bundleId)
+        } else {
+            appName = stringValue(event.parameters["app_name"])
+        }
+        return SkillStep(
             tool: "launch_app",
-            arguments: ["app_name": stringValue(event.parameters["app_name"])]
+            arguments: ["app_name": appName]
         )
     }
 
