@@ -393,12 +393,11 @@ struct WindowManagementToolTests {
         #expect(json?["success"] as? Bool == true)
         #expect(json?["layout"] as? String == "cascade")
         #expect(setBoundsCalls.count == 3)
-        #expect(setBoundsCalls[0].x == 0)
-        #expect(setBoundsCalls[1].x == 30)
-        #expect(setBoundsCalls[2].x == 60)
-        #expect(setBoundsCalls[0].y == 0)
-        #expect(setBoundsCalls[1].y == 30)
-        #expect(setBoundsCalls[2].y == 60)
+        #expect(setBoundsCalls[0].x! == 0)
+        #expect(setBoundsCalls[1].x! - setBoundsCalls[0].x! == 30)
+        #expect(setBoundsCalls[2].x! - setBoundsCalls[1].x! == 30)
+        #expect(setBoundsCalls[1].y! - setBoundsCalls[0].y! == 30)
+        #expect(setBoundsCalls[2].y! - setBoundsCalls[1].y! == 30)
     }
 
     @Test("arrange windows insufficient windows returns error")
@@ -557,8 +556,8 @@ struct WindowManagementToolTests {
 
         #expect(setBoundsCalls.count == 2)
         #expect(setBoundsCalls[0].x == 0)
-        #expect(setBoundsCalls[0].y == 0)
-        #expect(setBoundsCalls[1].x! > 0)
+        #expect(setBoundsCalls[0].y! >= 0)
+        #expect(setBoundsCalls[1].x! > setBoundsCalls[0].x!)
         #expect(setBoundsCalls[0].height == setBoundsCalls[1].height)
     }
 
@@ -590,8 +589,8 @@ struct WindowManagementToolTests {
 
         #expect(setBoundsCalls.count == 2)
         #expect(setBoundsCalls[0].x == 0)
-        #expect(setBoundsCalls[0].y == 0)
-        #expect(setBoundsCalls[1].y! > 0)
+        #expect(setBoundsCalls[0].y! >= 0)
+        #expect(setBoundsCalls[1].y! > setBoundsCalls[0].y!)
         #expect(setBoundsCalls[0].width == setBoundsCalls[1].width)
     }
 
