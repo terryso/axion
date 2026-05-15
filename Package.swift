@@ -14,7 +14,10 @@ let package = Package(
         .library(name: "AxionCore", targets: ["AxionCore"]),
     ],
     dependencies: [
-        .package(path: "../open-agent-sdk-swift"),
+        .package(
+            url: "https://github.com/terryso/open-agent-sdk-swift",
+            from: "0.3.1"
+        ),
         .package(
             url: "https://github.com/terryso/swift-mcp.git",
             from: "2.0.0"

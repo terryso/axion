@@ -111,7 +111,13 @@ struct AppMemoryExtractor {
         bundleId: String?
     ) -> KnowledgeEntry {
         let toolNames = pairs.map { stripMcpPrefix($0.toolUse.toolName) }
-        let hasError = pairs.contains { $0.toolResult.isError }
+        let hasError = pairs.contains { pair in
+            if pair.toolResult.isError { return true }
+            // Some tools catch errors and return structured JSON instead of throwing,
+            // so isError is false even when the result is an error. Detect these by
+            // checking for error payload fields in the content.
+            return contentContainsErrorPayload(pair.toolResult.content)
+        }
         let stepCount = pairs.count
         let effectiveAppName = appName ?? "unknown"
         let successLabel = hasError ? "failure" : "success"
@@ -387,12 +393,12 @@ struct AppMemoryExtractor {
     /// Extract failure marker from error tool results.
     private func extractFailureMarker(from pairs: [ToolPair]) -> String? {
         for pair in pairs {
-            if pair.toolResult.isError {
+            let isFailure = pair.toolResult.isError || contentContainsErrorPayload(pair.toolResult.content)
+            if isFailure {
                 let toolName = stripMcpPrefix(pair.toolUse.toolName)
                 let paramSummary = extractToolParamSummary(name: toolName, input: pair.toolUse.input)
                 let toolDesc = paramSummary != nil ? "\(toolName)(\(paramSummary!))" : toolName
 
-                // Try to extract error message from JSON result
                 let errorMsg = extractErrorMessage(from: pair.toolResult.content)
 
                 if let errorMsg {
@@ -412,7 +418,7 @@ struct AppMemoryExtractor {
         // Find first error pair
         var errorIndex: Int?
         for (i, pair) in pairs.enumerated() {
-            if pair.toolResult.isError {
+            if pair.toolResult.isError || contentContainsErrorPayload(pair.toolResult.content) {
                 errorIndex = i
                 break
             }
@@ -426,7 +432,8 @@ struct AppMemoryExtractor {
         // Look for a successful pair after the failure, preferring same tool type
         for i in (errorIdx + 1)..<pairs.count {
             let nextPair = pairs[i]
-            if !nextPair.toolResult.isError {
+            let nextIsSuccess = !nextPair.toolResult.isError && !contentContainsErrorPayload(nextPair.toolResult.content)
+            if nextIsSuccess {
                 let nextTool = stripMcpPrefix(nextPair.toolUse.toolName)
                 let nextParam = extractToolParamSummary(name: nextTool, input: nextPair.toolUse.input)
                 let desc = nextParam != nil ? "\(nextTool)(\(nextParam!))" : nextTool
@@ -463,5 +470,18 @@ struct AppMemoryExtractor {
             return error
         }
         return nil
+    }
+
+    /// Check if tool result content contains a structured error payload.
+    ///
+    /// Some tools (e.g., launch_app) catch errors and return structured JSON
+    /// with "error" and "message" fields instead of throwing. This makes the
+    /// MCP framework set `isError: false` even though the result is an error.
+    private func contentContainsErrorPayload(_ content: String) -> Bool {
+        guard let data = content.data(using: .utf8),
+              let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any]
+        else { return false }
+        // ToolErrorPayload has both "error" and "message" keys
+        return json["error"] != nil && json["message"] != nil
     }
 }
