@@ -1,12 +1,9 @@
-import XCTest
+import Testing
 
 @testable import AxionCLI
 
-// [P0] buildProfileContent format validation (Story 4.2 → 4.3 interface contract)
-// Story 4.3 Planner parses this format to inject memory context — format regressions
-// would silently break memory-enhanced planning.
-
-final class RunCommandProfileContentTests: XCTestCase {
+@Suite("RunCommandProfileContent")
+struct RunCommandProfileContentTests {
 
     // MARK: - Helper: Build a profile
 
@@ -34,7 +31,8 @@ final class RunCommandProfileContentTests: XCTestCase {
 
     // MARK: - P0: Basic format structure
 
-    func test_buildProfileContent_includesDomainAndCounts() {
+    @Test("buildProfileContent includes domain and counts")
+    func buildProfileContentIncludesDomainAndCounts() {
         let profile = makeProfile(
             domain: "com.apple.calculator",
             totalRuns: 5,
@@ -45,56 +43,55 @@ final class RunCommandProfileContentTests: XCTestCase {
 
         let content = RunCommand.buildProfileContent(profile: profile)
 
-        XCTAssertTrue(content.contains("App Profile: com.apple.calculator"),
+        #expect(content.contains("App Profile: com.apple.calculator"),
             "Should include domain header")
-        XCTAssertTrue(content.contains("总运行次数: 5"),
+        #expect(content.contains("总运行次数: 5"),
             "Should include total run count")
-        XCTAssertTrue(content.contains("成功次数: 3"),
+        #expect(content.contains("成功次数: 3"),
             "Should include success count")
-        XCTAssertTrue(content.contains("失败次数: 2"),
+        #expect(content.contains("失败次数: 2"),
             "Should include failure count")
-        XCTAssertTrue(content.contains("已熟悉: 是"),
+        #expect(content.contains("已熟悉: 是"),
             "Should indicate familiar status")
     }
 
-    func test_buildProfileContent_notFamiliar_showsNo() {
+    @Test("buildProfileContent not familiar shows no")
+    func buildProfileContentNotFamiliarShowsNo() {
         let profile = makeProfile(isFamiliar: false)
 
         let content = RunCommand.buildProfileContent(profile: profile)
 
-        XCTAssertTrue(content.contains("已熟悉: 否"),
-            "Should indicate not-familiar status")
+        #expect(content.contains("已熟悉: 否"), "Should indicate not-familiar status")
     }
 
     // MARK: - P0: AX characteristics line
 
-    func test_buildProfileContent_includesAxCharacteristics() {
+    @Test("buildProfileContent includes AX characteristics")
+    func buildProfileContentIncludesAxCharacteristics() {
         let profile = makeProfile(
             axCharacteristics: ["AXButton", "AXTextField"]
         )
 
         let content = RunCommand.buildProfileContent(profile: profile)
 
-        XCTAssertTrue(content.contains("AX特征:"),
-            "Should include AX characteristics header")
-        XCTAssertTrue(content.contains("AXButton"),
-            "Should include AX characteristic values")
-        XCTAssertTrue(content.contains("AXTextField"),
-            "Should include all AX characteristic values")
+        #expect(content.contains("AX特征:"), "Should include AX characteristics header")
+        #expect(content.contains("AXButton"), "Should include AX characteristic values")
+        #expect(content.contains("AXTextField"), "Should include all AX characteristic values")
     }
 
-    func test_buildProfileContent_noAxCharacteristics_omitsLine() {
+    @Test("buildProfileContent no AX characteristics omits line")
+    func buildProfileContentNoAxCharacteristicsOmitsLine() {
         let profile = makeProfile(axCharacteristics: [])
 
         let content = RunCommand.buildProfileContent(profile: profile)
 
-        XCTAssertFalse(content.contains("AX特征:"),
-            "Should not include AX characteristics line when empty")
+        #expect(!content.contains("AX特征:"), "Should not include AX characteristics line when empty")
     }
 
     // MARK: - P0: High-frequency patterns line
 
-    func test_buildProfileContent_includesCommonPatterns() {
+    @Test("buildProfileContent includes common patterns")
+    func buildProfileContentIncludesCommonPatterns() {
         let patterns = [
             OperationPattern(
                 sequence: ["launch_app", "click", "type_text"],
@@ -107,28 +104,25 @@ final class RunCommandProfileContentTests: XCTestCase {
 
         let content = RunCommand.buildProfileContent(profile: profile)
 
-        XCTAssertTrue(content.contains("高频路径:"),
-            "Should include high-frequency patterns header")
-        XCTAssertTrue(content.contains("launch_app → click → type_text"),
-            "Should include pattern sequence")
-        XCTAssertTrue(content.contains("频率:3"),
-            "Should include pattern frequency")
-        XCTAssertTrue(content.contains("成功率:100%"),
-            "Should include success rate")
+        #expect(content.contains("高频路径:"), "Should include high-frequency patterns header")
+        #expect(content.contains("launch_app → click → type_text"), "Should include pattern sequence")
+        #expect(content.contains("频率:3"), "Should include pattern frequency")
+        #expect(content.contains("成功率:100%"), "Should include success rate")
     }
 
-    func test_buildProfileContent_noPatterns_omitsLine() {
+    @Test("buildProfileContent no patterns omits line")
+    func buildProfileContentNoPatternsOmitsLine() {
         let profile = makeProfile(commonPatterns: [])
 
         let content = RunCommand.buildProfileContent(profile: profile)
 
-        XCTAssertFalse(content.contains("高频路径:"),
-            "Should not include patterns line when empty")
+        #expect(!content.contains("高频路径:"), "Should not include patterns line when empty")
     }
 
     // MARK: - P0: Known failures line
 
-    func test_buildProfileContent_includesKnownFailures_withWorkaround() {
+    @Test("buildProfileContent includes known failures with workaround")
+    func buildProfileContentIncludesKnownFailuresWithWorkaround() {
         let failures = [
             FailurePattern(
                 failedAction: "click(x:300,y:400)",
@@ -140,17 +134,14 @@ final class RunCommandProfileContentTests: XCTestCase {
 
         let content = RunCommand.buildProfileContent(profile: profile)
 
-        XCTAssertTrue(content.contains("已知失败:"),
-            "Should include known failures header")
-        XCTAssertTrue(content.contains("click(x:300,y:400)"),
-            "Should include failed action")
-        XCTAssertTrue(content.contains("坐标不可靠"),
-            "Should include failure reason")
-        XCTAssertTrue(content.contains("修正:"),
-            "Should include workaround when present")
+        #expect(content.contains("已知失败:"), "Should include known failures header")
+        #expect(content.contains("click(x:300,y:400)"), "Should include failed action")
+        #expect(content.contains("坐标不可靠"), "Should include failure reason")
+        #expect(content.contains("修正:"), "Should include workaround when present")
     }
 
-    func test_buildProfileContent_includesKnownFailures_withoutWorkaround() {
+    @Test("buildProfileContent includes known failures without workaround")
+    func buildProfileContentIncludesKnownFailuresWithoutWorkaround() {
         let failures = [
             FailurePattern(
                 failedAction: "launch_app",
@@ -162,24 +153,23 @@ final class RunCommandProfileContentTests: XCTestCase {
 
         let content = RunCommand.buildProfileContent(profile: profile)
 
-        XCTAssertTrue(content.contains("已知失败:"),
-            "Should include known failures header")
-        XCTAssertFalse(content.contains("修正:"),
-            "Should not include workaround section when none exists")
+        #expect(content.contains("已知失败:"), "Should include known failures header")
+        #expect(!content.contains("修正:"), "Should not include workaround section when none exists")
     }
 
-    func test_buildProfileContent_noFailures_omitsLine() {
+    @Test("buildProfileContent no failures omits line")
+    func buildProfileContentNoFailuresOmitsLine() {
         let profile = makeProfile(knownFailures: [])
 
         let content = RunCommand.buildProfileContent(profile: profile)
 
-        XCTAssertFalse(content.contains("已知失败:"),
-            "Should not include failures line when empty")
+        #expect(!content.contains("已知失败:"), "Should not include failures line when empty")
     }
 
     // MARK: - P0: Minimal profile (zero runs)
 
-    func test_buildProfileContent_zeroRuns_stillProducesValidContent() {
+    @Test("buildProfileContent zero runs still produces valid content")
+    func buildProfileContentZeroRunsStillProducesValidContent() {
         let profile = makeProfile(
             totalRuns: 0,
             successfulRuns: 0,
@@ -189,19 +179,16 @@ final class RunCommandProfileContentTests: XCTestCase {
 
         let content = RunCommand.buildProfileContent(profile: profile)
 
-        XCTAssertTrue(content.contains("总运行次数: 0"),
-            "Should handle zero runs gracefully")
-        XCTAssertFalse(content.contains("AX特征:"),
-            "No AX characteristics for zero runs")
-        XCTAssertFalse(content.contains("高频路径:"),
-            "No patterns for zero runs")
-        XCTAssertFalse(content.contains("已知失败:"),
-            "No failures for zero runs")
+        #expect(content.contains("总运行次数: 0"), "Should handle zero runs gracefully")
+        #expect(!content.contains("AX特征:"), "No AX characteristics for zero runs")
+        #expect(!content.contains("高频路径:"), "No patterns for zero runs")
+        #expect(!content.contains("已知失败:"), "No failures for zero runs")
     }
 
     // MARK: - P0: Multiple patterns and failures
 
-    func test_buildProfileContent_multiplePatterns_separatedBySemicolon() {
+    @Test("buildProfileContent multiple patterns separated by semicolon")
+    func buildProfileContentMultiplePatternsSeparatedBySemicolon() {
         let patterns = [
             OperationPattern(
                 sequence: ["launch_app", "click"],
@@ -220,11 +207,8 @@ final class RunCommandProfileContentTests: XCTestCase {
 
         let content = RunCommand.buildProfileContent(profile: profile)
 
-        XCTAssertTrue(content.contains(";"),
-            "Multiple patterns should be separated by semicolons")
-        XCTAssertTrue(content.contains("频率:5"),
-            "Should include first pattern frequency")
-        XCTAssertTrue(content.contains("频率:3"),
-            "Should include second pattern frequency")
+        #expect(content.contains(";"), "Multiple patterns should be separated by semicolons")
+        #expect(content.contains("频率:5"), "Should include first pattern frequency")
+        #expect(content.contains("频率:3"), "Should include second pattern frequency")
     }
 }

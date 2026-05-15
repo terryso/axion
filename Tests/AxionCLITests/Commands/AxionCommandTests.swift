@@ -1,36 +1,34 @@
-import XCTest
+import Testing
 import ArgumentParser
 @testable import AxionCLI
 
-// [P0] 基础设施验证 — CLI 根命令与子命令骨架
-// [P1] 行为验证 — 参数解析、版本输出、帮助输出
-
-final class AxionCommandTests: XCTestCase {
+@Suite("AxionCommand")
+struct AxionCommandTests {
 
     // MARK: - AC1: `axion --help` 显示根命令帮助
 
-    // 验证 --help 输出包含 "run" 子命令
-    func test_axionHelp_showsRunSubcommand() {
+    @Test("help output contains run subcommand")
+    func axionHelpShowsRunSubcommand() {
         let helpText = AxionCLI.helpMessage(for: AxionCLI.self)
-        XCTAssertTrue(
+        #expect(
             helpText.contains("run"),
             "'--help' output should contain 'run' subcommand. Got:\n\(helpText)"
         )
     }
 
-    // 验证 --help 输出包含 "setup" 子命令
-    func test_axionHelp_showsSetupSubcommand() {
+    @Test("help output contains setup subcommand")
+    func axionHelpShowsSetupSubcommand() {
         let helpText = AxionCLI.helpMessage(for: AxionCLI.self)
-        XCTAssertTrue(
+        #expect(
             helpText.contains("setup"),
             "'--help' output should contain 'setup' subcommand. Got:\n\(helpText)"
         )
     }
 
-    // 验证 --help 输出包含 "doctor" 子命令
-    func test_axionHelp_showsDoctorSubcommand() {
+    @Test("help output contains doctor subcommand")
+    func axionHelpShowsDoctorSubcommand() {
         let helpText = AxionCLI.helpMessage(for: AxionCLI.self)
-        XCTAssertTrue(
+        #expect(
             helpText.contains("doctor"),
             "'--help' output should contain 'doctor' subcommand. Got:\n\(helpText)"
         )
@@ -38,10 +36,10 @@ final class AxionCommandTests: XCTestCase {
 
     // MARK: - AC2: `axion --version` 显示版本号
 
-    // 验证 AxionCLI CommandConfiguration 包含版本号
-    func test_axionVersion_configurationHasVersion() {
+    @Test("configuration has version")
+    func axionVersionConfigurationHasVersion() {
         let version = AxionCLI.configuration.version
-        XCTAssertTrue(
+        #expect(
             version.contains("0.1.0"),
             "Version should contain '0.1.0', got: \(version)"
         )
@@ -49,89 +47,89 @@ final class AxionCommandTests: XCTestCase {
 
     // MARK: - AC3: 未知子命令显示错误提示
 
-    // 验证未知子命令返回解析错误
-    func test_unknownSubcommand_throwsParseError() throws {
-        XCTAssertThrowsError(try AxionCLI.parse(["unknown"])) { error in
-            // 未知子命令不应是 CleanExit（如 helpRequest 或 message）
-            if let cleanExit = error as? CleanExit {
-                XCTFail(
-                    "Unknown subcommand should produce a parse error, not CleanExit. Got: \(cleanExit)"
-                )
-            }
+    @Test("unknown subcommand throws parse error")
+    func unknownSubcommandThrowsParseError() {
+        do {
+            _ = try AxionCLI.parse(["unknown"])
+            Issue.record("Should have thrown an error")
+        } catch is CleanExit {
+            Issue.record("Unknown subcommand should produce a parse error, not CleanExit")
+        } catch {
+            // Expected: parse error
         }
     }
 
     // MARK: - RunCommand 参数解析
 
-    // 验证 RunCommand 正确解析 task 必填参数
-    func test_runCommandParsesTaskArgument() throws {
+    @Test("run command parses task argument")
+    func runCommandParsesTaskArgument() throws {
         let cmd = try RunCommand.parse(["打开计算器"])
-        XCTAssertEqual(cmd.task, "打开计算器")
+        #expect(cmd.task == "打开计算器")
     }
 
-    // 验证 RunCommand 正确解析 --dryrun flag
-    func test_runCommandParsesDryrunFlag() throws {
+    @Test("run command parses dryrun flag")
+    func runCommandParsesDryrunFlag() throws {
         let cmd = try RunCommand.parse(["打开计算器", "--dryrun"])
-        XCTAssertTrue(cmd.dryrun)
+        #expect(cmd.dryrun)
     }
 
-    // 验证 RunCommand 默认 dryrun=false（实际执行模式）
-    func test_runCommandDryrunDefaultIsFalse() throws {
+    @Test("run command dryrun default is false")
+    func runCommandDryrunDefaultIsFalse() throws {
         let cmd = try RunCommand.parse(["打开计算器"])
-        XCTAssertFalse(cmd.dryrun)
+        #expect(!cmd.dryrun)
     }
 
-    // 验证 RunCommand 正确解析 --max-steps 选项
-    func test_runCommandParsesMaxSteps() throws {
+    @Test("run command parses max-steps")
+    func runCommandParsesMaxSteps() throws {
         let cmd = try RunCommand.parse(["打开计算器", "--max-steps", "5"])
-        XCTAssertEqual(cmd.maxSteps, 5)
+        #expect(cmd.maxSteps == 5)
     }
 
-    // 验证 RunCommand 默认 maxSteps=nil
-    func test_runCommandMaxStepsDefaultIsNil() throws {
+    @Test("run command maxSteps default is nil")
+    func runCommandMaxStepsDefaultIsNil() throws {
         let cmd = try RunCommand.parse(["打开计算器"])
-        XCTAssertNil(cmd.maxSteps)
+        #expect(cmd.maxSteps == nil)
     }
 
-    // 验证 RunCommand 正确解析 --max-batches 选项
-    func test_runCommandParsesMaxBatches() throws {
+    @Test("run command parses max-batches")
+    func runCommandParsesMaxBatches() throws {
         let cmd = try RunCommand.parse(["打开计算器", "--max-batches", "3"])
-        XCTAssertEqual(cmd.maxBatches, 3)
+        #expect(cmd.maxBatches == 3)
     }
 
-    // 验证 RunCommand 默认 maxBatches=nil
-    func test_runCommandMaxBatchesDefaultIsNil() throws {
+    @Test("run command maxBatches default is nil")
+    func runCommandMaxBatchesDefaultIsNil() throws {
         let cmd = try RunCommand.parse(["打开计算器"])
-        XCTAssertNil(cmd.maxBatches)
+        #expect(cmd.maxBatches == nil)
     }
 
-    // 验证 RunCommand 正确解析 --allow-foreground flag
-    func test_runCommandParsesAllowForeground() throws {
+    @Test("run command parses allow-foreground flag")
+    func runCommandParsesAllowForeground() throws {
         let cmd = try RunCommand.parse(["打开计算器", "--allow-foreground"])
-        XCTAssertTrue(cmd.allowForeground)
+        #expect(cmd.allowForeground)
     }
 
-    // 验证 RunCommand 正确解析 --verbose flag
-    func test_runCommandParsesVerbose() throws {
+    @Test("run command parses verbose flag")
+    func runCommandParsesVerbose() throws {
         let cmd = try RunCommand.parse(["打开计算器", "--verbose"])
-        XCTAssertTrue(cmd.verbose)
+        #expect(cmd.verbose)
     }
 
-    // 验证 RunCommand 正确解析 --json flag
-    func test_runCommandParsesJson() throws {
+    @Test("run command parses json flag")
+    func runCommandParsesJson() throws {
         let cmd = try RunCommand.parse(["打开计算器", "--json"])
-        XCTAssertTrue(cmd.json)
+        #expect(cmd.json)
     }
 
-    // 验证 RunCommand 缺少 task 参数时报错
-    func test_runCommandRequiresTaskArgument() throws {
-        XCTAssertThrowsError(try RunCommand.parse([])) { error in
-            XCTAssertNotNil(error, "Missing 'task' argument should throw an error")
+    @Test("run command requires task argument")
+    func runCommandRequiresTaskArgument() {
+        #expect(throws: Error.self) {
+            _ = try RunCommand.parse([])
         }
     }
 
-    // 验证 RunCommand 解析所有参数组合
-    func test_runCommandParsesAllArgumentsCombined() throws {
+    @Test("run command parses all arguments combined")
+    func runCommandParsesAllArgumentsCombined() throws {
         let cmd = try RunCommand.parse([
             "打开计算器并输入1+1",
             "--dryrun",
@@ -141,46 +139,40 @@ final class AxionCommandTests: XCTestCase {
             "--verbose",
             "--json"
         ])
-        XCTAssertEqual(cmd.task, "打开计算器并输入1+1")
-        XCTAssertTrue(cmd.dryrun)
-        XCTAssertEqual(cmd.maxSteps, 10)
-        XCTAssertEqual(cmd.maxBatches, 4)
-        XCTAssertTrue(cmd.allowForeground)
-        XCTAssertTrue(cmd.verbose)
-        XCTAssertTrue(cmd.json)
+        #expect(cmd.task == "打开计算器并输入1+1")
+        #expect(cmd.dryrun)
+        #expect(cmd.maxSteps == 10)
+        #expect(cmd.maxBatches == 4)
+        #expect(cmd.allowForeground)
+        #expect(cmd.verbose)
+        #expect(cmd.json)
     }
 
     // MARK: - SetupCommand 骨架验证
 
-    // 验证 SetupCommand 存在且可解析
-    func test_setupCommandExists() throws {
-        let cmd = try SetupCommand.parse([])
-        XCTAssertNotNil(cmd)
+    @Test("setup command exists")
+    func setupCommandExists() throws {
+        _ = try SetupCommand.parse([])
     }
 
     // MARK: - DoctorCommand 骨架验证
 
-    // 验证 DoctorCommand 存在且可解析
-    func test_doctorCommandExists() throws {
-        let cmd = try DoctorCommand.parse([])
-        XCTAssertNotNil(cmd)
+    @Test("doctor command exists")
+    func doctorCommandExists() throws {
+        _ = try DoctorCommand.parse([])
     }
 
     // MARK: - AxionVersion 验证
 
-    // 验证 AxionVersion.current 返回有效版本字符串
-    func test_axionVersion_currentIsNotEmpty() {
-        XCTAssertFalse(
-            AxionVersion.current.isEmpty,
-            "AxionVersion.current should not be empty"
-        )
+    @Test("AxionVersion.current is not empty")
+    func axionVersionCurrentIsNotEmpty() {
+        #expect(!AxionVersion.current.isEmpty, "AxionVersion.current should not be empty")
     }
 
-    // 验证 AxionVersion.current 与 VERSION 文件一致
-    func test_axionVersion_matchesVersionFile() {
-        XCTAssertEqual(
-            AxionVersion.current,
-            "0.1.0",
+    @Test("AxionVersion.current matches VERSION file")
+    func axionVersionMatchesVersionFile() {
+        #expect(
+            AxionVersion.current == "0.1.0",
             "AxionVersion.current should match VERSION file content"
         )
     }

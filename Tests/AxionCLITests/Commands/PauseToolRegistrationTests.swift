@@ -1,21 +1,21 @@
-import XCTest
+import Testing
 import OpenAgentSDK
 
 @testable import AxionCLI
 
-/// Story 7.1 Task 1: 验证 pause_for_human 工具注册到 Agent。
-final class PauseToolRegistrationTests: XCTestCase {
+@Suite("PauseToolRegistration")
+struct PauseToolRegistrationTests {
 
-    /// 验证 createPauseForHumanTool() 返回有效的 ToolProtocol。
-    func test_createPauseForHumanTool_returnsToolProtocol() {
+    @Test("createPauseForHumanTool returns tool protocol")
+    func createPauseForHumanToolReturnsToolProtocol() {
         let tool = createPauseForHumanTool()
-        XCTAssertEqual(tool.name, "pause_for_human")
+        #expect(tool.name == "pause_for_human")
     }
 
-    /// 验证工具可以被放入数组（即兼容 [ToolProtocol]）。
-    func test_pauseTool_canBeAddedToToolsArray() {
+    @Test("pause tool can be added to tools array")
+    func pauseToolCanBeAddedToToolsArray() {
         let tools: [ToolProtocol] = [createPauseForHumanTool()]
-        XCTAssertEqual(tools.count, 1)
-        XCTAssertEqual(tools.first?.name, "pause_for_human")
+        #expect(tools.count == 1)
+        #expect(tools.first?.name == "pause_for_human")
     }
 }

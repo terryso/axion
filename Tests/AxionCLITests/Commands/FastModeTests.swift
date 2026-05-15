@@ -1,27 +1,30 @@
 import Foundation
 import OpenAgentSDK
-import XCTest
+import Testing
 
 @testable import AxionCLI
 
-/// Story 7.2: Tests for --fast mode in RunCommand.
-final class FastModeTests: XCTestCase {
+@Suite("FastMode")
+struct FastModeTests {
 
     // MARK: - Task 1: --fast Flag Registration (AC#1)
 
-    func test_fastFlag_existsInRunCommand() throws {
+    @Test("fast flag exists in RunCommand")
+    func fastFlagExistsInRunCommand() throws {
         let command = try RunCommand.parse(["test-task", "--fast"])
-        XCTAssertTrue(command.fast)
+        #expect(command.fast)
     }
 
-    func test_fastFlag_defaultsToFalse() throws {
+    @Test("fast flag defaults to false")
+    func fastFlagDefaultsToFalse() throws {
         let command = try RunCommand.parse(["test-task"])
-        XCTAssertFalse(command.fast)
+        #expect(!command.fast)
     }
 
     // MARK: - Task 2: Fast Mode System Prompt (AC#2)
 
-    func test_buildFullSystemPrompt_fastMode_includesFastInstructions() throws {
+    @Test("fast mode system prompt includes fast instructions")
+    func buildFullSystemPromptFastModeIncludesFastInstructions() throws {
         let command = try RunCommand.parse(["test-task", "--fast"])
         let prompt = command.buildFullSystemPrompt(
             basePrompt: "Base prompt",
@@ -29,14 +32,15 @@ final class FastModeTests: XCTestCase {
             dryrun: false,
             verbose: false
         )
-        XCTAssertTrue(prompt.contains("FAST mode"))
-        XCTAssertTrue(prompt.contains("1-3 steps max"))
-        XCTAssertTrue(prompt.contains("Skip discovery steps"))
-        XCTAssertTrue(prompt.contains("screenshot for verification"))
-        XCTAssertTrue(prompt.contains("report failure immediately"))
+        #expect(prompt.contains("FAST mode"))
+        #expect(prompt.contains("1-3 steps max"))
+        #expect(prompt.contains("Skip discovery steps"))
+        #expect(prompt.contains("screenshot for verification"))
+        #expect(prompt.contains("report failure immediately"))
     }
 
-    func test_buildFullSystemPrompt_fastMode_beforeDryrun() throws {
+    @Test("fast mode system prompt appears before dryrun")
+    func buildFullSystemPromptFastModeBeforeDryrun() throws {
         let command = try RunCommand.parse(["test-task", "--fast", "--dryrun"])
         let prompt = command.buildFullSystemPrompt(
             basePrompt: "Base prompt",
@@ -46,10 +50,11 @@ final class FastModeTests: XCTestCase {
         )
         let fastRange = prompt.range(of: "FAST mode")!
         let dryrunRange = prompt.range(of: "DRYRUN mode")!
-        XCTAssertLessThan(fastRange.lowerBound, dryrunRange.lowerBound)
+        #expect(fastRange.lowerBound < dryrunRange.lowerBound)
     }
 
-    func test_buildFullSystemPrompt_standardMode_noFastInstructions() throws {
+    @Test("standard mode has no fast instructions")
+    func buildFullSystemPromptStandardModeNoFastInstructions() throws {
         let command = try RunCommand.parse(["test-task"])
         let prompt = command.buildFullSystemPrompt(
             basePrompt: "Base prompt",
@@ -57,47 +62,55 @@ final class FastModeTests: XCTestCase {
             dryrun: false,
             verbose: false
         )
-        XCTAssertFalse(prompt.contains("FAST mode"))
+        #expect(!prompt.contains("FAST mode"))
     }
 
     // MARK: - Task 3: AgentOptions Configuration (AC#3, #4, #6)
 
-    func test_computeEffectiveMaxSteps_fastMode_capsAt5() {
+    @Test("computeEffectiveMaxSteps fast mode caps at 5")
+    func computeEffectiveMaxStepsFastModeCapsAt5() {
         let result = RunCommand.computeEffectiveMaxSteps(fast: true, maxSteps: nil, configMaxSteps: 20)
-        XCTAssertEqual(result, 5)
+        #expect(result == 5)
     }
 
-    func test_computeEffectiveMaxSteps_fastMode_capsExplicitValueAt5() {
+    @Test("computeEffectiveMaxSteps fast mode caps explicit value at 5")
+    func computeEffectiveMaxStepsFastModeCapsExplicitValueAt5() {
         let result = RunCommand.computeEffectiveMaxSteps(fast: true, maxSteps: 10, configMaxSteps: 20)
-        XCTAssertEqual(result, 5)
+        #expect(result == 5)
     }
 
-    func test_computeEffectiveMaxSteps_fastMode_respectsExplicitBelow5() {
+    @Test("computeEffectiveMaxSteps fast mode respects explicit below 5")
+    func computeEffectiveMaxStepsFastModeRespectsExplicitBelow5() {
         let result = RunCommand.computeEffectiveMaxSteps(fast: true, maxSteps: 3, configMaxSteps: 20)
-        XCTAssertEqual(result, 3)
+        #expect(result == 3)
     }
 
-    func test_computeEffectiveMaxSteps_standardMode_usesConfigDefault() {
+    @Test("computeEffectiveMaxSteps standard mode uses config default")
+    func computeEffectiveMaxStepsStandardModeUsesConfigDefault() {
         let result = RunCommand.computeEffectiveMaxSteps(fast: false, maxSteps: nil, configMaxSteps: 20)
-        XCTAssertEqual(result, 20)
+        #expect(result == 20)
     }
 
-    func test_computeEffectiveMaxSteps_standardMode_respectsExplicitOverride() {
+    @Test("computeEffectiveMaxSteps standard mode respects explicit override")
+    func computeEffectiveMaxStepsStandardModeRespectsExplicitOverride() {
         let result = RunCommand.computeEffectiveMaxSteps(fast: false, maxSteps: 30, configMaxSteps: 20)
-        XCTAssertEqual(result, 30)
+        #expect(result == 30)
     }
 
-    func test_computeEffectiveMaxTokens_fastMode() {
-        XCTAssertEqual(RunCommand.computeEffectiveMaxTokens(fast: true), 2048)
+    @Test("computeEffectiveMaxTokens fast mode")
+    func computeEffectiveMaxTokensFastMode() {
+        #expect(RunCommand.computeEffectiveMaxTokens(fast: true) == 2048)
     }
 
-    func test_computeEffectiveMaxTokens_standardMode() {
-        XCTAssertEqual(RunCommand.computeEffectiveMaxTokens(fast: false), 4096)
+    @Test("computeEffectiveMaxTokens standard mode")
+    func computeEffectiveMaxTokensStandardMode() {
+        #expect(RunCommand.computeEffectiveMaxTokens(fast: false) == 4096)
     }
 
     // MARK: - Task 4-5: Output Handler Fast Mode (AC#5, #7)
 
-    func test_terminalHandler_fastMode_successShowsFastCompletion() {
+    @Test("terminal handler fast mode success shows fast completion")
+    func terminalHandlerFastModeSuccessShowsFastCompletion() {
         var lines: [String] = []
         let output = TerminalOutput(write: { lines.append($0) })
         let handler = SDKTerminalOutputHandler(output: output, mode: "fast")
@@ -107,12 +120,13 @@ final class FastModeTests: XCTestCase {
         handler.handleMessage(.result(.init(subtype: .success, text: "Done", usage: nil, numTurns: 1, durationMs: 100)))
 
         let combined = lines.joined(separator: "\n")
-        XCTAssertTrue(combined.contains("Fast mode 完成"))
-        XCTAssertTrue(combined.contains("1 步"))
-        XCTAssertTrue(combined.contains("秒"))
+        #expect(combined.contains("Fast mode 完成"))
+        #expect(combined.contains("1 步"))
+        #expect(combined.contains("秒"))
     }
 
-    func test_terminalHandler_fastMode_errorMaxTurnsShowsRetrySuggestion() {
+    @Test("terminal handler fast mode error max turns shows retry suggestion")
+    func terminalHandlerFastModeErrorMaxTurnsShowsRetrySuggestion() {
         var lines: [String] = []
         let output = TerminalOutput(write: { lines.append($0) })
         let handler = SDKTerminalOutputHandler(output: output, mode: "fast")
@@ -121,11 +135,12 @@ final class FastModeTests: XCTestCase {
         handler.handleMessage(.result(.init(subtype: .errorMaxTurns, text: "", usage: nil, numTurns: 5, durationMs: 0)))
 
         let combined = lines.joined(separator: "\n")
-        XCTAssertTrue(combined.contains("最大步数"))
-        XCTAssertTrue(combined.contains("去掉 --fast"))
+        #expect(combined.contains("最大步数"))
+        #expect(combined.contains("去掉 --fast"))
     }
 
-    func test_terminalHandler_fastMode_errorDuringExecutionShowsRetrySuggestion() {
+    @Test("terminal handler fast mode error during execution shows retry suggestion")
+    func terminalHandlerFastModeErrorDuringExecutionShowsRetrySuggestion() {
         var lines: [String] = []
         let output = TerminalOutput(write: { lines.append($0) })
         let handler = SDKTerminalOutputHandler(output: output, mode: "fast")
@@ -134,11 +149,12 @@ final class FastModeTests: XCTestCase {
         handler.handleMessage(.result(.init(subtype: .errorDuringExecution, text: "", usage: nil, numTurns: 0, durationMs: 0)))
 
         let combined = lines.joined(separator: "\n")
-        XCTAssertTrue(combined.contains("执行错误"))
-        XCTAssertTrue(combined.contains("去掉 --fast"))
+        #expect(combined.contains("执行错误"))
+        #expect(combined.contains("去掉 --fast"))
     }
 
-    func test_terminalHandler_standardMode_successNoFastMessage() {
+    @Test("terminal handler standard mode success no fast message")
+    func terminalHandlerStandardModeSuccessNoFastMessage() {
         var lines: [String] = []
         let output = TerminalOutput(write: { lines.append($0) })
         let handler = SDKTerminalOutputHandler(output: output, mode: "standard")
@@ -147,10 +163,11 @@ final class FastModeTests: XCTestCase {
         handler.handleMessage(.result(.init(subtype: .success, text: "Done", usage: nil, numTurns: 1, durationMs: 100)))
 
         let combined = lines.joined(separator: "\n")
-        XCTAssertFalse(combined.contains("Fast mode 完成"))
+        #expect(!combined.contains("Fast mode 完成"))
     }
 
-    func test_terminalHandler_fastMode_displayRunStartShowsFastMode() {
+    @Test("terminal handler fast mode displayRunStart shows fast mode")
+    func terminalHandlerFastModeDisplayRunStartShowsFastMode() {
         var lines: [String] = []
         let output = TerminalOutput(write: { lines.append($0) })
         let handler = SDKTerminalOutputHandler(output: output, mode: "fast")
@@ -158,12 +175,13 @@ final class FastModeTests: XCTestCase {
         handler.displayRunStart(runId: "r1", task: "Open Calculator")
 
         let combined = lines.joined(separator: "\n")
-        XCTAssertTrue(combined.contains("fast"))
+        #expect(combined.contains("fast"))
     }
 
     // MARK: SDKJSONOutputHandler — Fast Mode (AC#7)
 
-    func test_jsonHandler_fastMode_includesModeField() {
+    @Test("JSON handler fast mode includes mode field")
+    func jsonHandlerFastModeIncludesModeField() {
         var captured: String?
         let handler = SDKJSONOutputHandler(mode: "fast", write: { captured = $0 })
 
@@ -171,24 +189,26 @@ final class FastModeTests: XCTestCase {
         handler.handleMessage(.result(.init(subtype: .success, text: "Done", usage: nil, numTurns: 1, durationMs: 100)))
         handler.displayCompletion()
 
-        XCTAssertNotNil(captured)
+        #expect(captured != nil)
         let json = try? JSONSerialization.jsonObject(with: captured!.data(using: .utf8)!) as? [String: Any]
-        XCTAssertEqual(json?["mode"] as? String, "fast")
+        #expect(json?["mode"] as? String == "fast")
     }
 
-    func test_jsonHandler_standardMode_includesModeField() {
+    @Test("JSON handler standard mode includes mode field")
+    func jsonHandlerStandardModeIncludesModeField() {
         var captured: String?
         let handler = SDKJSONOutputHandler(mode: "standard", write: { captured = $0 })
 
         handler.displayRunStart(runId: "r1", task: "Open Calc")
         handler.displayCompletion()
 
-        XCTAssertNotNil(captured)
+        #expect(captured != nil)
         let json = try? JSONSerialization.jsonObject(with: captured!.data(using: .utf8)!) as? [String: Any]
-        XCTAssertEqual(json?["mode"] as? String, "standard")
+        #expect(json?["mode"] as? String == "standard")
     }
 
-    func test_jsonHandler_fastMode_preservesOtherFields() {
+    @Test("JSON handler fast mode preserves other fields")
+    func jsonHandlerFastModePreservesOtherFields() {
         var captured: String?
         let handler = SDKJSONOutputHandler(mode: "fast", write: { captured = $0 })
 
@@ -197,35 +217,39 @@ final class FastModeTests: XCTestCase {
         handler.handleMessage(.result(.init(subtype: .success, text: "Done", usage: nil, numTurns: 1, durationMs: 100)))
         handler.displayCompletion()
 
-        XCTAssertNotNil(captured)
+        #expect(captured != nil)
         let json = try? JSONSerialization.jsonObject(with: captured!.data(using: .utf8)!) as? [String: Any]
-        XCTAssertEqual(json?["runId"] as? String, "r1")
-        XCTAssertEqual(json?["task"] as? String, "Open Calc")
-        XCTAssertEqual(json?["status"] as? String, "success")
-        XCTAssertEqual(json?["numTurns"] as? Int, 1)
-        XCTAssertEqual(json?["mode"] as? String, "fast")
-        XCTAssertNotNil(json?["steps"])
+        #expect(json?["runId"] as? String == "r1")
+        #expect(json?["task"] as? String == "Open Calc")
+        #expect(json?["status"] as? String == "success")
+        #expect(json?["numTurns"] as? Int == 1)
+        #expect(json?["mode"] as? String == "fast")
+        #expect(json?["steps"] != nil)
     }
 
     // MARK: - Task 6: Trace Recording (AC#8)
 
-    func test_traceMode_fastValue() {
+    @Test("trace mode fast value")
+    func traceModeFastValue() {
         let mode = RunCommand.traceMode(fast: true, dryrun: false)
-        XCTAssertEqual(mode, "fast")
+        #expect(mode == "fast")
     }
 
-    func test_traceMode_fastWithDryrun_fastTakesPriority() {
+    @Test("trace mode fast with dryrun takes priority")
+    func traceModeFastWithDryrunFastTakesPriority() {
         let mode = RunCommand.traceMode(fast: true, dryrun: true)
-        XCTAssertEqual(mode, "fast")
+        #expect(mode == "fast")
     }
 
-    func test_traceMode_standardValue() {
+    @Test("trace mode standard value")
+    func traceModeStandardValue() {
         let mode = RunCommand.traceMode(fast: false, dryrun: false)
-        XCTAssertEqual(mode, "standard")
+        #expect(mode == "standard")
     }
 
-    func test_traceMode_dryrunValue() {
+    @Test("trace mode dryrun value")
+    func traceModeDryrunValue() {
         let mode = RunCommand.traceMode(fast: false, dryrun: true)
-        XCTAssertEqual(mode, "dryrun")
+        #expect(mode == "dryrun")
     }
 }

@@ -1,40 +1,28 @@
-import XCTest
+import Foundation
+import Testing
 import OpenAgentSDK
 
 @testable import AxionCLI
 
-// [P0] MemoryListCommand type existence, output format
-// [P1] Edge cases (empty memory, multiple domains, date display)
-// Story 4.3 AC: #5
-
-// MARK: - MemoryListCommand ATDD Tests
-
-/// ATDD red-phase tests for `axion memory list` command (Story 4.3 AC5).
-/// Tests that MemoryListCommand:
-/// - Lists all domains with entry counts and last-used dates
-/// - Handles empty Memory gracefully
-/// - Outputs correct format
-///
-/// TDD RED PHASE: These tests will not compile until MemoryListCommand is implemented
-/// in Sources/AxionCLI/Commands/MemoryListCommand.swift.
-final class MemoryListCommandTests: XCTestCase {
+@Suite("MemoryListCommand")
+struct MemoryListCommandTests {
 
     // MARK: - P0: Type Existence
 
-    func test_memoryListCommand_typeExists() {
+    @Test("MemoryListCommand type exists")
+    func memoryListCommandTypeExists() {
         let _ = MemoryListCommand.self
     }
 
     // MARK: - P0 AC5: Display app list with entry counts and last-used time
 
-    func test_listOutput_containsAppMemoryHeader() async throws {
-        // Use a temp directory as memory store
+    @Test("list output contains app memory header")
+    func listOutputContainsAppMemoryHeader() async throws {
         let tempDir = try createTempMemoryDir()
         defer { try? FileManager.default.removeItem(atPath: tempDir) }
 
         let store = FileBasedMemoryStore(memoryDir: tempDir)
 
-        // Add some data
         let entry = KnowledgeEntry(
             id: UUID().uuidString,
             content: "Test run",
@@ -46,25 +34,25 @@ final class MemoryListCommandTests: XCTestCase {
 
         let output = try await MemoryListCommand.listMemory(in: tempDir)
 
-        XCTAssertTrue(output.contains("App Memory") || output.contains("Memory"),
+        #expect(output.contains("App Memory") || output.contains("Memory"),
             "Output should contain a header line for memory listing")
     }
 
-    func test_listOutput_showsDomainEntryCountAndDate() async throws {
+    @Test("list output shows domain entry count and date")
+    func listOutputShowsDomainEntryCountAndDate() async throws {
         let tempDir = try createTempMemoryDir()
         defer { try? FileManager.default.removeItem(atPath: tempDir) }
 
         let store = FileBasedMemoryStore(memoryDir: tempDir)
         let domain = "com.apple.calculator"
 
-        // Add 3 entries with different dates
         let now = Date()
         for i in 0..<3 {
             let entry = KnowledgeEntry(
                 id: "entry-\(i)",
                 content: "Run \(i)",
                 tags: ["app:\(domain)", "success"],
-                createdAt: now.addingTimeInterval(Double(-i) * 86400), // i days ago
+                createdAt: now.addingTimeInterval(Double(-i) * 86400),
                 sourceRunId: nil
             )
             try await store.save(domain: domain, knowledge: entry)
@@ -72,19 +60,18 @@ final class MemoryListCommandTests: XCTestCase {
 
         let output = try await MemoryListCommand.listMemory(in: tempDir)
 
-        XCTAssertTrue(output.contains(domain),
-            "Output should show the domain name")
-        XCTAssertTrue(output.contains("3") || output.contains("3 entries"),
+        #expect(output.contains(domain), "Output should show the domain name")
+        #expect(output.contains("3") || output.contains("3 entries"),
             "Output should show entry count for the domain")
     }
 
-    func test_listOutput_multipleDomains_showsAll() async throws {
+    @Test("list output multiple domains shows all")
+    func listOutputMultipleDomainsShowsAll() async throws {
         let tempDir = try createTempMemoryDir()
         defer { try? FileManager.default.removeItem(atPath: tempDir) }
 
         let store = FileBasedMemoryStore(memoryDir: tempDir)
 
-        // Add data for 2 domains
         let calcEntry = KnowledgeEntry(
             id: "calc-1",
             content: "Calculator run",
@@ -104,40 +91,38 @@ final class MemoryListCommandTests: XCTestCase {
 
         let output = try await MemoryListCommand.listMemory(in: tempDir)
 
-        XCTAssertTrue(output.contains("com.apple.calculator"),
-            "Output should include Calculator domain")
-        XCTAssertTrue(output.contains("com.apple.finder"),
-            "Output should include Finder domain")
-        XCTAssertTrue(output.contains("Total") || output.contains("total") || output.contains("2"),
+        #expect(output.contains("com.apple.calculator"), "Output should include Calculator domain")
+        #expect(output.contains("com.apple.finder"), "Output should include Finder domain")
+        #expect(output.contains("Total") || output.contains("total") || output.contains("2"),
             "Output should show total count of apps/entries")
     }
 
     // MARK: - P0 AC5: Empty Memory output
 
-    func test_listOutput_noMemory_showsEmptyMessage() async throws {
+    @Test("list output no memory shows empty message")
+    func listOutputNoMemoryShowsEmptyMessage() async throws {
         let tempDir = try createTempMemoryDir()
         defer { try? FileManager.default.removeItem(atPath: tempDir) }
 
         let output = try await MemoryListCommand.listMemory(in: tempDir)
 
-        // Should not crash and should indicate no memory
-        XCTAssertTrue(output.contains("No") || output.contains("empty") || output.contains("0") || output.contains("Total: 0"),
+        #expect(output.contains("No") || output.contains("empty") || output.contains("0") || output.contains("Total: 0"),
             "Output should indicate no memory data exists")
     }
 
-    func test_listOutput_nonExistentDirectory_showsEmptyMessage() async throws {
+    @Test("list output non-existent directory shows empty message")
+    func listOutputNonExistentDirectoryShowsEmptyMessage() async throws {
         let tempDir = "/tmp/axion-test-nonexistent-\(UUID().uuidString)"
 
         let output = try await MemoryListCommand.listMemory(in: tempDir)
 
-        // Should not crash even if directory doesn't exist
-        XCTAssertFalse(output.isEmpty,
-            "Should return a non-empty string even for non-existent directory")
+        #expect(!output.isEmpty, "Should return a non-empty string even for non-existent directory")
     }
 
     // MARK: - P1: Last used date display
 
-    func test_listOutput_showsLastUsedDate() async throws {
+    @Test("list output shows last used date")
+    func listOutputShowsLastUsedDate() async throws {
         let tempDir = try createTempMemoryDir()
         defer { try? FileManager.default.removeItem(atPath: tempDir) }
 
@@ -155,12 +140,10 @@ final class MemoryListCommandTests: XCTestCase {
 
         let output = try await MemoryListCommand.listMemory(in: tempDir)
 
-        // Should contain a date-like string (YYYY-MM-DD or similar)
         let datePattern = #"20\d{2}-\d{2}-\d{2}"#
         let regex = try NSRegularExpression(pattern: datePattern)
         let matches = regex.matches(in: output, range: NSRange(output.startIndex..., in: output))
-        XCTAssertFalse(matches.isEmpty,
-            "Output should contain a date representation for 'last used'")
+        #expect(!matches.isEmpty, "Output should contain a date representation for 'last used'")
     }
 
     // MARK: - Helpers

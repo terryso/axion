@@ -1,30 +1,31 @@
-import XCTest
+import Testing
 import ArgumentParser
 @testable import AxionCLI
 
-// [P0] ATDD GREEN-PHASE — Story 6.1 AC1
+@Suite("McpCommand")
+struct McpCommandTests {
 
-final class McpCommandTests: XCTestCase {
-
-    // MARK: - AC1: McpCommand registration
-
-    func test_mcpCommand_registeredInAxionCLI() {
+    @Test("mcpCommand registered in AxionCLI")
+    func mcpCommandRegisteredInAxionCLI() {
         let names = AxionCLI.configuration.subcommands.map { $0.configuration.commandName }
-        XCTAssertTrue(names.contains("mcp"), "McpCommand should be registered as a subcommand")
+        #expect(names.contains("mcp"), "McpCommand should be registered as a subcommand")
     }
 
-    func test_mcpCommand_defaultVerbose_isFalse() throws {
+    @Test("mcpCommand default verbose is false")
+    func mcpCommandDefaultVerboseIsFalse() throws {
         let cmd = try McpCommand.parse([])
-        XCTAssertFalse(cmd.verbose, "Default verbose should be false")
+        #expect(!cmd.verbose, "Default verbose should be false")
     }
 
-    func test_mcpCommand_parsesVerbose() throws {
+    @Test("mcpCommand parses verbose")
+    func mcpCommandParsesVerbose() throws {
         let cmd = try McpCommand.parse(["--verbose"])
-        XCTAssertTrue(cmd.verbose)
+        #expect(cmd.verbose)
     }
 
-    func test_mcpCommand_helpContainsMCPDescription() {
+    @Test("mcpCommand help contains MCP description")
+    func mcpCommandHelpContainsMCPDescription() {
         let helpText = McpCommand.configuration.abstract
-        XCTAssertTrue(helpText.contains("MCP"), "Abstract should mention MCP")
+        #expect(helpText.contains("MCP"), "Abstract should mention MCP")
     }
 }

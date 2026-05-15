@@ -1,10 +1,10 @@
-import XCTest
+import Foundation
+import Testing
 @testable import AxionCLI
 @testable import AxionCore
 
 // MARK: - MockDoctorIO
 
-/// MockDoctorIO -- 实现 DoctorIO 协议，捕获输出到数组，用于单元测试。
 final class MockDoctorIO: DoctorIO {
     var capturedOutput: [String] = []
 
@@ -13,19 +13,15 @@ final class MockDoctorIO: DoctorIO {
     }
 }
 
-// [P0] 基础设施验证 -- CheckResult, DoctorReport, DoctorIO, SystemChecker 类型存在性
-// [P1] 行为验证 -- doctor 检查逻辑和输出格式
-// Story 2.4 AC: #1-#9
+@Suite("DoctorCommand")
+struct DoctorCommandTests {
 
-final class DoctorCommandTests: XCTestCase {
+    let tempDir: String
+    let configFilePath: String
 
-    private var tempDir: String!
-    private var configFilePath: String!
-
-    override func setUp() async throws {
-        try await super.setUp()
+    init() {
         tempDir = NSTemporaryDirectory() + "axion-test-doctor-\(UUID().uuidString)"
-        try FileManager.default.createDirectory(
+        try? FileManager.default.createDirectory(
             atPath: tempDir,
             withIntermediateDirectories: true,
             attributes: [.posixPermissions: 0o755]
@@ -33,77 +29,77 @@ final class DoctorCommandTests: XCTestCase {
         configFilePath = tempDir + "/config.json"
     }
 
-    override func tearDown() async throws {
-        if let tempDir = tempDir {
-            try? FileManager.default.removeItem(atPath: tempDir)
-        }
-        try await super.tearDown()
-    }
-
     // MARK: - [P0] 类型存在性
 
-    func test_checkStatus_enumExists() throws {
+    @Test("CheckStatus enum exists")
+    func checkStatusEnumExists() {
         _ = [CheckStatus.ok, .fail]
     }
 
-    func test_checkResult_structExists() throws {
+    @Test("CheckResult struct exists")
+    func checkResultStructExists() {
         let _ = CheckResult(name: "test", status: .ok, detail: "detail", fixHint: nil)
     }
 
-    func test_doctorReport_allOkComputed() throws {
+    @Test("DoctorReport allOk computed")
+    func doctorReportAllOkComputed() {
         let report = DoctorReport(results: [
             CheckResult(name: "a", status: .ok, detail: "", fixHint: nil),
             CheckResult(name: "b", status: .ok, detail: "", fixHint: nil),
         ])
-        XCTAssertTrue(report.allOk)
+        #expect(report.allOk)
     }
 
-    func test_doctorReport_notAllOkComputed() throws {
+    @Test("DoctorReport not allOk computed")
+    func doctorReportNotAllOkComputed() {
         let report = DoctorReport(results: [
             CheckResult(name: "a", status: .ok, detail: "", fixHint: nil),
             CheckResult(name: "b", status: .fail, detail: "broken", fixHint: "fix it"),
         ])
-        XCTAssertFalse(report.allOk)
+        #expect(!report.allOk)
     }
 
-    func test_doctorIO_protocolExists() throws {
+    @Test("DoctorIO protocol exists")
+    func doctorIOProtocolExists() {
         let mock: DoctorIO = MockDoctorIO()
         _ = mock
     }
 
-    func test_mockDoctorIO_capturesWrites() throws {
+    @Test("MockDoctorIO captures writes")
+    func mockDoctorIOCapturesWrites() {
         let mock = MockDoctorIO()
         mock.write("hello")
         mock.write("world")
-        XCTAssertEqual(mock.capturedOutput, ["hello", "world"])
+        #expect(mock.capturedOutput == ["hello", "world"])
     }
 
-    func test_terminalDoctorIO_typeExists() throws {
+    @Test("TerminalDoctorIO type exists")
+    func terminalDoctorIOTypeExists() {
         _ = TerminalDoctorIO.self
     }
 
-    func test_systemChecker_typeExists() throws {
+    @Test("SystemChecker type exists")
+    func systemCheckerTypeExists() {
         _ = SystemChecker.self
     }
 
     // MARK: - [P0] AC1/AC2: API Key 检查
 
-    func test_doctor_reportsApiKeyMissing_whenNoConfig() throws {
+    @Test("doctor reports API key missing when no config")
+    func doctorReportsApiKeyMissingWhenNoConfig() throws {
         let mock = MockDoctorIO()
         let report = DoctorCommand.runDoctor(io: mock, configDirectory: tempDir)
 
-        // 无配置文件时，API Key 检查应失败
         let apiKeyCheck = report.results.first { $0.name.contains("API Key") }
-        XCTAssertNotNil(apiKeyCheck)
-        XCTAssertEqual(apiKeyCheck?.status, .fail)
+        #expect(apiKeyCheck != nil)
+        #expect(apiKeyCheck?.status == .fail)
 
-        // 输出应包含 API Key 缺失信息
         let output = mock.capturedOutput.joined(separator: "\n")
-        XCTAssertTrue(output.contains("API Key"))
+        #expect(output.contains("API Key"))
     }
 
-    func test_doctor_reportsApiKeyOk_whenConfigured() throws {
-        // 创建包含 API Key 的配置文件
+    @Test("doctor reports API key ok when configured")
+    func doctorReportsApiKeyOkWhenConfigured() throws {
         let configJSON = """
         {"apiKey": "sk-ant-test-key-1234567890"}
         """
@@ -113,12 +109,12 @@ final class DoctorCommandTests: XCTestCase {
         let report = DoctorCommand.runDoctor(io: mock, configDirectory: tempDir)
 
         let apiKeyCheck = report.results.first { $0.name.contains("API Key") }
-        XCTAssertNotNil(apiKeyCheck)
-        XCTAssertEqual(apiKeyCheck?.status, .ok)
+        #expect(apiKeyCheck != nil)
+        #expect(apiKeyCheck?.status == .ok)
     }
 
-    func test_doctor_reportsApiKeyMissing_whenNoKey() throws {
-        // 创建不含 API Key 的配置文件
+    @Test("doctor reports API key missing when no key")
+    func doctorReportsApiKeyMissingWhenNoKey() throws {
         let configJSON = """
         {"model": "claude-sonnet-4-20250514"}
         """
@@ -128,13 +124,14 @@ final class DoctorCommandTests: XCTestCase {
         let report = DoctorCommand.runDoctor(io: mock, configDirectory: tempDir)
 
         let apiKeyCheck = report.results.first { $0.name.contains("API Key") }
-        XCTAssertNotNil(apiKeyCheck)
-        XCTAssertEqual(apiKeyCheck?.status, .fail)
+        #expect(apiKeyCheck != nil)
+        #expect(apiKeyCheck?.status == .fail)
     }
 
     // MARK: - [P0] AC3: Accessibility 权限检查
 
-    func test_doctor_reportsAccessibilityStatus() throws {
+    @Test("doctor reports accessibility status")
+    func doctorReportsAccessibilityStatus() throws {
         let configJSON = """
         {"apiKey": "sk-ant-test-key-1234567890"}
         """
@@ -144,12 +141,13 @@ final class DoctorCommandTests: XCTestCase {
         let _ = DoctorCommand.runDoctor(io: mock, configDirectory: tempDir)
 
         let output = mock.capturedOutput.joined(separator: "\n")
-        XCTAssertTrue(output.contains("Accessibility"), "输出应包含 Accessibility 检查结果")
+        #expect(output.contains("Accessibility"), "输出应包含 Accessibility 检查结果")
     }
 
     // MARK: - [P0] AC4: 屏幕录制权限检查
 
-    func test_doctor_reportsScreenRecordingStatus() throws {
+    @Test("doctor reports screen recording status")
+    func doctorReportsScreenRecordingStatus() throws {
         let configJSON = """
         {"apiKey": "sk-ant-test-key-1234567890"}
         """
@@ -159,12 +157,13 @@ final class DoctorCommandTests: XCTestCase {
         let _ = DoctorCommand.runDoctor(io: mock, configDirectory: tempDir)
 
         let output = mock.capturedOutput.joined(separator: "\n")
-        XCTAssertTrue(output.contains("屏幕录制"), "输出应包含屏幕录制检查结果")
+        #expect(output.contains("屏幕录制"), "输出应包含屏幕录制检查结果")
     }
 
     // MARK: - [P0] AC5: macOS 版本检查
 
-    func test_doctor_reportsMacOSVersion() throws {
+    @Test("doctor reports macOS version")
+    func doctorReportsMacOSVersion() throws {
         let configJSON = """
         {"apiKey": "sk-ant-test-key-1234567890"}
         """
@@ -174,20 +173,17 @@ final class DoctorCommandTests: XCTestCase {
         let _ = DoctorCommand.runDoctor(io: mock, configDirectory: tempDir)
 
         let output = mock.capturedOutput.joined(separator: "\n")
-        XCTAssertTrue(output.contains("macOS"), "输出应包含 macOS 版本信息")
+        #expect(output.contains("macOS"), "输出应包含 macOS 版本信息")
     }
 
-    func test_doctor_reportsUnsupportedMacOS() throws {
-        // 验证 SystemChecker 的版本检查逻辑
-        // 当前测试机器应该运行 macOS 14+（项目最低要求）
+    @Test("doctor reports unsupported macOS")
+    func doctorReportsUnsupportedMacOS() throws {
         let version = SystemChecker.macOSVersion()
-        XCTAssertFalse(version.isEmpty, "macOS 版本字符串不应为空")
+        #expect(!version.isEmpty, "macOS 版本字符串不应为空")
 
-        // 开发/CI 环境应满足最低版本要求
         let isSupported = SystemChecker.isMacOSVersionSupported()
-        XCTAssertTrue(isSupported, "开发/CI 环境应运行 macOS 14+ (当前: \(version))")
+        #expect(isSupported, "开发/CI 环境应运行 macOS 14+ (当前: \(version))")
 
-        // 验证 doctor 命令输出包含版本号
         let configJSON = """
         {"apiKey": "sk-ant-test-key-1234567890"}
         """
@@ -197,13 +193,14 @@ final class DoctorCommandTests: XCTestCase {
         let report = DoctorCommand.runDoctor(io: mock, configDirectory: tempDir)
 
         let macOSCheck = report.results.first { $0.name.contains("macOS") }
-        XCTAssertNotNil(macOSCheck, "应包含 macOS 版本检查项")
-        XCTAssertTrue(macOSCheck!.detail.contains(version), "详情应包含当前版本号")
+        #expect(macOSCheck != nil, "应包含 macOS 版本检查项")
+        #expect(macOSCheck!.detail.contains(version), "详情应包含当前版本号")
     }
 
     // MARK: - [P0] AC6: 所有检查通过
 
-    func test_doctor_showsAllChecksPassed_whenEverythingOk() throws {
+    @Test("doctor shows all checks passed when everything ok")
+    func doctorShowsAllChecksPassedWhenEverythingOk() throws {
         let configJSON = """
         {"apiKey": "sk-ant-test-key-1234567890"}
         """
@@ -213,44 +210,40 @@ final class DoctorCommandTests: XCTestCase {
         let report = DoctorCommand.runDoctor(io: mock, configDirectory: tempDir)
 
         let output = mock.capturedOutput.joined(separator: "\n")
-        // 验证输出包含通过或失败汇总（格式正确性）
         let hasAllPassed = output.contains("All checks passed")
         let hasFailureCount = output.contains("check(s) failed")
-        XCTAssertTrue(hasAllPassed || hasFailureCount, "输出应包含通过或失败汇总")
+        #expect(hasAllPassed || hasFailureCount, "输出应包含通过或失败汇总")
 
-        // 验证 report 的 allOk 与输出汇总一致
         if report.allOk {
-            XCTAssertTrue(hasAllPassed, "allOk 时输出应包含 'All checks passed'")
+            #expect(hasAllPassed, "allOk 时输出应包含 'All checks passed'")
         } else {
-            XCTAssertTrue(hasFailureCount, "有失败项时输出应包含 'check(s) failed'")
+            #expect(hasFailureCount, "有失败项时输出应包含 'check(s) failed'")
         }
     }
 
     // MARK: - [P0] AC7: 明确修复建议
 
-    func test_doctor_showsFixHints_forFailedChecks() throws {
-        // 无配置文件，确保有失败项
+    @Test("doctor shows fix hints for failed checks")
+    func doctorShowsFixHintsForFailedChecks() throws {
         let mock = MockDoctorIO()
         let report = DoctorCommand.runDoctor(io: mock, configDirectory: tempDir)
 
-        // 至少有一个失败项（无配置文件）
         let failedChecks = report.results.filter { $0.status == .fail }
-        XCTAssertFalse(failedChecks.isEmpty, "无配置文件时应有失败项")
+        #expect(!failedChecks.isEmpty, "无配置文件时应有失败项")
 
-        // 失败项应有修复建议
         for check in failedChecks {
-            XCTAssertNotNil(check.fixHint, "失败项 '\(check.name)' 应有修复建议")
-            XCTAssertFalse(check.fixHint!.isEmpty, "失败项 '\(check.name)' 的修复建议不应为空")
+            #expect(check.fixHint != nil, "失败项 '\(check.name)' 应有修复建议")
+            #expect(!check.fixHint!.isEmpty, "失败项 '\(check.name)' 的修复建议不应为空")
         }
 
-        // 输出中应包含修复建议
         let output = mock.capturedOutput.joined(separator: "\n")
-        XCTAssertTrue(output.contains("axion setup") || output.contains("系统设置"), "输出应包含具体修复步骤")
+        #expect(output.contains("axion setup") || output.contains("系统设置"), "输出应包含具体修复步骤")
     }
 
     // MARK: - [P0] AC8: API Key 不泄露
 
-    func test_doctor_masksApiKey_inOutput() throws {
+    @Test("doctor masks API key in output")
+    func doctorMasksApiKeyInOutput() throws {
         let testKey = "sk-ant-api03-supersecret123456"
         let configJSON = """
         {"apiKey": "\(testKey)"}
@@ -261,14 +254,14 @@ final class DoctorCommandTests: XCTestCase {
         let _ = DoctorCommand.runDoctor(io: mock, configDirectory: tempDir)
 
         let output = mock.capturedOutput.joined(separator: "\n")
-        XCTAssertFalse(output.contains(testKey), "完整 API Key 不应出现在终端输出中 (NFR9)")
-        XCTAssertFalse(output.contains("supersecret"), "API Key 敏感部分不应出现在输出中")
+        #expect(!output.contains(testKey), "完整 API Key 不应出现在终端输出中 (NFR9)")
+        #expect(!output.contains("supersecret"), "API Key 敏感部分不应出现在输出中")
     }
 
     // MARK: - [P0] AC9: 配置文件完整性检查
 
-    func test_doctor_reportsCorruptConfig() throws {
-        // 写入无效 JSON
+    @Test("doctor reports corrupt config")
+    func doctorReportsCorruptConfig() throws {
         let corruptJSON = "}{not valid json"
         try corruptJSON.write(toFile: configFilePath, atomically: true, encoding: .utf8)
 
@@ -276,24 +269,24 @@ final class DoctorCommandTests: XCTestCase {
         let report = DoctorCommand.runDoctor(io: mock, configDirectory: tempDir)
 
         let configCheck = report.results.first { $0.name.contains("配置文件") }
-        XCTAssertNotNil(configCheck, "应包含配置文件检查项")
-        XCTAssertEqual(configCheck?.status, .fail, "损坏的配置文件应报告失败")
+        #expect(configCheck != nil, "应包含配置文件检查项")
+        #expect(configCheck?.status == .fail, "损坏的配置文件应报告失败")
 
         let output = mock.capturedOutput.joined(separator: "\n")
-        XCTAssertTrue(output.contains("axion setup"), "损坏配置应建议运行 axion setup")
+        #expect(output.contains("axion setup"), "损坏配置应建议运行 axion setup")
     }
 
     // MARK: - [P1] 失败计数输出
 
-    func test_doctor_showsFailureCount_whenChecksFail() throws {
-        // 无配置文件，确保有失败项
+    @Test("doctor shows failure count when checks fail")
+    func doctorShowsFailureCountWhenChecksFail() throws {
         let mock = MockDoctorIO()
         let report = DoctorCommand.runDoctor(io: mock, configDirectory: tempDir)
 
         let failedCount = report.results.filter { $0.status == .fail }.count
         if failedCount > 0 {
             let output = mock.capturedOutput.joined(separator: "\n")
-            XCTAssertTrue(
+            #expect(
                 output.contains("\(failedCount) check(s) failed"),
                 "输出应显示失败检查数: \(failedCount)"
             )
@@ -302,8 +295,8 @@ final class DoctorCommandTests: XCTestCase {
 
     // MARK: - [P0] AC5 (Story 4.1): Memory 状态检查
 
-    func test_doctor_reportsMemoryStatus_whenMemoryExists() async throws {
-        // Create a temp directory simulating ~/.axion/memory/ with domain files
+    @Test("doctor reports memory status when memory exists")
+    func doctorReportsMemoryStatusWhenMemoryExists() async throws {
         let memoryDir = tempDir + "/memory"
         try FileManager.default.createDirectory(
             atPath: memoryDir,
@@ -311,7 +304,6 @@ final class DoctorCommandTests: XCTestCase {
             attributes: [.posixPermissions: 0o700]
         )
 
-        // Create a domain file with entries
         let domainData = """
         [
           {
@@ -333,11 +325,11 @@ final class DoctorCommandTests: XCTestCase {
         let _ = DoctorCommand.runDoctor(io: mock, configDirectory: tempDir)
 
         let output = mock.capturedOutput.joined(separator: "\n")
-        XCTAssertTrue(output.contains("Memory"), "输出应包含 Memory 检查结果")
+        #expect(output.contains("Memory"), "输出应包含 Memory 检查结果")
     }
 
-    func test_doctor_reportsMemoryUnused_whenNoMemory() async throws {
-        // No memory directory exists
+    @Test("doctor reports memory unused when no memory")
+    func doctorReportsMemoryUnusedWhenNoMemory() async throws {
         let configJSON = """
         {"apiKey": "sk-ant-test-key-1234567890"}
         """
@@ -347,14 +339,14 @@ final class DoctorCommandTests: XCTestCase {
         let _ = DoctorCommand.runDoctor(io: mock, configDirectory: tempDir)
 
         let output = mock.capturedOutput.joined(separator: "\n")
-        XCTAssertTrue(
+        #expect(
             output.contains("Memory") || output.contains("memory"),
             "输出应包含 Memory 状态信息（即使未使用）"
         )
     }
 
-    func test_doctor_memoryCheck_showsDomainCountAndEntryCount() async throws {
-        // Create a temp directory simulating ~/.axion/memory/ with multiple domains
+    @Test("doctor memory check shows domain count and entry count")
+    func doctorMemoryCheckShowsDomainCountAndEntryCount() async throws {
         let memoryDir = tempDir + "/memory"
         try FileManager.default.createDirectory(
             atPath: memoryDir,
@@ -362,7 +354,6 @@ final class DoctorCommandTests: XCTestCase {
             attributes: [.posixPermissions: 0o700]
         )
 
-        // Domain 1: Calculator (2 entries)
         let calcData = """
         [
           {"id": "c1", "content": "Calc entry 1", "tags": [], "createdAt": "2026-05-13T10:00:00.000Z"},
@@ -371,7 +362,6 @@ final class DoctorCommandTests: XCTestCase {
         """
         try calcData.write(toFile: memoryDir + "/com.apple.calculator.json", atomically: true, encoding: .utf8)
 
-        // Domain 2: Notes (1 entry)
         let notesData = """
         [
           {"id": "n1", "content": "Notes entry 1", "tags": [], "createdAt": "2026-05-13T10:00:00.000Z"}
@@ -387,20 +377,18 @@ final class DoctorCommandTests: XCTestCase {
         let mock = MockDoctorIO()
         let report = DoctorCommand.runDoctor(io: mock, configDirectory: tempDir)
 
-        // Check for Memory check in results
         let memoryCheck = report.results.first { $0.name.contains("Memory") }
-        XCTAssertNotNil(memoryCheck, "应包含 Memory 检查项")
+        #expect(memoryCheck != nil, "应包含 Memory 检查项")
 
         let output = mock.capturedOutput.joined(separator: "\n")
-        // Output should indicate domain count and entry count
-        XCTAssertTrue(
+        #expect(
             output.contains("2 domains") || output.contains("3 entries") || output.contains("domain"),
             "Memory 检查应显示 domain 数量和条目数: \(output)"
         )
     }
 
-    func test_doctor_memoryCheckFormat_whenUnused() async throws {
-        // No memory directory
+    @Test("doctor memory check format when unused")
+    func doctorMemoryCheckFormatWhenUnused() async throws {
         let configJSON = """
         {"apiKey": "sk-ant-test-key-1234567890"}
         """
@@ -410,21 +398,23 @@ final class DoctorCommandTests: XCTestCase {
         let report = DoctorCommand.runDoctor(io: mock, configDirectory: tempDir)
 
         let memoryCheck = report.results.first { $0.name.contains("Memory") }
-        XCTAssertNotNil(memoryCheck, "应包含 Memory 检查项")
-        XCTAssertEqual(memoryCheck?.status, .ok, "未使用 Memory 不应报告为失败")
+        #expect(memoryCheck != nil, "应包含 Memory 检查项")
+        #expect(memoryCheck?.status == .ok, "未使用 Memory 不应报告为失败")
     }
 
     // MARK: - [P1] 输出格式验证
 
-    func test_doctor_output_containsHeader() throws {
+    @Test("doctor output contains header")
+    func doctorOutputContainsHeader() throws {
         let mock = MockDoctorIO()
         let _ = DoctorCommand.runDoctor(io: mock, configDirectory: tempDir)
 
         let output = mock.capturedOutput.joined(separator: "\n")
-        XCTAssertTrue(output.contains("Axion Doctor"), "输出应包含 Axion Doctor 标题")
+        #expect(output.contains("Axion Doctor"), "输出应包含 Axion Doctor 标题")
     }
 
-    func test_doctor_output_usesOkFailMarkers() throws {
+    @Test("doctor output uses OK/FAIL markers")
+    func doctorOutputUsesOkFailMarkers() throws {
         let configJSON = """
         {"apiKey": "sk-ant-test-key-1234567890"}
         """
@@ -434,8 +424,7 @@ final class DoctorCommandTests: XCTestCase {
         let _ = DoctorCommand.runDoctor(io: mock, configDirectory: tempDir)
 
         let output = mock.capturedOutput.joined(separator: "\n")
-        // 输出应使用 [OK] 或 [FAIL] 标记
-        XCTAssertTrue(
+        #expect(
             output.contains("[OK]") || output.contains("[FAIL]"),
             "输出应使用 [OK]/[FAIL] 标记格式"
         )
