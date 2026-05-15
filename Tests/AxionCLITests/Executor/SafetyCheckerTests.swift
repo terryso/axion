@@ -1,236 +1,257 @@
-import XCTest
+import Testing
+import Foundation
 @testable import AxionCLI
 @testable import AxionCore
 
-// [P0] 基础设施验证
-// [P1] 行为验证
-
-// MARK: - SafetyChecker ATDD Tests
-
 /// ATDD 红色阶段测试 — 覆盖 Story 3-3 AC6 (共享座椅安全检查) 和 AC7 (--allow-foreground 模式放行)
 /// 这些测试将在 SafetyChecker 实现后通过 (TDD red-green-refactor)
-final class SafetyCheckerTests: XCTestCase {
+@Suite("SafetyChecker")
+struct SafetyCheckerTests {
 
-    // MARK: - P0 类型存在性
-
-    func test_safetyChecker_typeExists() {
+    @Test("safetyChecker type exists")
+    func safetyCheckerTypeExists() {
         let _ = SafetyChecker.self
     }
 
-    func test_toolSafetyCategory_typeExists() {
+    @Test("toolSafetyCategory type exists")
+    func toolSafetyCategoryTypeExists() {
         let _ = ToolSafetyCategory.self
     }
 
-    func test_safetyCheckResult_typeExists() {
+    @Test("safetyCheckResult type exists")
+    func safetyCheckResultTypeExists() {
         let _ = SafetyCheckResult.self
     }
 
-    // MARK: - P0 工具安全分类 (AC6 辅助)
-
-    func test_classifyTool_listApps_isReadOnly() {
+    @Test("classify list_apps as readOnly")
+    func classifyToolListAppsIsReadOnly() {
         let checker = SafetyChecker()
-        XCTAssertEqual(checker.classifyTool("list_apps"), .readOnly)
+        #expect(checker.classifyTool("list_apps") == .readOnly)
     }
 
-    func test_classifyTool_listWindows_isReadOnly() {
+    @Test("classify list_windows as readOnly")
+    func classifyToolListWindowsIsReadOnly() {
         let checker = SafetyChecker()
-        XCTAssertEqual(checker.classifyTool("list_windows"), .readOnly)
+        #expect(checker.classifyTool("list_windows") == .readOnly)
     }
 
-    func test_classifyTool_screenshot_isReadOnly() {
+    @Test("classify screenshot as readOnly")
+    func classifyToolScreenshotIsReadOnly() {
         let checker = SafetyChecker()
-        XCTAssertEqual(checker.classifyTool("screenshot"), .readOnly)
+        #expect(checker.classifyTool("screenshot") == .readOnly)
     }
 
-    func test_classifyTool_getAccessibilityTree_isReadOnly() {
+    @Test("classify get_accessibility_tree as readOnly")
+    func classifyToolGetAccessibilityTreeIsReadOnly() {
         let checker = SafetyChecker()
-        XCTAssertEqual(checker.classifyTool("get_accessibility_tree"), .readOnly)
+        #expect(checker.classifyTool("get_accessibility_tree") == .readOnly)
     }
 
-    func test_classifyTool_getFileInfo_isReadOnly() {
+    @Test("classify get_file_info as readOnly")
+    func classifyToolGetFileInfoIsReadOnly() {
         let checker = SafetyChecker()
-        XCTAssertEqual(checker.classifyTool("get_file_info"), .readOnly)
+        #expect(checker.classifyTool("get_file_info") == .readOnly)
     }
 
-    func test_classifyTool_launchApp_isBackgroundSafe() {
+    @Test("classify launch_app as backgroundSafe")
+    func classifyToolLaunchAppIsBackgroundSafe() {
         let checker = SafetyChecker()
-        XCTAssertEqual(checker.classifyTool("launch_app"), .backgroundSafe)
+        #expect(checker.classifyTool("launch_app") == .backgroundSafe)
     }
 
-    func test_classifyTool_openUrl_isBackgroundSafe() {
+    @Test("classify open_url as backgroundSafe")
+    func classifyToolOpenUrlIsBackgroundSafe() {
         let checker = SafetyChecker()
-        XCTAssertEqual(checker.classifyTool("open_url"), .backgroundSafe)
+        #expect(checker.classifyTool("open_url") == .backgroundSafe)
     }
 
-    func test_classifyTool_getWindowState_isBackgroundSafe() {
+    @Test("classify get_window_state as backgroundSafe")
+    func classifyToolGetWindowStateIsBackgroundSafe() {
         let checker = SafetyChecker()
-        XCTAssertEqual(checker.classifyTool("get_window_state"), .backgroundSafe)
+        #expect(checker.classifyTool("get_window_state") == .backgroundSafe)
     }
 
-    func test_classifyTool_moveWindow_isBackgroundSafe() {
+    @Test("classify move_window as backgroundSafe")
+    func classifyToolMoveWindowIsBackgroundSafe() {
         let checker = SafetyChecker()
-        XCTAssertEqual(checker.classifyTool("move_window"), .backgroundSafe)
+        #expect(checker.classifyTool("move_window") == .backgroundSafe)
     }
 
-    func test_classifyTool_resizeWindow_isBackgroundSafe() {
+    @Test("classify resize_window as backgroundSafe")
+    func classifyToolResizeWindowIsBackgroundSafe() {
         let checker = SafetyChecker()
-        XCTAssertEqual(checker.classifyTool("resize_window"), .backgroundSafe)
+        #expect(checker.classifyTool("resize_window") == .backgroundSafe)
     }
 
-    func test_classifyTool_activateWindow_isBackgroundSafe() {
+    @Test("classify activate_window as backgroundSafe")
+    func classifyToolActivateWindowIsBackgroundSafe() {
         let checker = SafetyChecker()
-        XCTAssertEqual(checker.classifyTool("activate_window"), .backgroundSafe)
+        #expect(checker.classifyTool("activate_window") == .backgroundSafe)
     }
 
-    func test_classifyTool_quitApp_isBackgroundSafe() {
+    @Test("classify quit_app as backgroundSafe")
+    func classifyToolQuitAppIsBackgroundSafe() {
         let checker = SafetyChecker()
-        XCTAssertEqual(checker.classifyTool("quit_app"), .backgroundSafe)
+        #expect(checker.classifyTool("quit_app") == .backgroundSafe)
     }
 
-    func test_classifyTool_click_isForegroundRequired() {
+    @Test("classify click as foregroundRequired")
+    func classifyToolClickIsForegroundRequired() {
         let checker = SafetyChecker()
-        XCTAssertEqual(checker.classifyTool("click"), .foregroundRequired)
+        #expect(checker.classifyTool("click") == .foregroundRequired)
     }
 
-    func test_classifyTool_doubleClick_isForegroundRequired() {
+    @Test("classify double_click as foregroundRequired")
+    func classifyToolDoubleClickIsForegroundRequired() {
         let checker = SafetyChecker()
-        XCTAssertEqual(checker.classifyTool("double_click"), .foregroundRequired)
+        #expect(checker.classifyTool("double_click") == .foregroundRequired)
     }
 
-    func test_classifyTool_rightClick_isForegroundRequired() {
+    @Test("classify right_click as foregroundRequired")
+    func classifyToolRightClickIsForegroundRequired() {
         let checker = SafetyChecker()
-        XCTAssertEqual(checker.classifyTool("right_click"), .foregroundRequired)
+        #expect(checker.classifyTool("right_click") == .foregroundRequired)
     }
 
-    func test_classifyTool_typeText_isForegroundRequired() {
+    @Test("classify type_text as foregroundRequired")
+    func classifyToolTypeTextIsForegroundRequired() {
         let checker = SafetyChecker()
-        XCTAssertEqual(checker.classifyTool("type_text"), .foregroundRequired)
+        #expect(checker.classifyTool("type_text") == .foregroundRequired)
     }
 
-    func test_classifyTool_pressKey_isForegroundRequired() {
+    @Test("classify press_key as foregroundRequired")
+    func classifyToolPressKeyIsForegroundRequired() {
         let checker = SafetyChecker()
-        XCTAssertEqual(checker.classifyTool("press_key"), .foregroundRequired)
+        #expect(checker.classifyTool("press_key") == .foregroundRequired)
     }
 
-    func test_classifyTool_hotkey_isForegroundRequired() {
+    @Test("classify hotkey as foregroundRequired")
+    func classifyToolHotkeyIsForegroundRequired() {
         let checker = SafetyChecker()
-        XCTAssertEqual(checker.classifyTool("hotkey"), .foregroundRequired)
+        #expect(checker.classifyTool("hotkey") == .foregroundRequired)
     }
 
-    func test_classifyTool_scroll_isForegroundRequired() {
+    @Test("classify scroll as foregroundRequired")
+    func classifyToolScrollIsForegroundRequired() {
         let checker = SafetyChecker()
-        XCTAssertEqual(checker.classifyTool("scroll"), .foregroundRequired)
+        #expect(checker.classifyTool("scroll") == .foregroundRequired)
     }
 
-    func test_classifyTool_drag_isForegroundRequired() {
+    @Test("classify drag as foregroundRequired")
+    func classifyToolDragIsForegroundRequired() {
         let checker = SafetyChecker()
-        XCTAssertEqual(checker.classifyTool("drag"), .foregroundRequired)
+        #expect(checker.classifyTool("drag") == .foregroundRequired)
     }
 
-    func test_classifyTool_unknownTool_isUnsupported() {
+    @Test("classify unknown tool as unsupported")
+    func classifyToolUnknownToolIsUnsupported() {
         let checker = SafetyChecker()
-        XCTAssertEqual(checker.classifyTool("nonexistent_tool"), .unsupported)
+        #expect(checker.classifyTool("nonexistent_tool") == .unsupported)
     }
 
-    // MARK: - P0 共享座椅模式阻止前台操作 (AC6)
-
-    func test_check_sharedSeatMode_true_blocksForegroundTool() {
+    @Test("shared seat mode blocks foreground tool")
+    func checkSharedSeatModeTrueBlocksForegroundTool() {
         let checker = SafetyChecker()
         let result = checker.check(tool: "click", sharedSeatMode: true)
 
-        XCTAssertFalse(result.allowed)
-        XCTAssertFalse(result.errorMessage.isEmpty)
+        #expect(!result.allowed)
+        #expect(!result.errorMessage.isEmpty)
     }
 
-    func test_check_sharedSeatMode_true_blocksTypeText() {
+    @Test("shared seat mode blocks type_text")
+    func checkSharedSeatModeTrueBlocksTypeText() {
         let checker = SafetyChecker()
         let result = checker.check(tool: "type_text", sharedSeatMode: true)
 
-        XCTAssertFalse(result.allowed)
+        #expect(!result.allowed)
     }
 
-    func test_check_sharedSeatMode_true_blocksAllForegroundTools() {
+    @Test("shared seat mode blocks all foreground tools")
+    func checkSharedSeatModeTrueBlocksAllForegroundTools() {
         let checker = SafetyChecker()
         let foregroundTools = ["click", "double_click", "right_click", "type_text",
                                "press_key", "hotkey", "scroll", "drag"]
 
         for tool in foregroundTools {
             let result = checker.check(tool: tool, sharedSeatMode: true)
-            XCTAssertFalse(result.allowed, "Shared seat mode should block \(tool)")
+            #expect(!result.allowed)
         }
     }
 
-    func test_check_sharedSeatMode_true_allowsReadOnlyTools() {
+    @Test("shared seat mode allows read-only tools")
+    func checkSharedSeatModeTrueAllowsReadOnlyTools() {
         let checker = SafetyChecker()
         let readOnlyTools = ["list_apps", "list_windows", "screenshot",
                              "get_accessibility_tree", "get_file_info"]
 
         for tool in readOnlyTools {
             let result = checker.check(tool: tool, sharedSeatMode: true)
-            XCTAssertTrue(result.allowed, "Shared seat mode should allow read-only tool \(tool)")
+            #expect(result.allowed)
         }
     }
 
-    func test_check_sharedSeatMode_true_allowsBackgroundSafeTools() {
+    @Test("shared seat mode allows background-safe tools")
+    func checkSharedSeatModeTrueAllowsBackgroundSafeTools() {
         let checker = SafetyChecker()
         let bgSafeTools = ["launch_app", "open_url", "get_window_state",
                            "move_window", "resize_window", "activate_window", "quit_app"]
 
         for tool in bgSafeTools {
             let result = checker.check(tool: tool, sharedSeatMode: true)
-            XCTAssertTrue(result.allowed, "Shared seat mode should allow background-safe tool \(tool)")
+            #expect(result.allowed)
         }
     }
 
-    // MARK: - P0 allow-foreground 模式放行 (AC7)
-
-    func test_check_sharedSeatMode_false_allowsAllTools() {
+    @Test("allow-foreground mode allows all tools")
+    func checkSharedSeatModeFalseAllowsAllTools() {
         let checker = SafetyChecker()
         let allTools = ["click", "type_text", "launch_app", "list_apps",
                         "double_click", "scroll", "drag", "screenshot"]
 
         for tool in allTools {
             let result = checker.check(tool: tool, sharedSeatMode: false)
-            XCTAssertTrue(result.allowed, "Allow-foreground mode should allow \(tool)")
+            #expect(result.allowed)
         }
     }
 
-    func test_check_sharedSeatMode_false_allowsClick() {
+    @Test("allow-foreground mode allows click")
+    func checkSharedSeatModeFalseAllowsClick() {
         let checker = SafetyChecker()
         let result = checker.check(tool: "click", sharedSeatMode: false)
 
-        XCTAssertTrue(result.allowed)
+        #expect(result.allowed)
     }
 
-    func test_check_sharedSeatMode_false_allowsTypeText() {
+    @Test("allow-foreground mode allows type_text")
+    func checkSharedSeatModeFalseAllowsTypeText() {
         let checker = SafetyChecker()
         let result = checker.check(tool: "type_text", sharedSeatMode: false)
 
-        XCTAssertTrue(result.allowed)
+        #expect(result.allowed)
     }
 
-    // MARK: - P1 边界情况
-
-    func test_check_unsupportedTool_sharedSeatMode_blocks() {
+    @Test("unsupported tool blocked in shared seat mode")
+    func checkUnsupportedToolSharedSeatModeBlocks() {
         let checker = SafetyChecker()
         let result = checker.check(tool: "nonexistent_tool", sharedSeatMode: true)
 
-        XCTAssertFalse(result.allowed, "Unsupported tools should be blocked in shared seat mode")
+        #expect(!result.allowed)
     }
 
-    func test_check_unsupportedTool_allowForeground_blocks() {
+    @Test("unsupported tool blocked in allow-foreground mode")
+    func checkUnsupportedToolAllowForegroundBlocks() {
         let checker = SafetyChecker()
         let result = checker.check(tool: "nonexistent_tool", sharedSeatMode: false)
 
-        XCTAssertFalse(result.allowed, "Unsupported tools should be blocked even in allow-foreground mode")
+        #expect(!result.allowed)
     }
 
-    func test_check_foregroundTool_returnsDescriptiveError() {
+    @Test("foreground tool returns descriptive error")
+    func checkForegroundToolReturnsDescriptiveError() {
         let checker = SafetyChecker()
         let result = checker.check(tool: "click", sharedSeatMode: true)
 
-        XCTAssertFalse(result.allowed)
-        XCTAssertTrue(result.errorMessage.contains("foreground") || result.errorMessage.contains("shared seat") || result.errorMessage.contains("safety"),
-                      "Error message should explain why the tool was blocked: \(result.errorMessage)")
+        #expect(!result.allowed)
+        #expect(result.errorMessage.contains("foreground") || result.errorMessage.contains("shared seat") || result.errorMessage.contains("safety"))
     }
 }

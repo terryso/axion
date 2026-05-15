@@ -1,11 +1,7 @@
-import XCTest
+import Testing
+import Foundation
 @testable import AxionCLI
 @testable import AxionCore
-
-// [P0] 基础设施验证
-// [P1] 行为验证
-
-// MARK: - Mock MCP Client for StepExecutor Tests
 
 /// Mock 实现 MCPClientProtocol，用于测试 StepExecutor 而不调用真实 MCP
 final class MockExecutorMCPClient: MCPClientProtocol {
@@ -32,19 +28,18 @@ final class MockExecutorMCPClient: MCPClientProtocol {
     }
 }
 
-// MARK: - StepExecutor ATDD Tests
-
 /// ATDD 红色阶段测试 — 覆盖 Story 3-3 AC1 (MCP 工具调用), AC4 (AX 刷新), AC5 (失败处理)
 /// 这些测试将在 StepExecutor 实现后通过 (TDD red-green-refactor)
-final class StepExecutorTests: XCTestCase {
+@Suite("StepExecutor")
+struct StepExecutorTests {
 
-    // MARK: - P0 类型存在性
-
-    func test_stepExecutor_typeExists() {
+    @Test("stepExecutor type exists")
+    func stepExecutorTypeExists() {
         let _ = StepExecutor.self
     }
 
-    func test_stepExecutor_conformsToExecutorProtocol() {
+    @Test("stepExecutor conforms to ExecutorProtocol")
+    func stepExecutorConformsToExecutorProtocol() {
         // StepExecutor must conform to ExecutorProtocol
         let mockClient = MockExecutorMCPClient()
         let config = AxionConfig.default
@@ -52,9 +47,8 @@ final class StepExecutorTests: XCTestCase {
         let _ = executor as ExecutorProtocol
     }
 
-    // MARK: - P0 单步执行成功 (AC1)
-
-    func test_executeStep_launchApp_callsMCPAndReturnsSuccess() async throws {
+    @Test("executeStep launch_app calls MCP and returns success")
+    func executeStepLaunchAppCallsMCPAndReturnsSuccess() async throws {
         let mockClient = MockExecutorMCPClient()
         mockClient.stubbedResults["launch_app"] = """
         {"pid": 1234, "app_name": "Calculator", "status": "launched"}
@@ -81,15 +75,14 @@ final class StepExecutorTests: XCTestCase {
 
         let executed = try await executor.executeStep(step, context: context)
 
-        XCTAssertTrue(executed.success)
-        XCTAssertEqual(executed.tool, "launch_app")
-        XCTAssertEqual(executed.stepIndex, 0)
-        XCTAssertTrue(mockClient.callHistory.contains(where: { $0.name == "launch_app" }))
+        #expect(executed.success)
+        #expect(executed.tool == "launch_app")
+        #expect(executed.stepIndex == 0)
+        #expect(mockClient.callHistory.contains(where: { $0.name == "launch_app" }))
     }
 
-    // MARK: - P0 步骤执行失败处理 (AC5)
-
-    func test_executeStep_mcpError_returnsFailedExecutedStep() async throws {
+    @Test("executeStep MCP error returns failed executed step")
+    func executeStepMCPErrorReturnsFailedExecutedStep() async throws {
         let mockClient = MockExecutorMCPClient()
         mockClient.shouldThrow = true
         mockClient.throwError = AxionError.mcpError(tool: "launch_app", reason: "App not found")
@@ -123,14 +116,13 @@ final class StepExecutorTests: XCTestCase {
             } else if case .mcpError = error {
                 // Also acceptable: MCP error propagated
             } else {
-                XCTFail("Expected executionFailed or mcpError, got: \(error)")
+                Issue.record("Expected executionFailed or mcpError, got: \(error)")
             }
         }
     }
 
-    // MARK: - P0 安全检查阻止 (AC6)
-
-    func test_executeStep_safetyBlocked_returnsSafetyError() async throws {
+    @Test("executeStep safety blocked returns safety error")
+    func executeStepSafetyBlockedReturnsSafetyError() async throws {
         let mockClient = MockExecutorMCPClient()
         mockClient.stubbedResults["click"] = """
         {"success": true}
@@ -159,24 +151,22 @@ final class StepExecutorTests: XCTestCase {
         do {
             let executed = try await executor.executeStep(step, context: context)
             // If it returns instead of throws, it should be a failed step
-            XCTAssertFalse(executed.success, "Foreground operation should be blocked in shared seat mode")
+            #expect(!executed.success)
         } catch let error as AxionError {
             // Safety error expected
             if case .executionFailed = error {
                 // Expected
             } else {
-                XCTFail("Expected executionFailed for safety block, got: \(error)")
+                Issue.record("Expected executionFailed for safety block, got: \(error)")
             }
         }
 
         // MCP client should NOT have been called for the blocked tool
-        XCTAssertFalse(mockClient.callHistory.contains(where: { $0.name == "click" }),
-                       "Blocked tool should not reach MCP")
+        #expect(!mockClient.callHistory.contains(where: { $0.name == "click" }))
     }
 
-    // MARK: - P0 allow-foreground 放行 (AC7)
-
-    func test_executeStep_allowForeground_executesClick() async throws {
+    @Test("executeStep allow-foreground executes click")
+    func executeStepAllowForegroundExecutesClick() async throws {
         let mockClient = MockExecutorMCPClient()
         mockClient.stubbedResults["click"] = """
         {"success": true}
@@ -204,13 +194,12 @@ final class StepExecutorTests: XCTestCase {
 
         let executed = try await executor.executeStep(step, context: context)
 
-        XCTAssertTrue(executed.success)
-        XCTAssertTrue(mockClient.callHistory.contains(where: { $0.name == "click" }))
+        #expect(executed.success)
+        #expect(mockClient.callHistory.contains(where: { $0.name == "click" }))
     }
 
-    // MARK: - P0 占位符解析后执行 (AC2 + AC3 集成)
-
-    func test_executeStep_placeholderResolved_beforeMCPCall() async throws {
+    @Test("executeStep placeholder resolved before MCP call")
+    func executeStepPlaceholderResolvedBeforeMCPCall() async throws {
         let mockClient = MockExecutorMCPClient()
         mockClient.stubbedResults["click"] = """
         {"success": true}
@@ -254,17 +243,16 @@ final class StepExecutorTests: XCTestCase {
 
         let executed = try await executor.executeStep(step, context: context)
 
-        XCTAssertTrue(executed.success)
+        #expect(executed.success)
 
         // Verify MCP was called with resolved (non-placeholder) parameters
         let clickCall = mockClient.callHistory.first(where: { $0.name == "click" })
-        XCTAssertNotNil(clickCall)
-        XCTAssertEqual(clickCall?.arguments["pid"], .int(1234))
+        let resolvedCall = try #require(clickCall)
+        #expect(resolvedCall.arguments["pid"] == .int(1234))
     }
 
-    // MARK: - P1 AX 刷新前执行 (AC4)
-
-    func test_executePlan_axOperation_refreshesWindowStateFirst() async throws {
+    @Test("executePlan AX operation refreshes window state first")
+    func executePlanAXOperationRefreshesWindowStateFirst() async throws {
         let mockClient = MockExecutorMCPClient()
         mockClient.stubbedResults["launch_app"] = """
         {"pid": 1234, "app_name": "Calculator", "status": "launched"}
@@ -312,21 +300,19 @@ final class StepExecutorTests: XCTestCase {
         let getWinStateCallIndex = mockClient.callHistory.firstIndex(where: { $0.name == "get_window_state" })
         let clickCallIndex = mockClient.callHistory.firstIndex(where: { $0.name == "click" })
 
-        XCTAssertNotNil(getWinStateCallIndex, "get_window_state should be called before AX operations")
-        XCTAssertNotNil(clickCallIndex, "click should be called")
+        #expect(getWinStateCallIndex != nil)
+        #expect(clickCallIndex != nil)
         // Verify get_window_state was called with window_id (not pid)
         let refreshCall = mockClient.callHistory.first(where: { $0.name == "get_window_state" })
-        XCTAssertNotNil(refreshCall)
-        XCTAssertEqual(refreshCall?.arguments["window_id"], .int(42),
-                       "get_window_state should be called with window_id from prior list_windows result")
+        let resolvedRefreshCall = try #require(refreshCall)
+        #expect(resolvedRefreshCall.arguments["window_id"] == .int(42))
         if let refreshIdx = getWinStateCallIndex, let clickIdx = clickCallIndex {
-            XCTAssertLessThan(refreshIdx, clickIdx, "AX refresh should happen before click")
+            #expect(refreshIdx < clickIdx)
         }
     }
 
-    // MARK: - P1 多步骤占位符链式解析
-
-    func test_executePlan_multipleSteps_resolvesPlaceholders() async throws {
+    @Test("executePlan multiple steps resolves placeholders")
+    func executePlanMultipleStepsResolvesPlaceholders() async throws {
         let mockClient = MockExecutorMCPClient()
         mockClient.stubbedResults["launch_app"] = """
         {"pid": 5555, "app_name": "Calculator", "status": "launched"}
@@ -375,22 +361,21 @@ final class StepExecutorTests: XCTestCase {
 
         let (executedSteps, _) = try await executor.executePlan(plan, context: context)
 
-        XCTAssertEqual(executedSteps.count, 3)
-        XCTAssertTrue(executedSteps[0].success)
-        XCTAssertTrue(executedSteps[1].success)
-        XCTAssertTrue(executedSteps[2].success)
+        #expect(executedSteps.count == 3)
+        #expect(executedSteps[0].success)
+        #expect(executedSteps[1].success)
+        #expect(executedSteps[2].success)
 
         // Verify type_text was called with resolved pid/window_id from prior steps
         let typeTextCall = mockClient.callHistory.first(where: { $0.name == "type_text" })
-        XCTAssertNotNil(typeTextCall)
-        XCTAssertEqual(typeTextCall?.arguments["pid"], .int(5555))
-        XCTAssertEqual(typeTextCall?.arguments["window_id"], .int(88))
-        XCTAssertEqual(typeTextCall?.arguments["text"], .string("17*23="))
+        let resolvedCall = try #require(typeTextCall)
+        #expect(resolvedCall.arguments["pid"] == .int(5555))
+        #expect(resolvedCall.arguments["window_id"] == .int(88))
+        #expect(resolvedCall.arguments["text"] == .string("17*23="))
     }
 
-    // MARK: - P1 executePlan 返回执行上下文
-
-    func test_executePlan_returnsUpdatedExecutionContext() async throws {
+    @Test("executePlan returns updated execution context")
+    func executePlanReturnsUpdatedExecutionContext() async throws {
         let mockClient = MockExecutorMCPClient()
         mockClient.stubbedResults["launch_app"] = """
         {"pid": 9999, "app_name": "Calculator", "status": "launched"}
@@ -420,15 +405,14 @@ final class StepExecutorTests: XCTestCase {
 
         let (executedSteps, updatedContext) = try await executor.executePlan(plan, context: context)
 
-        XCTAssertEqual(executedSteps.count, 1)
-        XCTAssertTrue(executedSteps[0].success)
+        #expect(executedSteps.count == 1)
+        #expect(executedSteps[0].success)
         // The returned context should include the executed steps
-        XCTAssertFalse(updatedContext.executedSteps.isEmpty)
+        #expect(!updatedContext.executedSteps.isEmpty)
     }
 
-    // MARK: - P1 executePlan 失败即停
-
-    func test_executePlan_stopsOnFirstFailure() async throws {
+    @Test("executePlan stops on first failure")
+    func executePlanStopsOnFirstFailure() async throws {
         let mockClient = MockExecutorMCPClient()
         // First step succeeds
         mockClient.stubbedResults["launch_app"] = """
@@ -476,19 +460,18 @@ final class StepExecutorTests: XCTestCase {
             // type_text should not have been called if execution stopped at step 1
             if let failedStep = executedSteps.last, !failedStep.success {
                 // Step 1 failed, so step 2 should not be reached
-                XCTAssertTrue(typeTextCalls.isEmpty, "Steps after failure should not execute")
+                #expect(typeTextCalls.isEmpty)
             }
         } catch {
             // Throwing on failure is also acceptable behavior
             // Verify type_text was not called
             let typeTextCalls = mockClient.callHistory.filter { $0.name == "type_text" }
-            XCTAssertTrue(typeTextCalls.isEmpty, "Steps after failure should not execute")
+            #expect(typeTextCalls.isEmpty)
         }
     }
 
-    // MARK: - P1 空步骤列表
-
-    func test_executePlan_emptySteps_returnsEmptyResults() async throws {
+    @Test("executePlan with empty steps returns empty results")
+    func executePlanEmptyStepsReturnsEmptyResults() async throws {
         let mockClient = MockExecutorMCPClient()
         let config = AxionConfig.default
         let executor = StepExecutor(mcpClient: mockClient, config: config)
@@ -512,7 +495,7 @@ final class StepExecutorTests: XCTestCase {
 
         let (executedSteps, _) = try await executor.executePlan(plan, context: context)
 
-        XCTAssertTrue(executedSteps.isEmpty)
-        XCTAssertTrue(mockClient.callHistory.isEmpty)
+        #expect(executedSteps.isEmpty)
+        #expect(mockClient.callHistory.isEmpty)
     }
 }

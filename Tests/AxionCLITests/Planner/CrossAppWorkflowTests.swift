@@ -1,11 +1,13 @@
-import XCTest
+import Testing
+import Foundation
 @testable import AxionCLI
 @testable import AxionCore
 
 // Story 8.2: Cross-Application Workflow Orchestration
 // Tests cover AC1–AC5 acceptance criteria with mock LLM and MCP clients.
 
-final class CrossAppWorkflowTests: XCTestCase {
+@Suite("CrossAppWorkflow")
+struct CrossAppWorkflowTests {
 
     // MARK: - Helpers
 
@@ -43,52 +45,48 @@ final class CrossAppWorkflowTests: XCTestCase {
     }
     """
 
-    // MARK: - AC1: Planner generates cross-app plans
-
-    func test_planParser_crossAppSteps_parseSuccessfully() throws {
+    @Test("AC1: plan parser cross-app steps parse successfully")
+    func planParserCrossAppStepsParseSuccessfully() throws {
         let plan = try PlanParser.parse(crossAppPlanJSON, task: "Copy Safari URL to TextEdit", maxSteps: 10)
 
-        XCTAssertEqual(plan.steps.count, 6)
-        XCTAssertEqual(plan.steps[0].tool, "list_windows")
-        XCTAssertEqual(plan.steps[1].tool, "activate_window")
-        XCTAssertEqual(plan.steps[3].tool, "hotkey")
-        XCTAssertEqual(plan.steps[3].parameters["keys"], .string("command+c"))
-        XCTAssertEqual(plan.steps[4].tool, "activate_window")
-        XCTAssertEqual(plan.steps[5].tool, "hotkey")
-        XCTAssertEqual(plan.steps[5].parameters["keys"], .string("command+v"))
+        #expect(plan.steps.count == 6)
+        #expect(plan.steps[0].tool == "list_windows")
+        #expect(plan.steps[1].tool == "activate_window")
+        #expect(plan.steps[3].tool == "hotkey")
+        #expect(plan.steps[3].parameters["keys"] == .string("command+c"))
+        #expect(plan.steps[4].tool == "activate_window")
+        #expect(plan.steps[5].tool == "hotkey")
+        #expect(plan.steps[5].parameters["keys"] == .string("command+v"))
     }
 
-    func test_createPlan_crossAppTask_systemPromptContainsCrossAppGuidance() async throws {
+    @Test("AC1: system prompt contains cross-app guidance for cross-app tasks")
+    func createPlanCrossAppTaskSystemPromptContainsCrossAppGuidance() async throws {
         let mockLLM = MockLLMClient(stubbedResponse: crossAppPlanJSON)
         let mockMCP = MockPlannerMCPClient()
         let planner = makePlanner(mockLLM: mockLLM, mockMCP: mockMCP)
 
         _ = try await planner.createPlan(for: "Copy Safari URL to TextEdit", context: makeContext())
 
-        let systemPrompt = try XCTUnwrap(mockLLM.lastSystemPrompt)
-        XCTAssertTrue(systemPrompt.contains("Cross-Application Workflow Patterns"),
-            "System prompt should contain cross-app workflow guidance for cross-app tasks")
-        XCTAssertTrue(systemPrompt.contains("activate_window"),
-            "System prompt should mention activate_window tool")
-        XCTAssertTrue(systemPrompt.contains("clipboard") || systemPrompt.contains("command+c"),
-            "System prompt should mention clipboard operations")
+        let systemPrompt = try #require(mockLLM.lastSystemPrompt)
+        #expect(systemPrompt.contains("Cross-Application Workflow Patterns"))
+        #expect(systemPrompt.contains("activate_window"))
+        #expect(systemPrompt.contains("clipboard") || systemPrompt.contains("command+c"))
     }
 
-    func test_createPlan_crossAppTask_userPromptContainsTask() async throws {
+    @Test("AC1: user prompt contains cross-app task")
+    func createPlanCrossAppTaskUserPromptContainsTask() async throws {
         let mockLLM = MockLLMClient(stubbedResponse: crossAppPlanJSON)
         let mockMCP = MockPlannerMCPClient()
         let planner = makePlanner(mockLLM: mockLLM, mockMCP: mockMCP)
 
         _ = try await planner.createPlan(for: "Copy Safari URL to TextEdit", context: makeContext())
 
-        let userMessage = try XCTUnwrap(mockLLM.lastUserMessage)
-        XCTAssertTrue(userMessage.contains("Copy Safari URL to TextEdit"),
-            "User prompt should contain the original cross-app task")
+        let userMessage = try #require(mockLLM.lastUserMessage)
+        #expect(userMessage.contains("Copy Safari URL to TextEdit"))
     }
 
-    // MARK: - AC2: Executor window switching ensures focus
-
-    func test_planParser_multiAppActivateSteps_parsedCorrectly() throws {
+    @Test("AC2: multi-app activate steps parsed correctly")
+    func planParserMultiAppActivateStepsParsedCorrectly() throws {
         let json = """
         {
             "steps": [
@@ -103,12 +101,13 @@ final class CrossAppWorkflowTests: XCTestCase {
         let plan = try PlanParser.parse(json, task: "Copy link to Notes", maxSteps: 10)
 
         let activateSteps = plan.steps.filter { $0.tool == "activate_window" }
-        XCTAssertEqual(activateSteps.count, 2, "Should have 2 activate_window steps for source and target apps")
-        XCTAssertEqual(activateSteps[0].parameters["pid"], .int(100))
-        XCTAssertEqual(activateSteps[1].parameters["pid"], .int(200))
+        #expect(activateSteps.count == 2)
+        #expect(activateSteps[0].parameters["pid"] == .int(100))
+        #expect(activateSteps[1].parameters["pid"] == .int(200))
     }
 
-    func test_planParser_activateThenVerify_pattern() throws {
+    @Test("AC2: activate then verify pattern")
+    func planParserActivateThenVerifyPattern() throws {
         let json = """
         {
             "steps": [
@@ -121,15 +120,13 @@ final class CrossAppWorkflowTests: XCTestCase {
         """
         let plan = try PlanParser.parse(json, task: "Copy from Safari", maxSteps: 10)
 
-        XCTAssertEqual(plan.steps[0].tool, "activate_window")
-        XCTAssertEqual(plan.steps[1].tool, "get_window_state",
-            "After activate_window, next step should verify focus via get_window_state")
-        XCTAssertEqual(plan.steps[2].tool, "hotkey")
+        #expect(plan.steps[0].tool == "activate_window")
+        #expect(plan.steps[1].tool == "get_window_state")
+        #expect(plan.steps[2].tool == "hotkey")
     }
 
-    // MARK: - AC3: Clipboard cross-app data transfer
-
-    func test_planParser_clipboardCopyStep_parsedCorrectly() throws {
+    @Test("AC3: clipboard copy step parsed correctly")
+    func planParserClipboardCopyStepParsedCorrectly() throws {
         let json = """
         {
             "steps": [
@@ -144,20 +141,21 @@ final class CrossAppWorkflowTests: XCTestCase {
         let plan = try PlanParser.parse(json, task: "Transfer text via clipboard", maxSteps: 10)
 
         let hotkeySteps = plan.steps.filter { $0.tool == "hotkey" }
-        XCTAssertEqual(hotkeySteps.count, 2)
+        #expect(hotkeySteps.count == 2)
 
         let copyStep = hotkeySteps.first { $0.parameters["keys"] == .string("command+c") }
-        XCTAssertNotNil(copyStep, "Should have a command+c copy step")
+        #expect(copyStep != nil)
 
         let pasteStep = hotkeySteps.first { $0.parameters["keys"] == .string("command+v") }
-        XCTAssertNotNil(pasteStep, "Should have a command+v paste step")
+        #expect(pasteStep != nil)
 
         let copyIndex = plan.steps.firstIndex(where: { $0.parameters["keys"] == .string("command+c") })!
         let pasteIndex = plan.steps.firstIndex(where: { $0.parameters["keys"] == .string("command+v") })!
-        XCTAssertLessThan(copyIndex, pasteIndex, "Copy step should come before paste step")
+        #expect(copyIndex < pasteIndex)
     }
 
-    func test_planParser_clipboardWithVerifyStep_parsedCorrectly() throws {
+    @Test("AC3: clipboard with verify step parsed correctly")
+    func planParserClipboardWithVerifyStepParsedCorrectly() throws {
         let json = """
         {
             "steps": [
@@ -172,27 +170,24 @@ final class CrossAppWorkflowTests: XCTestCase {
         let plan = try PlanParser.parse(json, task: "Copy-paste with verification", maxSteps: 10)
 
         let verifyStep = plan.steps.first { $0.tool == "get_window_state" }
-        XCTAssertNotNil(verifyStep, "Plan should include a verification step after clipboard copy")
-        XCTAssertTrue(verifyStep!.purpose.contains("Verify") || verifyStep!.purpose.contains("confirm"),
-            "Verification step purpose should mention verification")
+        #expect(verifyStep != nil)
+        #expect(verifyStep!.purpose.contains("Verify") || verifyStep!.purpose.contains("confirm"))
     }
 
-    func test_plannerPrompt_containsClipboardVerificationGuidance() throws {
+    @Test("AC3: planner prompt contains clipboard verification guidance")
+    func plannerPromptContainsClipboardVerificationGuidance() throws {
         let promptDir = PromptBuilder.resolvePromptDirectory()
         let content = try PromptBuilder.load(
             name: "planner-system",
             variables: ["tools": "test", "max_steps": "20"],
             fromDirectory: promptDir
         )
-        XCTAssertTrue(content.contains("Clipboard verification") || content.contains("clipboard"),
-            "System prompt should include clipboard verification guidance")
-        XCTAssertTrue(content.contains("command+c") || content.contains("command+v"),
-            "System prompt should reference cmd+c/v keyboard shortcuts")
+        #expect(content.contains("Clipboard verification") || content.contains("clipboard"))
+        #expect(content.contains("command+c") || content.contains("command+v"))
     }
 
-    // MARK: - AC4: Cross-app failure replanning
-
-    func test_replan_appNotInstalled_failurePropagates() async throws {
+    @Test("AC4: replan when app not installed failure propagates")
+    func replanAppNotInstalledFailurePropagates() async throws {
         let mockLLM = MockLLMClient(stubbedResponse: """
         {
             "steps": [
@@ -239,13 +234,13 @@ final class CrossAppWorkflowTests: XCTestCase {
             context: context
         )
 
-        XCTAssertEqual(replanned.task, "Copy URL from Chrome to Notes")
-        XCTAssertFalse(replanned.steps.isEmpty)
-        XCTAssertTrue(replanned.steps.contains(where: { $0.tool == "launch_app" }),
-            "Replanned steps should include launching an alternative app")
+        #expect(replanned.task == "Copy URL from Chrome to Notes")
+        #expect(!replanned.steps.isEmpty)
+        #expect(replanned.steps.contains(where: { $0.tool == "launch_app" }))
     }
 
-    func test_replan_crossAppFailure_userPromptContainsErrorContext() async throws {
+    @Test("AC4: replan cross-app failure user prompt contains error context")
+    func replanCrossAppFailureUserPromptContainsErrorContext() async throws {
         let mockLLM = MockLLMClient(stubbedResponse: """
         {
             "steps": [{"tool": "launch_app", "args": {"app_name": "TextEdit"}, "purpose": "Use TextEdit instead", "expected_change": "TextEdit opens"}],
@@ -281,13 +276,13 @@ final class CrossAppWorkflowTests: XCTestCase {
             context: context
         )
 
-        let userMessage = try XCTUnwrap(mockLLM.lastUserMessage)
-        XCTAssertTrue(userMessage.contains("REPLAN"), "Replan prompt should contain REPLAN marker")
-        XCTAssertTrue(userMessage.contains("not installed"),
-            "Replan prompt should contain the original failure reason about app not installed")
+        let userMessage = try #require(mockLLM.lastUserMessage)
+        #expect(userMessage.contains("REPLAN"))
+        #expect(userMessage.contains("not installed"))
     }
 
-    func test_replan_clipboardEmpty_failureIncludesContext() async throws {
+    @Test("AC4: replan clipboard empty failure includes context")
+    func replanClipboardEmptyFailureIncludesContext() async throws {
         let mockLLM = MockLLMClient(stubbedResponse: """
         {
             "steps": [
@@ -336,14 +331,12 @@ final class CrossAppWorkflowTests: XCTestCase {
             context: context
         )
 
-        XCTAssertFalse(replanned.steps.isEmpty)
-        XCTAssertTrue(replanned.steps.contains(where: { $0.tool == "activate_window" }),
-            "Replanned steps should handle clipboard failure with alternative approach")
+        #expect(!replanned.steps.isEmpty)
+        #expect(replanned.steps.contains(where: { $0.tool == "activate_window" }))
     }
 
-    // MARK: - AC5: End-to-end cross-app pipeline simulation
-
-    func test_crossAppPipeline_fullCopyPasteWorkflow() async throws {
+    @Test("AC5: full cross-app copy-paste workflow pipeline")
+    func crossAppPipelineFullCopyPasteWorkflow() async throws {
         // Phase 1: Plan generation
         let planJSON = """
         {
@@ -365,30 +358,30 @@ final class CrossAppWorkflowTests: XCTestCase {
         let plan = try await planner.createPlan(for: "Copy Safari page text to TextEdit", context: makeContext())
 
         // Phase 2: Validate plan structure
-        XCTAssertEqual(plan.steps.count, 6, "Cross-app plan should have multi-step workflow")
-        XCTAssertEqual(plan.task, "Copy Safari page text to TextEdit")
+        #expect(plan.steps.count == 6)
+        #expect(plan.task == "Copy Safari page text to TextEdit")
 
         // Verify discover → source → copy → switch → paste pattern
         let tools = plan.steps.map(\.tool)
-        XCTAssertEqual(tools[0], "list_windows", "First step should discover windows")
-        XCTAssertTrue(tools.contains("activate_window"), "Plan should include window activation")
-        XCTAssertTrue(tools.contains("hotkey"), "Plan should include hotkey operations")
+        #expect(tools[0] == "list_windows")
+        #expect(tools.contains("activate_window"))
+        #expect(tools.contains("hotkey"))
 
         let copyIndex = plan.steps.firstIndex(where: { $0.tool == "hotkey" && $0.parameters["keys"] == .string("command+c") })
         let pasteIndex = plan.steps.firstIndex(where: { $0.tool == "hotkey" && $0.parameters["keys"] == .string("command+v") })
-        XCTAssertNotNil(copyIndex, "Plan should include a command+c copy step")
-        XCTAssertNotNil(pasteIndex, "Plan should include a command+v paste step")
+        #expect(copyIndex != nil)
+        #expect(pasteIndex != nil)
         if let copyIndex, let pasteIndex {
-            XCTAssertLessThan(copyIndex, pasteIndex, "Copy step should come before paste step")
+            #expect(copyIndex < pasteIndex)
         }
 
         // Phase 3: Verify system prompt had proper guidance
-        let systemPrompt = try XCTUnwrap(mockLLM.lastSystemPrompt)
-        XCTAssertTrue(systemPrompt.contains("Cross-Application"),
-            "System prompt should have cross-app guidance for cross-app tasks")
+        let systemPrompt = try #require(mockLLM.lastSystemPrompt)
+        #expect(systemPrompt.contains("Cross-Application"))
     }
 
-    func test_crossAppPipeline_replanAfterAppNotFound() async throws {
+    @Test("AC5: cross-app pipeline replan after app not found")
+    func crossAppPipelineReplanAfterAppNotFound() async throws {
         // Phase 1: Initial plan fails because target app is missing
         let initialPlan = Plan(
             id: UUID(),
@@ -437,46 +430,40 @@ final class CrossAppWorkflowTests: XCTestCase {
         )
 
         // Phase 3: Verify recovery plan uses alternative approach
-        XCTAssertEqual(replanned.task, "Copy URL from Safari to Notes")
-        XCTAssertFalse(replanned.steps.isEmpty)
+        #expect(replanned.task == "Copy URL from Safari to Notes")
+        #expect(!replanned.steps.isEmpty)
 
         let launchSteps = replanned.steps.filter { $0.tool == "launch_app" }
-        XCTAssertTrue(launchSteps.contains(where: { $0.parameters["app_name"]?.stringValue == "TextEdit" }),
-            "Recovery plan should launch alternative app (TextEdit)")
+        #expect(launchSteps.contains(where: { $0.parameters["app_name"]?.stringValue == "TextEdit" }))
 
-        let userMessage = try XCTUnwrap(mockLLM.lastUserMessage)
-        XCTAssertTrue(userMessage.contains("REPLAN"))
-        XCTAssertTrue(userMessage.contains("not installed"))
+        let userMessage = try #require(mockLLM.lastUserMessage)
+        #expect(userMessage.contains("REPLAN"))
+        #expect(userMessage.contains("not installed"))
     }
 
-    // MARK: - Prompt content validation
-
-    func test_plannerPrompt_crossAppWorkflow_containsSixStepPattern() throws {
+    @Test("planner prompt cross-app workflow contains six-step pattern")
+    func plannerPromptCrossAppWorkflowContainsSixStepPattern() throws {
         let promptDir = PromptBuilder.resolvePromptDirectory()
         let content = try PromptBuilder.load(
             name: "planner-system",
             variables: ["tools": "test", "max_steps": "20"],
             fromDirectory: promptDir
         )
-        XCTAssertTrue(content.contains("Discover") && content.contains("Source operation") && content.contains("Verify"),
-            "Cross-Application Workflow Patterns should include the 6-step pattern (Discover, Source, Verify, Switch, Target, Verify)")
+        #expect(content.contains("Discover") && content.contains("Source operation") && content.contains("Verify"))
     }
 
-    func test_plannerPrompt_failureRecovery_containsAppNotFoundGuidance() throws {
+    @Test("planner prompt failure recovery contains app not found guidance")
+    func plannerPromptFailureRecoveryContainsAppNotFoundGuidance() throws {
         let promptDir = PromptBuilder.resolvePromptDirectory()
         let content = try PromptBuilder.load(
             name: "planner-system",
             variables: ["tools": "test", "max_steps": "20"],
             fromDirectory: promptDir
         )
-        XCTAssertTrue(content.contains("Application not found") || content.contains("alternative"),
-            "Failure recovery should include guidance for when application is not found")
-        XCTAssertTrue(content.contains("AX tree") || content.contains("accessibility"),
-            "Failure recovery should mention AX tree fallback for clipboard failures")
+        #expect(content.contains("Application not found") || content.contains("alternative"))
+        #expect(content.contains("AX tree") || content.contains("accessibility"))
     }
 }
-
-// MARK: - Value helper extension
 
 extension Value {
     var stringValue: String? {

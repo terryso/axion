@@ -1,15 +1,11 @@
-import XCTest
+import Testing
+import Foundation
 @testable import AxionCLI
 import AxionCore
-
-// [P0] 基础设施验证
-// [P1] 行为验证
 
 // ATDD RED PHASE — Story 3-6: Run Engine 执行循环状态机
 // 所有测试在 RunEngine 实现后将通过 (TDD red-green-refactor)
 // 测试覆盖 AC1-AC12 全部 12 个验收标准
-
-// MARK: - Mock Planner
 
 final class MockPlanner: PlannerProtocol {
     var createPlanResult: Result<Plan, Error>?
@@ -77,8 +73,6 @@ final class MockPlanner: PlannerProtocol {
     }
 }
 
-// MARK: - Mock Executor
-
 final class MockExecutor: ExecutorProtocol {
     var executeStepResult: Result<ExecutedStep, Error>?
     var executePlanResult: Result<(executedSteps: [ExecutedStep], context: RunContext), Error>?
@@ -134,8 +128,6 @@ final class MockExecutor: ExecutorProtocol {
     }
 }
 
-// MARK: - Mock Verifier
-
 final class MockVerifier: VerifierProtocol {
     var verifyResult: VerificationResult?
     var verifyCallCount = 0
@@ -157,8 +149,6 @@ final class MockVerifier: VerifierProtocol {
         return verifyResult ?? .done()
     }
 }
-
-// MARK: - Mock Output
 
 final class MockOutput: OutputProtocol {
     var displayPlanCalls: [Plan] = []
@@ -203,9 +193,9 @@ final class MockOutput: OutputProtocol {
     }
 }
 
-// MARK: - Test Helpers
+@Suite("RunEngine")
+struct RunEngineTests {
 
-extension RunEngineTests {
     func makeDefaultConfig() -> AxionConfig {
         AxionConfig(
             apiKey: "test-key",
@@ -257,29 +247,19 @@ extension RunEngineTests {
             timestamp: Date()
         )
     }
-}
 
-// MARK: - RunEngine ATDD Tests
-
-final class RunEngineTests: XCTestCase {
-
-    // ========================================================================
-    // MARK: - [P0] 类型存在性 — RunEngine 和 RunEngineOptions 存在
-    // ========================================================================
-
-    func test_runEngine_typeExists() throws {
+    @Test("RunEngine type exists")
+    func runEngineTypeExists() throws {
         let _ = RunEngine.self
     }
 
-    func test_runEngineOptions_typeExists() throws {
+    @Test("RunEngineOptions type exists")
+    func runEngineOptionsTypeExists() throws {
         let _ = RunEngineOptions.self
     }
 
-    // ========================================================================
-    // MARK: - [P0] AC1: 状态机启动 — planning -> executing -> verifying
-    // ========================================================================
-
-    func test_runEngine_happyPath_planExecuteVerifyDone() async throws {
+    @Test("AC1: happy path — planning -> executing -> verifying -> done")
+    func happyPathPlanExecuteVerifyDone() async throws {
 
         let planner = MockPlanner()
         let executor = MockExecutor()
@@ -313,24 +293,14 @@ final class RunEngineTests: XCTestCase {
         let options = RunEngineOptions()
         let result = await engine.run(task: "Open Calculator", config: config, options: options)
 
-        // Verify final state is .done
-        XCTAssertEqual(result.currentState, .done)
-
-        // Verify planner was called once
-        XCTAssertEqual(planner.createPlanCallCount, 1)
-
-        // Verify executor was called once
-        XCTAssertEqual(executor.executePlanCallCount, 1)
-
-        // Verify verifier was called once
-        XCTAssertEqual(verifier.verifyCallCount, 1)
+        #expect(result.currentState == .done)
+        #expect(planner.createPlanCallCount == 1)
+        #expect(executor.executePlanCallCount == 1)
+        #expect(verifier.verifyCallCount == 1)
     }
 
-    // ========================================================================
-    // MARK: - [P0] AC2: 任务完成终态 (.done) — 显示完成汇总
-    // ========================================================================
-
-    func test_runEngine_doneState_displaysSummary() async throws {
+    @Test("AC2: done state displays summary")
+    func doneStateDisplaysSummary() async throws {
 
         let planner = MockPlanner()
         let executor = MockExecutor()
@@ -355,16 +325,11 @@ final class RunEngineTests: XCTestCase {
         let options = RunEngineOptions()
         _ = await engine.run(task: "Open Calculator", config: config, options: options)
 
-        // Verify displaySummary was called
-        XCTAssertTrue(output.displaySummaryCalls.count >= 1,
-                       "displaySummary should be called when run completes")
+        #expect(output.displaySummaryCalls.count >= 1)
     }
 
-    // ========================================================================
-    // MARK: - [P0] AC3: 重规划循环 — blocked -> replanning -> planning
-    // ========================================================================
-
-    func test_runEngine_blockedTriggersReplan() async throws {
+    @Test("AC3: blocked triggers replan")
+    func blockedTriggersReplan() async throws {
 
         let planner = MockPlanner()
         let executor = MockExecutor()
@@ -401,22 +366,13 @@ final class RunEngineTests: XCTestCase {
         let options = RunEngineOptions()
         let result = await engine.run(task: "Open Calculator", config: config, options: options)
 
-        // Verify final state is .done (after successful replan)
-        XCTAssertEqual(result.currentState, .done)
-
-        // Verify replan was called once
-        XCTAssertEqual(planner.replanCallCount, 1)
-
-        // Verify displayReplan was called
-        XCTAssertTrue(output.displayReplanCalls.count >= 1,
-                       "displayReplan should be called when replanning")
+        #expect(result.currentState == .done)
+        #expect(planner.replanCallCount == 1)
+        #expect(output.displayReplanCalls.count >= 1)
     }
 
-    // ========================================================================
-    // MARK: - [P0] AC4: 重规划后继续执行 — 回到 executing 状态
-    // ========================================================================
-
-    func test_runEngine_replanSuccess_returnsToExecuting() async throws {
+    @Test("AC4: replan success returns to executing")
+    func replanSuccessReturnsToExecuting() async throws {
 
         let planner = MockPlanner()
         let executor = MockExecutor()
@@ -453,26 +409,16 @@ final class RunEngineTests: XCTestCase {
         let options = RunEngineOptions()
         let result = await engine.run(task: "Open Calculator", config: config, options: options)
 
-        // Executor was called twice (original plan + replan plan)
-        XCTAssertEqual(executor.executePlanCallCount, 2)
+        #expect(executor.executePlanCallCount == 2)
+        #expect(verifier.verifyCallCount == 2)
+        #expect(result.currentState == .done)
 
-        // Verifier was called twice
-        XCTAssertEqual(verifier.verifyCallCount, 2)
-
-        // Final state is .done
-        XCTAssertEqual(result.currentState, .done)
-
-        // State transitions include executing twice
         let executingTransitions = output.displayStateChangeCalls.filter { $0.to == .executing }
-        XCTAssertEqual(executingTransitions.count, 2,
-                       "Should transition to executing twice (original + replan)")
+        #expect(executingTransitions.count == 2)
     }
 
-    // ========================================================================
-    // MARK: - [P0] AC5: 最大重规划次数 — 进入 .failed 终态
-    // ========================================================================
-
-    func test_runEngine_maxReplanRetriesExceeded_entersFailed() async throws {
+    @Test("AC5: max replan retries exceeded enters failed")
+    func maxReplanRetriesExceededEntersFailed() async throws {
 
         let planner = MockPlanner()
         let executor = MockExecutor()
@@ -521,18 +467,12 @@ final class RunEngineTests: XCTestCase {
         let options = RunEngineOptions()
         let result = await engine.run(task: "Impossible task", config: config, options: options)
 
-        // Should enter .failed after max retries exceeded
-        XCTAssertEqual(result.currentState, .failed)
-
-        // Replan was called maxReplanRetries times
-        XCTAssertEqual(planner.replanCallCount, 2)
+        #expect(result.currentState == .failed)
+        #expect(planner.replanCallCount == 2)
     }
 
-    // ========================================================================
-    // MARK: - [P1] AC6: Ctrl-C 中断 — 进入 .cancelled
-    // ========================================================================
-
-    func test_runEngine_cancelPropagation_entersCancelled() async throws {
+    @Test("AC6: cancel propagation enters cancelled")
+    func cancelPropagationEntersCancelled() async throws {
 
         let planner = MockPlanner()
         let executor = MockExecutor()
@@ -550,15 +490,11 @@ final class RunEngineTests: XCTestCase {
         let options = RunEngineOptions()
         let result = await engine.run(task: "Open Calculator", config: config, options: options)
 
-        // Should enter .cancelled state
-        XCTAssertEqual(result.currentState, .cancelled)
+        #expect(result.currentState == .cancelled)
     }
 
-    // ========================================================================
-    // MARK: - [P0] AC7: 批次限制 — maxBatches 超出后终止
-    // ========================================================================
-
-    func test_runEngine_maxBatchesExceeded_entersFailed() async throws {
+    @Test("AC7: max batches exceeded enters failed")
+    func maxBatchesExceededEntersFailed() async throws {
 
         let planner = MockPlanner()
         let executor = MockExecutor()
@@ -596,15 +532,11 @@ final class RunEngineTests: XCTestCase {
         let options = RunEngineOptions()
         let result = await engine.run(task: "Open Calculator", config: config, options: options)
 
-        // Should enter .failed when maxBatches exceeded
-        XCTAssertEqual(result.currentState, .failed)
+        #expect(result.currentState == .failed)
     }
 
-    // ========================================================================
-    // MARK: - [P0] AC7: 步数限制 — maxSteps 超出后终止
-    // ========================================================================
-
-    func test_runEngine_maxStepsExceeded_stopsExecution() async throws {
+    @Test("AC7: max steps exceeded stops execution")
+    func maxStepsExceededStopsExecution() async throws {
 
         let planner = MockPlanner()
         let executor = MockExecutor()
@@ -632,15 +564,11 @@ final class RunEngineTests: XCTestCase {
         let options = RunEngineOptions()
         let result = await engine.run(task: "Complex task", config: config, options: options)
 
-        // Should enter .failed when steps exceed maxSteps
-        XCTAssertEqual(result.currentState, .failed)
+        #expect(result.currentState == .failed)
     }
 
-    // ========================================================================
-    // MARK: - [P0] AC8: 干跑模式 — Planner 生成计划后不执行
-    // ========================================================================
-
-    func test_runEngine_dryrunMode_plansOnlyNoExecute() async throws {
+    @Test("AC8: dryrun mode plans only without execute")
+    func dryrunModePlansOnlyNoExecute() async throws {
 
         let planner = MockPlanner()
         let executor = MockExecutor()
@@ -659,31 +587,15 @@ final class RunEngineTests: XCTestCase {
         options.dryrun = true
         let result = await engine.run(task: "Open Calculator", config: config, options: options)
 
-        // Should enter .done without executing
-        XCTAssertEqual(result.currentState, .done)
-
-        // Executor should NOT have been called
-        XCTAssertEqual(executor.executePlanCallCount, 0,
-                       "Executor should not be called in dryrun mode")
-
-        // Verifier should NOT have been called
-        XCTAssertEqual(verifier.verifyCallCount, 0,
-                       "Verifier should not be called in dryrun mode")
-
-        // Planner SHOULD have been called
-        XCTAssertEqual(planner.createPlanCallCount, 1,
-                       "Planner should be called in dryrun mode")
-
-        // Plan should be displayed
-        XCTAssertTrue(output.displayPlanCalls.count >= 1,
-                       "Plan should be displayed in dryrun mode")
+        #expect(result.currentState == .done)
+        #expect(executor.executePlanCallCount == 0)
+        #expect(verifier.verifyCallCount == 0)
+        #expect(planner.createPlanCallCount == 1)
+        #expect(output.displayPlanCalls.count >= 1)
     }
 
-    // ========================================================================
-    // MARK: - [P1] AC9: 前台模式 — allowForeground 放行
-    // ========================================================================
-
-    func test_runEngine_allowForeground_executesForegroundOps() async throws {
+    @Test("AC9: allowForeground executes foreground ops")
+    func allowForegroundExecutesForegroundOps() async throws {
 
         let planner = MockPlanner()
         let executor = MockExecutor()
@@ -720,15 +632,12 @@ final class RunEngineTests: XCTestCase {
         options.allowForeground = true
         let result = await engine.run(task: "Click button", config: config, options: options)
 
-        XCTAssertEqual(result.currentState, .done)
-        XCTAssertEqual(executor.executePlanCallCount, 1)
+        #expect(result.currentState == .done)
+        #expect(executor.executePlanCallCount == 1)
     }
 
-    // ========================================================================
-    // MARK: - [P1] AC10: needsClarification 处理 — 进入终态
-    // ========================================================================
-
-    func test_runEngine_needsClarification_entersTerminalState() async throws {
+    @Test("AC10: needsClarification enters terminal state")
+    func needsClarificationEntersTerminalState() async throws {
 
         let planner = MockPlanner()
         let executor = MockExecutor()
@@ -753,19 +662,12 @@ final class RunEngineTests: XCTestCase {
         let options = RunEngineOptions()
         let result = await engine.run(task: "Open calculator", config: config, options: options)
 
-        // Should enter .needsClarification state (terminal)
-        XCTAssertEqual(result.currentState, .needsClarification)
-
-        // Should NOT attempt replan
-        XCTAssertEqual(planner.replanCallCount, 0,
-                       "Should not replan for needsClarification")
+        #expect(result.currentState == .needsClarification)
+        #expect(planner.replanCallCount == 0)
     }
 
-    // ========================================================================
-    // MARK: - [P0] AC11: 不可恢复错误 — 进入 .failed 终态
-    // ========================================================================
-
-    func test_runEngine_irrecoverableError_entersFailed() async throws {
+    @Test("AC11: irrecoverable error enters failed")
+    func irrecoverableErrorEntersFailed() async throws {
 
         let planner = MockPlanner()
         let executor = MockExecutor()
@@ -783,19 +685,12 @@ final class RunEngineTests: XCTestCase {
         let options = RunEngineOptions()
         let result = await engine.run(task: "Open Calculator", config: config, options: options)
 
-        // Should enter .failed state
-        XCTAssertEqual(result.currentState, .failed)
-
-        // displayError should have been called
-        XCTAssertTrue(output.displayErrorCalls.count >= 1,
-                       "displayError should be called for irrecoverable errors")
+        #expect(result.currentState == .failed)
+        #expect(output.displayErrorCalls.count >= 1)
     }
 
-    // ========================================================================
-    // MARK: - [P0] AC12: 步骤执行失败触发重规划 — 跳过验证
-    // ========================================================================
-
-    func test_runEngine_stepFailure_skipsVerifyAndReplans() async throws {
+    @Test("AC12: step failure skips verify and replans")
+    func stepFailureSkipsVerifyAndReplans() async throws {
 
         let planner = MockPlanner()
         let executor = MockExecutor()
@@ -832,25 +727,14 @@ final class RunEngineTests: XCTestCase {
         let options = RunEngineOptions()
         let result = await engine.run(task: "Open Calculator", config: config, options: options)
 
-        // Final state should be .done
-        XCTAssertEqual(result.currentState, .done)
-
-        // Verifier should only be called once (for the successful replan, NOT for the failed first plan)
-        XCTAssertEqual(verifier.verifyCallCount, 1,
-                       "Verifier should be skipped when step execution fails")
-
-        // Replan should have been called once
-        XCTAssertEqual(planner.replanCallCount, 1)
-
-        // Executor should have been called twice (failed plan + replan plan)
-        XCTAssertEqual(executor.executePlanCallCount, 2)
+        #expect(result.currentState == .done)
+        #expect(verifier.verifyCallCount == 1)
+        #expect(planner.replanCallCount == 1)
+        #expect(executor.executePlanCallCount == 2)
     }
 
-    // ========================================================================
-    // MARK: - [P0] AC12 变体: 步骤失败重规划也耗尽 -> .failed
-    // ========================================================================
-
-    func test_runEngine_stepFailureReplanExhausted_entersFailed() async throws {
+    @Test("AC12 variant: step failure replan exhausted enters failed")
+    func stepFailureReplanExhaustedEntersFailed() async throws {
 
         let planner = MockPlanner()
         let executor = MockExecutor()
@@ -886,18 +770,12 @@ final class RunEngineTests: XCTestCase {
         let options = RunEngineOptions()
         let result = await engine.run(task: "Open Calculator", config: config, options: options)
 
-        // Should enter .failed
-        XCTAssertEqual(result.currentState, .failed)
-
-        // Verifier should NOT have been called at all (all steps failed)
-        XCTAssertEqual(verifier.verifyCallCount, 0)
+        #expect(result.currentState == .failed)
+        #expect(verifier.verifyCallCount == 0)
     }
 
-    // ========================================================================
-    // MARK: - [P1] Output 调用验证 — displayRunStart 被调用
-    // ========================================================================
-
-    func test_runEngine_callsDisplayRunStart() async throws {
+    @Test("calls displayRunStart")
+    func callsDisplayRunStart() async throws {
 
         let planner = MockPlanner()
         let executor = MockExecutor()
@@ -922,17 +800,12 @@ final class RunEngineTests: XCTestCase {
         let options = RunEngineOptions()
         _ = await engine.run(task: "Open Calculator", config: config, options: options)
 
-        // displayRunStart should have been called
-        XCTAssertTrue(output.displayRunStartCalls.count >= 1,
-                       "displayRunStart should be called at the beginning")
-        XCTAssertEqual(output.displayRunStartCalls.first?.task, "Open Calculator")
+        #expect(output.displayRunStartCalls.count >= 1)
+        #expect(output.displayRunStartCalls.first?.task == "Open Calculator")
     }
 
-    // ========================================================================
-    // MARK: - [P1] Output 调用验证 — displayStateChange 被调用
-    // ========================================================================
-
-    func test_runEngine_callsDisplayStateChange() async throws {
+    @Test("calls displayStateChange")
+    func callsDisplayStateChange() async throws {
 
         let planner = MockPlanner()
         let executor = MockExecutor()
@@ -957,20 +830,14 @@ final class RunEngineTests: XCTestCase {
         let options = RunEngineOptions()
         _ = await engine.run(task: "Open Calculator", config: config, options: options)
 
-        // displayStateChange should have been called for state transitions
-        XCTAssertTrue(output.displayStateChangeCalls.count >= 2,
-                       "displayStateChange should be called for each state transition")
+        #expect(output.displayStateChangeCalls.count >= 2)
 
-        // Should contain planning -> executing transition
         let planningToExecuting = output.displayStateChangeCalls.contains { $0.from == .planning && $0.to == .executing }
-        XCTAssertTrue(planningToExecuting, "Should transition from planning to executing")
+        #expect(planningToExecuting)
     }
 
-    // ========================================================================
-    // MARK: - [P1] Output 调用验证 — displayVerificationResult 被调用
-    // ========================================================================
-
-    func test_runEngine_callsDisplayVerificationResult() async throws {
+    @Test("calls displayVerificationResult")
+    func callsDisplayVerificationResult() async throws {
 
         let planner = MockPlanner()
         let executor = MockExecutor()
@@ -995,29 +862,21 @@ final class RunEngineTests: XCTestCase {
         let options = RunEngineOptions()
         _ = await engine.run(task: "Open Calculator", config: config, options: options)
 
-        // displayVerificationResult should have been called
-        XCTAssertTrue(output.displayVerificationResultCalls.count >= 1,
-                       "displayVerificationResult should be called after verification")
+        #expect(output.displayVerificationResultCalls.count >= 1)
     }
 
-    // ========================================================================
-    // MARK: - [P0] RunEngineOptions 默认值
-    // ========================================================================
-
-    func test_runEngineOptions_defaultValues() throws {
+    @Test("RunEngineOptions default values")
+    func runEngineOptionsDefaultValues() throws {
 
         let options = RunEngineOptions()
-        XCTAssertEqual(options.dryrun, false)
-        XCTAssertEqual(options.allowForeground, false)
-        XCTAssertEqual(options.maxSteps, nil) // nil means use config default
-        XCTAssertEqual(options.maxBatches, nil) // nil means use config default
+        #expect(options.dryrun == false)
+        #expect(options.allowForeground == false)
+        #expect(options.maxSteps == nil) // nil means use config default
+        #expect(options.maxBatches == nil) // nil means use config default
     }
 
-    // ========================================================================
-    // MARK: - [P0] RunId 格式和唯一性
-    // ========================================================================
-
-    func test_runEngine_runIdFormat() async throws {
+    @Test("runId format YYYYMMDD-{6random}")
+    func runIdFormat() async throws {
 
         let planner = MockPlanner()
         let executor = MockExecutor()
@@ -1044,11 +903,11 @@ final class RunEngineTests: XCTestCase {
 
         // Run ID should follow YYYYMMDD-{6random} format
         let runId = output.displayRunStartCalls.first?.runId
-        XCTAssertNotNil(runId, "Run ID should be generated")
+        let unwrappedRunId = try #require(runId)
         let pattern = "^\\d{8}-[a-z0-9]{6}$"
         let regex = try NSRegularExpression(pattern: pattern)
-        let range = NSRange(runId!.startIndex..., in: runId!)
-        let match = regex.firstMatch(in: runId!, range: range)
-        XCTAssertNotNil(match, "Run ID should match YYYYMMDD-{6random} format: \(runId!)")
+        let range = NSRange(unwrappedRunId.startIndex..., in: unwrappedRunId)
+        let match = regex.firstMatch(in: unwrappedRunId, range: range)
+        #expect(match != nil)
     }
 }

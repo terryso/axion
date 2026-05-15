@@ -1,10 +1,12 @@
-import XCTest
+import Testing
+import Foundation
 @testable import AxionCLI
 import AxionCore
 
 // Additional RunEngine tests covering error paths and edge cases.
 
-final class RunEngineExtraTests: XCTestCase {
+@Suite("RunEngine Extra")
+struct RunEngineExtraTests {
 
     func makeDefaultConfig() -> AxionConfig {
         AxionConfig(apiKey: "test-key", maxSteps: 20, maxBatches: 6, maxReplanRetries: 3)
@@ -24,9 +26,8 @@ final class RunEngineExtraTests: XCTestCase {
         }
     }
 
-    // MARK: - Executor throws generic error
-
-    func test_runEngine_executorThrowsGenericError_entersFailed() async throws {
+    @Test("executor throws generic error enters failed")
+    func executorThrowsGenericErrorEntersFailed() async throws {
         let planner = MockPlannerExtra()
         let executor = MockExecutorExtra()
         let verifier = MockVerifierExtra()
@@ -40,12 +41,11 @@ final class RunEngineExtraTests: XCTestCase {
         let engine = RunEngine(planner: planner, executor: executor, verifier: verifier, output: output)
         let result = await engine.run(task: "Open Calculator", config: config, options: RunEngineOptions())
 
-        XCTAssertEqual(result.currentState, .failed)
+        #expect(result.currentState == .failed)
     }
 
-    // MARK: - Verifier throws generic error
-
-    func test_runEngine_verifierThrowsGenericError_entersFailed() async throws {
+    @Test("verifier throws generic error enters failed")
+    func verifierThrowsGenericErrorEntersFailed() async throws {
         let planner = MockPlannerExtra()
         let executor = MockExecutorExtra()
         let verifier = MockVerifierExtra()
@@ -61,12 +61,11 @@ final class RunEngineExtraTests: XCTestCase {
         let engine = RunEngine(planner: planner, executor: executor, verifier: verifier, output: output)
         let result = await engine.run(task: "Open Calculator", config: config, options: RunEngineOptions())
 
-        XCTAssertEqual(result.currentState, .failed)
+        #expect(result.currentState == .failed)
     }
 
-    // MARK: - Planner throws generic error
-
-    func test_runEngine_plannerThrowsGenericError_entersFailed() async throws {
+    @Test("planner throws generic error enters failed")
+    func plannerThrowsGenericErrorEntersFailed() async throws {
         let planner = MockPlannerExtra()
         let executor = MockExecutorExtra()
         let verifier = MockVerifierExtra()
@@ -78,12 +77,11 @@ final class RunEngineExtraTests: XCTestCase {
         let engine = RunEngine(planner: planner, executor: executor, verifier: verifier, output: output)
         let result = await engine.run(task: "Open Calculator", config: config, options: RunEngineOptions())
 
-        XCTAssertEqual(result.currentState, .failed)
+        #expect(result.currentState == .failed)
     }
 
-    // MARK: - Verifier returns unexpected state
-
-    func test_runEngine_verifierReturnsUnexpectedState_entersFailed() async throws {
+    @Test("verifier returns unexpected state enters failed")
+    func verifierReturnsUnexpectedStateEntersFailed() async throws {
         let planner = MockPlannerExtra()
         let executor = MockExecutorExtra()
         let verifier = MockVerifierExtra()
@@ -99,12 +97,11 @@ final class RunEngineExtraTests: XCTestCase {
         let engine = RunEngine(planner: planner, executor: executor, verifier: verifier, output: output)
         let result = await engine.run(task: "Open Calculator", config: config, options: RunEngineOptions())
 
-        XCTAssertEqual(result.currentState, .failed)
+        #expect(result.currentState == .failed)
     }
 
-    // MARK: - Executor throws AxionError.cancelled
-
-    func test_runEngine_executorThrowsCancelled_entersCancelled() async throws {
+    @Test("executor throws cancelled enters cancelled")
+    func executorThrowsCancelledEntersCancelled() async throws {
         let planner = MockPlannerExtra()
         let executor = MockExecutorExtra()
         let verifier = MockVerifierExtra()
@@ -118,12 +115,11 @@ final class RunEngineExtraTests: XCTestCase {
         let engine = RunEngine(planner: planner, executor: executor, verifier: verifier, output: output)
         let result = await engine.run(task: "Open Calculator", config: config, options: RunEngineOptions())
 
-        XCTAssertEqual(result.currentState, .cancelled)
+        #expect(result.currentState == .cancelled)
     }
 
-    // MARK: - Verifier throws AxionError.cancelled
-
-    func test_runEngine_verifierThrowsCancelled_entersCancelled() async throws {
+    @Test("verifier throws cancelled enters cancelled")
+    func verifierThrowsCancelledEntersCancelled() async throws {
         let planner = MockPlannerExtra()
         let executor = MockExecutorExtra()
         let verifier = MockVerifierExtra()
@@ -139,12 +135,11 @@ final class RunEngineExtraTests: XCTestCase {
         let engine = RunEngine(planner: planner, executor: executor, verifier: verifier, output: output)
         let result = await engine.run(task: "Open Calculator", config: config, options: RunEngineOptions())
 
-        XCTAssertEqual(result.currentState, .cancelled)
+        #expect(result.currentState == .cancelled)
     }
 
-    // MARK: - Batch budget exceeded
-
-    func test_runEngine_batchBudgetExceeded_entersFailed() async throws {
+    @Test("batch budget exceeded enters failed")
+    func batchBudgetExceededEntersFailed() async throws {
         let planner = MockPlannerExtra()
         let executor = MockExecutorExtra()
         let verifier = MockVerifierExtra()
@@ -163,12 +158,11 @@ final class RunEngineExtraTests: XCTestCase {
         let engine = RunEngine(planner: planner, executor: executor, verifier: verifier, output: output)
         let result = await engine.run(task: "Open Calculator", config: config, options: RunEngineOptions())
 
-        XCTAssertEqual(result.currentState, .failed)
+        #expect(result.currentState == .failed)
     }
 
-    // MARK: - Foreground mode
-
-    func test_runEngine_foregroundMode_setsModeCorrectly() async throws {
+    @Test("foreground mode sets mode correctly")
+    func foregroundModeSetsModeCorrectly() async throws {
         let planner = MockPlannerExtra()
         let executor = MockExecutorExtra()
         let verifier = MockVerifierExtra()
@@ -186,13 +180,12 @@ final class RunEngineExtraTests: XCTestCase {
         options.allowForeground = true
         let result = await engine.run(task: "Open Calculator", config: config, options: options)
 
-        XCTAssertEqual(result.currentState, .done)
-        XCTAssertTrue(output.runStartCalls.contains(where: { $0.mode == "foreground" }))
+        #expect(result.currentState == .done)
+        #expect(output.runStartCalls.contains(where: { $0.mode == "foreground" }))
     }
 
-    // MARK: - RunEngineOptions custom values
-
-    func test_runEngineOptions_customValues() {
+    @Test("RunEngineOptions custom values")
+    func runEngineOptionsCustomValues() {
         var options = RunEngineOptions()
         options.dryrun = true
         options.allowForeground = true
@@ -200,15 +193,13 @@ final class RunEngineExtraTests: XCTestCase {
         options.maxBatches = 3
         options.verbose = true
 
-        XCTAssertTrue(options.dryrun)
-        XCTAssertTrue(options.allowForeground)
-        XCTAssertEqual(options.maxSteps, 10)
-        XCTAssertEqual(options.maxBatches, 3)
-        XCTAssertTrue(options.verbose)
+        #expect(options.dryrun)
+        #expect(options.allowForeground)
+        #expect(options.maxSteps == 10)
+        #expect(options.maxBatches == 3)
+        #expect(options.verbose)
     }
 }
-
-// MARK: - Simple Mocks for Extra Tests
 
 private final class MockPlannerExtra: PlannerProtocol {
     var createPlanResult: Result<Plan, Error>?

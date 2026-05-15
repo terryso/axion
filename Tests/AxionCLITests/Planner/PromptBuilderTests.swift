@@ -1,22 +1,19 @@
-import XCTest
+import Testing
+import Foundation
 @testable import AxionCLI
 @testable import AxionCore
 
-// [P0] 基础设施验证
-// [P1] 行为验证
+@Suite("PromptBuilder")
+struct PromptBuilderTests {
 
-final class PromptBuilderTests: XCTestCase {
-
-    // MARK: - P0 类型存在性
-
-    func test_promptBuilder_typeExists() async throws {
+    @Test("type exists")
+    func promptBuilderTypeExists() async throws {
         // 验证 PromptBuilder 类型存在
         let _ = PromptBuilder.self
     }
 
-    // MARK: - P0 Prompt 文件加载 (AC1)
-
-    func test_load_existingFile_returnsContent() async throws {
+    @Test("load existing file returns content")
+    func loadExistingFileReturnsContent() async throws {
         // 创建临时 prompt 文件
         let tempDir = FileManager.default.temporaryDirectory.appendingPathComponent("Prompts-\(UUID().uuidString)")
         try FileManager.default.createDirectory(at: tempDir, withIntermediateDirectories: true)
@@ -32,20 +29,25 @@ final class PromptBuilderTests: XCTestCase {
             fromDirectory: tempDir.path
         )
 
-        XCTAssertEqual(result, "Hello Alice, welcome to Axion!")
+        #expect(result == "Hello Alice, welcome to Axion!")
     }
 
-    func test_load_missingFile_throwsError() async throws {
-        XCTAssertThrowsError(
+    @Test("load missing file throws error")
+    func loadMissingFileThrowsError() async throws {
+        do {
             try PromptBuilder.load(
                 name: "nonexistent",
                 variables: [:],
                 fromDirectory: "/tmp/empty-dir-\(UUID().uuidString)"
             )
-        )
+            Issue.record("Should have thrown")
+        } catch {
+            // Expected
+        }
     }
 
-    func test_load_noVariables_returnsRawContent() async throws {
+    @Test("load with no variables returns raw content")
+    func loadNoVariablesReturnsRawContent() async throws {
         let tempDir = FileManager.default.temporaryDirectory.appendingPathComponent("Prompts-\(UUID().uuidString)")
         try FileManager.default.createDirectory(at: tempDir, withIntermediateDirectories: true)
         defer { try? FileManager.default.removeItem(at: tempDir) }
@@ -60,10 +62,11 @@ final class PromptBuilderTests: XCTestCase {
             fromDirectory: tempDir.path
         )
 
-        XCTAssertEqual(result, "No variables here, just plain text.")
+        #expect(result == "No variables here, just plain text.")
     }
 
-    func test_load_multipleOccurrences_replacesAll() async throws {
+    @Test("load with multiple occurrences replaces all")
+    func loadMultipleOccurrencesReplacesAll() async throws {
         let tempDir = FileManager.default.temporaryDirectory.appendingPathComponent("Prompts-\(UUID().uuidString)")
         try FileManager.default.createDirectory(at: tempDir, withIntermediateDirectories: true)
         defer { try? FileManager.default.removeItem(at: tempDir) }
@@ -78,12 +81,11 @@ final class PromptBuilderTests: XCTestCase {
             fromDirectory: tempDir.path
         )
 
-        XCTAssertEqual(result, "Hi Bob! Hi again.")
+        #expect(result == "Hi Bob! Hi again.")
     }
 
-    // MARK: - P0 模板变量注入 (AC1)
-
-    func test_templateVariable_injectedCorrectly() async throws {
+    @Test("template variable injected correctly")
+    func templateVariableInjectedCorrectly() async throws {
         let tempDir = FileManager.default.temporaryDirectory.appendingPathComponent("Prompts-\(UUID().uuidString)")
         try FileManager.default.createDirectory(at: tempDir, withIntermediateDirectories: true)
         defer { try? FileManager.default.removeItem(at: tempDir) }
@@ -99,30 +101,29 @@ final class PromptBuilderTests: XCTestCase {
             fromDirectory: tempDir.path
         )
 
-        XCTAssertTrue(result.contains(toolList))
-        XCTAssertFalse(result.contains("{{tools}}"))
+        #expect(result.contains(toolList))
+        #expect(!result.contains("{{tools}}"))
     }
 
-    // MARK: - P0 工具列表格式化 (AC1)
-
-    func test_buildToolListDescription_formatsToolNames() async throws {
+    @Test("buildToolListDescription formats tool names")
+    func buildToolListDescriptionFormatsToolNames() async throws {
         let tools = ["launch_app", "click", "type_text", "screenshot"]
         let description = PromptBuilder.buildToolListDescription(from: tools)
 
         // 验证每个工具名出现在描述中
         for tool in tools {
-            XCTAssertTrue(description.contains(tool), "Description should contain '\(tool)'")
+            #expect(description.contains(tool))
         }
     }
 
-    func test_buildToolListDescription_emptyList_returnsEmpty() async throws {
+    @Test("buildToolListDescription empty list returns empty")
+    func buildToolListDescriptionEmptyListReturnsEmpty() async throws {
         let description = PromptBuilder.buildToolListDescription(from: [])
-        XCTAssertTrue(description.isEmpty)
+        #expect(description.isEmpty)
     }
 
-    // MARK: - P1 完整 Planner Prompt 组装 (AC1)
-
-    func test_buildPlannerPrompt_includesTask() async throws {
+    @Test("buildPlannerPrompt includes task")
+    func buildPlannerPromptIncludesTask() async throws {
         let prompt = PromptBuilder.buildPlannerPrompt(
             task: "Open Calculator and compute 17 * 23",
             currentStateSummary: "Desktop is visible",
@@ -130,11 +131,12 @@ final class PromptBuilderTests: XCTestCase {
             replanContext: nil
         )
 
-        XCTAssertTrue(prompt.contains("Open Calculator"))
-        XCTAssertTrue(prompt.contains("10"))
+        #expect(prompt.contains("Open Calculator"))
+        #expect(prompt.contains("10"))
     }
 
-    func test_buildPlannerPrompt_withReplanContext_includesFailureInfo() async throws {
+    @Test("buildPlannerPrompt with replanContext includes failure info")
+    func buildPlannerPromptWithReplanContextIncludesFailureInfo() async throws {
         let replanContext = ReplanContext(
             failedStepIndex: 2,
             failedStep: Step(index: 2, tool: "click", parameters: ["x": .int(100), "y": .int(200)], purpose: "Click button", expectedChange: "Button clicked"),
@@ -154,21 +156,19 @@ final class PromptBuilderTests: XCTestCase {
             replanContext: replanContext
         )
 
-        XCTAssertTrue(prompt.contains("REPLAN"))
-        XCTAssertTrue(prompt.contains("Element not found"))
-        XCTAssertTrue(prompt.contains("launch_app"))
+        #expect(prompt.contains("REPLAN"))
+        #expect(prompt.contains("Element not found"))
+        #expect(prompt.contains("launch_app"))
     }
 
-    // MARK: - P1 Prompt 目录查找
-
-    func test_resolvePromptDirectory_returnsValidPath() async throws {
+    @Test("resolvePromptDirectory returns valid path")
+    func resolvePromptDirectoryReturnsValidPath() async throws {
         let path = PromptBuilder.resolvePromptDirectory()
-        XCTAssertFalse(path.isEmpty)
+        #expect(!path.isEmpty)
     }
 
-    // MARK: - P1 未使用变量保留原样
-
-    func test_load_unresolvedVariables_remainAsPlaceholders() async throws {
+    @Test("load with unresolved variables remain as placeholders")
+    func loadUnresolvedVariablesRemainAsPlaceholders() async throws {
         let tempDir = FileManager.default.temporaryDirectory.appendingPathComponent("Prompts-\(UUID().uuidString)")
         try FileManager.default.createDirectory(at: tempDir, withIntermediateDirectories: true)
         defer { try? FileManager.default.removeItem(at: tempDir) }
@@ -183,64 +183,55 @@ final class PromptBuilderTests: XCTestCase {
             fromDirectory: tempDir.path
         )
 
-        XCTAssertEqual(result, "Hello Alice, your {{unknown_var}} is ready.")
+        #expect(result == "Hello Alice, your {{unknown_var}} is ready.")
     }
 
-    // MARK: - Story 8.2 Cross-Application Prompt Content
-
-    func test_plannerPrompt_containsCrossAppWorkflowPatterns() async throws {
+    @Test("planner prompt contains cross-app workflow patterns")
+    func plannerPromptContainsCrossAppWorkflowPatterns() async throws {
         let promptDir = PromptBuilder.resolvePromptDirectory()
         let content = try PromptBuilder.load(
             name: "planner-system",
             variables: ["tools": "test", "max_steps": "20"],
             fromDirectory: promptDir
         )
-        XCTAssertTrue(content.contains("Cross-Application Workflow Patterns"),
-            "Planner prompt should contain Cross-Application Workflow Patterns section")
+        #expect(content.contains("Cross-Application Workflow Patterns"))
     }
 
-    func test_plannerPrompt_containsClipboardVerification() async throws {
+    @Test("planner prompt contains clipboard verification")
+    func plannerPromptContainsClipboardVerification() async throws {
         let promptDir = PromptBuilder.resolvePromptDirectory()
         let content = try PromptBuilder.load(
             name: "planner-system",
             variables: ["tools": "test", "max_steps": "20"],
             fromDirectory: promptDir
         )
-        XCTAssertTrue(content.contains("Clipboard verification"),
-            "Planner prompt should contain clipboard verification guidance")
+        #expect(content.contains("Clipboard verification"))
     }
 
-    func test_plannerPrompt_containsCrossAppFailureRecovery() async throws {
+    @Test("planner prompt contains cross-app failure recovery")
+    func plannerPromptContainsCrossAppFailureRecovery() async throws {
         let promptDir = PromptBuilder.resolvePromptDirectory()
         let content = try PromptBuilder.load(
             name: "planner-system",
             variables: ["tools": "test", "max_steps": "20"],
             fromDirectory: promptDir
         )
-        XCTAssertTrue(content.contains("Cross-app failure"),
-            "Planner prompt should contain cross-app failure recovery guidance")
-        XCTAssertTrue(content.contains("Application not found"),
-            "Planner prompt should contain application not found guidance")
+        #expect(content.contains("Cross-app failure"))
+        #expect(content.contains("Application not found"))
     }
 
-    // MARK: - Story 8.3 Window Layout Prompt Content
-
-    func test_plannerPrompt_containsWindowLayoutGuidance() async throws {
+    @Test("planner prompt contains window layout guidance")
+    func plannerPromptContainsWindowLayoutGuidance() async throws {
         let promptDir = PromptBuilder.resolvePromptDirectory()
         let content = try PromptBuilder.load(
             name: "planner-system",
             variables: ["tools": "test", "max_steps": "20"],
             fromDirectory: promptDir
         )
-        XCTAssertTrue(content.contains("arrange_windows"),
-            "Planner prompt should reference arrange_windows tool")
-        XCTAssertTrue(content.contains("tile-left-right"),
-            "Planner prompt should describe tile-left-right layout")
-        XCTAssertTrue(content.contains("tile-top-bottom"),
-            "Planner prompt should describe tile-top-bottom layout")
-        XCTAssertTrue(content.contains("cascade"),
-            "Planner prompt should describe cascade layout")
-        XCTAssertTrue(content.contains("resize_window"),
-            "Planner prompt should reference resize_window tool")
+        #expect(content.contains("arrange_windows"))
+        #expect(content.contains("tile-left-right"))
+        #expect(content.contains("tile-top-bottom"))
+        #expect(content.contains("cascade"))
+        #expect(content.contains("resize_window"))
     }
 }

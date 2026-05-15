@@ -1,27 +1,26 @@
-import XCTest
+import Testing
+import Foundation
 @testable import AxionCLI
 @testable import AxionCore
 
-// [P1] Story 8.1 AC5: Trace records multi-window context
+// Story 8.1 AC5: Trace records multi-window context
 // Verifies that TraceRecorder correctly stores window_id, pid, and app_name
 // in tool_use and tool_result events, matching the extraction logic in
 // RunCommand.recordToTrace().
 
-final class TraceWindowContextTests: XCTestCase {
+@Suite("TraceWindowContext")
+struct TraceWindowContextTests: ~Copyable {
 
-    var tempDir: URL!
+    private var tempDir: URL!
 
-    override func setUp() {
-        super.setUp()
+    init() {
         tempDir = FileManager.default.temporaryDirectory
             .appendingPathComponent("TraceWindowCtx-\(UUID().uuidString)")
         try? FileManager.default.createDirectory(at: tempDir, withIntermediateDirectories: true)
     }
 
-    override func tearDown() {
+    deinit {
         try? FileManager.default.removeItem(at: tempDir!)
-        tempDir = nil
-        super.tearDown()
     }
 
     private func makeRecorder(runId: String = "20260514-winctx") async throws -> TraceRecorder {
@@ -45,9 +44,8 @@ final class TraceWindowContextTests: XCTestCase {
         return try? JSONSerialization.jsonObject(with: data) as? [String: Any]
     }
 
-    // MARK: - tool_use event with window context
-
-    func test_toolUseEvent_storesWindowId() async throws {
+    @Test("tool_use event stores window_id")
+    func toolUseEventStoresWindowId() async throws {
         let recorder = try await makeRecorder()
         try await recorder.record(event: "tool_use", payload: [
             "tool": "click",
@@ -58,17 +56,16 @@ final class TraceWindowContextTests: XCTestCase {
         try await recorder.close()
 
         let lines = try readTraceLines()
-        XCTAssertEqual(lines.count, 1)
+        #expect(lines.count == 1)
 
         let json = parseJSONLine(lines[0])
-        XCTAssertEqual(json?["event"] as? String, "tool_use")
-        XCTAssertEqual(json?["window_id"] as? Int, 42)
-        XCTAssertEqual(json?["pid"] as? Int, 1234)
+        #expect(json?["event"] as? String == "tool_use")
+        #expect(json?["window_id"] as? Int == 42)
+        #expect(json?["pid"] as? Int == 1234)
     }
 
-    // MARK: - tool_result event with window context
-
-    func test_toolResultEvent_storesAppName() async throws {
+    @Test("tool_result event stores app_name")
+    func toolResultEventStoresAppName() async throws {
         let recorder = try await makeRecorder()
         try await recorder.record(event: "tool_result", payload: [
             "toolUseId": "tu-1",
@@ -80,14 +77,13 @@ final class TraceWindowContextTests: XCTestCase {
 
         let lines = try readTraceLines()
         let json = parseJSONLine(lines[0])
-        XCTAssertEqual(json?["event"] as? String, "tool_result")
-        XCTAssertEqual(json?["app_name"] as? String, "Safari")
-        XCTAssertEqual(json?["window_id"] as? Int, 10)
+        #expect(json?["event"] as? String == "tool_result")
+        #expect(json?["app_name"] as? String == "Safari")
+        #expect(json?["window_id"] as? Int == 10)
     }
 
-    // MARK: - Multi-window trace sequence (AC5 full scenario)
-
-    func test_multiWindowSequence_recordsContextForEachStep() async throws {
+    @Test("multi-window sequence records context for each step")
+    func multiWindowSequenceRecordsContextForEachStep() async throws {
         let recorder = try await makeRecorder()
 
         // Step 1: list_windows tool_use
@@ -127,26 +123,25 @@ final class TraceWindowContextTests: XCTestCase {
         try await recorder.close()
 
         let lines = try readTraceLines()
-        XCTAssertEqual(lines.count, 5, "Should have 5 trace events for the multi-window sequence")
+        #expect(lines.count == 5)
 
         // Verify tool_use events have window context
         let tu2 = parseJSONLine(lines[2])
-        XCTAssertEqual(tu2?["tool"] as? String, "activate_window")
-        XCTAssertEqual(tu2?["pid"] as? Int, 200)
+        #expect(tu2?["tool"] as? String == "activate_window")
+        #expect(tu2?["pid"] as? Int == 200)
 
         let tu3 = parseJSONLine(lines[3])
-        XCTAssertEqual(tu3?["tool"] as? String, "get_window_state")
-        XCTAssertEqual(tu3?["window_id"] as? Int, 20)
+        #expect(tu3?["tool"] as? String == "get_window_state")
+        #expect(tu3?["window_id"] as? Int == 20)
 
         // Verify tool_result event has app_name
         let tr3 = parseJSONLine(lines[4])
-        XCTAssertEqual(tr3?["app_name"] as? String, "Safari")
-        XCTAssertEqual(tr3?["window_id"] as? Int, 20)
+        #expect(tr3?["app_name"] as? String == "Safari")
+        #expect(tr3?["window_id"] as? Int == 20)
     }
 
-    // MARK: - Events without window context still valid
-
-    func test_toolUseEvent_withoutWindowContext_stillRecords() async throws {
+    @Test("tool_use without window context still records")
+    func toolUseEventWithoutWindowContextStillRecords() async throws {
         let recorder = try await makeRecorder()
         try await recorder.record(event: "tool_use", payload: [
             "tool": "screenshot",
@@ -155,12 +150,12 @@ final class TraceWindowContextTests: XCTestCase {
         try await recorder.close()
 
         let lines = try readTraceLines()
-        XCTAssertEqual(lines.count, 1)
+        #expect(lines.count == 1)
 
         let json = parseJSONLine(lines[0])
-        XCTAssertEqual(json?["event"] as? String, "tool_use")
-        XCTAssertEqual(json?["tool"] as? String, "screenshot")
-        XCTAssertNil(json?["window_id"])
-        XCTAssertNil(json?["pid"])
+        #expect(json?["event"] as? String == "tool_use")
+        #expect(json?["tool"] as? String == "screenshot")
+        #expect(json?["window_id"] == nil)
+        #expect(json?["pid"] == nil)
     }
 }

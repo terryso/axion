@@ -1,13 +1,8 @@
-import XCTest
+import Testing
+import Foundation
 @testable import AxionCLI
 import AxionCore
 import MCP
-
-// [P0] 基础设施验证 — HelperProcessManager actor 类型存在性和方法签名
-// [P1] 行为验证 — 启动连接、优雅关闭、崩溃重启、信号处理
-// Story 3.1 AC: #1–#6
-
-// MARK: - Mock Transport
 
 /// Mock transport for testing HelperProcessManager without real processes.
 actor MockHelperTransport: HelperTransportProtocol {
@@ -36,7 +31,6 @@ actor MockHelperTransport: HelperTransportProtocol {
     }
 
     func getTransport() async -> (any Transport)? {
-        // Mock doesn't provide a real transport; tests use it only for state checks.
         nil
     }
 
@@ -50,8 +44,6 @@ actor MockHelperTransport: HelperTransportProtocol {
         _isRunning = running
     }
 }
-
-// MARK: - Mock MCP Client
 
 /// Mock MCP client for testing HelperProcessManager without real MCP handshake.
 actor MockHelperMCPClient: HelperMCPClientProtocol {
@@ -119,11 +111,14 @@ actor MockHelperMCPClient: HelperMCPClientProtocol {
     }
 }
 
-// MARK: - Tests
+extension MockHelperMCPClient {
+    func setShouldReturnError(_ value: Bool) {
+        shouldReturnError = value
+    }
+}
 
-final class HelperProcessManagerTests: XCTestCase {
-
-    // MARK: - Helper to create manager with mocks
+@Suite("HelperProcessManager")
+struct HelperProcessManagerTests {
 
     private func makeManager(
         transport: MockHelperTransport? = nil,
@@ -135,32 +130,14 @@ final class HelperProcessManagerTests: XCTestCase {
         return (manager, transport, client)
     }
 
-    /// Starts the manager by manually setting connected state (bypassing path resolution).
-    /// For mock-based tests, use the init(transport:client:) which sets connected=true.
-    /// This method is kept for tests that need the real start() path.
-    private func startMocked(
-        _ manager: HelperProcessManager,
-        client: MockHelperMCPClient
-    ) async throws {
-        // For tests using the default init(), start() requires a real helper path.
-        // Set a fake path that will trigger the MCP handshake to fail predictably.
-        setenv("AXION_HELPER_PATH", "/usr/bin/true", 1)
-        defer { unsetenv("AXION_HELPER_PATH") }
-
-        try await manager.start()
-    }
-
-    // MARK: - [P0] 类型存在性
-
-    // AC1: HelperProcessManager actor 类型存在
-    func test_helperProcessManager_typeExists() {
+    @Test("HelperProcessManager type exists")
+    func helperProcessManagerTypeExists() {
         _ = HelperProcessManager.self
     }
 
-    // AC1: start() async throws 方法存在
-    func test_helperProcessManager_startMethodExists() async {
+    @Test("start() async throws method exists")
+    func helperProcessManagerStartMethodExists() async {
         let manager = HelperProcessManager()
-        // start() will fail without helper path, but the method exists
         setenv("AXION_HELPER_PATH", "/nonexistent/path", 1)
         defer { unsetenv("AXION_HELPER_PATH") }
         do {
@@ -170,20 +147,20 @@ final class HelperProcessManagerTests: XCTestCase {
         }
     }
 
-    // AC3: stop() async 方法存在
-    func test_helperProcessManager_stopMethodExists() async {
+    @Test("stop() async method exists")
+    func helperProcessManagerStopMethodExists() async {
         let manager = HelperProcessManager()
         await manager.stop()
     }
 
-    // AC1: isRunning() async -> Bool 方法存在
-    func test_helperProcessManager_isRunningMethodExists() async {
+    @Test("isRunning() async -> Bool method exists")
+    func helperProcessManagerIsRunningMethodExists() async {
         let manager = HelperProcessManager()
         _ = await manager.isRunning()
     }
 
-    // AC1: callTool(name:arguments:) async throws -> String 方法存在
-    func test_helperProcessManager_callToolMethodExists() async {
+    @Test("callTool(name:arguments:) async throws method exists")
+    func helperProcessManagerCallToolMethodExists() async {
         let manager = HelperProcessManager()
         do {
             _ = try await manager.callTool(name: "test", arguments: [:])
@@ -192,8 +169,8 @@ final class HelperProcessManagerTests: XCTestCase {
         }
     }
 
-    // AC1: listTools() async throws -> [String] 方法存在
-    func test_helperProcessManager_listToolsMethodExists() async {
+    @Test("listTools() async throws method exists")
+    func helperProcessManagerListToolsMethodExists() async {
         let manager = HelperProcessManager()
         do {
             _ = try await manager.listTools()
@@ -202,47 +179,38 @@ final class HelperProcessManagerTests: XCTestCase {
         }
     }
 
-    // MARK: - [P1] AC1: 启动 Helper 并建立 MCP 连接
-
-    // Helper 路径未找到时，start() 抛出 helperNotRunning 错误
-    func test_start_throwsWhenHelperPathNotFound() async {
-        // Given: 环境中无法找到 Helper 可执行文件
+    @Test("start() throws when helper path not found")
+    func startThrowsWhenHelperPathNotFound() async {
         unsetenv("AXION_HELPER_PATH")
         let manager = HelperProcessManager()
 
-        // When/Then: start() 应抛出 AxionError.helperNotRunning
         do {
             try await manager.start()
-            XCTFail("start() 应在 Helper 路径未找到时抛出错误")
+            Issue.record("start() should throw when Helper path not found")
         } catch let error as AxionError {
-            XCTAssertEqual(error, .helperNotRunning, "应抛出 helperNotRunning 错误")
+            #expect(error == .helperNotRunning)
         } catch {
-            XCTFail("应抛出 AxionError.helperNotRunning，实际: \(error)")
+            Issue.record("Expected AxionError.helperNotRunning, got: \(error)")
         }
     }
 
-    // MARK: - [P1] AC1: Mock-based connection test
-
-    // Mock-based manager with connected=true returns isRunning based on transport
-    func test_start_connectsMCPClient_isRunningReflectsTransport() async throws {
+    @Test("mock-based manager reflects transport isRunning state")
+    func startConnectsMCPClientIsRunningReflectsTransport() async throws {
         let transport = MockHelperTransport()
         await transport.setRunning(true)
         let client = MockHelperMCPClient()
         let manager = HelperProcessManager(transport: transport, client: client)
 
-        // Manager created with mock init is connected; isRunning checks transport
         let running = await manager.isRunning()
-        XCTAssertTrue(running, "Mock transport running 时 isRunning 应为 true")
+        #expect(running)
 
-        // Simulate transport going down
         await transport.simulateCrash()
         let afterCrash = await manager.isRunning()
-        XCTAssertFalse(afterCrash, "Transport 停止后 isRunning 应为 false")
+        #expect(!afterCrash)
     }
 
-    // MCP 握手失败时，start() 抛出 helperConnectionFailed
-    func test_start_throwsHelperConnectionFailed_onMCPError() async {
-        // Given: helper path 存在但 MCP 连接失败
+    @Test("start() throws helperConnectionFailed on MCP error")
+    func startThrowsHelperConnectionFailedOnMCPError() async {
         setenv("AXION_HELPER_PATH", "/usr/bin/true", 1)
         defer { unsetenv("AXION_HELPER_PATH") }
 
@@ -250,8 +218,6 @@ final class HelperProcessManagerTests: XCTestCase {
 
         do {
             try await manager.start()
-            // /usr/bin/true may succeed in process launch but fail MCP handshake
-            // This is expected behavior
         } catch let error as AxionError {
             if case .helperConnectionFailed = error {
                 // expected: MCP handshake fails because /usr/bin/true isn't an MCP server
@@ -259,72 +225,63 @@ final class HelperProcessManagerTests: XCTestCase {
                 // helperNotRunning also acceptable if path resolution has issues
             }
         } catch {
-            XCTFail("应抛出 AxionError，实际: \(error)")
+            Issue.record("Expected AxionError, got: \(error)")
         }
     }
 
-    // MARK: - [P1] AC2: MCP 连接就绪确认
-
-    // 连接就绪后可以获取工具列表 — 通过 mock
-    func test_listTools_returnsToolNames() async throws {
+    @Test("listTools returns tool names")
+    func listToolsReturnsToolNames() async throws {
         let client = MockHelperMCPClient()
         let transport = MockHelperTransport()
         let manager = HelperProcessManager(transport: transport, client: client)
 
-        // Manager with mock init is connected; listTools should return tools from mock client
         let tools = try await manager.listTools()
-        XCTAssertEqual(tools, ["click", "type_text", "screenshot"])
+        #expect(tools == ["click", "type_text", "screenshot"])
     }
 
-    // 工具名应为 snake_case
-    func test_listTools_toolNamesAreSnakeCase() async throws {
+    @Test("tool names are snake_case")
+    func listToolsToolNamesAreSnakeCase() async throws {
         let client = MockHelperMCPClient()
         await client.setStubbedTools(["click", "type_text", "get_window_state"])
 
         let result = try await client.listTools()
         for tool in result.tools {
-            XCTAssertTrue(
-                tool.name.allSatisfy { $0.isLowercase || $0 == "_" || $0.isNumber },
-                "工具名应为 snake_case: \(tool.name)"
+            #expect(
+                tool.name.allSatisfy { $0.isLowercase || $0 == "_" || $0.isNumber }
             )
         }
     }
 
-    // MARK: - [P1] AC3: 正常退出清理
-
-    // stop() 关闭 MCP 连接和 transport
-    func test_stop_closesMCPClientAndTransport() async throws {
+    @Test("stop() closes MCP client and transport")
+    func stopClosesMCPClientAndTransport() async throws {
         let transport = MockHelperTransport()
         let client = MockHelperMCPClient()
         let manager = HelperProcessManager(transport: transport, client: client)
 
-        // Simulate connected state
         await transport.setRunning(true)
 
-        // stop should clean up
         await manager.stop()
 
         let disconnectCalled = await client.disconnectCalled
         let transportDisconnected = await transport.disconnectCalled
-        XCTAssertTrue(disconnectCalled, "stop() 应调用 client.disconnect()")
-        XCTAssertTrue(transportDisconnected, "stop() 应调用 transport.disconnect()")
+        #expect(disconnectCalled)
+        #expect(transportDisconnected)
 
         let running = await manager.isRunning()
-        XCTAssertFalse(running, "stop() 后 isRunning 应为 false")
+        #expect(!running)
     }
 
-    // stop() 在 Helper 未启动时是空操作
-    func test_stop_whenNotStarted_isNoOp() async {
+    @Test("stop() when not started is a no-op")
+    func stopWhenNotStartedIsNoOp() async {
         let manager = HelperProcessManager()
 
-        // When/Then: stop() 不应抛出异常
         await manager.stop()
         let running = await manager.isRunning()
-        XCTAssertFalse(running, "未启动时 stop() 后 isRunning 应为 false")
+        #expect(!running)
     }
 
-    // 优雅关闭流程：先关 MCP 连接，再关 transport
-    func test_stop_gracefulShutdown_closesConnectionFirst() async throws {
+    @Test("graceful shutdown closes connection first")
+    func stopGracefulShutdownClosesConnectionFirst() async throws {
         let transport = MockHelperTransport()
         let client = MockHelperMCPClient()
         let manager = HelperProcessManager(transport: transport, client: client)
@@ -334,13 +291,11 @@ final class HelperProcessManagerTests: XCTestCase {
         await manager.stop()
 
         let running = await manager.isRunning()
-        XCTAssertFalse(running, "优雅关闭后应清理所有资源")
+        #expect(!running)
     }
 
-    // MARK: - [P1] AC4: 强制终止回退
-
-    // stop() 调用 disconnect，最终清理进程
-    func test_stop_forceKillAfterTimeout() async throws {
+    @Test("stop() force kills after timeout")
+    func stopForceKillAfterTimeout() async throws {
         let transport = MockHelperTransport()
         let client = MockHelperMCPClient()
         let manager = HelperProcessManager(transport: transport, client: client)
@@ -349,109 +304,92 @@ final class HelperProcessManagerTests: XCTestCase {
 
         await manager.stop()
         let running = await manager.isRunning()
-        XCTAssertFalse(running, "stop() 后进程应已终止")
+        #expect(!running)
     }
 
-    // MARK: - [P1] AC5: Ctrl-C 信号传播（NFR8）
-
-    // setupSignalHandling 注册 SIGINT 处理 — 接口存在性测试
-    func test_setupSignalHandling_registersSIGINTHandler() async {
+    @Test("setupSignalHandling registers SIGINT handler")
+    func setupSignalHandlingRegistersSIGINTHandler() async {
         let manager = HelperProcessManager()
-        // Should not throw
         await manager.setupSignalHandling()
     }
 
-    // MARK: - [P1] AC6: Helper 崩溃检测与重启
-
-    // 崩溃后 crash monitor 检测到 transport 不再运行
-    func test_crashMonitor_detectsCrashViaTransportState() async throws {
+    @Test("crash monitor detects crash via transport state")
+    func crashMonitorDetectsCrashViaTransportState() async throws {
         let transport = MockHelperTransport()
         let client = MockHelperMCPClient()
         let manager = HelperProcessManager(transport: transport, client: client)
 
-        // Simulate running state
         await transport.setRunning(true)
 
-        // Before crash, isRunning is true
         let beforeCrash = await manager.isRunning()
-        XCTAssertTrue(beforeCrash, "崩溃前 isRunning 应为 true")
+        #expect(beforeCrash)
 
-        // Simulate crash
         await transport.simulateCrash()
 
-        // After crash, isRunning reflects transport state
         let afterCrash = await manager.isRunning()
-        XCTAssertFalse(afterCrash, "崩溃后 isRunning 应为 false")
+        #expect(!afterCrash)
     }
 
-    // 二次崩溃不再重启 — hasRestarted 标志验证
-    func test_crashMonitor_hasRestartedPreventsSecondRestart() async throws {
-        // Test the guard in performCrashRestart: if hasRestarted is true, return early.
-        // We verify through the public API that after stop + manual state inspection.
+    @Test("hasRestarted prevents second restart after stop")
+    func crashMonitorHasRestartedPreventsSecondRestart() async throws {
         let transport = MockHelperTransport()
         let client = MockHelperMCPClient()
         let manager = HelperProcessManager(transport: transport, client: client)
 
-        // After stop(), further crashes won't trigger restart because isStopping prevents it
         await manager.stop()
 
-        // Simulate crash while stopped — should not cause issues
         await transport.simulateCrash()
 
         let running = await manager.isRunning()
-        XCTAssertFalse(running, "停止后崩溃不应触发重启")
+        #expect(!running)
     }
 
-    // MARK: - [P1] Value 类型转换（通过 callTool 端到端验证）
-
-    // AxionCore.Value.string 通过 callTool 正确转换为 MCP.Value.string
-    func test_callTool_convertsStringValue() async throws {
+    @Test("callTool converts AxionCore.Value.string to MCP.Value.string")
+    func callToolConvertsStringValue() async throws {
         let client = MockHelperMCPClient()
         await client.setStubbedCallToolResult("typed: hello")
         let transport = MockHelperTransport()
         let manager = HelperProcessManager(transport: transport, client: client)
 
         let result = try await manager.callTool(name: "type_text", arguments: ["text": .string("hello")])
-        XCTAssertEqual(result, "typed: hello")
+        #expect(result == "typed: hello")
     }
 
-    // AxionCore.Value.int 通过 callTool 正确转换为 MCP.Value.int
-    func test_callTool_convertsIntValue() async throws {
+    @Test("callTool converts AxionCore.Value.int to MCP.Value.int")
+    func callToolConvertsIntValue() async throws {
         let client = MockHelperMCPClient()
         await client.setStubbedCallToolResult("clicked")
         let transport = MockHelperTransport()
         let manager = HelperProcessManager(transport: transport, client: client)
 
         let result = try await manager.callTool(name: "click", arguments: ["x": .int(100), "y": .int(200)])
-        XCTAssertEqual(result, "clicked")
+        #expect(result == "clicked")
     }
 
-    // AxionCore.Value.bool 通过 callTool 正确转换为 MCP.Value.bool
-    func test_callTool_convertsBoolValue() async throws {
+    @Test("callTool converts AxionCore.Value.bool to MCP.Value.bool")
+    func callToolConvertsBoolValue() async throws {
         let client = MockHelperMCPClient()
         await client.setStubbedCallToolResult("ok")
         let transport = MockHelperTransport()
         let manager = HelperProcessManager(transport: transport, client: client)
 
         let result = try await manager.callTool(name: "test_tool", arguments: ["flag": .bool(true)])
-        XCTAssertEqual(result, "ok")
+        #expect(result == "ok")
     }
 
-    // AxionCore.Value.placeholder 作为 MCP.Value.string 传递
-    func test_callTool_convertsPlaceholderAsString() async throws {
+    @Test("callTool converts AxionCore.Value.placeholder as MCP.Value.string")
+    func callToolConvertsPlaceholderAsString() async throws {
         let client = MockHelperMCPClient()
         await client.setStubbedCallToolResult("window focused")
         let transport = MockHelperTransport()
         let manager = HelperProcessManager(transport: transport, client: client)
 
         let result = try await manager.callTool(name: "focus_window", arguments: ["window_id": .placeholder("$window_id")])
-        XCTAssertEqual(result, "window focused")
+        #expect(result == "window focused")
     }
 
-    // MARK: - [P1] MCP ToolResult 提取
-
-    // 从 MCP ToolResult 中提取文本内容
-    func test_callTool_extractsTextFromResult() async throws {
+    @Test("extracts text from MCP ToolResult content")
+    func callToolExtractsTextFromResult() async throws {
         let result = CallTool.Result(
             content: [.text("clicked at (100, 200)", annotations: nil, _meta: nil)]
         )
@@ -459,11 +397,11 @@ final class HelperProcessManagerTests: XCTestCase {
             if case .text(let text, _, _) = block { return text }
             return nil
         }
-        XCTAssertEqual(textParts, ["clicked at (100, 200)"])
+        #expect(textParts == ["clicked at (100, 200)"])
     }
 
-    // 多个 content 块用换行符连接
-    func test_callTool_joinsMultipleContentBlocks() async throws {
+    @Test("joins multiple content blocks with newline")
+    func callToolJoinsMultipleContentBlocks() async throws {
         let result = CallTool.Result(
             content: [
                 .text("line 1", annotations: nil, _meta: nil),
@@ -474,11 +412,11 @@ final class HelperProcessManagerTests: XCTestCase {
             if case .text(let text, _, _) = block { return text }
             return nil
         }
-        XCTAssertEqual(textParts.joined(separator: "\n"), "line 1\nline 2")
+        #expect(textParts.joined(separator: "\n") == "line 1\nline 2")
     }
 
-    // 错误结果（isError=true）抛出 mcpError
-    func test_callTool_handlesErrorResult() async throws {
+    @Test("isError=true causes callTool to throw mcpError")
+    func callToolHandlesErrorResult() async throws {
         let client = MockHelperMCPClient()
         await client.setShouldReturnError(true)
         let transport = MockHelperTransport()
@@ -486,54 +424,44 @@ final class HelperProcessManagerTests: XCTestCase {
 
         do {
             _ = try await manager.callTool(name: "test_tool", arguments: [:])
-            XCTFail("isError=true 时 callTool 应抛出错误")
+            Issue.record("callTool should throw when isError=true")
         } catch let error as AxionError {
             if case .mcpError(let tool, let reason) = error {
-                XCTAssertEqual(tool, "test_tool")
-                XCTAssertTrue(reason.contains("something went wrong"), "应包含错误文本")
+                #expect(tool == "test_tool")
+                #expect(reason.contains("something went wrong"))
             } else {
-                XCTFail("应抛出 mcpError，实际: \(error)")
+                Issue.record("Expected mcpError, got: \(error)")
             }
         } catch {
-            XCTFail("应抛出 AxionError.mcpError，实际: \(error)")
+            Issue.record("Expected AxionError.mcpError, got: \(error)")
         }
     }
 
-    // MARK: - [P1] 未启动时调用工具
-
-    // 未启动时调用 callTool 抛出错误
-    func test_callTool_whenNotStarted_throwsError() async {
+    @Test("callTool when not started throws helperNotRunning")
+    func callToolWhenNotStartedThrowsError() async {
         let manager = HelperProcessManager()
 
         do {
             _ = try await manager.callTool(name: "click", arguments: ["x": AxionCore.Value.int(100), "y": AxionCore.Value.int(200)])
-            XCTFail("未启动时 callTool 应抛出错误")
+            Issue.record("callTool should throw when not started")
         } catch let error as AxionError {
-            XCTAssertEqual(error, .helperNotRunning, "应抛出 helperNotRunning")
+            #expect(error == .helperNotRunning)
         } catch {
-            XCTFail("应抛出 AxionError.helperNotRunning，实际: \(error)")
+            Issue.record("Expected AxionError.helperNotRunning, got: \(error)")
         }
     }
 
-    // 未启动时调用 listTools 抛出错误
-    func test_listTools_whenNotStarted_throwsError() async {
+    @Test("listTools when not started throws helperNotRunning")
+    func listToolsWhenNotStartedThrowsError() async {
         let manager = HelperProcessManager()
 
         do {
             _ = try await manager.listTools()
-            XCTFail("未启动时 listTools 应抛出错误")
+            Issue.record("listTools should throw when not started")
         } catch let error as AxionError {
-            XCTAssertEqual(error, .helperNotRunning, "应抛出 helperNotRunning")
+            #expect(error == .helperNotRunning)
         } catch {
-            XCTFail("应抛出 AxionError.helperNotRunning，实际: \(error)")
+            Issue.record("Expected AxionError.helperNotRunning, got: \(error)")
         }
-    }
-}
-
-// MARK: - MockHelperMCPClient helpers
-
-extension MockHelperMCPClient {
-    func setShouldReturnError(_ value: Bool) {
-        shouldReturnError = value
     }
 }

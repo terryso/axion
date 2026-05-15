@@ -1,62 +1,68 @@
-import XCTest
+import Testing
+import Foundation
 
 @testable import AxionCLI
 
-// MARK: - TakeoverAction Tests
+@Suite("TakeoverIO")
+struct TakeoverIOTests {
 
-final class TakeoverIOTests: XCTestCase {
-
-    // MARK: - TakeoverAction Parsing
-
-    func test_takeoverAction_resume_fromNil() {
+    @Test("TakeoverAction from nil returns resume")
+    func takeoverActionResumeFromNil() {
         let action = TakeoverAction.fromInput(nil)
-        XCTAssertEqual(action, .resume)
+        #expect(action == .resume)
     }
 
-    func test_takeoverAction_resume_fromEmpty() {
+    @Test("TakeoverAction from empty returns resume")
+    func takeoverActionResumeFromEmpty() {
         let action = TakeoverAction.fromInput("")
-        XCTAssertEqual(action, .resume)
+        #expect(action == .resume)
     }
 
-    func test_takeoverAction_resume_fromEnter() {
+    @Test("TakeoverAction from newline returns resume")
+    func takeoverActionResumeFromEnter() {
         let action = TakeoverAction.fromInput("\n")
-        XCTAssertEqual(action, .resume)
+        #expect(action == .resume)
     }
 
-    func test_takeoverAction_resume_fromContinue() {
+    @Test("TakeoverAction from 'continue' returns resume")
+    func takeoverActionResumeFromContinue() {
         let action = TakeoverAction.fromInput("continue")
-        XCTAssertEqual(action, .resume)
+        #expect(action == .resume)
     }
 
-    func test_takeoverAction_skip() {
+    @Test("TakeoverAction from 'skip' returns skip")
+    func takeoverActionSkip() {
         let action = TakeoverAction.fromInput("skip")
-        XCTAssertEqual(action, .skip)
+        #expect(action == .skip)
     }
 
-    func test_takeoverAction_abort() {
+    @Test("TakeoverAction from 'abort' returns abort")
+    func takeoverActionAbort() {
         let action = TakeoverAction.fromInput("abort")
-        XCTAssertEqual(action, .abort)
+        #expect(action == .abort)
     }
 
-    func test_takeoverAction_abort_fromQuit() {
+    @Test("TakeoverAction from 'quit' returns abort")
+    func takeoverActionAbortFromQuit() {
         let action = TakeoverAction.fromInput("quit")
-        XCTAssertEqual(action, .abort)
+        #expect(action == .abort)
     }
 
-    func test_takeoverAction_caseInsensitive() {
-        XCTAssertEqual(TakeoverAction.fromInput("Skip"), .skip)
-        XCTAssertEqual(TakeoverAction.fromInput("ABORT"), .abort)
-        XCTAssertEqual(TakeoverAction.fromInput("CONTINUE"), .resume)
+    @Test("TakeoverAction is case insensitive")
+    func takeoverActionCaseInsensitive() {
+        #expect(TakeoverAction.fromInput("Skip") == .skip)
+        #expect(TakeoverAction.fromInput("ABORT") == .abort)
+        #expect(TakeoverAction.fromInput("CONTINUE") == .resume)
     }
 
-    func test_takeoverAction_whitespaceTrimmed() {
-        XCTAssertEqual(TakeoverAction.fromInput("  skip  "), .skip)
-        XCTAssertEqual(TakeoverAction.fromInput(" abort "), .abort)
+    @Test("TakeoverAction whitespace is trimmed")
+    func takeoverActionWhitespaceTrimmed() {
+        #expect(TakeoverAction.fromInput("  skip  ") == .skip)
+        #expect(TakeoverAction.fromInput(" abort ") == .abort)
     }
 
-    // MARK: - TakeoverIO Display
-
-    func test_displayTakeoverPrompt_outputsReason() {
+    @Test("displayTakeoverPrompt outputs reason")
+    func displayTakeoverPromptOutputsReason() {
         var output: [String] = []
         let io = TakeoverIO(
             write: { output.append($0) },
@@ -68,12 +74,13 @@ final class TakeoverIOTests: XCTestCase {
             allowForeground: false
         )
 
-        XCTAssertEqual(action, .resume)
+        #expect(action == .resume)
         let combined = output.joined(separator: "\n")
-        XCTAssertTrue(combined.contains("无法找到目标按钮"))
+        #expect(combined.contains("无法找到目标按钮"))
     }
 
-    func test_displayTakeoverPrompt_allowForegroundShowsHint() {
+    @Test("displayTakeoverPrompt with allowForeground shows hint")
+    func displayTakeoverPromptAllowForegroundShowsHint() {
         var output: [String] = []
         let io = TakeoverIO(
             write: { output.append($0) },
@@ -85,12 +92,13 @@ final class TakeoverIOTests: XCTestCase {
             allowForeground: true
         )
 
-        XCTAssertEqual(action, .skip)
+        #expect(action == .skip)
         let combined = output.joined(separator: "\n")
-        XCTAssertTrue(combined.contains("前台"))
+        #expect(combined.contains("前台"))
     }
 
-    func test_displayTakeoverPrompt_noForegroundHintWhenDisabled() {
+    @Test("displayTakeoverPrompt without foreground shows no hint")
+    func displayTakeoverPromptNoForegroundHintWhenDisabled() {
         var output: [String] = []
         let io = TakeoverIO(
             write: { output.append($0) },
@@ -103,10 +111,11 @@ final class TakeoverIOTests: XCTestCase {
         )
 
         let combined = output.joined(separator: "\n")
-        XCTAssertFalse(combined.contains("前台"))
+        #expect(!combined.contains("前台"))
     }
 
-    func test_displayTakeoverPrompt_abortAction() {
+    @Test("displayTakeoverPrompt abort action")
+    func displayTakeoverPromptAbortAction() {
         let io = TakeoverIO(
             write: { _ in },
             readLine: { "abort" }
@@ -116,10 +125,11 @@ final class TakeoverIOTests: XCTestCase {
             reason: "test",
             allowForeground: false
         )
-        XCTAssertEqual(action, .abort)
+        #expect(action == .abort)
     }
 
-    func test_displayTakeoverPrompt_abortWithSteps_showsSummary() {
+    @Test("displayTakeoverPrompt abort with steps shows summary")
+    func displayTakeoverPromptAbortWithStepsShowsSummary() {
         var output: [String] = []
         let io = TakeoverIO(
             write: { output.append($0) },
@@ -131,12 +141,13 @@ final class TakeoverIOTests: XCTestCase {
             allowForeground: false,
             completedSteps: 5
         )
-        XCTAssertEqual(action, .abort)
+        #expect(action == .abort)
         let combined = output.joined(separator: "\n")
-        XCTAssertTrue(combined.contains("已完成 5 步"))
+        #expect(combined.contains("已完成 5 步"))
     }
 
-    func test_displayTakeoverPrompt_abortWithoutSteps_showsZero() {
+    @Test("displayTakeoverPrompt abort without steps shows zero")
+    func displayTakeoverPromptAbortWithoutStepsShowsZero() {
         var output: [String] = []
         let io = TakeoverIO(
             write: { output.append($0) },
@@ -147,8 +158,8 @@ final class TakeoverIOTests: XCTestCase {
             reason: "test",
             allowForeground: false
         )
-        XCTAssertEqual(action, .abort)
+        #expect(action == .abort)
         let combined = output.joined(separator: "\n")
-        XCTAssertTrue(combined.contains("已完成 0 步"))
+        #expect(combined.contains("已完成 0 步"))
     }
 }
