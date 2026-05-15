@@ -1,5 +1,5 @@
 import Foundation
-import XCTest
+import Testing
 
 import AxionCore
 import OpenAgentSDK
@@ -13,40 +13,35 @@ import OpenAgentSDK
 /// Prerequisites:
 /// - `~/.axion/config.json` configured with valid API key (via `axion setup`)
 /// - AxionHelper.app built and AX permissions granted
-final class RealLLME2ETests: XCTestCase {
+@Suite("Real LLM E2E")
+struct RealLLME2ETests {
 
-    private var fixture: E2EHelperFixture!
-
-    override func setUp() async throws {
-        try await super.setUp()
-        fixture = try E2EHelperFixture()
-
-        // Start real Helper
-        try await fixture.setUpHelper()
-    }
-
-    override func tearDown() async throws {
-        await fixture.tearDown()
-        fixture = nil
-        try await super.tearDown()
+    private func setUpFixture() async throws -> E2EHelperFixture? {
+        let fixture = try E2EHelperFixture()
+        let started = try await fixture.setUpHelper()
+        guard started else { return nil }
+        return fixture
     }
 
     // MARK: - Smoke Test: Launch Calculator
 
-    /// Uses real Claude API to plan and execute "启动计算器".
-    /// Verifies the Agent can connect to Helper via MCP and launch an app.
-    func test_real_launchCalculator() async throws {
+    @Test("real launch Calculator")
+    func realLaunchCalculator() async throws {
+        guard let fixture = try await setUpFixture() else { return }
         guard fixture.mcpClient != nil else {
-            throw XCTSkip("AxionHelper not available")
+            await fixture.tearDown()
+            return
         }
 
         let config = try await ConfigManager.loadConfig()
         guard let apiKey = config.apiKey, !apiKey.isEmpty else {
-            throw XCTSkip("API key not configured — run 'axion setup' first.")
+            await fixture.tearDown()
+            return
         }
 
         guard let helperPath = HelperPathResolver.resolveHelperPath() else {
-            throw XCTSkip("AxionHelper not found.")
+            await fixture.tearDown()
+            return
         }
 
         let mcpServers: [String: McpServerConfig] = [
@@ -100,34 +95,38 @@ final class RealLLME2ETests: XCTestCase {
         try? await agent.close()
 
         // Verify at least one tool was called (e.g., launch_app)
-        XCTAssertFalse(toolCalls.isEmpty, "Agent should have called at least one tool")
+        #expect(!toolCalls.isEmpty, "Agent should have called at least one tool")
 
         // Verify the result is success
         if let result = finalResult {
-            XCTAssertEqual(result.subtype, .success, "Task should complete successfully, got: \(result.subtype)")
+            #expect(result.subtype == .success, "Task should complete successfully, got: \(result.subtype)")
         }
 
         // Clean up: quit Calculator
         if let mcpClient = fixture.mcpClient {
             _ = try? await mcpClient.callTool(name: "quit_app", arguments: ["name": AxionCore.Value.string("Calculator")])
         }
+        await fixture.tearDown()
     }
 
     // MARK: - Smoke Test: Open URL
 
-    /// Uses real Claude API to open a URL in the default browser.
-    func test_real_openURL() async throws {
+    @Test("real open URL")
+    func realOpenURL() async throws {
+        guard let fixture = try await setUpFixture() else { return }
         guard fixture.mcpClient != nil else {
-            throw XCTSkip("AxionHelper not available")
+            await fixture.tearDown()
+            return
         }
 
         let config = try await ConfigManager.loadConfig()
         guard let apiKey = config.apiKey, !apiKey.isEmpty else {
-            throw XCTSkip("API key not configured — run 'axion setup' first.")
+            await fixture.tearDown()
+            return
         }
-
         guard let helperPath = HelperPathResolver.resolveHelperPath() else {
-            throw XCTSkip("AxionHelper not found.")
+            await fixture.tearDown()
+            return
         }
 
         let mcpServers: [String: McpServerConfig] = [
@@ -180,23 +179,24 @@ final class RealLLME2ETests: XCTestCase {
         handler.displayCompletion()
         try? await agent.close()
 
-        XCTAssertFalse(toolCalls.isEmpty, "Agent should have called at least one tool")
+        #expect(!toolCalls.isEmpty, "Agent should have called at least one tool")
 
         if let result = finalResult {
-            XCTAssertEqual(result.subtype, .success, "Task should complete successfully, got: \(result.subtype)")
+            #expect(result.subtype == .success, "Task should complete successfully, got: \(result.subtype)")
         }
+        await fixture.tearDown()
     }
 
     // MARK: - Helper for building real agent
 
-    private func buildAgent(maxTurns: Int = 5) async throws -> (OpenAgentSDK.Agent, SDKTerminalOutputHandler, CapturingOutput) {
+    private func buildAgent(maxTurns: Int = 5) async throws -> (OpenAgentSDK.Agent, SDKTerminalOutputHandler, CapturingOutput)? {
         let config = try await ConfigManager.loadConfig()
         guard let apiKey = config.apiKey, !apiKey.isEmpty else {
-            throw XCTSkip("API key not configured — run 'axion setup' first.")
+            return nil
         }
 
         guard let helperPath = HelperPathResolver.resolveHelperPath() else {
-            throw XCTSkip("AxionHelper not found.")
+            return nil
         }
 
         let mcpServers: [String: McpServerConfig] = [
@@ -255,81 +255,99 @@ final class RealLLME2ETests: XCTestCase {
 
     // MARK: - Smoke Test: TextEdit
 
-    /// Uses real Claude API to open TextEdit and type text (Story 3.8).
-    func test_real_textEdit() async throws {
+    @Test("real TextEdit")
+    func realTextEdit() async throws {
+        guard let fixture = try await setUpFixture() else { return }
         guard fixture.mcpClient != nil else {
-            throw XCTSkip("AxionHelper not available")
+            await fixture.tearDown()
+            return
         }
 
-        let (agent, handler, _) = try await buildAgent(maxTurns: 5)
+        guard let (agent, handler, _) = try await buildAgent(maxTurns: 5) else {
+            await fixture.tearDown()
+            return
+        }
         handler.displayRunStart(runId: "real-e2e-003", task: "打开 TextEdit，输入 Hello World")
 
         let (toolCalls, finalResult) = try await runAgent(agent, handler: handler, task: "打开 TextEdit，输入 Hello World")
 
-        XCTAssertFalse(toolCalls.isEmpty, "Agent should have called at least one tool")
+        #expect(!toolCalls.isEmpty, "Agent should have called at least one tool")
         let shortNames = toolCalls.map { $0.replacingOccurrences(of: "mcp__axion-helper__", with: "") }
-        XCTAssertTrue(
+        #expect(
             shortNames.contains("launch_app") || shortNames.contains("type_text"),
             "Should use launch_app and/or type_text, got: \(toolCalls)"
         )
 
         if let result = finalResult {
-            XCTAssertEqual(result.subtype, .success, "Task should complete successfully, got: \(result.subtype)")
+            #expect(result.subtype == .success, "Task should complete successfully, got: \(result.subtype)")
         }
 
         // Clean up: quit TextEdit
         if let mcpClient = fixture.mcpClient {
             _ = try? await mcpClient.callTool(name: "quit_app", arguments: ["name": .string("TextEdit")])
         }
+        await fixture.tearDown()
     }
 
     // MARK: - Smoke Test: Finder
 
-    /// Uses real Claude API to open Finder and navigate to Downloads (Story 3.8).
-    func test_real_finder() async throws {
+    @Test("real Finder")
+    func realFinder() async throws {
+        guard let fixture = try await setUpFixture() else { return }
         guard fixture.mcpClient != nil else {
-            throw XCTSkip("AxionHelper not available")
+            await fixture.tearDown()
+            return
         }
 
-        let (agent, handler, _) = try await buildAgent(maxTurns: 8)
+        guard let (agent, handler, _) = try await buildAgent(maxTurns: 8) else {
+            await fixture.tearDown()
+            return
+        }
         handler.displayRunStart(runId: "real-e2e-004", task: "打开 Finder，进入下载目录")
 
         let (toolCalls, finalResult) = try await runAgent(agent, handler: handler, task: "打开 Finder，进入下载目录")
 
-        XCTAssertFalse(toolCalls.isEmpty, "Agent should have called at least one tool")
+        #expect(!toolCalls.isEmpty, "Agent should have called at least one tool")
         let shortNames = toolCalls.map { $0.replacingOccurrences(of: "mcp__axion-helper__", with: "") }
-        XCTAssertTrue(
+        #expect(
             shortNames.contains("launch_app") || shortNames.contains("hotkey"),
             "Should use launch_app and/or hotkey for Finder navigation, got: \(toolCalls)"
         )
 
         if let result = finalResult {
-            XCTAssertEqual(result.subtype, .success, "Task should complete successfully, got: \(result.subtype)")
+            #expect(result.subtype == .success, "Task should complete successfully, got: \(result.subtype)")
         }
+        await fixture.tearDown()
     }
 
     // MARK: - Smoke Test: Safari
 
-    /// Uses real Claude API to open Safari and visit example.com (Story 3.8).
-    func test_real_safari() async throws {
+    @Test("real Safari")
+    func realSafari() async throws {
+        guard let fixture = try await setUpFixture() else { return }
         guard fixture.mcpClient != nil else {
-            throw XCTSkip("AxionHelper not available")
+            await fixture.tearDown()
+            return
         }
 
-        let (agent, handler, _) = try await buildAgent(maxTurns: 3)
+        guard let (agent, handler, _) = try await buildAgent(maxTurns: 3) else {
+            await fixture.tearDown()
+            return
+        }
         handler.displayRunStart(runId: "real-e2e-005", task: "打开 Safari，访问 example.com")
 
         let (toolCalls, finalResult) = try await runAgent(agent, handler: handler, task: "打开 Safari，访问 example.com")
 
-        XCTAssertFalse(toolCalls.isEmpty, "Agent should have called at least one tool")
+        #expect(!toolCalls.isEmpty, "Agent should have called at least one tool")
         let shortNames = toolCalls.map { $0.replacingOccurrences(of: "mcp__axion-helper__", with: "") }
-        XCTAssertTrue(
+        #expect(
             shortNames.contains("open_url") || shortNames.contains("launch_app"),
             "Should use open_url or launch_app, got: \(toolCalls)"
         )
 
         if let result = finalResult {
-            XCTAssertEqual(result.subtype, .success, "Task should complete successfully, got: \(result.subtype)")
+            #expect(result.subtype == .success, "Task should complete successfully, got: \(result.subtype)")
         }
+        await fixture.tearDown()
     }
 }

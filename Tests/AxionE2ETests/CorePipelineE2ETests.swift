@@ -1,5 +1,5 @@
 import Foundation
-import XCTest
+import Testing
 
 import AxionCore
 import OpenAgentSDK
@@ -11,12 +11,13 @@ import OpenAgentSDK
 /// These run in any CI environment.
 ///
 /// Covers: Stories 3.2 (prompt loading), 3.4 (stop conditions), 3.6 (safety, run engine).
-final class CorePipelineLogicE2ETests: XCTestCase {
+@Suite("Core Pipeline Logic E2E")
+struct CorePipelineLogicE2ETests {
 
     // MARK: - Story 3.2: Prompt Management
 
-    /// PromptBuilder loads planner-system.md and substitutes {{tools}} and {{max_steps}}.
-    func test_promptLoadingWithVariableInjection() async throws {
+    @Test("prompt loading with variable injection")
+    func promptLoadingWithVariableInjection() async throws {
         let promptDir = PromptBuilder.resolvePromptDirectory()
         let systemPrompt = try PromptBuilder.load(
             name: "planner-system",
@@ -27,25 +28,25 @@ final class CorePipelineLogicE2ETests: XCTestCase {
             fromDirectory: promptDir
         )
 
-        XCTAssertFalse(systemPrompt.contains("{{tools}}"), "{{tools}} should be replaced")
-        XCTAssertFalse(systemPrompt.contains("{{max_steps}}"), "{{max_steps}} should be replaced")
-        XCTAssertTrue(systemPrompt.contains("launch_app"), "Prompt should contain tool descriptions")
-        XCTAssertTrue(systemPrompt.contains("25"), "Prompt should contain the max_steps value")
-        XCTAssertTrue(systemPrompt.contains("Axion"), "Prompt should contain agent identity")
+        #expect(!systemPrompt.contains("{{tools}}"), "{{tools}} should be replaced")
+        #expect(!systemPrompt.contains("{{max_steps}}"), "{{max_steps}} should be replaced")
+        #expect(systemPrompt.contains("launch_app"), "Prompt should contain tool descriptions")
+        #expect(systemPrompt.contains("25"), "Prompt should contain the max_steps value")
+        #expect(systemPrompt.contains("Axion"), "Prompt should contain agent identity")
     }
 
-    /// PromptBuilder throws when prompt file doesn't exist.
-    func test_promptLoadingThrowsOnMissingFile() async throws {
+    @Test("prompt loading throws on missing file")
+    func promptLoadingThrowsOnMissingFile() async throws {
         let promptDir = PromptBuilder.resolvePromptDirectory()
-        XCTAssertThrowsError(
+        #expect(throws: Error.self) {
             try PromptBuilder.load(name: "nonexistent", variables: [:], fromDirectory: promptDir)
-        )
+        }
     }
 
     // MARK: - Story 3.4: Stop Condition Evaluation
 
-    /// Tests maxStepsReached stop condition.
-    func test_maxStepsStopCondition() {
+    @Test("maxSteps stop condition")
+    func maxStepsStopCondition() {
         let evaluator = StopConditionEvaluator()
 
         let executedSteps = (0..<5).map { i in
@@ -60,7 +61,7 @@ final class CorePipelineLogicE2ETests: XCTestCase {
             executedSteps: executedSteps,
             maxSteps: 5
         )
-        XCTAssertEqual(result, .satisfied, "maxStepsReached should be satisfied when steps == maxSteps")
+        #expect(result == .satisfied, "maxStepsReached should be satisfied when steps == maxSteps")
 
         let underLimit = evaluator.evaluate(
             stopConditions: [condition],
@@ -69,11 +70,11 @@ final class CorePipelineLogicE2ETests: XCTestCase {
             executedSteps: executedSteps,
             maxSteps: 10
         )
-        XCTAssertEqual(underLimit, .notSatisfied, "maxStepsReached should NOT be satisfied when steps < maxSteps")
+        #expect(underLimit == .notSatisfied, "maxStepsReached should NOT be satisfied when steps < maxSteps")
     }
 
-    /// Tests empty stop conditions → trivially satisfied.
-    func test_emptyStopConditions() {
+    @Test("empty stop conditions are trivially satisfied")
+    func emptyStopConditions() {
         let evaluator = StopConditionEvaluator()
         let result = evaluator.evaluate(
             stopConditions: [],
@@ -82,50 +83,50 @@ final class CorePipelineLogicE2ETests: XCTestCase {
             executedSteps: [],
             maxSteps: 20
         )
-        XCTAssertEqual(result, .satisfied, "Empty stop conditions should be trivially satisfied")
+        #expect(result == .satisfied, "Empty stop conditions should be trivially satisfied")
     }
 
     // MARK: - Story 3.6: Safety Checker
 
-    /// SafetyChecker blocks foreground tools in shared-seat mode.
-    func test_safetyCheckerBlocksForegroundInSharedSeatMode() {
+    @Test("safety checker blocks foreground in shared-seat mode")
+    func safetyCheckerBlocksForegroundInSharedSeatMode() {
         let checker = SafetyChecker()
 
         let foregroundTools = ["click", "type_text", "press_key", "hotkey", "double_click", "right_click", "scroll", "drag"]
         for tool in foregroundTools {
             let result = checker.check(tool: tool, sharedSeatMode: true)
-            XCTAssertFalse(result.allowed, "Tool '\(tool)' should be blocked in shared-seat mode")
-            XCTAssertTrue(result.errorMessage.contains("foreground"), "Error should mention foreground for \(tool)")
+            #expect(!result.allowed, "Tool '\(tool)' should be blocked in shared-seat mode")
+            #expect(result.errorMessage.contains("foreground"), "Error should mention foreground for \(tool)")
         }
     }
 
-    /// SafetyChecker allows foreground tools when not in shared-seat mode.
-    func test_safetyCheckerAllowsForegroundInNormalMode() {
+    @Test("safety checker allows foreground in normal mode")
+    func safetyCheckerAllowsForegroundInNormalMode() {
         let checker = SafetyChecker()
 
         let allTools = ToolNames.allToolNames
         for tool in allTools {
             let result = checker.check(tool: tool, sharedSeatMode: false)
-            XCTAssertTrue(result.allowed, "Tool '\(tool)' should be allowed in normal mode")
+            #expect(result.allowed, "Tool '\(tool)' should be allowed in normal mode")
         }
     }
 
-    /// SafetyChecker allows read-only and background-safe tools in shared-seat mode.
-    func test_safetyCheckerAllowsReadOnlyInBackgroundMode() {
+    @Test("safety checker allows read-only in background mode")
+    func safetyCheckerAllowsReadOnlyInBackgroundMode() {
         let checker = SafetyChecker()
 
         let safeTools = ["list_apps", "list_windows", "screenshot", "get_accessibility_tree",
                          "launch_app", "open_url", "get_window_state", "quit_app"]
         for tool in safeTools {
             let result = checker.check(tool: tool, sharedSeatMode: true)
-            XCTAssertTrue(result.allowed, "Tool '\(tool)' should be allowed in shared-seat mode")
+            #expect(result.allowed, "Tool '\(tool)' should be allowed in shared-seat mode")
         }
     }
 
     // MARK: - Story 3.6: Run Engine State Machine
 
-    /// RunEngine state machine: replan loop succeeds on second attempt.
-    func test_runEngineReplanLoop() async throws {
+    @Test("run engine replan loop succeeds on second attempt")
+    func runEngineReplanLoop() async throws {
         let planner = MockPlanner()
         let executor = MockExecutor()
         let verifier = MockVerifier()
@@ -154,12 +155,12 @@ final class CorePipelineLogicE2ETests: XCTestCase {
         let engine = RunEngine(planner: planner, executor: executor, verifier: verifier, output: output)
         let context = await engine.run(task: "test", config: config, options: RunEngineOptions())
 
-        XCTAssertEqual(context.currentState, .done, "Engine should reach .done after replan")
-        XCTAssertEqual(output.replanCalls, 1, "Should have replanned once")
+        #expect(context.currentState == .done, "Engine should reach .done after replan")
+        #expect(output.replanCalls == 1, "Should have replanned once")
     }
 
-    /// RunEngine terminates when max replan retries exceeded.
-    func test_runEngineMaxReplanExceeded() async throws {
+    @Test("run engine terminates when max replan retries exceeded")
+    func runEngineMaxReplanExceeded() async throws {
         let planner = MockPlanner()
         let executor = MockExecutor()
         let verifier = MockVerifier()
@@ -186,11 +187,11 @@ final class CorePipelineLogicE2ETests: XCTestCase {
         let engine = RunEngine(planner: planner, executor: executor, verifier: verifier, output: output)
         let context = await engine.run(task: "test", config: config, options: RunEngineOptions())
 
-        XCTAssertEqual(context.currentState, .failed, "Engine should fail when max replan retries exceeded")
+        #expect(context.currentState == .failed, "Engine should fail when max replan retries exceeded")
     }
 
-    /// RunEngine dryrun mode skips execution and verification.
-    func test_runEngineDryrunMode() async throws {
+    @Test("run engine dryrun mode skips execution and verification")
+    func runEngineDryrunMode() async throws {
         let planner = MockPlanner()
         let executor = MockExecutor()
         let verifier = MockVerifier()
@@ -207,9 +208,9 @@ final class CorePipelineLogicE2ETests: XCTestCase {
         let engine = RunEngine(planner: planner, executor: executor, verifier: verifier, output: output)
         let context = await engine.run(task: "test", config: config, options: RunEngineOptions(dryrun: true))
 
-        XCTAssertEqual(context.currentState, .done, "Dryrun should reach .done without execution")
-        XCTAssertEqual(executor.executeCallCount, 0, "Executor should NOT be called in dryrun mode")
-        XCTAssertEqual(verifier.verifyCallCount, 0, "Verifier should NOT be called in dryrun mode")
+        #expect(context.currentState == .done, "Dryrun should reach .done without execution")
+        #expect(executor.executeCallCount == 0, "Executor should NOT be called in dryrun mode")
+        #expect(verifier.verifyCallCount == 0, "Verifier should NOT be called in dryrun mode")
     }
 }
 
@@ -217,29 +218,24 @@ final class CorePipelineLogicE2ETests: XCTestCase {
 
 /// E2E tests that require a real Helper process with AX permissions.
 /// Covers: Stories 3.3 (placeholder resolution), 3.4 (verification with real AX tree).
-final class CorePipelineHelperE2ETests: XCTestCase {
+@Suite("Core Pipeline Helper E2E")
+struct CorePipelineHelperE2ETests {
 
-    private var fixture: E2EHelperFixture!
-
-    override func setUp() async throws {
-        try await super.setUp()
-        fixture = try E2EHelperFixture()
-        try await fixture.setUpHelper()
-    }
-
-    override func tearDown() async throws {
-        await fixture.tearDown()
-        fixture = nil
-        try await super.tearDown()
+    private func setUpFixture() async throws -> E2EHelperFixture? {
+        let fixture = try E2EHelperFixture()
+        let started = try await fixture.setUpHelper()
+        guard started else { return nil }
+        return fixture
     }
 
     // MARK: - Story 3.3: Placeholder Resolution with Real Helper
 
-    /// Launches Calculator via MCP, captures pid from result, verifies PlaceholderResolver
-    /// absorbs it into ExecutionContext and resolves $pid in a subsequent step.
-    func test_placeholderResolutionWithRealHelper() async throws {
+    @Test("placeholder resolution with real helper")
+    func placeholderResolutionWithRealHelper() async throws {
+        guard let fixture = try await setUpFixture() else { return }
         guard let mcpClient = fixture.mcpClient else {
-            throw XCTSkip("AxionHelper not available")
+            await fixture.tearDown()
+            return
         }
 
         let launchResult = try await mcpClient.callTool(
@@ -251,7 +247,7 @@ final class CorePipelineHelperE2ETests: XCTestCase {
         let resolver = PlaceholderResolver()
         resolver.absorbResult(tool: "launch_app", result: launchResult, context: &execContext)
 
-        XCTAssertNotNil(execContext.pid, "pid should be extracted from launch_app result: \(launchResult)")
+        #expect(execContext.pid != nil, "pid should be extracted from launch_app result: \(launchResult)")
 
         let stepWithPlaceholder = Step(
             index: 1,
@@ -262,7 +258,7 @@ final class CorePipelineHelperE2ETests: XCTestCase {
         )
 
         let resolvedStep = resolver.resolve(step: stepWithPlaceholder, context: execContext)
-        XCTAssertEqual(resolvedStep.parameters["pid"], .int(execContext.pid!), "$pid should be resolved to actual pid")
+        #expect(resolvedStep.parameters["pid"] == .int(execContext.pid!), "$pid should be resolved to actual pid")
 
         // Wait for Calculator window to become available
         try await _Concurrency.Task.sleep(nanoseconds: 500_000_000)
@@ -271,18 +267,21 @@ final class CorePipelineHelperE2ETests: XCTestCase {
             name: "list_windows",
             arguments: ["pid": .int(execContext.pid!)]
         )
-        XCTAssertTrue(
+        #expect(
             windowsResult.contains("window_id") || windowsResult.contains("title"),
             "list_windows with resolved pid should return window info: \(windowsResult)"
         )
 
         _ = try? await mcpClient.callTool(name: "quit_app", arguments: ["name": .string("Calculator")])
+        await fixture.tearDown()
     }
 
-    /// Verifies $window_id placeholder resolution: launch → list_windows → get_window_state.
-    func test_windowIdPlaceholderResolution() async throws {
+    @Test("window_id placeholder resolution")
+    func windowIdPlaceholderResolution() async throws {
+        guard let fixture = try await setUpFixture() else { return }
         guard let mcpClient = fixture.mcpClient else {
-            throw XCTSkip("AxionHelper not available")
+            await fixture.tearDown()
+            return
         }
 
         let launchResult = try await mcpClient.callTool(
@@ -300,7 +299,7 @@ final class CorePipelineHelperE2ETests: XCTestCase {
         )
         resolver.absorbResult(tool: "list_windows", result: windowsResult, context: &execContext)
 
-        XCTAssertNotNil(execContext.windowId, "window_id should be extracted from list_windows result: \(windowsResult)")
+        #expect(execContext.windowId != nil, "window_id should be extracted from list_windows result: \(windowsResult)")
 
         let stepWithPlaceholder = Step(
             index: 2,
@@ -310,26 +309,29 @@ final class CorePipelineHelperE2ETests: XCTestCase {
             expectedChange: "Window state with AX tree"
         )
         let resolvedStep = resolver.resolve(step: stepWithPlaceholder, context: execContext)
-        XCTAssertEqual(resolvedStep.parameters["window_id"], .int(execContext.windowId!))
+        #expect(resolvedStep.parameters["window_id"] == .int(execContext.windowId!))
 
         let stateResult = try await mcpClient.callTool(
             name: "get_window_state",
             arguments: ["window_id": .int(execContext.windowId!)]
         )
-        XCTAssertTrue(
+        #expect(
             stateResult.contains("bounds") || stateResult.contains("ax_tree"),
             "get_window_state should return window info: \(stateResult)"
         )
 
         _ = try? await mcpClient.callTool(name: "quit_app", arguments: ["name": .string("Calculator")])
+        await fixture.tearDown()
     }
 
     // MARK: - Story 3.4: Verification with Real AX Tree
 
-    /// Tests StopConditionEvaluator with real AX tree data from Calculator.
-    func test_stopConditionEvaluationWithRealAXTree() async throws {
+    @Test("stop condition evaluation with real AX tree")
+    func stopConditionEvaluationWithRealAXTree() async throws {
+        guard let fixture = try await setUpFixture() else { return }
         guard let mcpClient = fixture.mcpClient else {
-            throw XCTSkip("AxionHelper not available")
+            await fixture.tearDown()
+            return
         }
 
         let launchResult = try await mcpClient.callTool(
@@ -372,7 +374,7 @@ final class CorePipelineHelperE2ETests: XCTestCase {
             executedSteps: [],
             maxSteps: 20
         )
-        XCTAssertTrue(
+        #expect(
             satisfiedResultEN == .satisfied || satisfiedResultZH == .satisfied,
             "textAppears 'Calculator' or '计算器' should be satisfied in AX tree: \(axTreeResult.prefix(200))"
         )
@@ -385,9 +387,10 @@ final class CorePipelineHelperE2ETests: XCTestCase {
             executedSteps: [],
             maxSteps: 20
         )
-        XCTAssertEqual(notFoundResult, .notSatisfied, "textAppears 'TextEdit' should NOT be satisfied")
+        #expect(notFoundResult == .notSatisfied, "textAppears 'TextEdit' should NOT be satisfied")
 
         _ = try? await mcpClient.callTool(name: "quit_app", arguments: ["name": .string("Calculator")])
+        await fixture.tearDown()
     }
 }
 

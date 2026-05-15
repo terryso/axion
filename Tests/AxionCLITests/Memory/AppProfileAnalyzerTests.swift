@@ -1,4 +1,5 @@
-import XCTest
+import Foundation
+import Testing
 import OpenAgentSDK
 
 @testable import AxionCLI
@@ -10,13 +11,8 @@ import OpenAgentSDK
 // MARK: - AppProfileAnalyzer ATDD Tests
 
 /// ATDD red-phase tests for AppProfileAnalyzer (Story 4.2 AC1, AC2, AC3, AC4).
-/// Tests that AppProfileAnalyzer extracts operation patterns from accumulated
-/// KnowledgeEntry history and produces structured AppProfile data.
-///
-/// TDD RED PHASE: These tests will not compile until AppProfileAnalyzer,
-/// AppProfile, OperationPattern, and FailurePattern are implemented
-/// in Sources/AxionCLI/Memory/AppProfileAnalyzer.swift.
-final class AppProfileAnalyzerTests: XCTestCase {
+@Suite("AppProfileAnalyzer")
+struct AppProfileAnalyzerTests {
 
     // MARK: - Helper: Create KnowledgeEntry
 
@@ -66,25 +62,30 @@ final class AppProfileAnalyzerTests: XCTestCase {
 
     // MARK: - P0: Type Existence
 
-    func test_appProfileAnalyzer_typeExists() {
+    @Test("type exists")
+    func typeExists() {
         let _ = AppProfileAnalyzer.self
     }
 
-    func test_appProfile_typeExists() {
+    @Test("AppProfile type exists")
+    func appProfileTypeExists() {
         let _ = AppProfile.self
     }
 
-    func test_operationPattern_typeExists() {
+    @Test("OperationPattern type exists")
+    func operationPatternTypeExists() {
         let _ = OperationPattern.self
     }
 
-    func test_failurePattern_typeExists() {
+    @Test("FailurePattern type exists")
+    func failurePatternTypeExists() {
         let _ = FailurePattern.self
     }
 
     // MARK: - P0 AC1: Extract AX tree structure features from successful operations
 
-    func test_analyze_singleSuccessfulRun_extractsAxCharacteristics() {
+    @Test("analyze single successful run extracts AX characteristics")
+    func analyzeSingleSuccessfulRunExtractsAxCharacteristics() {
         let analyzer = AppProfileAnalyzer()
 
         let history = [
@@ -103,11 +104,12 @@ final class AppProfileAnalyzerTests: XCTestCase {
 
         let profile = analyzer.analyze(domain: "com.apple.calculator", history: history)
 
-        XCTAssertFalse(profile.axCharacteristics.isEmpty,
+        #expect(!profile.axCharacteristics.isEmpty,
             "Profile should contain AX characteristics from the successful run")
     }
 
-    func test_analyze_singleSuccessfulRun_extractsToolSequence() {
+    @Test("analyze single successful run extracts tool sequence")
+    func analyzeSingleSuccessfulRunExtractsToolSequence() {
         let analyzer = AppProfileAnalyzer()
 
         let history = [
@@ -124,14 +126,15 @@ final class AppProfileAnalyzerTests: XCTestCase {
 
         let profile = analyzer.analyze(domain: "com.apple.calculator", history: history)
 
-        XCTAssertEqual(profile.totalRuns, 1, "Should count 1 total run")
-        XCTAssertEqual(profile.successfulRuns, 1, "Should count 1 successful run")
-        XCTAssertEqual(profile.failedRuns, 0, "Should count 0 failed runs")
+        #expect(profile.totalRuns == 1, "Should count 1 total run")
+        #expect(profile.successfulRuns == 1, "Should count 1 successful run")
+        #expect(profile.failedRuns == 0, "Should count 0 failed runs")
     }
 
     // MARK: - P0 AC2: Identify high-frequency operation paths
 
-    func test_analyze_multipleRuns_identifiesHighFrequencyPatterns() {
+    @Test("analyze multiple runs identifies high-frequency patterns")
+    func analyzeMultipleRunsIdentifiesHighFrequencyPatterns() {
         let analyzer = AppProfileAnalyzer()
 
         let history = [
@@ -169,14 +172,13 @@ final class AppProfileAnalyzerTests: XCTestCase {
 
         let profile = analyzer.analyze(domain: "com.apple.calculator", history: history)
 
-        // The pattern "launch_app -> click -> click -> click" appears 3 times
-        // Should be identified as a high-frequency pattern (frequency >= 2)
         let highFreqPatterns = profile.commonPatterns.filter { $0.frequency >= 2 }
-        XCTAssertFalse(highFreqPatterns.isEmpty,
+        #expect(!highFreqPatterns.isEmpty,
             "Should identify at least one high-frequency pattern from 3 identical runs")
     }
 
-    func test_analyze_diverseRuns_onlyReportsFrequentPatterns() {
+    @Test("analyze diverse runs only reports frequent patterns")
+    func analyzeDiverseRunsOnlyReportsFrequentPatterns() {
         let analyzer = AppProfileAnalyzer()
 
         let history = [
@@ -204,23 +206,14 @@ final class AppProfileAnalyzerTests: XCTestCase {
 
         let profile = analyzer.analyze(domain: "com.apple.calculator", history: history)
 
-        // With only 2 different sequences, any 2-step window appearing in both
-        // might match, but full sequences are unique so high-frequency full
-        // patterns should be empty or minimal.
-        // This tests that frequency threshold is applied correctly.
         let highFreqPatterns = profile.commonPatterns.filter { $0.frequency >= 2 }
-
-        // The 2-step prefix "launch_app -> click" vs "launch_app -> type_text" differ,
-        // so no 3-step sequence should repeat. Only the 2-step prefix "launch_app"
-        // as a 1-step pattern might match with frequency 2.
-        // The test validates that frequency filtering is correct.
         for pattern in highFreqPatterns {
-            XCTAssertGreaterThanOrEqual(pattern.frequency, 2,
-                "All high-frequency patterns must have frequency >= 2")
+            #expect(pattern.frequency >= 2, "All high-frequency patterns must have frequency >= 2")
         }
     }
 
-    func test_analyze_highFrequencyPattern_includesDescription() {
+    @Test("analyze high-frequency pattern includes description")
+    func analyzeHighFrequencyPatternIncludesDescription() {
         let analyzer = AppProfileAnalyzer()
 
         let history = [
@@ -249,21 +242,19 @@ final class AppProfileAnalyzerTests: XCTestCase {
         let profile = analyzer.analyze(domain: "com.apple.finder", history: history)
 
         let highFreqPatterns = profile.commonPatterns.filter { $0.frequency >= 2 }
-        XCTAssertFalse(highFreqPatterns.isEmpty, "Should find high-frequency pattern")
+        #expect(!highFreqPatterns.isEmpty, "Should find high-frequency pattern")
 
         for pattern in highFreqPatterns {
-            XCTAssertFalse(pattern.description.isEmpty,
-                "Each OperationPattern should have a human-readable description")
-            XCTAssertFalse(pattern.sequence.isEmpty,
-                "Each OperationPattern should have a non-empty tool sequence")
-            XCTAssertGreaterThan(pattern.successRate, 0,
-                "Success rate should be greater than 0")
+            #expect(!pattern.description.isEmpty, "Each OperationPattern should have a human-readable description")
+            #expect(!pattern.sequence.isEmpty, "Each OperationPattern should have a non-empty tool sequence")
+            #expect(pattern.successRate > 0, "Success rate should be greater than 0")
         }
     }
 
     // MARK: - P0 AC3: Mark failure experiences
 
-    func test_analyze_failureEntries_extractsKnownFailures() {
+    @Test("analyze failure entries extracts known failures")
+    func analyzeFailureEntriesExtractsKnownFailures() {
         let analyzer = AppProfileAnalyzer()
 
         let history = [
@@ -293,16 +284,14 @@ final class AppProfileAnalyzerTests: XCTestCase {
 
         let profile = analyzer.analyze(domain: "com.apple.calculator", history: history)
 
-        XCTAssertFalse(profile.knownFailures.isEmpty,
-            "Should extract failure patterns from entries with failure tags")
+        #expect(!profile.knownFailures.isEmpty, "Should extract failure patterns from entries with failure tags")
         let failure = profile.knownFailures.first!
-        XCTAssertFalse(failure.failedAction.isEmpty,
-            "Failure pattern should describe the failed action")
-        XCTAssertFalse(failure.reason.isEmpty,
-            "Failure pattern should provide a reason")
+        #expect(!failure.failedAction.isEmpty, "Failure pattern should describe the failed action")
+        #expect(!failure.reason.isEmpty, "Failure pattern should provide a reason")
     }
 
-    func test_analyze_failureWithWorkaround_extractsWorkaround() {
+    @Test("analyze failure with workaround extracts workaround")
+    func analyzeFailureWithWorkaroundExtractsWorkaround() {
         let analyzer = AppProfileAnalyzer()
 
         let history = [
@@ -321,16 +310,14 @@ final class AppProfileAnalyzerTests: XCTestCase {
 
         let profile = analyzer.analyze(domain: "com.apple.calculator", history: history)
 
-        XCTAssertEqual(profile.knownFailures.count, 1,
-            "Should extract exactly 1 failure pattern")
+        #expect(profile.knownFailures.count == 1, "Should extract exactly 1 failure pattern")
         let failure = profile.knownFailures.first!
-        XCTAssertNotNil(failure.workaround,
-            "Failure pattern should include the workaround when available")
-        XCTAssertTrue(failure.workaround!.contains("AXButton"),
-            "Workaround should reference the AX selector correction")
+        #expect(failure.workaround != nil, "Failure pattern should include the workaround when available")
+        #expect(failure.workaround!.contains("AXButton"), "Workaround should reference the AX selector correction")
     }
 
-    func test_analyze_failureWithoutWorkaround_workaroundIsNil() {
+    @Test("analyze failure without workaround has nil workaround")
+    func analyzeFailureWithoutWorkaroundHasNilWorkaround() {
         let analyzer = AppProfileAnalyzer()
 
         let history = [
@@ -349,14 +336,14 @@ final class AppProfileAnalyzerTests: XCTestCase {
         let profile = analyzer.analyze(domain: "com.apple.calculator", history: history)
 
         if let failure = profile.knownFailures.first {
-            XCTAssertNil(failure.workaround,
-                "Failure pattern without workaround should have nil workaround")
+            #expect(failure.workaround == nil, "Failure pattern without workaround should have nil workaround")
         }
     }
 
     // MARK: - P0 AC4: Auto-mark familiar apps (>= 3 successful runs)
 
-    func test_analyze_threeSuccessfulRuns_marksFamiliar() {
+    @Test("analyze three successful runs marks familiar")
+    func analyzeThreeSuccessfulRunsMarksFamiliar() {
         let analyzer = AppProfileAnalyzer()
 
         let history = [
@@ -367,11 +354,11 @@ final class AppProfileAnalyzerTests: XCTestCase {
 
         let profile = analyzer.analyze(domain: "com.apple.calculator", history: history)
 
-        XCTAssertTrue(profile.isFamiliar,
-            "App with >= 3 successful runs should be marked as familiar")
+        #expect(profile.isFamiliar, "App with >= 3 successful runs should be marked as familiar")
     }
 
-    func test_analyze_twoSuccessfulRuns_notFamiliar() {
+    @Test("analyze two successful runs not familiar")
+    func analyzeTwoSuccessfulRunsNotFamiliar() {
         let analyzer = AppProfileAnalyzer()
 
         let history = [
@@ -381,11 +368,11 @@ final class AppProfileAnalyzerTests: XCTestCase {
 
         let profile = analyzer.analyze(domain: "com.apple.calculator", history: history)
 
-        XCTAssertFalse(profile.isFamiliar,
-            "App with < 3 successful runs should NOT be marked as familiar")
+        #expect(!profile.isFamiliar, "App with < 3 successful runs should NOT be marked as familiar")
     }
 
-    func test_analyze_exactlyThreeSuccessfulRuns_marksFamiliar() {
+    @Test("analyze exactly three successful runs with failures marks familiar")
+    func analyzeExactlyThreeSuccessfulRunsWithFailuresMarksFamiliar() {
         let analyzer = AppProfileAnalyzer()
 
         let history = [
@@ -397,16 +384,15 @@ final class AppProfileAnalyzerTests: XCTestCase {
 
         let profile = analyzer.analyze(domain: "com.apple.calculator", history: history)
 
-        // Exactly 3 successes + 1 failure: still familiar
-        XCTAssertTrue(profile.isFamiliar,
-            "App with exactly 3 successful runs (plus failures) should be familiar")
-        XCTAssertEqual(profile.successfulRuns, 3)
-        XCTAssertEqual(profile.failedRuns, 1)
+        #expect(profile.isFamiliar, "App with exactly 3 successful runs (plus failures) should be familiar")
+        #expect(profile.successfulRuns == 3)
+        #expect(profile.failedRuns == 1)
     }
 
     // MARK: - P0: Domain matches profile output
 
-    func test_analyze_domainMatchesInput() {
+    @Test("analyze domain matches input")
+    func analyzeDomainMatchesInput() {
         let analyzer = AppProfileAnalyzer()
 
         let history = [
@@ -416,27 +402,28 @@ final class AppProfileAnalyzerTests: XCTestCase {
         let domain = "com.apple.finder"
         let profile = analyzer.analyze(domain: domain, history: history)
 
-        XCTAssertEqual(profile.domain, domain,
-            "Profile domain should match the input domain")
+        #expect(profile.domain == domain, "Profile domain should match the input domain")
     }
 
     // MARK: - P1: Edge Cases
 
-    func test_analyze_emptyHistory_returnsEmptyProfile() {
+    @Test("analyze empty history returns empty profile")
+    func analyzeEmptyHistoryReturnsEmptyProfile() {
         let analyzer = AppProfileAnalyzer()
 
         let profile = analyzer.analyze(domain: "com.apple.calculator", history: [])
 
-        XCTAssertEqual(profile.totalRuns, 0, "Empty history should have 0 total runs")
-        XCTAssertEqual(profile.successfulRuns, 0)
-        XCTAssertEqual(profile.failedRuns, 0)
-        XCTAssertTrue(profile.commonPatterns.isEmpty)
-        XCTAssertTrue(profile.knownFailures.isEmpty)
-        XCTAssertTrue(profile.axCharacteristics.isEmpty)
-        XCTAssertFalse(profile.isFamiliar)
+        #expect(profile.totalRuns == 0, "Empty history should have 0 total runs")
+        #expect(profile.successfulRuns == 0)
+        #expect(profile.failedRuns == 0)
+        #expect(profile.commonPatterns.isEmpty)
+        #expect(profile.knownFailures.isEmpty)
+        #expect(profile.axCharacteristics.isEmpty)
+        #expect(!profile.isFamiliar)
     }
 
-    func test_analyze_allFailures_countsCorrectly() {
+    @Test("analyze all failures counts correctly")
+    func analyzeAllFailuresCountsCorrectly() {
         let analyzer = AppProfileAnalyzer()
 
         let history = [
@@ -446,15 +433,15 @@ final class AppProfileAnalyzerTests: XCTestCase {
 
         let profile = analyzer.analyze(domain: "com.apple.calculator", history: history)
 
-        XCTAssertEqual(profile.totalRuns, 2)
-        XCTAssertEqual(profile.successfulRuns, 0)
-        XCTAssertEqual(profile.failedRuns, 2)
-        XCTAssertFalse(profile.isFamiliar)
-        XCTAssertFalse(profile.knownFailures.isEmpty,
-            "All-failure history should still extract failure patterns")
+        #expect(profile.totalRuns == 2)
+        #expect(profile.successfulRuns == 0)
+        #expect(profile.failedRuns == 2)
+        #expect(!profile.isFamiliar)
+        #expect(!profile.knownFailures.isEmpty, "All-failure history should still extract failure patterns")
     }
 
-    func test_analyze_mixedSuccessFailure_countsCorrectly() {
+    @Test("analyze mixed success failure counts correctly")
+    func analyzeMixedSuccessFailureCountsCorrectly() {
         let analyzer = AppProfileAnalyzer()
 
         let history = [
@@ -467,25 +454,23 @@ final class AppProfileAnalyzerTests: XCTestCase {
 
         let profile = analyzer.analyze(domain: "com.apple.calculator", history: history)
 
-        XCTAssertEqual(profile.totalRuns, 5)
-        XCTAssertEqual(profile.successfulRuns, 3)
-        XCTAssertEqual(profile.failedRuns, 2)
-        XCTAssertTrue(profile.isFamiliar,
-            "3 successful runs (out of 5 total) should mark as familiar")
+        #expect(profile.totalRuns == 5)
+        #expect(profile.successfulRuns == 3)
+        #expect(profile.failedRuns == 2)
+        #expect(profile.isFamiliar, "3 successful runs (out of 5 total) should mark as familiar")
     }
 
-    func test_analyze_excludesProfileAndFamiliarEntriesFromTotalRuns() {
+    @Test("analyze excludes profile and familiar entries from total runs")
+    func analyzeExcludesProfileAndFamiliarEntriesFromTotalRuns() {
         let analyzer = AppProfileAnalyzer()
 
         let domain = "com.apple.calculator"
 
-        // Actual run entries
         let runEntries = [
             makeSuccessfulEntry(id: "run-1", content: "Success 1"),
             makeSuccessfulEntry(id: "run-2", content: "Success 2"),
         ]
 
-        // Metadata entries (profile + familiar) that should NOT count as runs
         let profileEntry = KnowledgeEntry(
             id: "profile-1",
             content: "App Profile: \(domain)",
@@ -504,16 +489,16 @@ final class AppProfileAnalyzerTests: XCTestCase {
         let history = runEntries + [profileEntry, familiarEntry]
         let profile = analyzer.analyze(domain: domain, history: history)
 
-        XCTAssertEqual(profile.totalRuns, 2,
+        #expect(profile.totalRuns == 2,
             "totalRuns should only count actual run entries (success/failure), not profile or familiar entries")
-        XCTAssertEqual(profile.successfulRuns, 2)
-        XCTAssertEqual(profile.failedRuns, 0)
+        #expect(profile.successfulRuns == 2)
+        #expect(profile.failedRuns == 0)
     }
 
-    func test_analyze_ignoresEntriesFromOtherDomains() {
+    @Test("analyze ignores entries from other domains")
+    func analyzeIgnoresEntriesFromOtherDomains() {
         let analyzer = AppProfileAnalyzer()
 
-        // These entries are tagged for a different domain
         let wrongDomainEntry = KnowledgeEntry(
             id: "other-1",
             content: "Other app run",
@@ -524,13 +509,11 @@ final class AppProfileAnalyzerTests: XCTestCase {
 
         let profile = analyzer.analyze(domain: "com.apple.calculator", history: [wrongDomainEntry])
 
-        // The analyzer should only count entries relevant to the requested domain
-        // Entries from other domains should be filtered out
-        XCTAssertEqual(profile.totalRuns, 0,
-            "Entries from other domains should not be counted")
+        #expect(profile.totalRuns == 0, "Entries from other domains should not be counted")
     }
 
-    func test_analyze_axCharacteristics_deduplicatesAcrossRuns() {
+    @Test("analyze AX characteristics deduplicates across runs")
+    func analyzeAxCharacteristicsDeduplicatesAcrossRuns() {
         let analyzer = AppProfileAnalyzer()
 
         let history = [
@@ -552,13 +535,13 @@ final class AppProfileAnalyzerTests: XCTestCase {
 
         let profile = analyzer.analyze(domain: "com.apple.calculator", history: history)
 
-        // AX characteristics should not have exact duplicates
         let uniqueCharacteristics = Set(profile.axCharacteristics)
-        XCTAssertEqual(uniqueCharacteristics.count, profile.axCharacteristics.count,
+        #expect(uniqueCharacteristics.count == profile.axCharacteristics.count,
             "AX characteristics should be deduplicated")
     }
 
-    func test_analyze_operationPattern_successRateIsCorrect() {
+    @Test("analyze operation pattern success rate is correct")
+    func analyzeOperationPatternSuccessRateIsCorrect() {
         let analyzer = AppProfileAnalyzer()
 
         let history = [
@@ -587,24 +570,20 @@ final class AppProfileAnalyzerTests: XCTestCase {
 
         let profile = analyzer.analyze(domain: "com.apple.calculator", history: history)
 
-        // Find the pattern that matches "launch_app -> click -> click"
         let matchingPattern = profile.commonPatterns.first { pattern in
             pattern.sequence == ["launch_app", "click", "click"]
         }
 
         if let pattern = matchingPattern {
-            // 2 successes out of 3 occurrences = ~0.667
-            XCTAssertGreaterThanOrEqual(pattern.successRate, 0.5,
-                "Success rate should reflect 2/3 successful occurrences")
-            XCTAssertLessThanOrEqual(pattern.successRate, 1.0,
-                "Success rate should not exceed 1.0")
+            #expect(pattern.successRate >= 0.5, "Success rate should reflect 2/3 successful occurrences")
+            #expect(pattern.successRate <= 1.0, "Success rate should not exceed 1.0")
         }
     }
 
-    func test_analyze_stripsToolParameters_forPatternMatching() {
+    @Test("analyze strips tool parameters for pattern matching")
+    func analyzeStripsToolParametersForPatternMatching() {
         let analyzer = AppProfileAnalyzer()
 
-        // Two runs with same tool sequence but different parameters
         let history = [
             makeSuccessfulEntry(
                 id: "run-1",
@@ -622,9 +601,8 @@ final class AppProfileAnalyzerTests: XCTestCase {
 
         let profile = analyzer.analyze(domain: "com.apple.calculator", history: history)
 
-        // After stripping params, both sequences become: launch_app -> click -> type_text
         let highFreqPatterns = profile.commonPatterns.filter { $0.frequency >= 2 }
-        XCTAssertFalse(highFreqPatterns.isEmpty,
+        #expect(!highFreqPatterns.isEmpty,
             "Should identify high-frequency pattern when tool names match but parameters differ")
     }
 }

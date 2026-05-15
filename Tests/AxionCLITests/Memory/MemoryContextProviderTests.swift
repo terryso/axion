@@ -1,4 +1,5 @@
-import XCTest
+import Foundation
+import Testing
 import OpenAgentSDK
 
 @testable import AxionCLI
@@ -10,16 +11,8 @@ import OpenAgentSDK
 // MARK: - MemoryContextProvider ATDD Tests
 
 /// ATDD red-phase tests for MemoryContextProvider (Story 4.3 AC1, AC2, AC3, AC4).
-/// Tests that MemoryContextProvider correctly:
-/// - Infers App domain from task description
-/// - Queries MemoryStore for profile and familiar data
-/// - Assembles a prompt fragment with Memory context
-/// - Handles familiar vs unfamiliar App strategies
-/// - Safely degrades when no Memory data exists
-///
-/// TDD RED PHASE: These tests will not compile until MemoryContextProvider is implemented
-/// in Sources/AxionCLI/Memory/MemoryContextProvider.swift.
-final class MemoryContextProviderTests: XCTestCase {
+@Suite("MemoryContextProvider")
+struct MemoryContextProviderTests {
 
     // MARK: - Helper: Create KnowledgeEntry
 
@@ -41,18 +34,19 @@ final class MemoryContextProviderTests: XCTestCase {
 
     // MARK: - P0: Type Existence
 
-    func test_memoryContextProvider_typeExists() {
+    @Test("type exists")
+    func typeExists() {
         let _ = MemoryContextProvider.self
     }
 
     // MARK: - P0 AC1: Inject App Memory context into Planner prompt
 
-    func test_buildMemoryContext_withProfileData_returnsNonNil() async throws {
+    @Test("build memory context with profile data returns non-nil")
+    func buildMemoryContextWithProfileDataReturnsNonNil() async throws {
         let store = InMemoryStore()
         let provider = MemoryContextProvider()
         let domain = "com.apple.calculator"
 
-        // Populate profile data
         let profileEntry = makeEntry(
             content: """
             App Profile: \(domain)
@@ -73,11 +67,12 @@ final class MemoryContextProviderTests: XCTestCase {
             store: store
         )
 
-        XCTAssertNotNil(context,
+        #expect(context != nil,
             "Should return non-nil Memory context when profile data exists for the matched App")
     }
 
-    func test_buildMemoryContext_containsAppMemorySection() async throws {
+    @Test("build memory context contains app memory section")
+    func buildMemoryContextContainsAppMemorySection() async throws {
         let store = InMemoryStore()
         let provider = MemoryContextProvider()
         let domain = "com.apple.calculator"
@@ -101,15 +96,16 @@ final class MemoryContextProviderTests: XCTestCase {
             store: store
         )
 
-        XCTAssertNotNil(context)
-        let ctx = try XCTUnwrap(context)
-        XCTAssertTrue(ctx.contains("App Memory Context"),
+        #expect(context != nil)
+        let ctx = try #require(context)
+        #expect(ctx.contains("App Memory Context"),
             "Memory context should include 'App Memory Context' section header")
-        XCTAssertTrue(ctx.contains(domain),
+        #expect(ctx.contains(domain),
             "Memory context should reference the App domain")
     }
 
-    func test_buildMemoryContext_containsReliableOperationPaths() async throws {
+    @Test("build memory context contains reliable operation paths")
+    func buildMemoryContextContainsReliableOperationPaths() async throws {
         let store = InMemoryStore()
         let provider = MemoryContextProvider()
         let domain = "com.apple.calculator"
@@ -132,13 +128,14 @@ final class MemoryContextProviderTests: XCTestCase {
             store: store
         )
 
-        XCTAssertNotNil(context)
-        let ctx = try XCTUnwrap(context)
-        XCTAssertTrue(ctx.contains("launch_app"),
+        #expect(context != nil)
+        let ctx = try #require(context)
+        #expect(ctx.contains("launch_app"),
             "Memory context should reference known reliable operation paths")
     }
 
-    func test_buildMemoryContext_containsAxCharacteristics() async throws {
+    @Test("build memory context contains AX characteristics")
+    func buildMemoryContextContainsAxCharacteristics() async throws {
         let store = InMemoryStore()
         let provider = MemoryContextProvider()
         let domain = "com.apple.calculator"
@@ -161,15 +158,16 @@ final class MemoryContextProviderTests: XCTestCase {
             store: store
         )
 
-        XCTAssertNotNil(context)
-        let ctx = try XCTUnwrap(context)
-        XCTAssertTrue(ctx.contains("AXButton"),
+        #expect(context != nil)
+        let ctx = try #require(context)
+        #expect(ctx.contains("AXButton"),
             "Memory context should include AX characteristics from profile")
     }
 
     // MARK: - P0 AC2: Annotate known unreliable operation paths
 
-    func test_buildMemoryContext_annotatesKnownFailures() async throws {
+    @Test("build memory context annotates known failures")
+    func buildMemoryContextAnnotatesKnownFailures() async throws {
         let store = InMemoryStore()
         let provider = MemoryContextProvider()
         let domain = "com.apple.calculator"
@@ -192,13 +190,14 @@ final class MemoryContextProviderTests: XCTestCase {
             store: store
         )
 
-        XCTAssertNotNil(context)
-        let ctx = try XCTUnwrap(context)
-        XCTAssertTrue(ctx.contains("已知失败") || ctx.contains("避免") || ctx.contains("不可靠"),
+        #expect(context != nil)
+        let ctx = try #require(context)
+        #expect(ctx.contains("已知失败") || ctx.contains("避免") || ctx.contains("不可靠"),
             "Memory context should annotate known failure patterns to help Planner avoid them")
     }
 
-    func test_buildMemoryContext_failureDataMarkedAsAvoid() async throws {
+    @Test("build memory context failure data marked as avoid")
+    func buildMemoryContextFailureDataMarkedAsAvoid() async throws {
         let store = InMemoryStore()
         let provider = MemoryContextProvider()
         let domain = "com.apple.finder"
@@ -221,21 +220,20 @@ final class MemoryContextProviderTests: XCTestCase {
             store: store
         )
 
-        XCTAssertNotNil(context)
-        let ctx = try XCTUnwrap(context)
-        // Should contain the failure info and optionally the workaround
-        XCTAssertTrue(ctx.contains("click(x:150,y:300)") || ctx.contains("AXSidebar"),
+        #expect(context != nil)
+        let ctx = try #require(context)
+        #expect(ctx.contains("click(x:150,y:300)") || ctx.contains("AXSidebar"),
             "Memory context should include specific failure details")
     }
 
     // MARK: - P0 AC3: Familiar App uses compact planning strategy
 
-    func test_buildMemoryContext_familiarApp_includesCompactStrategy() async throws {
+    @Test("build memory context familiar app includes compact strategy")
+    func buildMemoryContextFamiliarAppIncludesCompactStrategy() async throws {
         let store = InMemoryStore()
         let provider = MemoryContextProvider()
         let domain = "com.apple.calculator"
 
-        // Profile data showing app is familiar (>= 3 successes)
         let profileEntry = makeEntry(
             content: """
             App Profile: \(domain)
@@ -247,7 +245,6 @@ final class MemoryContextProviderTests: XCTestCase {
             """,
             tags: ["app:\(domain)", "profile"]
         )
-        // Familiar marker
         let familiarEntry = makeEntry(
             content: "App \(domain) 已熟悉（累计 5 次成功操作）",
             tags: ["app:\(domain)", "familiar"]
@@ -260,18 +257,18 @@ final class MemoryContextProviderTests: XCTestCase {
             store: store
         )
 
-        XCTAssertNotNil(context)
-        let ctx = try XCTUnwrap(context)
-        XCTAssertTrue(ctx.contains("紧凑") || ctx.contains("compact") || ctx.contains("省略") || ctx.contains("减少"),
+        #expect(context != nil)
+        let ctx = try #require(context)
+        #expect(ctx.contains("紧凑") || ctx.contains("compact") || ctx.contains("省略") || ctx.contains("减少"),
             "Familiar App context should include compact planning strategy suggestion")
     }
 
-    func test_buildMemoryContext_unfamiliarApp_includesFullVerificationStrategy() async throws {
+    @Test("build memory context unfamiliar app includes full verification strategy")
+    func buildMemoryContextUnfamiliarAppIncludesFullVerificationStrategy() async throws {
         let store = InMemoryStore()
         let provider = MemoryContextProvider()
         let domain = "com.apple.finder"
 
-        // Profile data showing app is NOT familiar
         let profileEntry = makeEntry(
             content: """
             App Profile: \(domain)
@@ -284,31 +281,25 @@ final class MemoryContextProviderTests: XCTestCase {
             tags: ["app:\(domain)", "profile"]
         )
         try await store.save(domain: domain, knowledge: profileEntry)
-        // No familiar entry saved
 
         let context = try await provider.buildMemoryContext(
             task: "在 Finder 中搜索文件",
             store: store
         )
 
-        XCTAssertNotNil(context)
-        let ctx = try XCTUnwrap(context)
-        XCTAssertTrue(ctx.contains("尚未熟悉") || ctx.contains("完整验证") || ctx.contains("建议"),
+        #expect(context != nil)
+        let ctx = try #require(context)
+        #expect(ctx.contains("尚未熟悉") || ctx.contains("完整验证") || ctx.contains("建议"),
             "Unfamiliar App context should include full verification strategy suggestion")
     }
 
     // MARK: - P0 AC4: --no-memory flag disables Memory injection
 
-    // Note: The --no-memory flag test is a RunCommand integration test.
-    // MemoryContextProvider should support being skipped entirely when noMemory == true.
-    // This is tested in the RunCommand test; here we test the provider returns nil
-    // when there is no matching data (safe degradation).
-
-    func test_buildMemoryContext_noMatchingApp_returnsNil() async throws {
+    @Test("build memory context no matching app returns nil")
+    func buildMemoryContextNoMatchingAppReturnsNil() async throws {
         let store = InMemoryStore()
         let provider = MemoryContextProvider()
 
-        // Store has data for Calculator but task mentions an unknown app
         let profileEntry = makeEntry(
             content: """
             App Profile: com.apple.calculator
@@ -321,17 +312,18 @@ final class MemoryContextProviderTests: XCTestCase {
         try await store.save(domain: "com.apple.calculator", knowledge: profileEntry)
 
         let context = try await provider.buildMemoryContext(
-            task: "在 Photoshop 中打开图片",  // No matching app
+            task: "在 Photoshop 中打开图片",
             store: store
         )
 
-        XCTAssertNil(context,
+        #expect(context == nil,
             "Should return nil when no App name in task matches any stored Memory domain")
     }
 
     // MARK: - P0: Domain inference from task description
 
-    func test_domainInference_matchesCalculator() async throws {
+    @Test("domain inference matches Calculator")
+    func domainInferenceMatchesCalculator() async throws {
         let store = InMemoryStore()
         let provider = MemoryContextProvider()
         let domain = "com.apple.calculator"
@@ -342,7 +334,6 @@ final class MemoryContextProviderTests: XCTestCase {
         )
         try await store.save(domain: domain, knowledge: profileEntry)
 
-        // Test various Chinese and English variants
         let tasks = [
             "打开计算器",
             "打开 Calculator",
@@ -352,12 +343,12 @@ final class MemoryContextProviderTests: XCTestCase {
 
         for task in tasks {
             let context = try await provider.buildMemoryContext(task: task, store: store)
-            XCTAssertNotNil(context,
-                "Should match Calculator domain for task: '\(task)'")
+            #expect(context != nil, "Should match Calculator domain for task: '\(task)'")
         }
     }
 
-    func test_domainInference_matchesFinder() async throws {
+    @Test("domain inference matches Finder")
+    func domainInferenceMatchesFinder() async throws {
         let store = InMemoryStore()
         let provider = MemoryContextProvider()
         let domain = "com.apple.finder"
@@ -373,10 +364,11 @@ final class MemoryContextProviderTests: XCTestCase {
             store: store
         )
 
-        XCTAssertNotNil(context, "Should match Finder domain")
+        #expect(context != nil, "Should match Finder domain")
     }
 
-    func test_domainInference_matchesSafari() async throws {
+    @Test("domain inference matches Safari")
+    func domainInferenceMatchesSafari() async throws {
         let store = InMemoryStore()
         let provider = MemoryContextProvider()
         let domain = "com.apple.safari"
@@ -392,10 +384,11 @@ final class MemoryContextProviderTests: XCTestCase {
             store: store
         )
 
-        XCTAssertNotNil(context, "Should match Safari domain")
+        #expect(context != nil, "Should match Safari domain")
     }
 
-    func test_domainInference_matchesChrome() async throws {
+    @Test("domain inference matches Chrome")
+    func domainInferenceMatchesChrome() async throws {
         let store = InMemoryStore()
         let provider = MemoryContextProvider()
         let domain = "com.google.chrome"
@@ -411,10 +404,11 @@ final class MemoryContextProviderTests: XCTestCase {
             store: store
         )
 
-        XCTAssertNotNil(context, "Should match Chrome domain")
+        #expect(context != nil, "Should match Chrome domain")
     }
 
-    func test_domainInference_matchesTextEdit() async throws {
+    @Test("domain inference matches TextEdit")
+    func domainInferenceMatchesTextEdit() async throws {
         let store = InMemoryStore()
         let provider = MemoryContextProvider()
         let domain = "com.apple.textedit"
@@ -430,10 +424,11 @@ final class MemoryContextProviderTests: XCTestCase {
             store: store
         )
 
-        XCTAssertNotNil(context, "Should match TextEdit domain")
+        #expect(context != nil, "Should match TextEdit domain")
     }
 
-    func test_domainInference_matchesTerminal() async throws {
+    @Test("domain inference matches Terminal")
+    func domainInferenceMatchesTerminal() async throws {
         let store = InMemoryStore()
         let provider = MemoryContextProvider()
         let domain = "com.apple.terminal"
@@ -449,12 +444,13 @@ final class MemoryContextProviderTests: XCTestCase {
             store: store
         )
 
-        XCTAssertNotNil(context, "Should match Terminal domain")
+        #expect(context != nil, "Should match Terminal domain")
     }
 
     // MARK: - P0: Empty Memory returns nil (safe degradation)
 
-    func test_buildMemoryContext_emptyStore_returnsNil() async throws {
+    @Test("build memory context empty store returns nil")
+    func buildMemoryContextEmptyStoreReturnsNil() async throws {
         let store = InMemoryStore()
         let provider = MemoryContextProvider()
 
@@ -463,16 +459,15 @@ final class MemoryContextProviderTests: XCTestCase {
             store: store
         )
 
-        XCTAssertNil(context,
-            "Should return nil when MemoryStore has no data")
+        #expect(context == nil, "Should return nil when MemoryStore has no data")
     }
 
-    func test_buildMemoryContext_noProfileData_returnsNil() async throws {
+    @Test("build memory context no profile data returns nil")
+    func buildMemoryContextNoProfileDataReturnsNil() async throws {
         let store = InMemoryStore()
         let provider = MemoryContextProvider()
         let domain = "com.apple.calculator"
 
-        // Only run entries, no profile
         let runEntry = makeEntry(
             content: "成功运行",
             tags: ["app:\(domain)", "success"]
@@ -484,53 +479,46 @@ final class MemoryContextProviderTests: XCTestCase {
             store: store
         )
 
-        XCTAssertNil(context,
+        #expect(context == nil,
             "Should return nil when only raw run entries exist without profile data")
     }
 
     // MARK: - P0: MemoryStore error handling (safe degradation)
 
-    func test_buildMemoryContext_storeError_returnsNil() async throws {
-        // Use a store that will be queried successfully but has no relevant data
+    @Test("build memory context store error returns nil")
+    func buildMemoryContextStoreErrorReturnsNil() async throws {
         let store = InMemoryStore()
         let provider = MemoryContextProvider()
 
-        // Task that doesn't match any known app
         let context = try await provider.buildMemoryContext(
             task: "完成一个不涉及任何已知 App 的任务",
             store: store
         )
 
-        XCTAssertNil(context,
+        #expect(context == nil,
             "Should return nil gracefully when no matching Memory context is found")
     }
 
     // MARK: - P1: App name mapping completeness
 
-    func test_appNameMap_containsCommonApps() {
+    @Test("app name map contains common apps")
+    func appNameMapContainsCommonApps() {
         let provider = MemoryContextProvider()
 
-        // Verify the static appNameMap contains expected entries
-        // This tests that the mapping table is populated
         let map = MemoryContextProvider.appNameMap
-        XCTAssertFalse(map.isEmpty,
-            "App name mapping should not be empty")
+        #expect(!map.isEmpty, "App name mapping should not be empty")
 
-        // Check for key entries
         let domains = map.map { $0.domain }
-        XCTAssertTrue(domains.contains("com.apple.calculator"),
-            "Should map Calculator")
-        XCTAssertTrue(domains.contains("com.apple.finder"),
-            "Should map Finder")
-        XCTAssertTrue(domains.contains("com.apple.safari"),
-            "Should map Safari")
-        XCTAssertTrue(domains.contains("com.google.chrome"),
-            "Should map Chrome")
+        #expect(domains.contains("com.apple.calculator"), "Should map Calculator")
+        #expect(domains.contains("com.apple.finder"), "Should map Finder")
+        #expect(domains.contains("com.apple.safari"), "Should map Safari")
+        #expect(domains.contains("com.google.chrome"), "Should map Chrome")
     }
 
     // MARK: - P1: Context format verification
 
-    func test_buildMemoryContext_format_hasSectionHeaders() async throws {
+    @Test("build memory context format has section headers")
+    func buildMemoryContextFormatHasSectionHeaders() async throws {
         let store = InMemoryStore()
         let provider = MemoryContextProvider()
         let domain = "com.apple.calculator"
@@ -560,21 +548,20 @@ final class MemoryContextProviderTests: XCTestCase {
             store: store
         )
 
-        XCTAssertNotNil(context)
-        let ctx = try XCTUnwrap(context)
+        #expect(context != nil)
+        let ctx = try #require(context)
 
-        // Should have section structure
-        XCTAssertTrue(ctx.hasPrefix("# App Memory Context") || ctx.contains("# App Memory Context"),
+        #expect(ctx.hasPrefix("# App Memory Context") || ctx.contains("# App Memory Context"),
             "Context should start with or contain '# App Memory Context' header")
     }
 
     // MARK: - P1: Multiple apps in task description
 
-    func test_buildMemoryContext_taskMentionsMultipleApps_matchesFirst() async throws {
+    @Test("build memory context task mentions multiple apps matches first")
+    func buildMemoryContextTaskMentionsMultipleAppsMatchesFirst() async throws {
         let store = InMemoryStore()
         let provider = MemoryContextProvider()
 
-        // Both Calculator and Finder have profile data
         let calcProfile = makeEntry(
             content: "App Profile: com.apple.calculator\n总运行次数: 3\n成功次数: 3\n已熟悉: 是",
             tags: ["app:com.apple.calculator", "profile"]
@@ -591,13 +578,14 @@ final class MemoryContextProviderTests: XCTestCase {
             store: store
         )
 
-        XCTAssertNotNil(context,
+        #expect(context != nil,
             "Should match at least one App when multiple are mentioned")
     }
 
     // MARK: - P1: Case-insensitive matching
 
-    func test_domainInference_caseInsensitive() async throws {
+    @Test("domain inference case insensitive")
+    func domainInferenceCaseInsensitive() async throws {
         let store = InMemoryStore()
         let provider = MemoryContextProvider()
         let domain = "com.apple.calculator"
@@ -613,7 +601,6 @@ final class MemoryContextProviderTests: XCTestCase {
             store: store
         )
 
-        XCTAssertNotNil(context,
-            "Should match domain case-insensitively")
+        #expect(context != nil, "Should match domain case-insensitively")
     }
 }

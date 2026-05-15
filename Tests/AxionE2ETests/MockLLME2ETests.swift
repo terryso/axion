@@ -1,5 +1,5 @@
 import Foundation
-import XCTest
+import Testing
 
 import AxionCore
 import OpenAgentSDK
@@ -14,28 +14,24 @@ import OpenAgentSDK
 /// Prerequisites:
 /// - AxionHelper.app built at .build/AxionHelper.app
 /// - macOS Accessibility permissions granted
-final class MockLLME2ETests: XCTestCase {
+@Suite("Mock LLM E2E")
+struct MockLLME2ETests {
 
-    private var fixture: E2EHelperFixture!
-
-    override func setUp() async throws {
-        try await super.setUp()
-        fixture = try E2EHelperFixture()
-        try await fixture.setUpHelper()
-    }
-
-    override func tearDown() async throws {
-        await fixture.tearDown()
-        fixture = nil
-        try await super.tearDown()
+    private func setUpFixture() async throws -> E2EHelperFixture? {
+        let fixture = try E2EHelperFixture()
+        let started = try await fixture.setUpHelper()
+        guard started else { return nil }
+        return fixture
     }
 
     // MARK: - 1. Launch App and Verify (Happy Path)
 
-    /// Full pipeline: assistant → launch_app → toolResult → assistant → result(success)
-    func test_e2e_launchAppAndVerify() async throws {
+    @Test("E2E launch app and verify")
+    func e2eLaunchAppAndVerify() async throws {
+        guard let fixture = try await setUpFixture() else { return }
         guard let mcpClient = fixture.mcpClient else {
-            throw XCTSkip("AxionHelper not available")
+            await fixture.tearDown()
+            return
         }
 
         // Use real Helper to launch Calculator and capture result
@@ -62,18 +58,19 @@ final class MockLLME2ETests: XCTestCase {
         await runner.run(messages: messages)
 
         // Verify output contains expected content
-        XCTAssertTrue(capturing.contains("Open Calculator"), "Output should contain task description")
-        XCTAssertTrue(capturing.contains("launch_app") || capturing.contains("执行"), "Output should contain tool execution info")
-        XCTAssertTrue(capturing.contains("运行结束"), "Output should show completion")
+        #expect(capturing.contains("Open Calculator"), "Output should contain task description")
+        #expect(capturing.contains("launch_app") || capturing.contains("执行"), "Output should contain tool execution info")
+        #expect(capturing.contains("运行结束"), "Output should show completion")
 
         // Clean up: quit Calculator
         _ = try? await mcpClient.callTool(name: "quit_app", arguments: ["name": .string("Calculator")])
+        await fixture.tearDown()
     }
 
     // MARK: - 2. Dryrun Mode
 
-    /// Dryrun: only assistant messages, no tool calls.
-    func test_e2e_dryrunMode() async throws {
+    @Test("E2E dryrun mode")
+    func e2eDryrunMode() async throws {
         let capturing = CapturingOutput()
         let handler = SDKTerminalOutputHandler(output: capturing.output)
 
@@ -90,17 +87,18 @@ final class MockLLME2ETests: XCTestCase {
         await runner.run(messages: messages)
 
         // Verify output
-        XCTAssertTrue(capturing.contains("运行结束"), "Should show completion")
-        // The streaming text should have been written
-        XCTAssertTrue(capturing.contains("Planning"), "Should show planning text")
+        #expect(capturing.contains("运行结束"), "Should show completion")
+        #expect(capturing.contains("Planning"), "Should show planning text")
     }
 
     // MARK: - 3. Multi-Step Keyboard Operations
 
-    /// Multi-step: launch → press keys → verify via screenshot.
-    func test_e2e_multiStepTyping() async throws {
+    @Test("E2E multi-step typing")
+    func e2eMultiStepTyping() async throws {
+        guard let fixture = try await setUpFixture() else { return }
         guard let mcpClient = fixture.mcpClient else {
-            throw XCTSkip("AxionHelper not available")
+            await fixture.tearDown()
+            return
         }
 
         // Launch Calculator first
@@ -134,19 +132,20 @@ final class MockLLME2ETests: XCTestCase {
         await runner.run(messages: messages)
 
         // Verify all steps appear in output
-        XCTAssertTrue(capturing.contains("launch_app"), "Should show launch_app step")
-        XCTAssertTrue(capturing.contains("press_key"), "Should show press_key step")
-        XCTAssertTrue(capturing.contains("hotkey"), "Should show hotkey step")
-        XCTAssertTrue(capturing.contains("运行结束"), "Should show completion")
+        #expect(capturing.contains("launch_app"), "Should show launch_app step")
+        #expect(capturing.contains("press_key"), "Should show press_key step")
+        #expect(capturing.contains("hotkey"), "Should show hotkey step")
+        #expect(capturing.contains("运行结束"), "Should show completion")
 
         // Clean up
         _ = try? await mcpClient.callTool(name: "quit_app", arguments: ["name": .string("Calculator")])
+        await fixture.tearDown()
     }
 
     // MARK: - 4. Error Recovery
 
-    /// Tool error followed by successful retry.
-    func test_e2e_errorRecovery() async throws {
+    @Test("E2E error recovery")
+    func e2eErrorRecovery() async throws {
         let capturing = CapturingOutput()
         let handler = SDKTerminalOutputHandler(output: capturing.output)
 
@@ -165,15 +164,15 @@ final class MockLLME2ETests: XCTestCase {
         let runner = E2EPipelineRunner(outputHandler: handler, tracer: nil)
         await runner.run(messages: messages)
 
-        XCTAssertTrue(capturing.contains("错误") || capturing.contains("error") || capturing.contains("App not found"),
+        #expect(capturing.contains("错误") || capturing.contains("error") || capturing.contains("App not found"),
                        "Output should indicate the error step")
-        XCTAssertTrue(capturing.contains("运行结束"), "Should complete despite error")
+        #expect(capturing.contains("运行结束"), "Should complete despite error")
     }
 
     // MARK: - 5. JSON Output Format
 
-    /// Verify JSON output handler produces valid structured JSON.
-    func test_e2e_jsonOutputFormat() async throws {
+    @Test("E2E JSON output format")
+    func e2eJsonOutputFormat() async throws {
         let capturing = CapturingJSONOutput()
         let handler = SDKJSONOutputHandler(write: capturing.write)
 
@@ -190,34 +189,39 @@ final class MockLLME2ETests: XCTestCase {
         await runner.run(messages: messages)
 
         guard let jsonStr = capturing.lastJSON else {
-            XCTFail("JSON output handler should produce output")
+            Issue.record("JSON output handler should produce output")
             return
         }
 
         // Verify it's valid JSON
         let data = jsonStr.data(using: .utf8)!
-        let json = try XCTUnwrap(JSONSerialization.jsonObject(with: data) as? [String: Any])
+        let json = try #require(JSONSerialization.jsonObject(with: data) as? [String: Any])
 
-        XCTAssertEqual(json["runId"] as? String, "e2e-json-001")
-        XCTAssertEqual(json["task"] as? String, "Open Calculator")
-        XCTAssertEqual(json["status"] as? String, "success")
-        XCTAssertEqual(json["numTurns"] as? Int, 1)
+        #expect(json["runId"] as? String == "e2e-json-001")
+        #expect(json["task"] as? String == "Open Calculator")
+        #expect(json["status"] as? String == "success")
+        #expect(json["numTurns"] as? Int == 1)
 
-        let steps = try XCTUnwrap(json["steps"] as? [[String: Any]])
-        XCTAssertFalse(steps.isEmpty, "Should have recorded tool steps")
-        XCTAssertEqual(steps[0]["tool"] as? String, "launch_app")
+        let steps = try #require(json["steps"] as? [[String: Any]])
+        #expect(!steps.isEmpty, "Should have recorded tool steps")
+        #expect(steps[0]["tool"] as? String == "launch_app")
     }
 
     // MARK: - 6. Trace File Integrity
 
-    /// Verify trace file records all expected event types.
-    func test_e2e_traceFileIntegrity() async throws {
+    @Test("E2E trace file integrity")
+    func e2eTraceFileIntegrity() async throws {
         let runId = "e2e-trace-\(UUID().uuidString.prefix(8))"
 
         var traceConfig = AxionConfig.default
         traceConfig.traceEnabled = true
 
-        let tracer = try TraceRecorder(runId: runId, config: traceConfig, baseURL: fixture.tempDir)
+        let tempDir = FileManager.default.temporaryDirectory
+            .appendingPathComponent("AxionE2E-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: tempDir, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: tempDir) }
+
+        let tracer = try TraceRecorder(runId: runId, config: traceConfig, baseURL: tempDir)
 
         await tracer.recordRunStart(runId: runId, task: "Open Calculator", mode: "standard")
 
@@ -239,29 +243,29 @@ final class MockLLME2ETests: XCTestCase {
         await tracer.close()
 
         // Read trace file
-        let traceFile = fixture.tempDir
+        let traceFile = tempDir
             .appendingPathComponent(runId)
             .appendingPathComponent("trace.jsonl")
         let traceContent = try String(contentsOf: traceFile, encoding: .utf8)
         let lines = traceContent.components(separatedBy: "\n").filter { !$0.isEmpty }
 
-        XCTAssertGreaterThanOrEqual(lines.count, 5, "Trace should have multiple events")
+        #expect(lines.count >= 5, "Trace should have multiple events")
 
         // Parse and verify event types
         var eventTypes: [String] = []
         for line in lines {
             let data = line.data(using: .utf8)!
-            let json = try XCTUnwrap(JSONSerialization.jsonObject(with: data) as? [String: Any])
+            let json = try #require(JSONSerialization.jsonObject(with: data) as? [String: Any])
             if let event = json["event"] as? String {
                 eventTypes.append(event)
             }
         }
 
-        XCTAssertTrue(eventTypes.contains("run_start"), "Trace should contain run_start")
-        XCTAssertTrue(eventTypes.contains("assistant_message"), "Trace should contain assistant_message")
-        XCTAssertTrue(eventTypes.contains("tool_use"), "Trace should contain tool_use")
-        XCTAssertTrue(eventTypes.contains("tool_result"), "Trace should contain tool_result")
-        XCTAssertTrue(eventTypes.contains("result"), "Trace should contain result")
-        XCTAssertTrue(eventTypes.contains("run_done"), "Trace should contain run_done")
+        #expect(eventTypes.contains("run_start"), "Trace should contain run_start")
+        #expect(eventTypes.contains("assistant_message"), "Trace should contain assistant_message")
+        #expect(eventTypes.contains("tool_use"), "Trace should contain tool_use")
+        #expect(eventTypes.contains("tool_result"), "Trace should contain tool_result")
+        #expect(eventTypes.contains("result"), "Trace should contain result")
+        #expect(eventTypes.contains("run_done"), "Trace should contain run_done")
     }
 }

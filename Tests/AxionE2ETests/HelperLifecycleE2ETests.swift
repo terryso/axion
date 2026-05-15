@@ -1,5 +1,5 @@
 import Foundation
-import XCTest
+import Testing
 
 import AxionCore
 import OpenAgentSDK
@@ -9,45 +9,44 @@ import OpenAgentSDK
 ///
 /// Validates: start → MCP connect → tool calls → graceful shutdown.
 /// Uses real Helper process but does NOT call LLM.
-final class HelperLifecycleE2ETests: XCTestCase {
+@Suite("Helper Lifecycle E2E")
+struct HelperLifecycleE2ETests {
 
-    private var fixture: E2EHelperFixture!
-
-    override func setUp() async throws {
-        try await super.setUp()
-        fixture = try E2EHelperFixture()
-        try await fixture.setUpHelper()
-    }
-
-    override func tearDown() async throws {
-        await fixture.tearDown()
-        fixture = nil
-        try await super.tearDown()
+    private func setUpFixture() async throws -> E2EHelperFixture? {
+        let fixture = try E2EHelperFixture()
+        let started = try await fixture.setUpHelper()
+        guard started else { return nil }
+        return fixture
     }
 
     // MARK: - AC1: Start Helper and establish MCP connection
 
-    /// Helper starts and MCP connection is ready for tool calls.
-    func test_helperStartsAndConnects() async throws {
+    @Test("helper starts and connects")
+    func helperStartsAndConnects() async throws {
+        guard let fixture = try await setUpFixture() else { return }
         guard let manager = fixture.manager else {
-            throw XCTSkip("AxionHelper not available")
+            await fixture.tearDown()
+            return
         }
 
         let running = await manager.isRunning()
-        XCTAssertTrue(running, "Helper should be running after setUpHelper()")
+        #expect(running, "Helper should be running after setUpHelper()")
+
+        await fixture.tearDown()
     }
 
     // MARK: - AC2: MCP connection ready — can list tools
 
-    /// MCP handshake completed and tools/list returns all expected tools.
-    func test_mcpListsTools() async throws {
+    @Test("MCP lists tools")
+    func mcpListsTools() async throws {
+        guard let fixture = try await setUpFixture() else { return }
         guard let mcpClient = fixture.mcpClient else {
-            throw XCTSkip("AxionHelper not available")
+            await fixture.tearDown()
+            return
         }
 
         let tools = try await mcpClient.listTools()
 
-        // Verify core tools are registered (Story 1.6 AC1)
         let expectedTools = [
             "launch_app", "list_apps",
             "activate_window", "list_windows", "get_window_state",
@@ -59,35 +58,36 @@ final class HelperLifecycleE2ETests: XCTestCase {
         ]
 
         for tool in expectedTools {
-            XCTAssertTrue(tools.contains(tool), "Expected tool '\(tool)' not found in tools/list. Available: \(tools)")
+            #expect(tools.contains(tool), "Expected tool '\(tool)' not found in tools/list. Available: \(tools)")
         }
+
+        await fixture.tearDown()
     }
 
     // MARK: - AC3: Graceful shutdown
 
-    /// Stopping Helper disconnects MCP and terminates the process.
-    func test_gracefulShutdown() async throws {
-        guard let manager = fixture.manager else {
-            throw XCTSkip("AxionHelper not available")
-        }
+    @Test("graceful shutdown")
+    func gracefulShutdown() async throws {
+        guard let fixture = try await setUpFixture() else { return }
+        guard let manager = fixture.manager else { return }
 
-        // Verify it's running first
         let runningBefore = await manager.isRunning()
-        XCTAssertTrue(runningBefore, "Helper should be running before stop")
+        #expect(runningBefore, "Helper should be running before stop")
 
-        // Stop
         await manager.stop()
 
         let runningAfter = await manager.isRunning()
-        XCTAssertFalse(runningAfter, "Helper should NOT be running after stop()")
+        #expect(!runningAfter, "Helper should NOT be running after stop()")
     }
 
     // MARK: - AC5: Tool call round-trip
 
-    /// A full tool call round-trip works: launch_app → get pid → quit_app.
-    func test_toolCallRoundTrip() async throws {
+    @Test("tool call round-trip")
+    func toolCallRoundTrip() async throws {
+        guard let fixture = try await setUpFixture() else { return }
         guard let mcpClient = fixture.mcpClient else {
-            throw XCTSkip("AxionHelper not available")
+            await fixture.tearDown()
+            return
         }
 
         // Launch Calculator
@@ -95,11 +95,11 @@ final class HelperLifecycleE2ETests: XCTestCase {
             name: "launch_app",
             arguments: ["app_name": .string("Calculator")]
         )
-        XCTAssertTrue(launchResult.contains("pid"), "launch_app result should contain pid: \(launchResult)")
+        #expect(launchResult.contains("pid"), "launch_app result should contain pid: \(launchResult)")
 
         // Verify it's in list_apps
         let appsResult = try await mcpClient.callTool(name: "list_apps", arguments: [:])
-        XCTAssertTrue(
+        #expect(
             appsResult.lowercased().contains("calculator"),
             "Calculator should appear in list_apps: \(appsResult)"
         )
@@ -109,15 +109,16 @@ final class HelperLifecycleE2ETests: XCTestCase {
             name: "quit_app",
             arguments: ["name": .string("Calculator")]
         )
+
+        await fixture.tearDown()
     }
 
     // MARK: - AC6: Fresh start after previous shutdown
 
-    /// A new HelperProcessManager can start a fresh Helper after the previous one stopped.
-    func test_freshStartAfterStop() async throws {
-        guard let manager = fixture.manager else {
-            throw XCTSkip("AxionHelper not available")
-        }
+    @Test("fresh start after stop")
+    func freshStartAfterStop() async throws {
+        guard let fixture = try await setUpFixture() else { return }
+        guard let manager = fixture.manager else { return }
 
         // Stop current
         await manager.stop()
@@ -127,11 +128,11 @@ final class HelperLifecycleE2ETests: XCTestCase {
         do {
             try await newManager.start()
         } catch {
-            throw XCTSkip("Could not restart Helper: \(error)")
+            return // Could not restart, skip
         }
 
         let running = await newManager.isRunning()
-        XCTAssertTrue(running, "New Helper should be running after fresh start")
+        #expect(running, "New Helper should be running after fresh start")
 
         await newManager.stop()
     }

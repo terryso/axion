@@ -1,4 +1,5 @@
-import XCTest
+import Foundation
+import Testing
 import OpenAgentSDK
 
 @testable import AxionCLI
@@ -11,26 +12,23 @@ import OpenAgentSDK
 // MARK: - MemoryCleanupService ATDD Tests
 
 /// ATDD red-phase tests for MemoryCleanupService (Story 4.1 AC3).
-/// Tests that MemoryCleanupService correctly cleans up expired memory entries
-/// using SDK MemoryStoreProtocol's delete(domain:olderThan:) method.
-///
-/// TDD RED PHASE: These tests will not compile until MemoryCleanupService is implemented
-/// in Sources/AxionCLI/Memory/MemoryCleanupService.swift.
-final class MemoryCleanupServiceTests: XCTestCase {
+@Suite("MemoryCleanupService")
+struct MemoryCleanupServiceTests {
 
     // MARK: - P0: Type Existence
 
-    func test_memoryCleanupService_typeExists() {
+    @Test("type exists")
+    func typeExists() {
         let _ = MemoryCleanupService.self
     }
 
     // MARK: - P0 AC3: Cleanup Expired Records
 
-    func test_cleanupExpired_removesOldEntries() async throws {
+    @Test("cleanup expired removes old entries")
+    func cleanupExpiredRemovesOldEntries() async throws {
         let store = InMemoryStore()
         let service = MemoryCleanupService()
 
-        // Insert an old entry (40 days ago, older than 30-day maxAge)
         let oldDate = Date().addingTimeInterval(-40 * 24 * 60 * 60)
         let oldEntry = KnowledgeEntry(
             id: "old-1",
@@ -41,7 +39,6 @@ final class MemoryCleanupServiceTests: XCTestCase {
         )
         try await store.save(domain: "com.apple.calculator", knowledge: oldEntry)
 
-        // Insert a recent entry (1 day ago)
         let recentDate = Date().addingTimeInterval(-1 * 24 * 60 * 60)
         let recentEntry = KnowledgeEntry(
             id: "recent-1",
@@ -52,19 +49,17 @@ final class MemoryCleanupServiceTests: XCTestCase {
         )
         try await store.save(domain: "com.apple.calculator", knowledge: recentEntry)
 
-        // Run cleanup
         let deletedCount = try await service.cleanupExpired(in: store)
 
-        // The old entry should be deleted
-        XCTAssertEqual(deletedCount, 1, "Should delete 1 old entry")
+        #expect(deletedCount == 1, "Should delete 1 old entry")
 
-        // Verify remaining entries
         let remaining = try await store.query(domain: "com.apple.calculator", filter: nil)
-        XCTAssertEqual(remaining.count, 1, "Should have 1 remaining entry")
-        XCTAssertEqual(remaining.first?.id, "recent-1")
+        #expect(remaining.count == 1, "Should have 1 remaining entry")
+        #expect(remaining.first?.id == "recent-1")
     }
 
-    func test_cleanupExpired_removesFromMultipleDomains() async throws {
+    @Test("cleanup expired removes from multiple domains")
+    func cleanupExpiredRemovesFromMultipleDomains() async throws {
         let store = InMemoryStore()
         let service = MemoryCleanupService()
 
@@ -89,18 +84,17 @@ final class MemoryCleanupServiceTests: XCTestCase {
 
         let deletedCount = try await service.cleanupExpired(in: store)
 
-        XCTAssertEqual(deletedCount, 2, "Should delete from both domains")
+        #expect(deletedCount == 2, "Should delete from both domains")
 
-        // Both domains should be empty now
         let domains = try await store.listDomains()
-        XCTAssertTrue(domains.isEmpty, "All domains should be empty after cleanup")
+        #expect(domains.isEmpty, "All domains should be empty after cleanup")
     }
 
-    func test_cleanupExpired_noExpiredEntries_returnsZero() async throws {
+    @Test("cleanup expired no expired entries returns zero")
+    func cleanupExpiredNoExpiredEntriesReturnsZero() async throws {
         let store = InMemoryStore()
         let service = MemoryCleanupService()
 
-        // Insert only recent entries
         let recentEntry = KnowledgeEntry(
             id: "recent-1",
             content: "Recent memory",
@@ -112,23 +106,24 @@ final class MemoryCleanupServiceTests: XCTestCase {
 
         let deletedCount = try await service.cleanupExpired(in: store)
 
-        XCTAssertEqual(deletedCount, 0, "Should delete 0 entries when none expired")
+        #expect(deletedCount == 0, "Should delete 0 entries when none expired")
     }
 
-    func test_cleanupExpired_emptyStore_returnsZero() async throws {
+    @Test("cleanup expired empty store returns zero")
+    func cleanupExpiredEmptyStoreReturnsZero() async throws {
         let store = InMemoryStore()
         let service = MemoryCleanupService()
 
         let deletedCount = try await service.cleanupExpired(in: store)
 
-        XCTAssertEqual(deletedCount, 0, "Empty store should report 0 deletions")
+        #expect(deletedCount == 0, "Empty store should report 0 deletions")
     }
 
-    func test_cleanupExpired_preservesRecentEntries() async throws {
+    @Test("cleanup expired preserves recent entries")
+    func cleanupExpiredPreservesRecentEntries() async throws {
         let store = InMemoryStore()
         let service = MemoryCleanupService()
 
-        // Insert mix of old and recent entries
         let oldDate = Date().addingTimeInterval(-40 * 24 * 60 * 60)
         let recentDate = Date().addingTimeInterval(-5 * 24 * 60 * 60)
 
@@ -144,28 +139,27 @@ final class MemoryCleanupServiceTests: XCTestCase {
 
         let deletedCount = try await service.cleanupExpired(in: store)
 
-        XCTAssertEqual(deletedCount, 1, "Should delete only the old entry")
+        #expect(deletedCount == 1, "Should delete only the old entry")
 
         let remaining = try await store.query(domain: "com.apple.calculator", filter: nil)
-        XCTAssertEqual(remaining.count, 2, "Should preserve 2 recent entries")
+        #expect(remaining.count == 2, "Should preserve 2 recent entries")
         let remainingIds = Set(remaining.map { $0.id })
-        XCTAssertTrue(remainingIds.contains("recent-1"))
-        XCTAssertTrue(remainingIds.contains("recent-2"))
+        #expect(remainingIds.contains("recent-1"))
+        #expect(remainingIds.contains("recent-2"))
     }
 
     // MARK: - P0 AC3: Uses 30-day threshold
 
-    func test_cleanupExpired_uses30DayThreshold() async throws {
+    @Test("cleanup expired uses 30-day threshold")
+    func cleanupExpiredUses30DayThreshold() async throws {
         let store = InMemoryStore()
         let service = MemoryCleanupService()
 
-        // Entry exactly 29 days old — should be preserved
         let twentyNineDaysAgo = Date().addingTimeInterval(-29 * 24 * 60 * 60)
         try await store.save(domain: "com.apple.calculator", knowledge: KnowledgeEntry(
             id: "29days", content: "29 days old", tags: ["test"], createdAt: twentyNineDaysAgo, sourceRunId: nil
         ))
 
-        // Entry exactly 31 days old — should be deleted
         let thirtyOneDaysAgo = Date().addingTimeInterval(-31 * 24 * 60 * 60)
         try await store.save(domain: "com.apple.calculator", knowledge: KnowledgeEntry(
             id: "31days", content: "31 days old", tags: ["test"], createdAt: thirtyOneDaysAgo, sourceRunId: nil
@@ -173,23 +167,23 @@ final class MemoryCleanupServiceTests: XCTestCase {
 
         let deletedCount = try await service.cleanupExpired(in: store)
 
-        XCTAssertEqual(deletedCount, 1, "Should delete only entries older than 30 days")
+        #expect(deletedCount == 1, "Should delete only entries older than 30 days")
 
         let remaining = try await store.query(domain: "com.apple.calculator", filter: nil)
-        XCTAssertEqual(remaining.count, 1, "Should preserve the 29-day-old entry")
-        XCTAssertEqual(remaining.first?.id, "29days")
+        #expect(remaining.count == 1, "Should preserve the 29-day-old entry")
+        #expect(remaining.first?.id == "29days")
     }
 
     // MARK: - P1: Edge Cases
 
-    func test_cleanupExpired_mixedOldAndRecentInSameDomain() async throws {
+    @Test("cleanup expired mixed old and recent in same domain")
+    func cleanupExpiredMixedOldAndRecentInSameDomain() async throws {
         let store = InMemoryStore()
         let service = MemoryCleanupService()
 
         let oldDate = Date().addingTimeInterval(-60 * 24 * 60 * 60)
         let recentDate = Date().addingTimeInterval(-10 * 24 * 60 * 60)
 
-        // Mix entries in the same domain
         try await store.save(domain: "com.apple.safari", knowledge: KnowledgeEntry(
             id: "old-safari-1", content: "Old Safari 1", tags: [], createdAt: oldDate, sourceRunId: nil
         ))
@@ -202,10 +196,10 @@ final class MemoryCleanupServiceTests: XCTestCase {
 
         let deletedCount = try await service.cleanupExpired(in: store)
 
-        XCTAssertEqual(deletedCount, 2, "Should delete 2 old entries from Safari domain")
+        #expect(deletedCount == 2, "Should delete 2 old entries from Safari domain")
 
         let remaining = try await store.query(domain: "com.apple.safari", filter: nil)
-        XCTAssertEqual(remaining.count, 1, "Should preserve 1 recent entry")
-        XCTAssertEqual(remaining.first?.id, "recent-safari-1")
+        #expect(remaining.count == 1, "Should preserve 1 recent entry")
+        #expect(remaining.first?.id == "recent-safari-1")
     }
 }

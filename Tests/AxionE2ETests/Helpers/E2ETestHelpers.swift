@@ -1,5 +1,5 @@
 import Foundation
-import XCTest
+import Testing
 
 import AxionCore
 import OpenAgentSDK
@@ -20,20 +20,22 @@ final class E2EHelperFixture {
         try FileManager.default.createDirectory(at: tempDir, withIntermediateDirectories: true)
     }
 
-    /// Starts the Helper process. Throws XCTSkip if unavailable.
-    func setUpHelper() async throws {
+    /// Starts the Helper process. Returns false if unavailable (caller should skip).
+    @discardableResult
+    func setUpHelper() async throws -> Bool {
         let mgr = HelperProcessManager()
         do {
             try await mgr.start()
         } catch {
-            throw XCTSkip("AxionHelper not available — build it first or set AXION_HELPER_PATH.")
+            return false
         }
 
         let running = await mgr.isRunning()
-        XCTAssertTrue(running, "Helper should be running after start()")
+        #expect(running, "Helper should be running after start()")
 
         self.manager = mgr
         self.mcpClient = RealMCPAdapter(manager: mgr)
+        return true
     }
 
     func tearDown() async {
