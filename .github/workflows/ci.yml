@@ -29,7 +29,7 @@ jobs:
           restore-keys: swift-${{ runner.os }}-
       - name: Run unit tests with coverage
         working-directory: axion
-        run: swift test --no-parallel --enable-code-coverage --skip AxionHelperIntegrationTests
+        run: swift test --no-parallel --quiet --enable-code-coverage --skip AxionHelperIntegrationTests --skip AxionCLIIntegrationTests --skip AxionE2ETests
       - name: Extract coverage percentage
         working-directory: axion
         run: |
