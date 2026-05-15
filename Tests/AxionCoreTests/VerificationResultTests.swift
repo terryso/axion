@@ -1,22 +1,17 @@
-import XCTest
+import Foundation
+import Testing
 @testable import AxionCore
 
 // [P0] Codable round-trip and factory methods
 // [P1] Optional field variations and equality
 
-// MARK: - VerificationResult ATDD Tests
-
-/// ATDD red-phase tests for VerificationResult model (Story 3-4 AC3, AC4, AC5).
-/// These tests validate the VerificationResult struct: Codable conformance, Equatable,
-/// and convenience factory methods for .done / .blocked / .needsClarification states.
-///
-/// TDD RED PHASE: These tests will not compile until VerificationResult is implemented
-/// in Sources/AxionCore/Models/VerificationResult.swift.
-final class VerificationResultTests: XCTestCase {
+@Suite("VerificationResult")
+struct VerificationResultTests {
 
     // MARK: - P0 Codable Round-Trip (AC3, AC4, AC5)
 
-    func test_verificationResult_doneRoundTrip_preservesAllFields() throws {
+    @Test("verificationResult done round trip preserves all fields")
+    func verificationResultDoneRoundTripPreservesAllFields() throws {
         let original = VerificationResult(
             state: .done,
             reason: "Task completed successfully",
@@ -25,14 +20,15 @@ final class VerificationResultTests: XCTestCase {
         )
         let data = try JSONEncoder().encode(original)
         let decoded = try JSONDecoder().decode(VerificationResult.self, from: data)
-        XCTAssertEqual(decoded, original)
-        XCTAssertEqual(decoded.state, .done)
-        XCTAssertEqual(decoded.reason, "Task completed successfully")
-        XCTAssertEqual(decoded.screenshotBase64, "iVBORwkgAAAANSUhEUg==")
-        XCTAssertEqual(decoded.axTreeSnapshot, "{\"role\": \"AXWindow\", \"title\": \"Calculator\"}")
+        #expect(decoded == original)
+        #expect(decoded.state == .done)
+        #expect(decoded.reason == "Task completed successfully")
+        #expect(decoded.screenshotBase64 == "iVBORwkgAAAANSUhEUg==")
+        #expect(decoded.axTreeSnapshot == "{\"role\": \"AXWindow\", \"title\": \"Calculator\"}")
     }
 
-    func test_verificationResult_blockedRoundTrip_preservesAllFields() throws {
+    @Test("verificationResult blocked round trip preserves all fields")
+    func verificationResultBlockedRoundTripPreservesAllFields() throws {
         let original = VerificationResult(
             state: .blocked,
             reason: "Application crashed unexpectedly",
@@ -41,14 +37,15 @@ final class VerificationResultTests: XCTestCase {
         )
         let data = try JSONEncoder().encode(original)
         let decoded = try JSONDecoder().decode(VerificationResult.self, from: data)
-        XCTAssertEqual(decoded, original)
-        XCTAssertEqual(decoded.state, .blocked)
-        XCTAssertEqual(decoded.reason, "Application crashed unexpectedly")
-        XCTAssertNil(decoded.screenshotBase64)
-        XCTAssertNil(decoded.axTreeSnapshot)
+        #expect(decoded == original)
+        #expect(decoded.state == .blocked)
+        #expect(decoded.reason == "Application crashed unexpectedly")
+        #expect(decoded.screenshotBase64 == nil)
+        #expect(decoded.axTreeSnapshot == nil)
     }
 
-    func test_verificationResult_needsClarificationRoundTrip_preservesAllFields() throws {
+    @Test("verificationResult needsClarification round trip preserves all fields")
+    func verificationResultNeedsClarificationRoundTripPreservesAllFields() throws {
         let original = VerificationResult(
             state: .needsClarification,
             reason: "Multiple calculators found; which one?",
@@ -57,49 +54,55 @@ final class VerificationResultTests: XCTestCase {
         )
         let data = try JSONEncoder().encode(original)
         let decoded = try JSONDecoder().decode(VerificationResult.self, from: data)
-        XCTAssertEqual(decoded, original)
-        XCTAssertEqual(decoded.state, .needsClarification)
+        #expect(decoded == original)
+        #expect(decoded.state == .needsClarification)
     }
 
     // MARK: - P0 Factory Methods (AC3, AC4, AC5)
 
-    func test_verificationResult_doneFactoryMethod_correctState() {
+    @Test("verificationResult done factory method correct state")
+    func verificationResultDoneFactoryMethodCorrectState() {
         let result = VerificationResult.done(reason: "Calculator shows 391")
-        XCTAssertEqual(result.state, .done)
-        XCTAssertEqual(result.reason, "Calculator shows 391")
+        #expect(result.state == .done)
+        #expect(result.reason == "Calculator shows 391")
     }
 
-    func test_verificationResult_blockedFactoryMethod_correctState() {
+    @Test("verificationResult blocked factory method correct state")
+    func verificationResultBlockedFactoryMethodCorrectState() {
         let result = VerificationResult.blocked(reason: "Element not found")
-        XCTAssertEqual(result.state, .blocked)
-        XCTAssertEqual(result.reason, "Element not found")
+        #expect(result.state == .blocked)
+        #expect(result.reason == "Element not found")
     }
 
-    func test_verificationResult_needsClarificationFactoryMethod_correctState() {
+    @Test("verificationResult needsClarification factory method correct state")
+    func verificationResultNeedsClarificationFactoryMethodCorrectState() {
         let result = VerificationResult.needsClarification(reason: "Ambiguous target")
-        XCTAssertEqual(result.state, .needsClarification)
-        XCTAssertEqual(result.reason, "Ambiguous target")
+        #expect(result.state == .needsClarification)
+        #expect(result.reason == "Ambiguous target")
     }
 
     // MARK: - P1 Optional Fields
 
-    func test_verificationResult_done_withoutOptionals() {
+    @Test("verificationResult done without optionals")
+    func verificationResultDoneWithoutOptionals() {
         let result = VerificationResult.done()
-        XCTAssertEqual(result.state, .done)
-        XCTAssertNil(result.reason)
+        #expect(result.state == .done)
+        #expect(result.reason == nil)
     }
 
     // MARK: - P1 Equality
 
-    func test_verificationResult_equality_sameValues() {
+    @Test("verificationResult equality same values")
+    func verificationResultEqualitySameValues() {
         let a = VerificationResult(state: .done, reason: "ok", screenshotBase64: nil, axTreeSnapshot: nil)
         let b = VerificationResult(state: .done, reason: "ok", screenshotBase64: nil, axTreeSnapshot: nil)
-        XCTAssertEqual(a, b)
+        #expect(a == b)
     }
 
-    func test_verificationResult_equality_differentReason() {
+    @Test("verificationResult equality different reason")
+    func verificationResultEqualityDifferentReason() {
         let a = VerificationResult(state: .done, reason: "ok", screenshotBase64: nil, axTreeSnapshot: nil)
         let b = VerificationResult(state: .done, reason: "different", screenshotBase64: nil, axTreeSnapshot: nil)
-        XCTAssertNotEqual(a, b)
+        #expect(a != b)
     }
 }

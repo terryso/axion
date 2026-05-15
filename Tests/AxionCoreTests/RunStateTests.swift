@@ -1,52 +1,59 @@
-import XCTest
+import Foundation
+import Testing
 @testable import AxionCore
 
-final class RunStateTests: XCTestCase {
+@Suite("RunState")
+struct RunStateTests {
 
     // MARK: - All Cases Exist
 
-    func test_runState_containsAllNineCases() {
+    @Test("runState contains all nine cases")
+    func runStateContainsAllNineCases() {
         let allCases = RunState.allCases
-        XCTAssertEqual(allCases.count, 9)
+        #expect(allCases.count == 9)
     }
 
-    func test_runState_allExpectedCasesExist() {
+    @Test("runState all expected cases exist")
+    func runStateAllExpectedCasesExist() {
         let expected: Set<RunState> = [
             .planning, .executing, .verifying, .replanning,
             .done, .blocked, .needsClarification, .cancelled, .failed,
         ]
         let actual = Set(RunState.allCases)
-        XCTAssertEqual(actual, expected)
+        #expect(actual == expected)
     }
 
     // MARK: - Raw Values
 
-    func test_runState_rawValues_matchCamelCase() {
-        XCTAssertEqual(RunState.planning.rawValue, "planning")
-        XCTAssertEqual(RunState.executing.rawValue, "executing")
-        XCTAssertEqual(RunState.verifying.rawValue, "verifying")
-        XCTAssertEqual(RunState.replanning.rawValue, "replanning")
-        XCTAssertEqual(RunState.done.rawValue, "done")
-        XCTAssertEqual(RunState.blocked.rawValue, "blocked")
-        XCTAssertEqual(RunState.needsClarification.rawValue, "needsClarification")
-        XCTAssertEqual(RunState.cancelled.rawValue, "cancelled")
-        XCTAssertEqual(RunState.failed.rawValue, "failed")
+    @Test("runState raw values match camelCase")
+    func runStateRawValuesMatchCamelCase() {
+        #expect(RunState.planning.rawValue == "planning")
+        #expect(RunState.executing.rawValue == "executing")
+        #expect(RunState.verifying.rawValue == "verifying")
+        #expect(RunState.replanning.rawValue == "replanning")
+        #expect(RunState.done.rawValue == "done")
+        #expect(RunState.blocked.rawValue == "blocked")
+        #expect(RunState.needsClarification.rawValue == "needsClarification")
+        #expect(RunState.cancelled.rawValue == "cancelled")
+        #expect(RunState.failed.rawValue == "failed")
     }
 
     // MARK: - Codable Round-Trip
 
-    func test_runState_codable_roundTrip() throws {
+    @Test("runState codable round trip")
+    func runStateCodableRoundTrip() throws {
         for state in RunState.allCases {
             let data = try JSONEncoder().encode(state)
             let decoded = try JSONDecoder().decode(RunState.self, from: data)
-            XCTAssertEqual(decoded, state)
+            #expect(decoded == state)
         }
     }
 
-    func test_runState_jsonEncoding_producesStringValue() throws {
+    @Test("runState json encoding produces string value")
+    func runStateJsonEncodingProducesStringValue() throws {
         let state = RunState.needsClarification
         let data = try JSONEncoder().encode(state)
         let jsonString = String(data: data, encoding: .utf8)!
-        XCTAssertEqual(jsonString, "\"needsClarification\"")
+        #expect(jsonString == "\"needsClarification\"")
     }
 }

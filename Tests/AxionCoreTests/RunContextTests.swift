@@ -1,8 +1,9 @@
 import Foundation
-import XCTest
+import Testing
 @testable import AxionCore
 
-final class RunContextTests: XCTestCase {
+@Suite("RunContext")
+struct RunContextTests {
 
     private func makePlanId() -> UUID { UUID() }
 
@@ -21,7 +22,8 @@ final class RunContextTests: XCTestCase {
 
     // MARK: - Creation
 
-    func test_init_withAllFields() {
+    @Test("init with all fields")
+    func initWithAllFields() {
         let planId = makePlanId()
         let config = AxionConfig(apiKey: "test-key", maxSteps: 10)
         let context = RunContext(
@@ -32,17 +34,18 @@ final class RunContextTests: XCTestCase {
             replanCount: 0,
             config: config
         )
-        XCTAssertEqual(context.planId, planId)
-        XCTAssertEqual(context.currentState, .planning)
-        XCTAssertEqual(context.currentStepIndex, 0)
-        XCTAssertTrue(context.executedSteps.isEmpty)
-        XCTAssertEqual(context.replanCount, 0)
-        XCTAssertEqual(context.config.apiKey, "test-key")
+        #expect(context.planId == planId)
+        #expect(context.currentState == .planning)
+        #expect(context.currentStepIndex == 0)
+        #expect(context.executedSteps.isEmpty)
+        #expect(context.replanCount == 0)
+        #expect(context.config.apiKey == "test-key")
     }
 
     // MARK: - Mutation
 
-    func test_mutateStepIndex() {
+    @Test("mutate step index")
+    func mutateStepIndex() {
         let context = RunContext(
             planId: makePlanId(),
             currentState: .executing,
@@ -53,10 +56,11 @@ final class RunContextTests: XCTestCase {
         )
         var mutable = context
         mutable.currentStepIndex = 5
-        XCTAssertEqual(mutable.currentStepIndex, 5)
+        #expect(mutable.currentStepIndex == 5)
     }
 
-    func test_mutateState() {
+    @Test("mutate state")
+    func mutateState() {
         let context = RunContext(
             planId: makePlanId(),
             currentState: .planning,
@@ -67,10 +71,11 @@ final class RunContextTests: XCTestCase {
         )
         var mutable = context
         mutable.currentState = .executing
-        XCTAssertEqual(mutable.currentState, .executing)
+        #expect(mutable.currentState == .executing)
     }
 
-    func test_mutateReplanCount() {
+    @Test("mutate replan count")
+    func mutateReplanCount() {
         var context = RunContext(
             planId: makePlanId(),
             currentState: .replanning,
@@ -80,10 +85,11 @@ final class RunContextTests: XCTestCase {
             config: .default
         )
         context.replanCount = 1
-        XCTAssertEqual(context.replanCount, 1)
+        #expect(context.replanCount == 1)
     }
 
-    func test_appendExecutedSteps() {
+    @Test("append executed steps")
+    func appendExecutedSteps() {
         var context = RunContext(
             planId: makePlanId(),
             currentState: .executing,
@@ -94,11 +100,12 @@ final class RunContextTests: XCTestCase {
         )
         let step = makeExecutedStep(index: 0)
         context.executedSteps.append(step)
-        XCTAssertEqual(context.executedSteps.count, 1)
-        XCTAssertEqual(context.executedSteps[0].stepIndex, 0)
+        #expect(context.executedSteps.count == 1)
+        #expect(context.executedSteps[0].stepIndex == 0)
     }
 
-    func test_stateTransitions() {
+    @Test("state transitions")
+    func stateTransitions() {
         var context = RunContext(
             planId: makePlanId(),
             currentState: .planning,
@@ -116,14 +123,15 @@ final class RunContextTests: XCTestCase {
         context.currentState = .verifying
         context.currentState = .done
 
-        XCTAssertEqual(context.currentState, .done)
-        XCTAssertEqual(context.currentStepIndex, 1)
-        XCTAssertEqual(context.executedSteps.count, 1)
+        #expect(context.currentState == .done)
+        #expect(context.currentStepIndex == 1)
+        #expect(context.executedSteps.count == 1)
     }
 
     // MARK: - Codable
 
-    func test_roundTrip() throws {
+    @Test("round trip")
+    func roundTrip() throws {
         let planId = makePlanId()
         let context = RunContext(
             planId: planId,
@@ -136,16 +144,17 @@ final class RunContextTests: XCTestCase {
         let data = try JSONEncoder().encode(context)
         let decoded = try JSONDecoder().decode(RunContext.self, from: data)
 
-        XCTAssertEqual(decoded.planId, planId)
-        XCTAssertEqual(decoded.currentState, .executing)
-        XCTAssertEqual(decoded.currentStepIndex, 2)
-        XCTAssertEqual(decoded.executedSteps.count, 2)
-        XCTAssertEqual(decoded.replanCount, 1)
-        XCTAssertEqual(decoded.config.apiKey, "sk-test")
-        XCTAssertEqual(decoded.config.maxSteps, 10)
+        #expect(decoded.planId == planId)
+        #expect(decoded.currentState == .executing)
+        #expect(decoded.currentStepIndex == 2)
+        #expect(decoded.executedSteps.count == 2)
+        #expect(decoded.replanCount == 1)
+        #expect(decoded.config.apiKey == "sk-test")
+        #expect(decoded.config.maxSteps == 10)
     }
 
-    func test_equality() {
+    @Test("equality")
+    func equality() {
         let planId = makePlanId()
         let a = RunContext(
             planId: planId, currentState: .planning,
@@ -155,10 +164,11 @@ final class RunContextTests: XCTestCase {
             planId: planId, currentState: .planning,
             currentStepIndex: 0, executedSteps: [], replanCount: 0, config: .default
         )
-        XCTAssertEqual(a, b)
+        #expect(a == b)
     }
 
-    func test_inequality_differentState() {
+    @Test("inequality different state")
+    func inequalityDifferentState() {
         let planId = makePlanId()
         let a = RunContext(
             planId: planId, currentState: .planning,
@@ -168,6 +178,6 @@ final class RunContextTests: XCTestCase {
             planId: planId, currentState: .executing,
             currentStepIndex: 0, executedSteps: [], replanCount: 0, config: .default
         )
-        XCTAssertNotEqual(a, b)
+        #expect(a != b)
     }
 }

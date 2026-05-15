@@ -1,4 +1,5 @@
-import XCTest
+import Foundation
+import Testing
 @testable import AxionCore
 
 // [P0] Protocol method existence and signature validation
@@ -10,58 +11,53 @@ import XCTest
 /// Validates that OutputProtocol has all required method signatures:
 /// - 5 existing methods (displayPlan, displayStepResult, displayStateChange, displayError, displaySummary)
 /// - 3 new methods (displayRunStart, displayReplan, displayVerificationResult)
-///
-/// TDD RED PHASE: These tests will not compile until OutputProtocol is updated
-/// with the 3 new method signatures in Sources/AxionCore/Protocols/OutputProtocol.swift.
-final class OutputProtocolTests: XCTestCase {
+@Suite("OutputProtocol")
+struct OutputProtocolTests {
 
     // MARK: - P0 Type Existence
 
-    func test_outputProtocol_hasRequiredMethods() {
-        // Verify OutputProtocol type exists and can be used as a constraint
+    @Test("outputProtocol has required methods")
+    func outputProtocolHasRequiredMethods() {
         let _ = OutputProtocol.self
     }
 
     // MARK: - P0 New Method Signatures (AC1, AC4)
 
-    func test_outputProtocol_displayRunStart_signature() {
-        // displayRunStart(runId:task:mode:) must exist on OutputProtocol
-        // This test validates the method signature by calling it through a conforming type.
-        // TerminalOutput/JSONOutput will implement this method.
+    @Test("outputProtocol displayRunStart signature")
+    func outputProtocolDisplayRunStartSignature() {
         let mock = MockOutput()
         mock.displayRunStart(runId: "20260510-abc123", task: "Open Calculator", mode: "plan_execute")
-        XCTAssertEqual(mock.runStartCallCount, 1)
-        XCTAssertEqual(mock.capturedRunId, "20260510-abc123")
-        XCTAssertEqual(mock.capturedTask, "Open Calculator")
-        XCTAssertEqual(mock.capturedMode, "plan_execute")
+        #expect(mock.runStartCallCount == 1)
+        #expect(mock.capturedRunId == "20260510-abc123")
+        #expect(mock.capturedTask == "Open Calculator")
+        #expect(mock.capturedMode == "plan_execute")
     }
 
-    func test_outputProtocol_displayReplan_signature() {
-        // displayReplan(attempt:maxRetries:reason:) must exist on OutputProtocol
+    @Test("outputProtocol displayReplan signature")
+    func outputProtocolDisplayReplanSignature() {
         let mock = MockOutput()
         mock.displayReplan(attempt: 2, maxRetries: 3, reason: "Step failed")
-        XCTAssertEqual(mock.replanCallCount, 1)
-        XCTAssertEqual(mock.capturedReplanAttempt, 2)
-        XCTAssertEqual(mock.capturedReplanMaxRetries, 3)
-        XCTAssertEqual(mock.capturedReplanReason, "Step failed")
+        #expect(mock.replanCallCount == 1)
+        #expect(mock.capturedReplanAttempt == 2)
+        #expect(mock.capturedReplanMaxRetries == 3)
+        #expect(mock.capturedReplanReason == "Step failed")
     }
 
-    func test_outputProtocol_displayVerificationResult_signature() {
-        // displayVerificationResult(_:) must exist on OutputProtocol
+    @Test("outputProtocol displayVerificationResult signature")
+    func outputProtocolDisplayVerificationResultSignature() {
         let mock = MockOutput()
         let result = VerificationResult.done(reason: "Task complete")
         mock.displayVerificationResult(result)
-        XCTAssertEqual(mock.verificationResultCallCount, 1)
-        XCTAssertEqual(mock.capturedVerificationResult?.state, .done)
+        #expect(mock.verificationResultCallCount == 1)
+        #expect(mock.capturedVerificationResult?.state == .done)
     }
 
     // MARK: - P0 Existing Methods Unchanged (AC1-7)
 
-    func test_outputProtocol_existingMethods_unchanged() {
-        // All 5 original methods must still exist with same signatures
+    @Test("outputProtocol existing methods unchanged")
+    func outputProtocolExistingMethodsUnchanged() {
         let mock = MockOutput()
 
-        // displayPlan(_:)
         let plan = Plan(
             id: UUID(),
             task: "test",
@@ -70,9 +66,8 @@ final class OutputProtocolTests: XCTestCase {
             maxRetries: 3
         )
         mock.displayPlan(plan)
-        XCTAssertEqual(mock.displayPlanCallCount, 1)
+        #expect(mock.displayPlanCallCount == 1)
 
-        // displayStepResult(_:)
         let executedStep = ExecutedStep(
             stepIndex: 0,
             tool: "click",
@@ -82,17 +77,14 @@ final class OutputProtocolTests: XCTestCase {
             timestamp: Date()
         )
         mock.displayStepResult(executedStep)
-        XCTAssertEqual(mock.displayStepResultCallCount, 1)
+        #expect(mock.displayStepResultCallCount == 1)
 
-        // displayStateChange(from:to:)
         mock.displayStateChange(from: .planning, to: .executing)
-        XCTAssertEqual(mock.displayStateChangeCallCount, 1)
+        #expect(mock.displayStateChangeCallCount == 1)
 
-        // displayError(_:)
         mock.displayError(.cancelled)
-        XCTAssertEqual(mock.displayErrorCallCount, 1)
+        #expect(mock.displayErrorCallCount == 1)
 
-        // displaySummary(context:)
         let context = RunContext(
             planId: UUID(),
             currentState: .done,
@@ -102,14 +94,12 @@ final class OutputProtocolTests: XCTestCase {
             config: .default
         )
         mock.displaySummary(context: context)
-        XCTAssertEqual(mock.displaySummaryCallCount, 1)
+        #expect(mock.displaySummaryCallCount == 1)
     }
 }
 
 // MARK: - Mock OutputProtocol
 
-/// Minimal mock to verify OutputProtocol method signatures.
-/// Each method records its call count and captured arguments.
 final class MockOutput: OutputProtocol {
     var runStartCallCount = 0
     var capturedRunId: String?

@@ -1,9 +1,12 @@
-import XCTest
+import Foundation
+import Testing
 @testable import AxionHelper
 
-final class WindowStateTests: XCTestCase {
+@Suite("WindowState")
+struct WindowStateTests {
 
-    func testCodableRoundTrip_withAXTree() throws {
+    @Test("codable round trip with AX tree")
+    func codableRoundTripWithAXTree() throws {
         let tree = AXElement(
             role: "AXWindow",
             title: "Calculator",
@@ -25,10 +28,11 @@ final class WindowStateTests: XCTestCase {
         )
         let data = try JSONEncoder().encode(original)
         let decoded = try JSONDecoder().decode(WindowState.self, from: data)
-        XCTAssertEqual(decoded, original)
+        #expect(decoded == original)
     }
 
-    func testCodableRoundTrip_nilAXTree() throws {
+    @Test("codable round trip with nil AX tree")
+    func codableRoundTripNilAXTree() throws {
         let original = WindowState(
             windowId: 1,
             pid: 99,
@@ -40,10 +44,11 @@ final class WindowStateTests: XCTestCase {
         )
         let data = try JSONEncoder().encode(original)
         let decoded = try JSONDecoder().decode(WindowState.self, from: data)
-        XCTAssertEqual(decoded, original)
+        #expect(decoded == original)
     }
 
-    func testAXTreeAlwaysEncoded() throws {
+    @Test("AX tree always encoded")
+    func axTreeAlwaysEncoded() throws {
         let state = WindowState(
             windowId: 1, pid: 99, title: nil,
             bounds: WindowBounds(x: 0, y: 0, width: 100, height: 100),
@@ -51,12 +56,13 @@ final class WindowStateTests: XCTestCase {
         )
         let data = try JSONEncoder().encode(state)
         let json = try JSONSerialization.jsonObject(with: data) as? [String: Any]
-        XCTAssertNotNil(json?["ax_tree"], "ax_tree should always be present in JSON output, even when nil")
+        #expect(json?["ax_tree"] != nil, "ax_tree should always be present in JSON output, even when nil")
     }
 
     // MARK: - JSON snake_case keys
 
-    func testJson_snakeCaseKeys() throws {
+    @Test("JSON uses snake_case keys")
+    func jsonSnakeCaseKeys() throws {
         let state = WindowState(
             windowId: 42, pid: 1234,
             title: "Test", bounds: WindowBounds(x: 0, y: 0, width: 100, height: 100),
@@ -67,20 +73,21 @@ final class WindowStateTests: XCTestCase {
         let json = try JSONSerialization.jsonObject(with: data) as! [String: Any]
 
         // snake_case keys
-        XCTAssertNotNil(json["window_id"])
-        XCTAssertNotNil(json["is_minimized"])
-        XCTAssertNotNil(json["is_focused"])
-        XCTAssertNotNil(json["ax_tree"])
+        #expect(json["window_id"] != nil)
+        #expect(json["is_minimized"] != nil)
+        #expect(json["is_focused"] != nil)
+        #expect(json["ax_tree"] != nil)
         // NOT camelCase
-        XCTAssertNil(json["windowId"])
-        XCTAssertNil(json["isMinimized"])
-        XCTAssertNil(json["isFocused"])
-        XCTAssertNil(json["axTree"])
+        #expect(json["windowId"] == nil)
+        #expect(json["isMinimized"] == nil)
+        #expect(json["isFocused"] == nil)
+        #expect(json["axTree"] == nil)
     }
 
     // MARK: - Equality
 
-    func testEquality_same() {
+    @Test("equality: same values")
+    func equalitySame() {
         let a = WindowState(
             windowId: 1, pid: 99, title: "W",
             bounds: WindowBounds(x: 0, y: 0, width: 100, height: 100),
@@ -91,10 +98,11 @@ final class WindowStateTests: XCTestCase {
             bounds: WindowBounds(x: 0, y: 0, width: 100, height: 100),
             isMinimized: false, isFocused: true, axTree: nil
         )
-        XCTAssertEqual(a, b)
+        #expect(a == b)
     }
 
-    func testEquality_differentIsMinimized() {
+    @Test("equality: different isMinimized")
+    func equalityDifferentIsMinimized() {
         let a = WindowState(
             windowId: 1, pid: 99, title: nil,
             bounds: WindowBounds(x: 0, y: 0, width: 0, height: 0),
@@ -105,10 +113,11 @@ final class WindowStateTests: XCTestCase {
             bounds: WindowBounds(x: 0, y: 0, width: 0, height: 0),
             isMinimized: true, isFocused: false, axTree: nil
         )
-        XCTAssertNotEqual(a, b)
+        #expect(a != b)
     }
 
-    func testEquality_differentIsFocused() {
+    @Test("equality: different isFocused")
+    func equalityDifferentIsFocused() {
         let a = WindowState(
             windowId: 1, pid: 99, title: nil,
             bounds: WindowBounds(x: 0, y: 0, width: 0, height: 0),
@@ -119,12 +128,13 @@ final class WindowStateTests: XCTestCase {
             bounds: WindowBounds(x: 0, y: 0, width: 0, height: 0),
             isMinimized: false, isFocused: true, axTree: nil
         )
-        XCTAssertNotEqual(a, b)
+        #expect(a != b)
     }
 
     // MARK: - Encoding with non-nil axTree
 
-    func testEncoding_withAXTree_producesCorrectStructure() throws {
+    @Test("encoding with AX tree produces correct structure")
+    func encodingWithAXTreeProducesCorrectStructure() throws {
         let tree = AXElement(
             role: "AXWindow",
             title: "Main",
@@ -142,13 +152,14 @@ final class WindowStateTests: XCTestCase {
         let data = try JSONEncoder().encode(state)
         let json = try JSONSerialization.jsonObject(with: data) as! [String: Any]
 
-        let axTreeJson = try XCTUnwrap(json["ax_tree"] as? [String: Any])
-        XCTAssertEqual(axTreeJson["role"] as? String, "AXWindow")
-        XCTAssertEqual(axTreeJson["title"] as? String, "Main")
-        XCTAssertEqual((axTreeJson["children"] as? [Any])?.count, 1)
+        let axTreeJson = try #require(json["ax_tree"] as? [String: Any])
+        #expect(axTreeJson["role"] as? String == "AXWindow")
+        #expect(axTreeJson["title"] as? String == "Main")
+        #expect((axTreeJson["children"] as? [Any])?.count == 1)
     }
 
-    func testEncoding_nilAXTree_producesNull() throws {
+    @Test("encoding nil AX tree produces null")
+    func encodingNilAXTreeProducesNull() throws {
         let state = WindowState(
             windowId: 1, pid: 99, title: nil,
             bounds: WindowBounds(x: 0, y: 0, width: 100, height: 100),
@@ -156,13 +167,13 @@ final class WindowStateTests: XCTestCase {
         )
         let data = try JSONEncoder().encode(state)
         let jsonString = String(data: data, encoding: .utf8)!
-        // When axTree is nil, the custom encoder should produce "ax_tree": null
-        XCTAssertTrue(jsonString.contains("\"ax_tree\":null"), "ax_tree should be null in JSON when nil")
+        #expect(jsonString.contains("\"ax_tree\":null"), "ax_tree should be null in JSON when nil")
     }
 
     // MARK: - appName field
 
-    func testAppName_roundTrip() throws {
+    @Test("appName round trip")
+    func appNameRoundTrip() throws {
         let original = WindowState(
             windowId: 1, pid: 99, title: "Doc",
             bounds: WindowBounds(x: 0, y: 0, width: 100, height: 100),
@@ -171,10 +182,11 @@ final class WindowStateTests: XCTestCase {
         )
         let data = try JSONEncoder().encode(original)
         let decoded = try JSONDecoder().decode(WindowState.self, from: data)
-        XCTAssertEqual(decoded.appName, "TextEdit")
+        #expect(decoded.appName == "TextEdit")
     }
 
-    func testAppName_snakeCaseKey() throws {
+    @Test("appName uses snake_case key")
+    func appNameSnakeCaseKey() throws {
         let state = WindowState(
             windowId: 1, pid: 99, title: "Doc",
             bounds: WindowBounds(x: 0, y: 0, width: 100, height: 100),
@@ -183,20 +195,22 @@ final class WindowStateTests: XCTestCase {
         )
         let data = try JSONEncoder().encode(state)
         let json = try JSONSerialization.jsonObject(with: data) as! [String: Any]
-        XCTAssertEqual(json["app_name"] as? String, "Safari")
-        XCTAssertNil(json["appName"])
+        #expect(json["app_name"] as? String == "Safari")
+        #expect(json["appName"] == nil)
     }
 
-    func testAppName_backwardCompatibility_missingField() throws {
+    @Test("appName backward compatibility with missing field")
+    func appNameBackwardCompatibilityMissingField() throws {
         let json = """
         {"window_id": 1, "pid": 99, "bounds": {"x": 0, "y": 0, "width": 100, "height": 100}, "is_minimized": false, "is_focused": false, "ax_tree": null}
         """
         let data = Data(json.utf8)
         let decoded = try JSONDecoder().decode(WindowState.self, from: data)
-        XCTAssertNil(decoded.appName)
+        #expect(decoded.appName == nil)
     }
 
-    func testAppName_equality_differentAppName() {
+    @Test("equality: different appName")
+    func equalityDifferentAppName() {
         let a = WindowState(
             windowId: 1, pid: 99, title: "W",
             bounds: WindowBounds(x: 0, y: 0, width: 100, height: 100),
@@ -209,6 +223,6 @@ final class WindowStateTests: XCTestCase {
             isMinimized: false, isFocused: true, axTree: nil,
             appName: "Chrome"
         )
-        XCTAssertNotEqual(a, b)
+        #expect(a != b)
     }
 }

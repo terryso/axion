@@ -1,16 +1,20 @@
-import XCTest
+import Foundation
+import Testing
 @testable import AxionHelper
 
-final class AXElementTests: XCTestCase {
+@Suite("AXElement")
+struct AXElementTests {
 
-    func testCodableRoundTrip_leaf() throws {
+    @Test("codable round trip leaf")
+    func codableRoundTripLeaf() throws {
         let original = AXElement(role: "AXButton", title: "OK", value: nil, bounds: nil, children: [])
         let data = try JSONEncoder().encode(original)
         let decoded = try JSONDecoder().decode(AXElement.self, from: data)
-        XCTAssertEqual(decoded, original)
+        #expect(decoded == original)
     }
 
-    func testCodableRoundTrip_withChildren() throws {
+    @Test("codable round trip with children")
+    func codableRoundTripWithChildren() throws {
         let original = AXElement(
             role: "AXGroup",
             title: "Container",
@@ -23,35 +27,38 @@ final class AXElementTests: XCTestCase {
         )
         let data = try JSONEncoder().encode(original)
         let decoded = try JSONDecoder().decode(AXElement.self, from: data)
-        XCTAssertEqual(decoded, original)
+        #expect(decoded == original)
     }
 
-    func testEquality() {
+    @Test("equality")
+    func equality() {
         let a = AXElement(role: "AXButton", title: "OK", value: nil, bounds: nil, children: [])
         let b = AXElement(role: "AXButton", title: "OK", value: nil, bounds: nil, children: [])
         let c = AXElement(role: "AXButton", title: "Cancel", value: nil, bounds: nil, children: [])
-        XCTAssertEqual(a, b)
-        XCTAssertNotEqual(a, c)
+        #expect(a == b)
+        #expect(a != c)
     }
 
     // MARK: - Deeply Nested Tree
 
-    func testCodableRoundTrip_deeplyNested() throws {
+    @Test("codable round trip deeply nested")
+    func codableRoundTripDeeplyNested() throws {
         let leaf = AXElement(role: "AXTextField", title: nil, value: "input", bounds: nil, children: [])
         let mid = AXElement(role: "AXGroup", title: "Mid", value: nil, bounds: WindowBounds(x: 0, y: 0, width: 100, height: 50), children: [leaf])
         let root = AXElement(role: "AXWindow", title: "Root", value: nil, bounds: WindowBounds(x: 0, y: 0, width: 800, height: 600), children: [mid])
 
         let data = try JSONEncoder().encode(root)
         let decoded = try JSONDecoder().decode(AXElement.self, from: data)
-        XCTAssertEqual(decoded, root)
-        XCTAssertEqual(decoded.children.count, 1)
-        XCTAssertEqual(decoded.children[0].children.count, 1)
-        XCTAssertEqual(decoded.children[0].children[0].value, "input")
+        #expect(decoded == root)
+        #expect(decoded.children.count == 1)
+        #expect(decoded.children[0].children.count == 1)
+        #expect(decoded.children[0].children[0].value == "input")
     }
 
     // MARK: - JSON Structure
 
-    func testJsonStructure_allFields() throws {
+    @Test("JSON structure with all fields")
+    func jsonStructureAllFields() throws {
         let element = AXElement(
             role: "AXButton",
             title: "OK",
@@ -62,42 +69,46 @@ final class AXElementTests: XCTestCase {
         let data = try JSONEncoder().encode(element)
         let json = try JSONSerialization.jsonObject(with: data) as! [String: Any]
 
-        XCTAssertEqual(json["role"] as? String, "AXButton")
-        XCTAssertEqual(json["title"] as? String, "OK")
-        XCTAssertEqual(json["value"] as? String, "confirm")
-        XCTAssertNotNil(json["bounds"])
-        XCTAssertEqual((json["children"] as? [Any])?.count, 0)
+        #expect(json["role"] as? String == "AXButton")
+        #expect(json["title"] as? String == "OK")
+        #expect(json["value"] as? String == "confirm")
+        #expect(json["bounds"] != nil)
+        #expect((json["children"] as? [Any])?.count == 0)
     }
 
-    func testJsonStructure_optionalFieldsOmitted() throws {
+    @Test("JSON structure with optional fields omitted")
+    func jsonStructureOptionalFieldsOmitted() throws {
         let element = AXElement(role: "AXUnknown", title: nil, value: nil, bounds: nil, children: [])
         let data = try JSONEncoder().encode(element)
         let json = try JSONSerialization.jsonObject(with: data) as! [String: Any]
 
-        XCTAssertEqual(json["role"] as? String, "AXUnknown")
-        XCTAssertNil(json["title"])
-        XCTAssertNil(json["value"])
-        XCTAssertNil(json["bounds"])
+        #expect(json["role"] as? String == "AXUnknown")
+        #expect(json["title"] == nil)
+        #expect(json["value"] == nil)
+        #expect(json["bounds"] == nil)
     }
 
     // MARK: - Equality Edge Cases
 
-    func testEquality_differentRoles() {
+    @Test("equality: different roles")
+    func equalityDifferentRoles() {
         let a = AXElement(role: "AXButton", title: "OK", value: nil, bounds: nil, children: [])
         let b = AXElement(role: "AXCheckBox", title: "OK", value: nil, bounds: nil, children: [])
-        XCTAssertNotEqual(a, b)
+        #expect(a != b)
     }
 
-    func testEquality_differentValues() {
+    @Test("equality: different values")
+    func equalityDifferentValues() {
         let a = AXElement(role: "AXTextField", title: nil, value: "a", bounds: nil, children: [])
         let b = AXElement(role: "AXTextField", title: nil, value: "b", bounds: nil, children: [])
-        XCTAssertNotEqual(a, b)
+        #expect(a != b)
     }
 
-    func testEquality_differentChildren() {
+    @Test("equality: different children")
+    func equalityDifferentChildren() {
         let child = AXElement(role: "AXStaticText", title: "Label", value: nil, bounds: nil, children: [])
         let a = AXElement(role: "AXGroup", title: nil, value: nil, bounds: nil, children: [])
         let b = AXElement(role: "AXGroup", title: nil, value: nil, bounds: nil, children: [child])
-        XCTAssertNotEqual(a, b)
+        #expect(a != b)
     }
 }

@@ -1,11 +1,14 @@
-import XCTest
+import Foundation
+import Testing
 @testable import AxionCore
 
-final class AxionConfigTests: XCTestCase {
+@Suite("AxionConfig")
+struct AxionConfigTests {
 
     // MARK: - camelCase JSON Output
 
-    func test_config_codable_outputIsCamelCase() throws {
+    @Test("config codable output is camelCase")
+    func configCodableOutputIsCamelCase() throws {
         let config = AxionConfig(
             apiKey: nil,
             model: "claude-sonnet-4-20250514",
@@ -21,23 +24,22 @@ final class AxionConfigTests: XCTestCase {
         let data = try encoder.encode(config)
         let json = try JSONSerialization.jsonObject(with: data) as! [String: Any]
 
-        // Verify camelCase keys (not snake_case)
-        XCTAssertNotNil(json["maxSteps"])
-        XCTAssertNotNil(json["maxBatches"])
-        XCTAssertNotNil(json["maxReplanRetries"])
-        XCTAssertNotNil(json["traceEnabled"])
-        XCTAssertNotNil(json["sharedSeatMode"])
-        XCTAssertNotNil(json["model"])
+        #expect(json["maxSteps"] != nil)
+        #expect(json["maxBatches"] != nil)
+        #expect(json["maxReplanRetries"] != nil)
+        #expect(json["traceEnabled"] != nil)
+        #expect(json["sharedSeatMode"] != nil)
+        #expect(json["model"] != nil)
 
-        // Verify no snake_case keys
-        XCTAssertNil(json["max_steps"])
-        XCTAssertNil(json["max_batches"])
-        XCTAssertNil(json["max_replan_retries"])
-        XCTAssertNil(json["trace_enabled"])
-        XCTAssertNil(json["shared_seat_mode"])
+        #expect(json["max_steps"] == nil)
+        #expect(json["max_batches"] == nil)
+        #expect(json["max_replan_retries"] == nil)
+        #expect(json["trace_enabled"] == nil)
+        #expect(json["shared_seat_mode"] == nil)
     }
 
-    func test_config_codable_roundTrip() throws {
+    @Test("config codable round trip")
+    func configCodableRoundTrip() throws {
         let config = AxionConfig(
             apiKey: "sk-test-key",
             model: "claude-opus-4-20250514",
@@ -51,121 +53,132 @@ final class AxionConfigTests: XCTestCase {
         let data = try JSONEncoder().encode(config)
         let decoded = try JSONDecoder().decode(AxionConfig.self, from: data)
 
-        XCTAssertEqual(decoded.apiKey, "sk-test-key")
-        XCTAssertEqual(decoded.model, "claude-opus-4-20250514")
-        XCTAssertEqual(decoded.maxSteps, 30)
-        XCTAssertEqual(decoded.maxBatches, 10)
-        XCTAssertEqual(decoded.maxReplanRetries, 5)
-        XCTAssertFalse(decoded.traceEnabled)
-        XCTAssertFalse(decoded.sharedSeatMode)
+        #expect(decoded.apiKey == "sk-test-key")
+        #expect(decoded.model == "claude-opus-4-20250514")
+        #expect(decoded.maxSteps == 30)
+        #expect(decoded.maxBatches == 10)
+        #expect(decoded.maxReplanRetries == 5)
+        #expect(!decoded.traceEnabled)
+        #expect(!decoded.sharedSeatMode)
     }
 
     // MARK: - Default Values
 
-    func test_config_defaultValues() {
+    @Test("config default values")
+    func configDefaultValues() {
         let config = AxionConfig.default
 
-        XCTAssertNil(config.apiKey)
-        XCTAssertEqual(config.model, "claude-sonnet-4-20250514")
-        XCTAssertEqual(config.maxSteps, 20)
-        XCTAssertEqual(config.maxBatches, 6)
-        XCTAssertEqual(config.maxReplanRetries, 3)
-        XCTAssertTrue(config.traceEnabled)
-        XCTAssertFalse(config.sharedSeatMode)
+        #expect(config.apiKey == nil)
+        #expect(config.model == "claude-sonnet-4-20250514")
+        #expect(config.maxSteps == 20)
+        #expect(config.maxBatches == 6)
+        #expect(config.maxReplanRetries == 3)
+        #expect(config.traceEnabled)
+        #expect(!config.sharedSeatMode)
     }
 
-    func test_config_apiKeyNil_notEncoded() throws {
+    @Test("config apiKey nil not encoded")
+    func configApiKeyNilNotEncoded() throws {
         let config = AxionConfig.default
         let data = try JSONEncoder().encode(config)
         let json = try JSONSerialization.jsonObject(with: data) as! [String: Any]
 
-        // apiKey is nil, should not appear in JSON
-        XCTAssertNil(json["apiKey"])
+        #expect(json["apiKey"] == nil)
     }
 
     // MARK: - Partial JSON Decoding (defaults fill in)
 
-    func test_config_partialJson_onlyApiKey_fillsDefaults() throws {
+    @Test("config partial json only apiKey fills defaults")
+    func configPartialJsonOnlyApiKeyFillsDefaults() throws {
         let json = """
         {"apiKey": "sk-test"}
         """
         let data = Data(json.utf8)
         let config = try JSONDecoder().decode(AxionConfig.self, from: data)
 
-        XCTAssertEqual(config.apiKey, "sk-test")
-        XCTAssertEqual(config.model, AxionConfig.default.model)
-        XCTAssertEqual(config.maxSteps, AxionConfig.default.maxSteps)
-        XCTAssertEqual(config.maxBatches, AxionConfig.default.maxBatches)
-        XCTAssertEqual(config.maxReplanRetries, AxionConfig.default.maxReplanRetries)
-        XCTAssertEqual(config.traceEnabled, AxionConfig.default.traceEnabled)
-        XCTAssertEqual(config.sharedSeatMode, AxionConfig.default.sharedSeatMode)
-        XCTAssertEqual(config.provider, .anthropic)
+        #expect(config.apiKey == "sk-test")
+        #expect(config.model == AxionConfig.default.model)
+        #expect(config.maxSteps == AxionConfig.default.maxSteps)
+        #expect(config.maxBatches == AxionConfig.default.maxBatches)
+        #expect(config.maxReplanRetries == AxionConfig.default.maxReplanRetries)
+        #expect(config.traceEnabled == AxionConfig.default.traceEnabled)
+        #expect(config.sharedSeatMode == AxionConfig.default.sharedSeatMode)
+        #expect(config.provider == .anthropic)
     }
 
-    func test_config_partialJson_onlyOverridesChanged() throws {
+    @Test("config partial json only overrides changed")
+    func configPartialJsonOnlyOverridesChanged() throws {
         let json = """
         {"maxSteps": 50, "traceEnabled": false}
         """
         let data = Data(json.utf8)
         let config = try JSONDecoder().decode(AxionConfig.self, from: data)
 
-        XCTAssertEqual(config.maxSteps, 50)
-        XCTAssertFalse(config.traceEnabled)
-        XCTAssertNil(config.apiKey)
-        XCTAssertEqual(config.model, AxionConfig.default.model)
-        XCTAssertEqual(config.maxBatches, AxionConfig.default.maxBatches)
+        #expect(config.maxSteps == 50)
+        #expect(!config.traceEnabled)
+        #expect(config.apiKey == nil)
+        #expect(config.model == AxionConfig.default.model)
+        #expect(config.maxBatches == AxionConfig.default.maxBatches)
     }
 
-    func test_config_emptyJson_decodesToDefaults() throws {
+    @Test("config empty json decodes to defaults")
+    func configEmptyJsonDecodesToDefaults() throws {
         let json = "{}"
         let data = Data(json.utf8)
         let config = try JSONDecoder().decode(AxionConfig.self, from: data)
 
-        XCTAssertEqual(config.model, AxionConfig.default.model)
-        XCTAssertEqual(config.maxSteps, AxionConfig.default.maxSteps)
-        XCTAssertEqual(config.provider, .anthropic)
-        XCTAssertNil(config.apiKey)
+        #expect(config.model == AxionConfig.default.model)
+        #expect(config.maxSteps == AxionConfig.default.maxSteps)
+        #expect(config.provider == .anthropic)
+        #expect(config.apiKey == nil)
     }
 
     // MARK: - LLMProvider
 
-    func test_llmProvider_anthropic_rawValue() {
-        XCTAssertEqual(LLMProvider.anthropic.rawValue, "anthropic")
+    @Test("LLMProvider anthropic raw value")
+    func llmProviderAnthropicRawValue() {
+        #expect(LLMProvider.anthropic.rawValue == "anthropic")
     }
 
-    func test_llmProvider_openai_rawValue() {
-        XCTAssertEqual(LLMProvider.openai.rawValue, "openai")
+    @Test("LLMProvider openai raw value")
+    func llmProviderOpenaiRawValue() {
+        #expect(LLMProvider.openai.rawValue == "openai")
     }
 
-    func test_llmProvider_codableRoundTrip_anthropic() throws {
+    @Test("LLMProvider codable round trip anthropic")
+    func llmProviderCodableRoundTripAnthropic() throws {
         let provider = LLMProvider.anthropic
         let data = try JSONEncoder().encode(provider)
         let decoded = try JSONDecoder().decode(LLMProvider.self, from: data)
-        XCTAssertEqual(decoded, .anthropic)
+        #expect(decoded == .anthropic)
     }
 
-    func test_llmProvider_codableRoundTrip_openai() throws {
+    @Test("LLMProvider codable round trip openai")
+    func llmProviderCodableRoundTripOpenai() throws {
         let provider = LLMProvider.openai
         let data = try JSONEncoder().encode(provider)
         let decoded = try JSONDecoder().decode(LLMProvider.self, from: data)
-        XCTAssertEqual(decoded, .openai)
+        #expect(decoded == .openai)
     }
 
-    func test_llmProvider_jsonString_anthropic() throws {
+    @Test("LLMProvider json string anthropic")
+    func llmProviderJsonStringAnthropic() throws {
         let data = try JSONEncoder().encode(LLMProvider.anthropic)
         let str = String(data: data, encoding: .utf8)
-        XCTAssertEqual(str, "\"anthropic\"")
+        #expect(str == "\"anthropic\"")
     }
 
-    func test_llmProvider_jsonString_openai() throws {
+    @Test("LLMProvider json string openai")
+    func llmProviderJsonStringOpenai() throws {
         let data = try JSONEncoder().encode(LLMProvider.openai)
         let str = String(data: data, encoding: .utf8)
-        XCTAssertEqual(str, "\"openai\"")
+        #expect(str == "\"openai\"")
     }
 
     // MARK: - Custom Init
 
-    func test_config_customInit_allParameters() {
+    @Test("config custom init all parameters")
+    func configCustomInitAllParameters() {
         let config = AxionConfig(
             apiKey: "sk-key",
             provider: .openai,
@@ -177,78 +190,87 @@ final class AxionConfigTests: XCTestCase {
             traceEnabled: false,
             sharedSeatMode: false
         )
-        XCTAssertEqual(config.apiKey, "sk-key")
-        XCTAssertEqual(config.provider, .openai)
-        XCTAssertEqual(config.baseURL, "https://custom.api.com")
-        XCTAssertEqual(config.model, "gpt-4")
-        XCTAssertEqual(config.maxSteps, 50)
-        XCTAssertEqual(config.maxBatches, 10)
-        XCTAssertEqual(config.maxReplanRetries, 5)
-        XCTAssertFalse(config.traceEnabled)
-        XCTAssertFalse(config.sharedSeatMode)
+        #expect(config.apiKey == "sk-key")
+        #expect(config.provider == .openai)
+        #expect(config.baseURL == "https://custom.api.com")
+        #expect(config.model == "gpt-4")
+        #expect(config.maxSteps == 50)
+        #expect(config.maxBatches == 10)
+        #expect(config.maxReplanRetries == 5)
+        #expect(!config.traceEnabled)
+        #expect(!config.sharedSeatMode)
     }
 
-    func test_config_customInit_defaultParameters() {
+    @Test("config custom init default parameters")
+    func configCustomInitDefaultParameters() {
         let config = AxionConfig(apiKey: "key")
-        XCTAssertEqual(config.apiKey, "key")
-        XCTAssertEqual(config.provider, .anthropic)
-        XCTAssertNil(config.baseURL)
-        XCTAssertEqual(config.model, "claude-sonnet-4-20250514")
-        XCTAssertEqual(config.maxSteps, 20)
+        #expect(config.apiKey == "key")
+        #expect(config.provider == .anthropic)
+        #expect(config.baseURL == nil)
+        #expect(config.model == "claude-sonnet-4-20250514")
+        #expect(config.maxSteps == 20)
     }
 
     // MARK: - Equality
 
-    func test_config_equality_sameConfigs() {
+    @Test("config equality same configs")
+    func configEqualitySameConfigs() {
         let a = AxionConfig(apiKey: "key", maxSteps: 10)
         let b = AxionConfig(apiKey: "key", maxSteps: 10)
-        XCTAssertEqual(a, b)
+        #expect(a == b)
     }
 
-    func test_config_equality_differentConfigs() {
+    @Test("config equality different configs")
+    func configEqualityDifferentConfigs() {
         let a = AxionConfig(apiKey: "key1", maxSteps: 10)
         let b = AxionConfig(apiKey: "key2", maxSteps: 10)
-        XCTAssertNotEqual(a, b)
+        #expect(a != b)
     }
 
-    func test_config_equality_differentProvider() {
+    @Test("config equality different provider")
+    func configEqualityDifferentProvider() {
         let a = AxionConfig(apiKey: "key", provider: .anthropic)
         let b = AxionConfig(apiKey: "key", provider: .openai)
-        XCTAssertNotEqual(a, b)
+        #expect(a != b)
     }
 
-    func test_config_equality_differentBaseURL() {
+    @Test("config equality different baseURL")
+    func configEqualityDifferentBaseURL() {
         let a = AxionConfig(apiKey: "key", baseURL: "https://a.com")
         let b = AxionConfig(apiKey: "key", baseURL: "https://b.com")
-        XCTAssertNotEqual(a, b)
+        #expect(a != b)
     }
 
-    func test_config_equality_nilVsNotNil() {
+    @Test("config equality nil vs not nil")
+    func configEqualityNilVsNotNil() {
         let a = AxionConfig(apiKey: nil, maxSteps: 20)
         let b = AxionConfig(apiKey: "key", maxSteps: 20)
-        XCTAssertNotEqual(a, b)
+        #expect(a != b)
     }
 
     // MARK: - Codable with provider
 
-    func test_config_codable_withProvider() throws {
+    @Test("config codable with provider")
+    func configCodableWithProvider() throws {
         let config = AxionConfig(apiKey: "key", provider: .openai)
         let data = try JSONEncoder().encode(config)
         let decoded = try JSONDecoder().decode(AxionConfig.self, from: data)
-        XCTAssertEqual(decoded.provider, .openai)
+        #expect(decoded.provider == .openai)
     }
 
-    func test_config_codable_withBaseURL() throws {
+    @Test("config codable with baseURL")
+    func configCodableWithBaseURL() throws {
         let config = AxionConfig(apiKey: "key", baseURL: "https://proxy.example.com")
         let data = try JSONEncoder().encode(config)
         let decoded = try JSONDecoder().decode(AxionConfig.self, from: data)
-        XCTAssertEqual(decoded.baseURL, "https://proxy.example.com")
+        #expect(decoded.baseURL == "https://proxy.example.com")
     }
 
-    func test_config_codable_nilBaseURL_notInJson() throws {
+    @Test("config codable nil baseURL not in json")
+    func configCodableNilBaseURLNotInJson() throws {
         let config = AxionConfig(apiKey: "key")
         let data = try JSONEncoder().encode(config)
         let json = try JSONSerialization.jsonObject(with: data) as! [String: Any]
-        XCTAssertNil(json["baseURL"])
+        #expect(json["baseURL"] == nil)
     }
 }

@@ -8,7 +8,7 @@ import Testing
 // E2E tests for StartRecordingTool and StopRecordingTool MCP tools
 // Uses ServiceContainerFixture to inject ToolTestEventRecorder mock
 
-@Suite("Recording MCP Tool E2E Tests")
+@Suite("Recording MCP Tool E2E Tests", .serialized)
 struct RecordingToolE2ETests {
 
     // MARK: - StartRecordingTool
