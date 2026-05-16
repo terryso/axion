@@ -118,9 +118,10 @@ struct RunCommand: AsyncParsableCommand {
             memoryContext: memoryContext
         )
 
-        // 6. Configure MCP server for Helper
+        // 6. Configure MCP servers: Helper for desktop, Playwright for web
         let mcpServers: [String: McpServerConfig] = [
-            "axion-helper": .stdio(McpStdioConfig(command: helperPath))
+            "axion-helper": .stdio(McpStdioConfig(command: helperPath)),
+            "playwright": .stdio(McpStdioConfig(command: "npx", args: ["@playwright/mcp@latest"])),
         ]
 
         // 7. Build safety hook registry
