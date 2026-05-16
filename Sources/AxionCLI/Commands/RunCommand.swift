@@ -186,7 +186,6 @@ struct RunCommand: AsyncParsableCommand {
 
         var totalSteps = 0
         let startTime = ContinuousClock.now
-        var resumeWatchdog: _Concurrency.Task<Void, Never>? = nil
 
         // Collect toolUse/toolResult pairs for memory extraction (matched by toolUseId)
         var pendingToolUses: [String: SDKMessage.ToolUseData] = [:]
@@ -196,11 +195,6 @@ struct RunCommand: AsyncParsableCommand {
             let messageStream = agent.stream(task)
             for await message in messageStream {
                 if _Concurrency.Task.isCancelled { break }
-                // Cancel resume watchdog on first message after takeover
-                if let watchdog = resumeWatchdog {
-                    watchdog.cancel()
-                    resumeWatchdog = nil
-                }
                 if case .toolUse = message { totalSteps += 1 }
                 outputHandler.handleMessage(message)
                 await recordToTrace(message: message, tracer: tracer)
@@ -227,26 +221,40 @@ struct RunCommand: AsyncParsableCommand {
                         )
                         switch result.action {
                         case .resume:
-                            let resumeContext = result.userInput?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty == false
-                                ? "用户输入: \(result.userInput!)"
-                                : "用户已完成手动操作"
-                            agent.resume(context: resumeContext)
-                            takeoverIO.write("[axion] Agent 正在恢复执行，请稍候...")
+                            let userAction = result.userInput?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty == false
+                                ? "用户输入: \(result.userInput!)" : "用户已在桌面上手动完成操作"
                             await tracer?.record(event: "takeover_resumed", payload: [
-                                "context": resumeContext
+                                "context": userAction
                             ])
-                            // Guard: if LLM doesn't respond within 90s after resume,
-                            // interrupt and suggest running a follow-up task.
-                            let capturedTask = task
-                            let watchdogWrite: @Sendable (String) -> Void = { msg in fputs(msg + "\n", stdout); fflush(stdout) }
-                            resumeWatchdog = _Concurrency.Task { @Sendable in
-                                try? await _Concurrency.Task.sleep(nanoseconds: 90_000_000_000)
-                                guard !_Concurrency.Task.isCancelled else { return }
-                                watchdogWrite("[axion] LLM 响应超时，正在终止当前会话...")
-                                watchdogWrite("[axion] 如需继续后续操作，请运行新任务，例如：")
-                                watchdogWrite("  .build/debug/axion run \"继续之前的任务：\(capturedTask)\"")
-                                agent.interrupt()
+                            takeoverIO.write("[axion] 正在以精简上下文重新规划...")
+                            agent.interrupt()
+                            try? await agent.close()
+                            let replanTask = """
+                            [Takeover 恢复] 原始任务: \(task)
+                            阻塞原因: \(pausedData.reason)
+                            \(userAction)
+                            请先截图查看当前屏幕状态，然后继续执行剩余操作。不要重复已完成的工作。
+                            """
+                            takeoverIO.write("[axion] 重新规划完成，继续执行...")
+                            let freshAgent = createAgent(options: options)
+                            let freshStream = freshAgent.stream(replanTask)
+                            for await freshMessage in freshStream {
+                                if _Concurrency.Task.isCancelled { break }
+                                if case .toolUse = freshMessage { totalSteps += 1 }
+                                outputHandler.handleMessage(freshMessage)
+                                await recordToTrace(message: freshMessage, tracer: tracer)
+                                switch freshMessage {
+                                case .toolUse(let d): pendingToolUses[d.toolUseId] = d
+                                case .toolResult(let d):
+                                    if let tu = pendingToolUses.removeValue(forKey: d.toolUseId) {
+                                        collectedPairs.append((toolUse: tu, toolResult: d))
+                                    }
+                                default: break
+                                }
                             }
+                            try? await freshAgent.close()
+                            takeoverIO.write("[axion] Takeover 后续执行完成。")
+                            return
                         case .skip:
                             agent.resume(context: "skip")
                             await tracer?.record(event: "takeover_resumed", payload: [
