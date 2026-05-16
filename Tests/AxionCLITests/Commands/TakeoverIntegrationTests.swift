@@ -56,8 +56,8 @@ struct TakeoverIntegrationTests {
             readLine: { "" }
         )
 
-        let action = io.displayTakeoverPrompt(reason: "目标不存在", allowForeground: false)
-        #expect(action == .resume)
+        let result = io.displayTakeoverPrompt(reason: "目标不存在", allowForeground: false)
+        #expect(result.action == .resume)
 
         let combined = output.joined(separator: "\n")
         #expect(combined.contains("目标不存在"))
@@ -72,8 +72,8 @@ struct TakeoverIntegrationTests {
             readLine: { "skip" }
         )
 
-        let action = io.displayTakeoverPrompt(reason: "无法操作", allowForeground: false)
-        #expect(action == .skip)
+        let result = io.displayTakeoverPrompt(reason: "无法操作", allowForeground: false)
+        #expect(result.action == .skip)
 
         let combined = output.joined(separator: "\n")
         #expect(combined.contains("无法操作"))
@@ -90,8 +90,8 @@ struct TakeoverIntegrationTests {
             readLine: { "" }
         )
 
-        let action = io.displayTakeoverPrompt(reason: "无法找到目标", allowForeground: false)
-        #expect(action == .resume)
+        let result = io.displayTakeoverPrompt(reason: "无法找到目标", allowForeground: false)
+        #expect(result.action == .resume)
 
         let combined = output.joined(separator: "\n")
         #expect(combined.contains("无法找到目标"))
@@ -120,13 +120,52 @@ struct TakeoverIntegrationTests {
             readLine: { "abort" }
         )
 
-        let action = io.displayTakeoverPrompt(
+        let result = io.displayTakeoverPrompt(
             reason: "无法继续",
             allowForeground: false,
             completedSteps: 3
         )
-        #expect(action == .abort)
+        #expect(result.action == .abort)
         let combined = output.joined(separator: "\n")
         #expect(combined.contains("已完成 3 步"))
+    }
+
+    // MARK: - 用户输入传递
+
+    @Test("resume with user text passes input as context")
+    func resumeWithUserTextPassesInputAsContext() {
+        var output: [String] = []
+        let io = TakeoverIO(
+            write: { output.append($0) },
+            readLine: { "nicksu@polyv.net / mypassword" }
+        )
+
+        let result = io.displayTakeoverPrompt(reason: "需要凭据", allowForeground: false)
+        #expect(result.action == .resume)
+        #expect(result.userInput == "nicksu@polyv.net / mypassword")
+
+        // Verify RunCommand would construct the correct context
+        let trimmed = result.userInput?.trimmingCharacters(in: .whitespacesAndNewlines)
+        let expectedContext = (trimmed?.isEmpty == false)
+            ? "用户输入: \(result.userInput!)"
+            : "用户已完成手动操作"
+        #expect(expectedContext == "用户输入: nicksu@polyv.net / mypassword")
+    }
+
+    @Test("resume with empty Enter uses default context")
+    func resumeWithEmptyEnterUsesDefaultContext() {
+        let io = TakeoverIO(
+            write: { _ in },
+            readLine: { "" }
+        )
+
+        let result = io.displayTakeoverPrompt(reason: "受阻", allowForeground: false)
+        #expect(result.action == .resume)
+
+        let trimmed = result.userInput?.trimmingCharacters(in: .whitespacesAndNewlines)
+        let expectedContext = (trimmed?.isEmpty == false)
+            ? "用户输入: \(result.userInput!)"
+            : "用户已完成手动操作"
+        #expect(expectedContext == "用户已完成手动操作")
     }
 }

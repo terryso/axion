@@ -529,10 +529,10 @@ struct AccessibilityEngineService: WindowManaging {
         }
 
         let bounds = WindowBounds(
-            x: Int(position.x),
-            y: Int(position.y),
-            width: Int(size.width),
-            height: Int(size.height)
+            x: position.x.isFinite ? Int(position.x) : 0,
+            y: position.y.isFinite ? Int(position.y) : 0,
+            width: size.width.isFinite ? Int(size.width) : 0,
+            height: size.height.isFinite ? Int(size.height) : 0
         )
 
         var children: [AXElement] = []

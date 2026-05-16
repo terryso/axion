@@ -186,6 +186,7 @@ struct RunCommand: AsyncParsableCommand {
 
         var totalSteps = 0
         let startTime = ContinuousClock.now
+        var resumeWatchdog: _Concurrency.Task<Void, Never>? = nil
 
         // Collect toolUse/toolResult pairs for memory extraction (matched by toolUseId)
         var pendingToolUses: [String: SDKMessage.ToolUseData] = [:]
@@ -195,6 +196,11 @@ struct RunCommand: AsyncParsableCommand {
             let messageStream = agent.stream(task)
             for await message in messageStream {
                 if _Concurrency.Task.isCancelled { break }
+                // Cancel resume watchdog on first message after takeover
+                if let watchdog = resumeWatchdog {
+                    watchdog.cancel()
+                    resumeWatchdog = nil
+                }
                 if case .toolUse = message { totalSteps += 1 }
                 outputHandler.handleMessage(message)
                 await recordToTrace(message: message, tracer: tracer)
@@ -214,17 +220,33 @@ struct RunCommand: AsyncParsableCommand {
                         await tracer?.record(event: "takeover_paused", payload: [
                             "reason": pausedData.reason
                         ])
-                        let action = takeoverIO.displayTakeoverPrompt(
+                        let result = takeoverIO.displayTakeoverPrompt(
                             reason: pausedData.reason,
                             allowForeground: allowForeground,
                             completedSteps: totalSteps
                         )
-                        switch action {
+                        switch result.action {
                         case .resume:
-                            agent.resume(context: "用户已完成手动操作")
+                            let resumeContext = result.userInput?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty == false
+                                ? "用户输入: \(result.userInput!)"
+                                : "用户已完成手动操作"
+                            agent.resume(context: resumeContext)
+                            takeoverIO.write("[axion] Agent 正在恢复执行，请稍候...")
                             await tracer?.record(event: "takeover_resumed", payload: [
-                                "context": "用户已完成手动操作"
+                                "context": resumeContext
                             ])
+                            // Guard: if LLM doesn't respond within 90s after resume,
+                            // interrupt and suggest running a follow-up task.
+                            let capturedTask = task
+                            let watchdogWrite: @Sendable (String) -> Void = { msg in fputs(msg + "\n", stdout); fflush(stdout) }
+                            resumeWatchdog = _Concurrency.Task { @Sendable in
+                                try? await _Concurrency.Task.sleep(nanoseconds: 90_000_000_000)
+                                guard !_Concurrency.Task.isCancelled else { return }
+                                watchdogWrite("[axion] LLM 响应超时，正在终止当前会话...")
+                                watchdogWrite("[axion] 如需继续后续操作，请运行新任务，例如：")
+                                watchdogWrite("  .build/debug/axion run \"继续之前的任务：\(capturedTask)\"")
+                                agent.interrupt()
+                            }
                         case .skip:
                             agent.resume(context: "skip")
                             await tracer?.record(event: "takeover_resumed", payload: [

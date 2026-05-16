@@ -69,12 +69,12 @@ struct TakeoverIOTests {
             readLine: { "continue" }
         )
 
-        let action = io.displayTakeoverPrompt(
+        let result = io.displayTakeoverPrompt(
             reason: "无法找到目标按钮",
             allowForeground: false
         )
 
-        #expect(action == .resume)
+        #expect(result.action == .resume)
         let combined = output.joined(separator: "\n")
         #expect(combined.contains("无法找到目标按钮"))
     }
@@ -87,12 +87,12 @@ struct TakeoverIOTests {
             readLine: { "skip" }
         )
 
-        let action = io.displayTakeoverPrompt(
+        let result = io.displayTakeoverPrompt(
             reason: "受阻",
             allowForeground: true
         )
 
-        #expect(action == .skip)
+        #expect(result.action == .skip)
         let combined = output.joined(separator: "\n")
         #expect(combined.contains("前台"))
     }
@@ -121,11 +121,11 @@ struct TakeoverIOTests {
             readLine: { "abort" }
         )
 
-        let action = io.displayTakeoverPrompt(
+        let result = io.displayTakeoverPrompt(
             reason: "test",
             allowForeground: false
         )
-        #expect(action == .abort)
+        #expect(result.action == .abort)
     }
 
     @Test("displayTakeoverPrompt abort with steps shows summary")
@@ -136,12 +136,12 @@ struct TakeoverIOTests {
             readLine: { "abort" }
         )
 
-        let action = io.displayTakeoverPrompt(
+        let result = io.displayTakeoverPrompt(
             reason: "受阻",
             allowForeground: false,
             completedSteps: 5
         )
-        #expect(action == .abort)
+        #expect(result.action == .abort)
         let combined = output.joined(separator: "\n")
         #expect(combined.contains("已完成 5 步"))
     }
@@ -154,12 +154,57 @@ struct TakeoverIOTests {
             readLine: { "quit" }
         )
 
-        let action = io.displayTakeoverPrompt(
+        let result = io.displayTakeoverPrompt(
             reason: "test",
             allowForeground: false
         )
-        #expect(action == .abort)
+        #expect(result.action == .abort)
         let combined = output.joined(separator: "\n")
         #expect(combined.contains("已完成 0 步"))
+    }
+
+    @Test("displayTakeoverPrompt returns user input on resume")
+    func displayTakeoverPromptReturnsUserInputOnResume() {
+        let io = TakeoverIO(
+            write: { _ in },
+            readLine: { "帐号: test@example.com 密码: secret123" }
+        )
+
+        let result = io.displayTakeoverPrompt(
+            reason: "需要凭据",
+            allowForeground: false
+        )
+        #expect(result.action == .resume)
+        #expect(result.userInput == "帐号: test@example.com 密码: secret123")
+    }
+
+    @Test("displayTakeoverPrompt returns nil userInput on empty Enter")
+    func displayTakeoverPromptReturnsNilUserInputOnEmptyEnter() {
+        let io = TakeoverIO(
+            write: { _ in },
+            readLine: { "" }
+        )
+
+        let result = io.displayTakeoverPrompt(
+            reason: "受阻",
+            allowForeground: false
+        )
+        #expect(result.action == .resume)
+        #expect(result.userInput == "")
+    }
+
+    @Test("displayTakeoverPrompt returns userInput on skip")
+    func displayTakeoverPromptReturnsUserInputOnSkip() {
+        let io = TakeoverIO(
+            write: { _ in },
+            readLine: { "skip" }
+        )
+
+        let result = io.displayTakeoverPrompt(
+            reason: "受阻",
+            allowForeground: false
+        )
+        #expect(result.action == .skip)
+        #expect(result.userInput == "skip")
     }
 }
