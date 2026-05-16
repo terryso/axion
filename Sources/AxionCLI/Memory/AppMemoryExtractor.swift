@@ -127,25 +127,7 @@ struct AppMemoryExtractor {
         }
         let workaround = extractWorkaround(from: pairs)
 
-        // Determine kind and confidence (AC2)
-        let kind: MemoryKind
-        let confidence: Double
-        let cause: String?
-
-        if hasError && workaround != nil {
-            // Had error but recovered with workaround
-            kind = .observation
-            confidence = 0.6
-            cause = "workaround"
-        } else if hasError {
-            kind = .avoid
-            confidence = 0.5
-            cause = nil
-        } else {
-            kind = .observation
-            confidence = 0.7
-            cause = nil
-        }
+        let classification = classifyKind(pairs: pairs, hasError: hasError, workaround: workaround)
 
         let stepCount = pairs.count
         let successLabel = hasError ? "failure" : "success"
@@ -157,6 +139,23 @@ struct AppMemoryExtractor {
         }.joined(separator: " -> ")
 
         var description = ""
+
+        // Affordance facts get a concise summary line first (Task 1.5)
+        if classification.kind == .affordance {
+            let effectiveAppName = appName ?? domain
+            let directOps = pairs.compactMap { pair -> String? in
+                let name = stripMcpPrefix(pair.toolUse.toolName)
+                return Self.directOpNames.contains(name) ? name : nil
+            }
+            if let primaryOp = directOps.first {
+                let paramSummary = extractToolParamSummary(name: primaryOp, input: pairs.first { stripMcpPrefix($0.toolUse.toolName) == primaryOp }?.toolUse.input ?? "")
+                let opDesc = paramSummary.map { "\(primaryOp)(\($0))" } ?? primaryOp
+                description += "在 \(effectiveAppName) 中使用 \(opDesc) 可高效完成任务\n"
+            } else {
+                description += "在 \(effectiveAppName) 中发现高效操作路径\n"
+            }
+        }
+
         if let appName, let bundleId {
             description += "App: \(appName) (\(bundleId))\n"
         } else if let appName {
@@ -188,10 +187,10 @@ struct AppMemoryExtractor {
 
         return AppMemoryFact.create(
             domain: domain,
-            kind: kind,
+            kind: classification.kind,
             description: description,
-            confidence: confidence,
-            cause: cause,
+            confidence: classification.confidence,
+            cause: classification.cause,
             evidence: [runId]
         )
     }
@@ -372,6 +371,49 @@ struct AppMemoryExtractor {
             return String(toolName.dropFirst(Self.mcpPrefix.count))
         }
         return toolName
+    }
+
+    // MARK: - Kind Classification
+
+    /// Direct operation tool names (click, type, hotkey — non-exploratory).
+    private static let directOpNames: Set<String> = ["click", "type_text", "hotkey", "double_click"]
+
+    /// Exploratory operation tool names (AX tree, screenshot, window listing).
+    private static let exploreOpNames: Set<String> = ["get_window_state", "get_accessibility_tree", "screenshot", "list_windows"]
+
+    /// Classify the memory kind, confidence, and cause from tool pair outcomes.
+    ///
+    /// - Parameters:
+    ///   - pairs: The tool-use/result pairs for this domain.
+    ///   - hasError: Whether any pair indicates an error.
+    ///   - workaround: A workaround description if an error was followed by success.
+    /// - Returns: A tuple of (kind, confidence, cause).
+    func classifyKind(
+        pairs: [ToolPair],
+        hasError: Bool,
+        workaround: String?
+    ) -> (kind: MemoryKind, confidence: Double, cause: String?) {
+        if hasError && workaround != nil {
+            return (.observation, 0.6, "workaround")
+        }
+        if hasError {
+            return (.avoid, 0.5, nil)
+        }
+
+        let directOps = pairs.filter { pair in
+            let name = stripMcpPrefix(pair.toolUse.toolName)
+            return Self.directOpNames.contains(name)
+        }
+        let exploreOps = pairs.filter { pair in
+            let name = stripMcpPrefix(pair.toolUse.toolName)
+            return Self.exploreOpNames.contains(name)
+        }
+
+        if !directOps.isEmpty && directOps.count >= exploreOps.count && pairs.count <= 5 {
+            return (.affordance, 0.72, nil)
+        }
+
+        return (.observation, 0.7, nil)
     }
 
     // MARK: - AX Tree & Failure Extraction

@@ -101,10 +101,18 @@ struct RunCommand: AsyncParsableCommand {
         if !noMemory {
             do {
                 let contextProvider = MemoryContextProvider()
-                memoryContext = try await contextProvider.buildMemoryContext(
+                let factStore = MemoryFactStore(memoryDir: memoryDir)
+                if let factContext = await contextProvider.buildFactMemoryContext(
                     task: task,
-                    store: memoryStore
-                )
+                    factStore: factStore
+                ) {
+                    memoryContext = factContext
+                } else {
+                    memoryContext = try await contextProvider.buildMemoryContext(
+                        task: task,
+                        store: memoryStore
+                    )
+                }
             } catch {
                 fputs("[axion] warning: memory context injection failed: \(error.localizedDescription)\n", stderr)
             }

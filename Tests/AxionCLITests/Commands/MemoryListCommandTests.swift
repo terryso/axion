@@ -14,6 +14,38 @@ struct MemoryListCommandTests {
         let _ = MemoryListCommand.self
     }
 
+    // MARK: - Story 12.2 AC6: Status icon and kind label mappings
+
+    @Test("status icon for active is checkmark")
+    func statusIconActive() {
+        #expect(MemoryListCommand.statusIcons[.active] == "✓")
+    }
+
+    @Test("status icon for candidate is circle")
+    func statusIconCandidate() {
+        #expect(MemoryListCommand.statusIcons[.candidate] == "○")
+    }
+
+    @Test("status icon for retired is cross")
+    func statusIconRetired() {
+        #expect(MemoryListCommand.statusIcons[.retired] == "✗")
+    }
+
+    @Test("kind label for affordance is 推荐")
+    func kindLabelAffordance() {
+        #expect(MemoryListCommand.kindLabels[.affordance] == "推荐")
+    }
+
+    @Test("kind label for avoid is 警告")
+    func kindLabelAvoid() {
+        #expect(MemoryListCommand.kindLabels[.avoid] == "警告")
+    }
+
+    @Test("kind label for observation is 备注")
+    func kindLabelObservation() {
+        #expect(MemoryListCommand.kindLabels[.observation] == "备注")
+    }
+
     // MARK: - P0 AC5: Display app list with entry counts and last-used time
 
     @Test("list output contains app memory header")
@@ -21,48 +53,45 @@ struct MemoryListCommandTests {
         let tempDir = try createTempMemoryDir()
         defer { try? FileManager.default.removeItem(atPath: tempDir) }
 
-        let store = FileBasedMemoryStore(memoryDir: tempDir)
+        let store = MemoryFactStore(memoryDir: tempDir)
 
-        let entry = KnowledgeEntry(
-            id: UUID().uuidString,
-            content: "Test run",
-            tags: ["app:com.apple.calculator", "success"],
-            createdAt: Date(),
-            sourceRunId: nil
-        )
-        try await store.save(domain: "com.apple.calculator", knowledge: entry)
+        let facts: [AppMemoryFact] = [
+            AppMemoryFact.create(domain: "com.apple.calculator", kind: .observation, description: "Test run", evidence: ["r1"]),
+        ]
+        try await store.saveAll(domain: "com.apple.calculator", facts: facts)
 
-        let output = try await MemoryListCommand.listMemory(in: tempDir)
+        let output = await MemoryListCommand.listMemory(in: tempDir)
 
         #expect(output.contains("App Memory") || output.contains("Memory"),
             "Output should contain a header line for memory listing")
     }
 
-    @Test("list output shows domain entry count and date")
-    func listOutputShowsDomainEntryCountAndDate() async throws {
+    @Test("list output shows domain with facts")
+    func listOutputShowsDomainFacts() async throws {
         let tempDir = try createTempMemoryDir()
         defer { try? FileManager.default.removeItem(atPath: tempDir) }
 
-        let store = FileBasedMemoryStore(memoryDir: tempDir)
+        let store = MemoryFactStore(memoryDir: tempDir)
         let domain = "com.apple.calculator"
 
-        let now = Date()
+        var facts: [AppMemoryFact] = []
         for i in 0..<3 {
-            let entry = KnowledgeEntry(
-                id: "entry-\(i)",
-                content: "Run \(i)",
-                tags: ["app:\(domain)", "success"],
-                createdAt: now.addingTimeInterval(Double(-i) * 86400),
-                sourceRunId: nil
+            var fact = AppMemoryFact.create(
+                domain: domain,
+                kind: .observation,
+                description: "Run \(i)",
+                evidence: ["r\(i)"]
             )
-            try await store.save(domain: domain, knowledge: entry)
+            fact.status = .active
+            fact.evidenceCount = 3
+            facts.append(fact)
         }
+        try await store.saveAll(domain: domain, facts: facts)
 
-        let output = try await MemoryListCommand.listMemory(in: tempDir)
+        let output = await MemoryListCommand.listMemory(in: tempDir)
 
         #expect(output.contains(domain), "Output should show the domain name")
-        #expect(output.contains("3") || output.contains("3 entries"),
-            "Output should show entry count for the domain")
+        #expect(output.contains("3 facts"), "Output should show fact count for the domain")
     }
 
     @Test("list output multiple domains shows all")
@@ -70,31 +99,24 @@ struct MemoryListCommandTests {
         let tempDir = try createTempMemoryDir()
         defer { try? FileManager.default.removeItem(atPath: tempDir) }
 
-        let store = FileBasedMemoryStore(memoryDir: tempDir)
+        let store = MemoryFactStore(memoryDir: tempDir)
 
-        let calcEntry = KnowledgeEntry(
-            id: "calc-1",
-            content: "Calculator run",
-            tags: ["app:com.apple.calculator", "success"],
-            createdAt: Date(),
-            sourceRunId: nil
-        )
-        let finderEntry = KnowledgeEntry(
-            id: "finder-1",
-            content: "Finder run",
-            tags: ["app:com.apple.finder", "success"],
-            createdAt: Date(),
-            sourceRunId: nil
-        )
-        try await store.save(domain: "com.apple.calculator", knowledge: calcEntry)
-        try await store.save(domain: "com.apple.finder", knowledge: finderEntry)
+        var calcFact = AppMemoryFact.create(domain: "com.apple.calculator", kind: .affordance, description: "Calculator run", evidence: ["r1"])
+        calcFact.status = .active
+        calcFact.evidenceCount = 3
 
-        let output = try await MemoryListCommand.listMemory(in: tempDir)
+        var finderFact = AppMemoryFact.create(domain: "com.apple.finder", kind: .observation, description: "Finder run", evidence: ["r2"])
+        finderFact.status = .active
+        finderFact.evidenceCount = 3
+
+        try await store.save(domain: "com.apple.calculator", fact: calcFact)
+        try await store.save(domain: "com.apple.finder", fact: finderFact)
+
+        let output = await MemoryListCommand.listMemory(in: tempDir)
 
         #expect(output.contains("com.apple.calculator"), "Output should include Calculator domain")
         #expect(output.contains("com.apple.finder"), "Output should include Finder domain")
-        #expect(output.contains("Total") || output.contains("total") || output.contains("2"),
-            "Output should show total count of apps/entries")
+        #expect(output.contains("Total"), "Output should show total summary")
     }
 
     // MARK: - P0 AC5: Empty Memory output
@@ -104,46 +126,98 @@ struct MemoryListCommandTests {
         let tempDir = try createTempMemoryDir()
         defer { try? FileManager.default.removeItem(atPath: tempDir) }
 
-        let output = try await MemoryListCommand.listMemory(in: tempDir)
+        let output = await MemoryListCommand.listMemory(in: tempDir)
 
-        #expect(output.contains("No") || output.contains("empty") || output.contains("0") || output.contains("Total: 0"),
+        #expect(output.contains("No App Memory found") || output.contains("0 apps"),
             "Output should indicate no memory data exists")
     }
 
     @Test("list output non-existent directory shows empty message")
-    func listOutputNonExistentDirectoryShowsEmptyMessage() async throws {
+    func listOutputNonExistentDirectoryShowsEmptyMessage() async {
         let tempDir = "/tmp/axion-test-nonexistent-\(UUID().uuidString)"
 
-        let output = try await MemoryListCommand.listMemory(in: tempDir)
+        let output = await MemoryListCommand.listMemory(in: tempDir)
 
         #expect(!output.isEmpty, "Should return a non-empty string even for non-existent directory")
     }
 
-    // MARK: - P1: Last used date display
+    // MARK: - Story 12.2 AC6: Status icon and kind display in output
 
-    @Test("list output shows last used date")
-    func listOutputShowsLastUsedDate() async throws {
+    @Test("list output displays facts with status icon and kind label")
+    func listOutputDisplaysIconAndKind() async throws {
         let tempDir = try createTempMemoryDir()
         defer { try? FileManager.default.removeItem(atPath: tempDir) }
 
-        let store = FileBasedMemoryStore(memoryDir: tempDir)
+        let store = MemoryFactStore(memoryDir: tempDir)
         let domain = "com.apple.calculator"
 
-        let entry = KnowledgeEntry(
-            id: "entry-1",
-            content: "Recent run",
-            tags: ["app:\(domain)", "success"],
-            createdAt: Date(),
-            sourceRunId: nil
+        var fact = AppMemoryFact.create(
+            domain: domain,
+            kind: .affordance,
+            description: "Use hotkey to navigate",
+            confidence: 0.82,
+            evidence: ["r1"]
         )
-        try await store.save(domain: domain, knowledge: entry)
+        fact.status = .active
+        fact.evidenceCount = 3
+        try await store.save(domain: domain, fact: fact)
 
-        let output = try await MemoryListCommand.listMemory(in: tempDir)
+        let output = await MemoryListCommand.listMemory(in: tempDir)
 
-        let datePattern = #"20\d{2}-\d{2}-\d{2}"#
-        let regex = try NSRegularExpression(pattern: datePattern)
-        let matches = regex.matches(in: output, range: NSRange(output.startIndex..., in: output))
-        #expect(!matches.isEmpty, "Output should contain a date representation for 'last used'")
+        #expect(output.contains("✓"), "Should display active icon ✓")
+        #expect(output.contains("推荐"), "Should display affordance kind label '推荐'")
+        #expect(output.contains("confidence:0.82"), "Should display confidence value")
+        #expect(output.contains("evidence:3"), "Should display evidence count")
+    }
+
+    @Test("list output displays multiple kinds with correct labels")
+    func listOutputDisplaysMultipleKinds() async throws {
+        let tempDir = try createTempMemoryDir()
+        defer { try? FileManager.default.removeItem(atPath: tempDir) }
+
+        let store = MemoryFactStore(memoryDir: tempDir)
+        let domain = "com.apple.finder"
+
+        var affordance = AppMemoryFact.create(
+            domain: domain,
+            kind: .affordance,
+            description: "Cmd+Shift+G for go to folder",
+            confidence: 0.72,
+            evidence: ["r1"]
+        )
+        affordance.status = .active
+        affordance.evidenceCount = 2
+
+        var avoid = AppMemoryFact.create(
+            domain: domain,
+            kind: .avoid,
+            description: "Avoid AX click on sidebar",
+            confidence: 0.55,
+            evidence: ["r2"]
+        )
+        avoid.status = .candidate
+        avoid.evidenceCount = 1
+
+        var observation = AppMemoryFact.create(
+            domain: domain,
+            kind: .observation,
+            description: "Window title is folder name",
+            confidence: 0.8,
+            evidence: ["r3"]
+        )
+        observation.status = .retired
+        observation.evidenceCount = 4
+
+        try await store.saveAll(domain: domain, facts: [affordance, avoid, observation])
+
+        let output = await MemoryListCommand.listMemory(in: tempDir)
+
+        #expect(output.contains("✓"), "Should display active icon")
+        #expect(output.contains("○"), "Should display candidate icon")
+        #expect(output.contains("✗"), "Should display retired icon")
+        #expect(output.contains("推荐"), "Should display affordance label")
+        #expect(output.contains("警告"), "Should display avoid label")
+        #expect(output.contains("备注"), "Should display observation label")
     }
 
     // MARK: - Helpers

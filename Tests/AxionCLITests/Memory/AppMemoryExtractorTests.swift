@@ -642,8 +642,9 @@ struct AppMemoryExtractorTests {
 
         #expect(!facts.isEmpty, "Should extract at least one fact")
         let fact = facts.first!
-        #expect(fact.kind == .observation, "Successful task should produce observation kind")
-        #expect(fact.confidence == 0.7, "Successful task should have confidence 0.7")
+        // launch_app + click (no error, direct ops dominate) → affordance
+        #expect(fact.kind == .affordance, "Successful direct-op task should produce affordance kind")
+        #expect(fact.confidence == 0.72, "Affordance should have confidence 0.72")
         #expect(fact.status == .candidate, "New fact should be candidate")
         #expect(fact.domain == "com.apple.calculator")
         #expect(fact.source == .local)
@@ -740,5 +741,104 @@ struct AppMemoryExtractorTests {
         #expect(!facts1.isEmpty && !facts2.isEmpty)
         // Same description content should produce same ID
         #expect(facts1.first!.id == facts2.first!.id)
+    }
+
+    // MARK: - Story 12.2 AC1: Affordance classification
+
+    @Test("classifyKind returns affordance for successful direct-op sequence")
+    func classifyKindReturnsAffordanceForDirectOps() {
+        let extractor = AppMemoryExtractor()
+
+        let toolPairs: [(toolUse: SDKMessage.ToolUseData, toolResult: SDKMessage.ToolResultData)] = [
+            (
+                makeToolUse(toolName: "mcp__axion-helper__launch_app", toolUseId: "tu-1", input: "{\"app_name\": \"Finder\"}"),
+                makeToolResult(toolUseId: "tu-1", content: "{\"success\": true, \"bundle_id\": \"com.apple.finder\"}")
+            ),
+            (
+                makeToolUse(toolName: "mcp__axion-helper__hotkey", toolUseId: "tu-2", input: "{\"key\": \"g\", \"modifiers\": [\"cmd\", \"shift\"]}"),
+                makeToolResult(toolUseId: "tu-2", content: "pressed")
+            ),
+        ]
+
+        let result = extractor.classifyKind(pairs: toolPairs, hasError: false, workaround: nil)
+        #expect(result.kind == .affordance, "Hotkey success → affordance")
+        #expect(result.confidence == 0.72, "Affordance confidence should be 0.72")
+    }
+
+    @Test("classifyKind returns affordance for mixed click/explore with direct dominance")
+    func classifyKindAffordanceMixedSequence() {
+        let extractor = AppMemoryExtractor()
+
+        // 2 direct (click) + 1 explore (screenshot) = direct >= explore → affordance
+        let toolPairs: [(toolUse: SDKMessage.ToolUseData, toolResult: SDKMessage.ToolResultData)] = [
+            (
+                makeToolUse(toolName: "mcp__axion-helper__launch_app", toolUseId: "tu-1", input: "{\"app_name\": \"Calculator\"}"),
+                makeToolResult(toolUseId: "tu-1", content: "{\"success\": true}")
+            ),
+            (
+                makeToolUse(toolName: "mcp__axion-helper__screenshot", toolUseId: "tu-2", input: "{}"),
+                makeToolResult(toolUseId: "tu-2", content: "{}")
+            ),
+            (
+                makeToolUse(toolName: "mcp__axion-helper__click", toolUseId: "tu-3", input: "{\"x\": 100, \"y\": 200}"),
+                makeToolResult(toolUseId: "tu-3", content: "clicked")
+            ),
+            (
+                makeToolUse(toolName: "mcp__axion-helper__click", toolUseId: "tu-4", input: "{\"x\": 150, \"y\": 250}"),
+                makeToolResult(toolUseId: "tu-4", content: "clicked")
+            ),
+        ]
+
+        let result = extractor.classifyKind(pairs: toolPairs, hasError: false, workaround: nil)
+        #expect(result.kind == .affordance, "Direct ops (2 click) >= explore ops (1 screenshot) → affordance")
+    }
+
+    @Test("classifyKind returns observation for pure explore success")
+    func classifyKindObservationForPureExplore() {
+        let extractor = AppMemoryExtractor()
+
+        let toolPairs: [(toolUse: SDKMessage.ToolUseData, toolResult: SDKMessage.ToolResultData)] = [
+            (
+                makeToolUse(toolName: "mcp__axion-helper__launch_app", toolUseId: "tu-1", input: "{\"app_name\": \"Safari\"}"),
+                makeToolResult(toolUseId: "tu-1", content: "{\"success\": true}")
+            ),
+            (
+                makeToolUse(toolName: "mcp__axion-helper__get_window_state", toolUseId: "tu-2", input: "{}"),
+                makeToolResult(toolUseId: "tu-2", content: "{}")
+            ),
+            (
+                makeToolUse(toolName: "mcp__axion-helper__get_accessibility_tree", toolUseId: "tu-3", input: "{}"),
+                makeToolResult(toolUseId: "tu-3", content: "{}")
+            ),
+        ]
+
+        let result = extractor.classifyKind(pairs: toolPairs, hasError: false, workaround: nil)
+        #expect(result.kind == .observation, "Pure explore (no direct ops) → observation")
+        #expect(result.confidence == 0.7)
+    }
+
+    @Test("classifyKind returns observation for too many steps")
+    func classifyKindObservationForTooManySteps() {
+        let extractor = AppMemoryExtractor()
+
+        // 6 pairs (over limit of 5) — should fall through to observation
+        var toolPairs: [(toolUse: SDKMessage.ToolUseData, toolResult: SDKMessage.ToolResultData)] = []
+        for i in 0..<6 {
+            toolPairs.append((
+                makeToolUse(toolName: "mcp__axion-helper__click", toolUseId: "tu-\(i)", input: "{\"x\": \(i*10)}"),
+                makeToolResult(toolUseId: "tu-\(i)", content: "clicked")
+            ))
+        }
+
+        let result = extractor.classifyKind(pairs: toolPairs, hasError: false, workaround: nil)
+        #expect(result.kind == .observation, "Over 5 steps → observation (not affordance)")
+    }
+
+    @Test("classifyKind returns observation for empty pairs without error")
+    func classifyKindObservationForEmptyPairs() {
+        let extractor = AppMemoryExtractor()
+        let result = extractor.classifyKind(pairs: [], hasError: false, workaround: nil)
+        // No direct ops (empty) → not affordance, falls to observation
+        #expect(result.kind == .observation)
     }
 }

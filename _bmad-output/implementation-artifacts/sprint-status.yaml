@@ -1,5 +1,5 @@
 # generated: 2026-05-08
-# last_updated: 2026-05-16
+# last_updated: 2026-05-17
 # story-12.1-created: 2026-05-16
 # retro-epic-11: 2026-05-15
 # story-11.3-created: 2026-05-15
@@ -50,7 +50,7 @@
 # - Dev moves story to 'review', then runs code-review (fresh context, different LLM recommended)
 
 generated: 2026-05-08
-last_updated: 2026-05-16
+last_updated: 2026-05-17
 project: axion
 project_key: NOKEY
 tracking_system: file-system
@@ -161,7 +161,7 @@ development_status:
   # Epic 12: Memory 生命周期与质量控制
   epic-12: in-progress
   12-1-memory-fact-model-upgrade: done
-  12-2-three-category-memory-classification: backlog
+  12-2-three-category-memory-classification: done
   12-3-memory-import-export: backlog
   epic-12-retrospective: optional
 

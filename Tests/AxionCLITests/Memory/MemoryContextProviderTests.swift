@@ -603,4 +603,156 @@ struct MemoryContextProviderTests {
 
         #expect(context != nil, "Should match domain case-insensitively")
     }
+
+    // MARK: - Story 12.2: Fact-based Memory Context
+
+    @Test("buildFactMemoryContext returns classified context with three sections")
+    func buildFactMemoryContextReturnsClassifiedContext() async throws {
+        let tempDir = FileManager.default.temporaryDirectory
+            .appendingPathComponent(UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: tempDir) }
+
+        let store = MemoryFactStore(memoryDir: tempDir)
+        let domain = "com.apple.calculator"
+
+        let facts: [AppMemoryFact] = [
+            AppMemoryFact.create(domain: domain, kind: .affordance, description: "Finder hotkey test", confidence: 0.8, evidence: ["r1"]),
+            AppMemoryFact.create(domain: domain, kind: .avoid, description: "Avoid AX click", confidence: 0.6, evidence: ["r2"]),
+            AppMemoryFact.create(domain: domain, kind: .observation, description: "Window title format", confidence: 0.7, evidence: ["r3"]),
+        ]
+
+        // Promote to active so they appear in context
+        var activeFacts: [AppMemoryFact] = []
+        for fact in facts {
+            var promoted = fact
+            promoted.status = .active
+            promoted.evidenceCount = 3
+            promoted.confidence = fact.confidence
+            activeFacts.append(promoted)
+        }
+        try await store.saveAll(domain: domain, facts: activeFacts)
+
+        let provider = MemoryContextProvider()
+        let context = await provider.buildFactMemoryContext(task: "打开计算器", factStore: store)
+
+        #expect(context != nil, "Should return non-nil context with active facts")
+        let ctx = try #require(context)
+        #expect(ctx.contains("推荐路径"), "Should contain affordance section header")
+        #expect(ctx.contains("注意事项"), "Should contain avoid section header")
+        #expect(ctx.contains("环境备注"), "Should contain observation section header")
+    }
+
+    @Test("buildFactMemoryContext includes soft hints declaration")
+    func buildFactMemoryContextIncludesSoftHintsDeclaration() async throws {
+        let tempDir = FileManager.default.temporaryDirectory
+            .appendingPathComponent(UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: tempDir) }
+
+        let store = MemoryFactStore(memoryDir: tempDir)
+        let domain = "com.apple.calculator"
+
+        var fact = AppMemoryFact.create(domain: domain, kind: .affordance, description: "test", confidence: 0.8)
+        fact.status = .active
+        fact.evidenceCount = 3
+        try await store.save(domain: domain, fact: fact)
+
+        let provider = MemoryContextProvider()
+        let context = await provider.buildFactMemoryContext(task: "打开计算器", factStore: store)
+
+        #expect(context != nil)
+        let ctx = try #require(context)
+        #expect(ctx.contains("soft hints, not hard rules"),
+            "Context must include soft hints declaration")
+    }
+
+    @Test("buildFactMemoryContext limits to 5 facts per kind")
+    func buildFactMemoryContextLimitsPerKind() async throws {
+        let tempDir = FileManager.default.temporaryDirectory
+            .appendingPathComponent(UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: tempDir) }
+
+        let store = MemoryFactStore(memoryDir: tempDir)
+        let domain = "com.apple.calculator"
+
+        // Create 7 affordance facts
+        var facts: [AppMemoryFact] = []
+        for i in 0..<7 {
+            var fact = AppMemoryFact.create(
+                domain: domain,
+                kind: .affordance,
+                description: "Affordance \(i)",
+                confidence: Double(7 - i) / 10.0,
+                evidence: ["r\(i)"]
+            )
+            fact.status = .active
+            fact.evidenceCount = 3
+            facts.append(fact)
+        }
+        try await store.saveAll(domain: domain, facts: facts)
+
+        let provider = MemoryContextProvider()
+        let context = await provider.buildFactMemoryContext(task: "打开计算器", factStore: store)
+
+        #expect(context != nil)
+        let ctx = try #require(context)
+        let affordanceLines = ctx.components(separatedBy: "\n").filter { $0.contains("[推荐]") }
+        #expect(affordanceLines.count == 5, "Should display at most 5 affordance facts, got \(affordanceLines.count)")
+    }
+
+    @Test("buildFactMemoryContext only includes active facts")
+    func buildFactMemoryContextOnlyActiveFacts() async throws {
+        let tempDir = FileManager.default.temporaryDirectory
+            .appendingPathComponent(UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: tempDir) }
+
+        let store = MemoryFactStore(memoryDir: tempDir)
+        let domain = "com.apple.calculator"
+
+        var activeFact = AppMemoryFact.create(domain: domain, kind: .affordance, description: "Active one", confidence: 0.8)
+        activeFact.status = .active
+        activeFact.evidenceCount = 3
+
+        var candidateFact = AppMemoryFact.create(domain: domain, kind: .observation, description: "Candidate one", confidence: 0.7)
+        candidateFact.status = .candidate
+
+        var retiredFact = AppMemoryFact.create(domain: domain, kind: .avoid, description: "Retired one", confidence: 0.5)
+        retiredFact.status = .retired
+
+        try await store.saveAll(domain: domain, facts: [activeFact, candidateFact, retiredFact])
+
+        let provider = MemoryContextProvider()
+        let context = await provider.buildFactMemoryContext(task: "打开计算器", factStore: store)
+
+        #expect(context != nil)
+        let ctx = try #require(context)
+        #expect(ctx.contains("Active one"), "Active fact should appear")
+        #expect(!ctx.contains("Candidate one"), "Candidate fact should NOT appear")
+        #expect(!ctx.contains("Retired one"), "Retired fact should NOT appear")
+    }
+
+    @Test("buildFactMemoryContext returns nil for no matching domain")
+    func buildFactMemoryContextReturnsNilNoMatch() async throws {
+        let tempDir = FileManager.default.temporaryDirectory
+            .appendingPathComponent(UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: tempDir) }
+
+        let store = MemoryFactStore(memoryDir: tempDir)
+        let provider = MemoryContextProvider()
+
+        let context = await provider.buildFactMemoryContext(task: "在 Photoshop 中编辑", factStore: store)
+        #expect(context == nil, "Should return nil when no domain matches")
+    }
+
+    @Test("buildFactMemoryContext returns nil for empty store")
+    func buildFactMemoryContextReturnsNilEmpty() async throws {
+        let tempDir = FileManager.default.temporaryDirectory
+            .appendingPathComponent(UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: tempDir) }
+
+        let store = MemoryFactStore(memoryDir: tempDir)
+        let provider = MemoryContextProvider()
+
+        let context = await provider.buildFactMemoryContext(task: "打开计算器", factStore: store)
+        #expect(context == nil, "Should return nil for empty fact store")
+    }
 }
