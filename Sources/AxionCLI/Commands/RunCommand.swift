@@ -188,6 +188,15 @@ struct RunCommand: AsyncParsableCommand {
         var totalSteps = 0
         let startTime = ContinuousClock.now
 
+        // Install SIGINT handler so Ctrl-C triggers graceful shutdown instead of killing the process.
+        // Without this, Helper child processes become orphans.
+        signal(SIGINT, SIG_IGN)
+        let sigintSource = DispatchSource.makeSignalSource(signal: SIGINT, queue: .global())
+        sigintSource.setEventHandler {
+            agent.interrupt()
+        }
+        sigintSource.resume()
+
         // Collect toolUse/toolResult pairs for memory extraction (matched by toolUseId)
         var pendingToolUses: [String: SDKMessage.ToolUseData] = [:]
         var collectedPairs: [(toolUse: SDKMessage.ToolUseData, toolResult: SDKMessage.ToolResultData)] = []
@@ -223,11 +232,12 @@ struct RunCommand: AsyncParsableCommand {
                         switch result.action {
                         case .resume:
                             let userAction = result.userInput?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty == false
-                                ? "用户输入: \(result.userInput!)" : "用户已完成手动操作"
+                                ? result.userInput! : "用户已完成手动操作"
+                            takeoverIO.write("[axion] 正在恢复执行...")
                             agent.resume(context: userAction)
-                            takeoverIO.write("[axion] Agent 正在恢复执行...")
                             await tracer?.record(event: "takeover_resumed", payload: [
-                                "context": userAction
+                                "context": userAction,
+                                "method": "resume"
                             ])
                         case .skip:
                             agent.resume(context: "skip")
@@ -259,6 +269,8 @@ struct RunCommand: AsyncParsableCommand {
 
         // Cleanup — always runs even after cancellation
         try? await agent.close()
+        sigintSource.cancel()
+        signal(SIGINT, SIG_DFL)
         outputHandler.displayCompletion()
         await tracer?.recordRunDone(totalSteps: totalSteps, durationMs: durationMs, replanCount: 0)
         await tracer?.close()
@@ -381,7 +393,8 @@ struct RunCommand: AsyncParsableCommand {
         let registry = HookRegistry()
 
         if sharedSeatMode {
-            let foregroundTools = ToolNames.foregroundToolNames
+            // SDK passes MCP-prefixed names (e.g. "mcp__axion-helper__click"), so match against those.
+            let foregroundTools = ToolNames.foregroundToolNames.map { "mcp__axion-helper__\($0)" }
             let safetyHook = HookDefinition(handler: { input in
                 guard let toolName = input.toolName else { return HookOutput(decision: .approve) }
 
