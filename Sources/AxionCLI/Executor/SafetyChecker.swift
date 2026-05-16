@@ -66,7 +66,10 @@ public struct SafetyChecker {
         ToolNames.moveWindow,
         ToolNames.resizeWindow,
         ToolNames.activateWindow,
-        ToolNames.quitApp
+        ToolNames.quitApp,
+        ToolNames.arrangeWindows,
+        ToolNames.startRecording,
+        ToolNames.stopRecording
     ]
 
     private static let foregroundRequiredTools: Set<String> = [

@@ -1,82 +1,92 @@
-import XCTest
+import Foundation
+import Testing
 @testable import AxionHelper
 
-final class AppInfoTests: XCTestCase {
+@Suite("AppInfo")
+struct AppInfoTests {
 
-    func testCodableRoundTrip() throws {
+    @Test("codable round trip")
+    func codableRoundTrip() throws {
         let original = AppInfo(pid: 1234, appName: "Calculator", bundleId: "com.apple.calculator")
         let data = try JSONEncoder().encode(original)
         let decoded = try JSONDecoder().decode(AppInfo.self, from: data)
-        XCTAssertEqual(decoded, original)
+        #expect(decoded == original)
     }
 
-    func testCodableRoundTrip_nilBundleId() throws {
+    @Test("codable round trip with nil bundleId")
+    func codableRoundTripNilBundleId() throws {
         let original = AppInfo(pid: 5678, appName: "SomeApp", bundleId: nil)
         let data = try JSONEncoder().encode(original)
         let decoded = try JSONDecoder().decode(AppInfo.self, from: data)
-        XCTAssertEqual(decoded, original)
+        #expect(decoded == original)
     }
 
-    func testJSONKeys() throws {
+    @Test("JSON keys present")
+    func jsonKeys() throws {
         let info = AppInfo(pid: 99, appName: "Finder", bundleId: "com.apple.finder")
         let data = try JSONEncoder().encode(info)
         let json = try JSONSerialization.jsonObject(with: data) as? [String: Any]
-        XCTAssertNotNil(json?["pid"])
-        XCTAssertNotNil(json?["app_name"])
-        XCTAssertNotNil(json?["bundle_id"])
+        #expect(json?["pid"] != nil)
+        #expect(json?["app_name"] != nil)
+        #expect(json?["bundle_id"] != nil)
     }
 
     // MARK: - Equality
 
-    func testEquality_same() {
+    @Test("equality: same values")
+    func equalitySame() {
         let a = AppInfo(pid: 123, appName: "Test", bundleId: "com.test")
         let b = AppInfo(pid: 123, appName: "Test", bundleId: "com.test")
-        XCTAssertEqual(a, b)
+        #expect(a == b)
     }
 
-    func testEquality_differentPid() {
+    @Test("equality: different pid")
+    func equalityDifferentPid() {
         let a = AppInfo(pid: 123, appName: "Test", bundleId: nil)
         let b = AppInfo(pid: 456, appName: "Test", bundleId: nil)
-        XCTAssertNotEqual(a, b)
+        #expect(a != b)
     }
 
-    func testEquality_differentName() {
+    @Test("equality: different name")
+    func equalityDifferentName() {
         let a = AppInfo(pid: 123, appName: "Test1", bundleId: nil)
         let b = AppInfo(pid: 123, appName: "Test2", bundleId: nil)
-        XCTAssertNotEqual(a, b)
+        #expect(a != b)
     }
 
-    func testEquality_differentBundleId() {
+    @Test("equality: different bundleId")
+    func equalityDifferentBundleId() {
         let a = AppInfo(pid: 123, appName: "Test", bundleId: "com.a")
         let b = AppInfo(pid: 123, appName: "Test", bundleId: "com.b")
-        XCTAssertNotEqual(a, b)
+        #expect(a != b)
     }
 
-    func testEquality_nilVsNotNilBundleId() {
+    @Test("equality: nil vs non-nil bundleId")
+    func equalityNilVsNotNilBundleId() {
         let a = AppInfo(pid: 123, appName: "Test", bundleId: nil)
         let b = AppInfo(pid: 123, appName: "Test", bundleId: "com.test")
-        XCTAssertNotEqual(a, b)
+        #expect(a != b)
     }
 
     // MARK: - JSON snake_case keys
 
-    func testJSON_snakeCaseKeys() throws {
+    @Test("JSON uses snake_case keys")
+    func jsonSnakeCaseKeys() throws {
         let info = AppInfo(pid: 1, appName: "Safari", bundleId: "com.apple.Safari")
         let data = try JSONEncoder().encode(info)
         let json = try JSONSerialization.jsonObject(with: data) as! [String: Any]
 
-        // Keys should be snake_case
-        XCTAssertNotNil(json["app_name"])
-        XCTAssertNotNil(json["bundle_id"])
-        // Keys should NOT be camelCase
-        XCTAssertNil(json["appName"])
-        XCTAssertNil(json["bundleId"])
+        #expect(json["app_name"] != nil)
+        #expect(json["bundle_id"] != nil)
+        #expect(json["appName"] == nil)
+        #expect(json["bundleId"] == nil)
     }
 
-    func testJSON_pidIsInt() throws {
+    @Test("JSON pid is Int")
+    func jsonPidIsInt() throws {
         let info = AppInfo(pid: 42, appName: "Test", bundleId: nil)
         let data = try JSONEncoder().encode(info)
         let json = try JSONSerialization.jsonObject(with: data) as! [String: Any]
-        XCTAssertEqual(json["pid"] as? Int, 42)
+        #expect(json["pid"] as? Int == 42)
     }
 }

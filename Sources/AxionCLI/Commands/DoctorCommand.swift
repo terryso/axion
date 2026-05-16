@@ -90,6 +90,11 @@ struct DoctorCommand: ParsableCommand {
         let srCheck = checkScreenRecording()
         results.append(srCheck)
 
+        // Check 6: Memory 状态
+        let memoryDir = (dir as NSString).appendingPathComponent("memory")
+        let memoryCheck = checkMemory(at: memoryDir)
+        results.append(memoryCheck)
+
         // 输出所有检查结果
         for result in results {
             let mark = result.status == .ok ? "[OK]  " : "[FAIL] "
@@ -229,5 +234,58 @@ struct DoctorCommand: ParsableCommand {
                 fixHint: "打开 系统设置 > 隐私与安全 > 屏幕录制，添加 AxionHelper.app"
             )
         }
+    }
+
+    // Intentionally reads raw files instead of using MemoryStoreProtocol —
+    // doctor is a diagnostic tool that should work without initializing the SDK store.
+    private static func checkMemory(at memoryDir: String) -> CheckResult {
+        let fm = FileManager.default
+
+        guard fm.fileExists(atPath: memoryDir) else {
+            return CheckResult(
+                name: "Memory",
+                status: .ok,
+                detail: "未使用（首次运行后自动创建）",
+                fixHint: nil
+            )
+        }
+
+        // Count domain files and total entries
+        var domainCount = 0
+        var totalEntries = 0
+
+        guard let files = try? fm.contentsOfDirectory(atPath: memoryDir) else {
+            return CheckResult(
+                name: "Memory",
+                status: .ok,
+                detail: "未使用（首次运行后自动创建）",
+                fixHint: nil
+            )
+        }
+
+        for file in files where file.hasSuffix(".json") {
+            domainCount += 1
+            let filePath = (memoryDir as NSString).appendingPathComponent(file)
+            if let data = fm.contents(atPath: filePath),
+               let jsonArray = try? JSONSerialization.jsonObject(with: data) as? [[String: Any]] {
+                totalEntries += jsonArray.count
+            }
+        }
+
+        if domainCount == 0 {
+            return CheckResult(
+                name: "Memory",
+                status: .ok,
+                detail: "未使用（首次运行后自动创建）",
+                fixHint: nil
+            )
+        }
+
+        return CheckResult(
+            name: "Memory",
+            status: .ok,
+            detail: "\(domainCount) domains, \(totalEntries) entries",
+            fixHint: nil
+        )
     }
 }

@@ -5,6 +5,7 @@ stepsCompleted:
   - step-03-create-stories
   - step-04-final-validation
   - step-05-phase2-epics
+  - step-06-phase3-epics
 inputDocuments:
   - _bmad-output/planning-artifacts/prd.md
   - _bmad-output/planning-artifacts/architecture.md
@@ -19,6 +20,7 @@ requirementsExtracted:
   uxDesign: 0
 phase1Status: complete
 phase2EpicsAdded: 2026-05-12
+phase3EpicsAdded: 2026-05-14
 ---
 
 # Axion - Epic Breakdown
@@ -1173,3 +1175,463 @@ So that 简单操作不需要等待完整的 LLM 规划循环.
 **实施前提：** OpenAgentSDK 的 Epic 19 需先于 Axion Phase 2 完成。建议 SDK 和 Axion 并行开发：Axion 先做 Epic 5（HTTP API，无 SDK 依赖）和 Epic 7 的 --fast 部分，SDK Epic 19 完成后再做 Memory、Takeover 和 MCP Server 集成。
 
 **建议实施顺序：Epic 5（无 SDK 依赖）→ SDK Epic 19 → Epic 7 → Epic 4 → Epic 6**
+
+---
+
+# Phase 3 — 愿景 Epics
+
+> Phase 1（Epic 1–3）MVP 和 Phase 2（Epic 4–7）成长功能均已完成。以下为 PRD Phase 3 愿景功能的 Epic 分解。
+>
+> Phase 3 定位为「从工具到平台」的跨越——将 Axion 从单窗口 CLI 自动化工具进化为支持跨应用工作流、可录制技能、拥有原生 GUI、可供第三方扩展的桌面自动化平台。
+>
+> **前置条件：** Phase 1 和 Phase 2 全部完成。Epic 8（多窗口）和 Epic 9（录制技能）依赖 Phase 1/2 的 Helper 工具集和 Agent 循环；Epic 10（菜单栏 UI）依赖 Phase 2 的 HTTP API；Epic 11（SDK 生态）依赖 Phase 1 的 SDK 边界文档和 Phase 2 的 MCP Server 模式。
+
+## Phase 3 Epic List
+
+### Epic 8: 多窗口、多 App 工作流
+
+当前 Axion 每次操作聚焦一个窗口。Epic 8 让 Axion 能同时追踪多个应用窗口的状态，协调跨应用的数据传递和操作编排——从浏览器复制数据到 Excel、从邮件客户端提取附件到 Finder、在多个应用间完成端到端工作流。
+
+**核心价值：** 真正的桌面自动化不是操作一个应用，而是串起多个应用完成端到端工作流。
+**依赖：** Phase 1 Helper 工具集（FR24–FR32）、Phase 1 执行循环（Epic 3）
+
+### Epic 9: 录制 → 编译 → 技能复用
+
+用户演示一遍操作，Axion 自动录制操作序列并编译为可复用的「技能」（Skill）。下次需要同样操作时，直接调用技能执行，无需 LLM 规划——从「每次都思考」进化到「学一次，用无数次」。
+
+**核心价值：** 把 LLM 规划成本降为零。常用操作从「N 秒 + API 调用」变成「毫秒级本地回放」。
+**依赖：** Phase 1 Helper 工具集、Phase 1 执行引擎
+
+### Epic 10: macOS 菜单栏 UI
+
+原生 macOS 菜单栏常驻应用，提供快捷操作入口、任务状态面板、技能快捷键和配置界面。用户不再需要打开终端，直接从菜单栏发起和管理自动化任务。
+
+**核心价值：** Axion 从 CLI 工具进化为原生 Mac 应用，触达非技术用户。
+**依赖：** Phase 2 HTTP API（Epic 5）作为后端通信通道
+
+### Epic 11: 第三方 SDK 生态
+
+让第三方开发者能基于 OpenAgentSDK 构建自己的 macOS 桌面 Agent 应用。Axion 作为旗舰参考实现，提供项目模板、插件化工具注册接口和开发者文档。
+
+**核心价值：** SDK 的价值不在于一个应用，在于一个生态。
+**依赖：** Phase 1 SDK 边界文档（FR41）、Phase 2 MCP Server 模式（Epic 6）
+
+---
+
+## Epic 8: 多窗口、多 App 工作流
+
+Axion 从单窗口操作升级为跨应用协调。核心变化：Planner 可以在计划中引用多个目标窗口，Executor 能在窗口间切换操作，数据通过剪贴板或文件系统在应用间传递。
+
+### Story 8.1: 多窗口状态追踪与上下文管理
+
+As a Planner,
+I want 同时追踪多个应用窗口的状态,
+So that 我可以在规划时了解所有相关窗口的布局和内容.
+
+**Acceptance Criteria:**
+
+**Given** 多个应用正在运行（如 Chrome 和 TextEdit）
+**When** 调用 list_windows
+**Then** 返回所有应用的窗口列表，每项包含 app_name、pid、window_id、title、bounds 和 z-order
+
+**Given** 任务涉及两个应用的交互
+**When** Planner 生成计划
+**Then** 计划中的步骤可以引用不同的 window_id，并通过 `$window_id:Chrome` 和 `$window_id:TextEdit` 占位符区分
+
+**Given** 执行过程中窗口焦点切换
+**When** Executor 在窗口间切换操作
+**Then** 每次切换前自动刷新目标窗口状态，确保 AX 元素索引有效（复用 FR18 机制）
+
+**Given** 某个目标窗口被用户最小化
+**When** Executor 尝试操作该窗口
+**Then** 检测到窗口不可见，自动恢复窗口后再执行操作，或触发 takeover 让用户手动恢复
+
+**Given** 多窗口上下文
+**When** TraceRecorder 记录事件
+**Then** 每个步骤事件包含 window_id 和 app_name 字段，trace 文件可回溯完整的多窗口操作序列
+
+### Story 8.2: 跨应用工作流编排
+
+As a 用户,
+I want 用一句话描述跨多个应用的工作流,
+So that Axion 可以自动协调多个应用完成端到端任务.
+
+**Acceptance Criteria:**
+
+**Given** 运行 `axion run "从 Safari 复制网页标题，粘贴到 TextEdit 文档"`
+**When** Planner 规划
+**Then** 生成包含跨应用操作的计划：激活 Safari → 获取标题 → 复制到剪贴板 → 切换到 TextEdit → 粘贴
+
+**Given** 跨应用计划执行中
+**When** 步骤需要切换目标应用
+**Then** Executor 通过 `list_windows` + 窗口激活确保目标应用获得焦点，再执行后续操作
+
+**Given** 跨应用数据传递涉及剪贴板
+**When** Planner 规划剪贴板操作
+**Then** 使用 cmd+c / cmd+v 的 hotkey 操作，Executor 在复制后验证剪贴板内容再执行粘贴
+
+**Given** 跨应用计划中某一步失败（如目标应用未安装）
+**When** 执行失败
+**Then** 携带失败上下文触发重规划，Planner 可以选择跳过失败步骤或寻找替代路径
+
+**Given** 运行 `axion run "打开浏览器搜索 'Swift Agent'，把第一个结果复制到备忘录"`
+**When** 完整流程执行
+**Then** 成功协调 Safari/Chrome 和 Notes/TextEdit 两个应用完成端到端操作
+
+### Story 8.3: 窗口布局管理
+
+As a 用户,
+I want Axion 自动管理窗口位置和大小,
+So that 多窗口工作流可以在最优布局下执行，避免窗口遮挡.
+
+**Acceptance Criteria:**
+
+**Given** 任务涉及两个窗口交互
+**When** Planner 规划
+**Then** 可选择在计划中包含窗口布局步骤（如并排显示两个窗口），Planner prompt 理解 `arrange_windows` 指令
+
+**Given** 用户运行 `axion run "把 Safari 和 TextEdit 并排显示，左 Safari 右 TextEdit"`
+**When** 执行
+**Then** AxionHelper 的窗口管理服务调整两个窗口的 bounds 实现并排布局
+
+**Given** 窗口布局调整后
+**When** 后续步骤执行
+**Then** 所有窗口坐标基于新布局重新计算，不使用布局前的过期坐标
+
+**Given** 布局操作完成
+**When** 任务结束
+**Then** 可选恢复原始窗口布局（`--restore-layout` 标志），或保持当前布局
+
+---
+
+## Epic 9: 录制 → 编译 → 技能复用
+
+用户演示操作，Axion 录制为结构化序列，编译为可复用技能（Skill）。技能以 JSON 文件存储在 `~/.axion/skills/`，执行时直接回放，无需 LLM 规划。技能支持参数化（如 URL、文件路径），适应不同的输入。
+
+### Story 9.1: 操作录制引擎
+
+As a 用户,
+I want Axion 录制我的桌面操作,
+So that 常用操作可以被记录下来供后续复用.
+
+**Acceptance Criteria:**
+
+**Given** 运行 `axion record "打开计算器"`
+**When** 录制模式启动
+**Then** Helper 开始监听用户操作（点击、键盘输入、应用切换），终端显示 "录制中... 按 Ctrl-C 结束录制"
+
+**Given** 录制模式下用户操作桌面
+**When** 用户点击 (x, y) 坐标
+**Then** 记录 click 事件：坐标、目标窗口、时间戳
+
+**Given** 录制模式下用户输入文本
+**When** 用户在输入框中打字
+**Then** 记录 type_text 事件：输入内容、目标窗口
+
+**Given** 录制模式下用户切换应用
+**When** 用户 Cmd+Tab 切换
+**Then** 记录 app_switch 事件：目标应用名
+
+**Given** 用户按 Ctrl-C 结束录制
+**When** 录制停止
+**Then** 将录制序列保存为 `~/.axion/recordings/{name}.json`，包含操作列表和窗口上下文快照
+
+**Given** 录制过程中 Helper 操作执行失败
+**When** 检测到失败
+**Then** 记录失败事件但不中断录制，继续监听后续操作
+
+### Story 9.2: 录制编译为可复用技能
+
+As a 用户,
+I want 将录制的操作编译为可复用的技能,
+So that 下次可以直接调用技能，不需要 LLM 重新规划.
+
+**Acceptance Criteria:**
+
+**Given** 录制文件存在 `~/.axion/recordings/open_calculator.json`
+**When** 运行 `axion skill compile open_calculator`
+**Then** 将录制编译为技能文件 `~/.axion/skills/open_calculator.json`，包含结构化的步骤序列
+
+**Given** 编译过程中发现可参数化的值
+**When** 分析录制内容
+**Then** 识别可变部分（如 URL、文件路径、搜索关键词）并标记为参数，编译后技能支持 `{{param}}` 占位符
+
+**Given** 运行 `axion skill compile open_calculator --param url --param search_term`
+**When** 编译完成
+**Then** 技能文件中指定的值被替换为参数占位符，执行时由用户提供具体值
+
+**Given** 编译后的技能文件
+**When** 检查格式
+**Then** 为标准 JSON，包含 name、description、parameters、steps（工具调用序列）字段，可人工编辑
+
+**Given** 录制中包含冗余操作（如多余的窗口切换）
+**When** 编译
+**Then** 自动去重和优化操作序列，移除无效的中间步骤
+
+### Story 9.3: 技能库管理与执行
+
+As a 用户,
+I want 管理和执行已保存的技能,
+So that 常用操作可以一键执行，无需每次描述任务.
+
+**Acceptance Criteria:**
+
+**Given** 技能文件存在 `~/.axion/skills/open_calculator.json`
+**When** 运行 `axion skill run open_calculator`
+**Then** 直接回放技能中的步骤序列，不调用 LLM，通过 MCP 调用 Helper 执行
+
+**Given** 技能包含参数 `{{url}}`
+**When** 运行 `axion skill run open_calculator --param url=https://example.com`
+**Then** 将参数值注入步骤序列后执行
+
+**Given** 运行 `axion skill list`
+**When** 查看技能库
+**Then** 显示所有已保存的技能：名称、描述、参数列表、上次使用时间、执行次数
+
+**Given** 运行 `axion skill delete open_calculator`
+**When** 删除技能
+**Then** 移除技能文件，`axion skill list` 不再显示该技能
+
+**Given** 技能执行中某步骤失败
+**When** 回放失败
+**Then** 记录失败位置，尝试重试一次（元素坐标可能因窗口位置变化而失效），仍失败则报告错误并建议用 `axion run` 代替
+
+**Given** 技能执行成功
+**When** 回放完成
+**Then** 显示 "技能完成。N 步，耗时 X 秒。" 以及技能名称，响应时间显著短于 LLM 规划模式
+
+---
+
+## Epic 10: macOS 菜单栏 UI
+
+Axion 作为 macOS 菜单栏常驻应用（NSStatusItem），通过 HTTP API 与 CLI 后端通信。提供任务状态面板、快捷操作入口、全局热键和技能快捷触发。
+
+### Story 10.1: 菜单栏常驻状态与服务通信
+
+As a 用户,
+I want Axion 在菜单栏常驻显示状态,
+So that 我可以随时了解 Axion 的运行状态并快速访问功能.
+
+**Acceptance Criteria:**
+
+**Given** 运行 `AxionBar`（菜单栏 App）
+**When** 应用启动
+**Then** 在 macOS 菜单栏显示状态图标（空闲/运行中），点击图标显示下拉菜单
+
+**Given** 菜单栏 App 启动
+**When** 检查后端连接
+**Then** 自动检测 `axion server` 是否在 localhost:4242 运行，未运行时显示 "启动服务" 菜单项
+
+**Given** 用户点击 "启动服务"
+**When** 触发服务启动
+**Then** 在后台启动 `axion server` 进程，就绪后菜单栏状态变为 "就绪"
+
+**Given** 菜单栏 App 运行中
+**When** 用户点击菜单栏图标
+**Then** 显示下拉菜单包含：快速执行、技能列表、任务历史、设置、退出
+
+**Given** 后端服务异常退出
+**When** 菜单栏 App 检测到连接断开
+**Then** 状态图标变为 "未连接"，下拉菜单提供 "重启服务" 选项
+
+### Story 10.2: 任务管理与实时状态面板
+
+As a 用户,
+I want 从菜单栏查看和管理任务执行状态,
+So that 我不需要切换到终端就能了解自动化任务的进展.
+
+**Acceptance Criteria:**
+
+**Given** 菜单栏 App 和后端服务均运行
+**When** 用户点击 "快速执行"
+**Then** 弹出输入框，用户输入自然语言任务描述后提交执行
+
+**Given** 任务正在执行
+**When** 查看菜单栏状态
+**Then** 状态图标显示执行中动画，下拉菜单显示当前任务名称和进度（步骤 N/M）
+
+**Given** 用户点击正在执行的任务
+**When** 查看详情
+**Then** 弹出面板显示实时日志流：步骤描述、工具调用、执行结果（通过 SSE 事件流获取）
+
+**Given** 任务执行完成
+**When** 查看结果
+**Then** 菜单栏弹出通知（macOS native notification）：任务完成/失败 + 摘要
+
+**Given** 用户点击 "任务历史"
+**When** 查看历史
+**Then** 显示最近 20 条任务记录，每条包含任务描述、状态、执行时间
+
+### Story 10.3: 全局热键与技能快捷触发
+
+As a 用户,
+I want 通过全局热键快速触发常用技能,
+So that 常用自动化操作可以一键执行，无需打开任何界面.
+
+**Acceptance Criteria:**
+
+**Given** 菜单栏 App 运行中
+**When** 用户在设置中配置全局热键
+**Then** 可以为技能或常用任务绑定全局热键（如 Cmd+Shift+A 触发 "打开计算器" 技能）
+
+**Given** 全局热键已配置
+**When** 用户按下热键组合
+**Then** 触发绑定的技能或任务，菜单栏图标显示执行状态
+
+**Given** 菜单栏 App 首次启动
+**When** 检查 Accessibility 权限
+**Then** 全局热键需要 Accessibility 权限，未授权时提示用户授权
+
+**Given** 技能列表中有已编译的技能
+**When** 用户点击 "技能" 菜单
+**Then** 显示所有可用技能的列表，每个技能可直接点击执行
+
+**Given** 运行 `axion skill run open_calculator` 或通过菜单栏触发技能
+**When** 执行方式不同
+**Then** 两种方式执行结果一致（技能回放，无 LLM 调用）
+
+---
+
+## Epic 11: 第三方 SDK 生态
+
+让第三方开发者基于 OpenAgentSDK 构建自己的 macOS 桌面 Agent 应用。提供项目模板脚手架、插件化工具注册接口和开发者文档。Axion 作为旗舰参考实现。
+
+### Story 11.1: Agent 项目模板与脚手架 CLI
+
+As a 第三方开发者,
+I want 通过模板快速创建基于 SDK 的 Agent 项目,
+So that 我可以在几分钟内搭建好项目骨架，专注于业务逻辑.
+
+**Acceptance Criteria:**
+
+**Given** 安装了 OpenAgentSDK
+**When** 运行 SDK 提供的脚手架命令（如 `swift package init --type agent`）
+**Then** 生成标准 Agent 项目结构：main.swift、Tools/、Prompts/、Config/ 目录
+
+**Given** 生成的项目模板
+**When** 运行 `swift build`
+**Then** 编译成功，包含一个可运行的 Agent 骨架（自定义工具 + system prompt）
+
+**Given** 模板中的 README
+**When** 阅读文档
+**Then** 包含：项目结构说明、如何添加自定义工具、如何配置 system prompt、如何运行和调试
+
+**Given** 模板中的示例工具
+**When** 查看代码
+**Then** 包含一个完整的自定义工具示例（如 `hello_world` 工具），展示 `@Tool` 宏用法
+
+**Given** Axion 仓库的 SDK 边界文档
+**When** 开发者阅读
+**Then** 可作为参考指南理解哪些是 SDK 提供的能力，哪些需要自己实现
+
+### Story 11.2: 插件化工具注册与自定义 Agent 扩展
+
+As a 第三方开发者,
+I want 为我的 Agent 注册自定义工具,
+So that 我的 Agent 可以执行特定领域的操作.
+
+**Acceptance Criteria:**
+
+**Given** SDK 的工具注册 API
+**When** 开发者创建自定义工具
+**Then** 通过 `@Tool` 宏 + `@Parameter` 定义工具签名，实现 `perform()` 方法，无需理解 MCP 协议细节
+
+**Given** 开发者注册了多个自定义工具
+**When** Agent 运行
+**Then** LLM 可以在规划时发现和使用所有已注册的工具，工具调用走 SDK 的标准 MCP 通道
+
+**Given** Axion 的 MCP Server 模式（Epic 6）
+**When** 第三方开发者想使用 Axion 的桌面操作能力
+**Then** 通过 `axion mcp` 暴露的工具（如 run_task），在自己的 Agent 中调用 Axion 完成桌面操作，无需重新实现 AX 引擎
+
+**Given** 第三方 Agent 需要特定的 macOS 操作（如模拟器控制）
+**When** 开发者实现自定义 Helper
+**Then** 参考 AxionHelper 架构（MCP Server + AX Service 分离），创建自己的 Helper App，通过 MCP stdio 与 Agent 通信
+
+**Given** SDK 的 Hooks 机制
+**When** 开发者需要添加安全策略
+**Then** 通过 Hook 拦截工具调用，实现自定义的权限检查和审计逻辑
+
+### Story 11.3: 开发者文档与示例库
+
+As a 第三方开发者,
+I want 有完整的开发文档和示例代码,
+So that 我可以快速上手并避免踩坑.
+
+**Acceptance Criteria:**
+
+**Given** OpenAgentSDK 仓库
+**When** 浏览文档
+**Then** 包含以下指南：快速开始（5 分钟跑通第一个 Agent）、工具开发指南、MCP 集成指南、Agent 自定义指南、Session 和 Memory 使用指南
+
+**Given** SDK 示例目录
+**When** 查看示例
+**Then** 包含至少 5 个完整示例：基础 Agent、自定义工具、MCP 集成、Session 管理、Memory 使用
+
+**Given** Axion 作为参考实现
+**When** 开发者阅读 Axion 源码
+**Then** 关键模块（Planner、Executor、Memory、MCP Server）有清晰的内联文档说明设计决策
+
+**Given** SDK 的 API 文档
+**When** 查看 `createAgent` 等 API
+**Then** 包含参数说明、使用场景、返回类型和常见错误处理模式
+
+**Given** 开发者完成自己的 Agent
+**When** 准备分发
+**Then** 文档提供打包和分发指南（SPM package 结构、Helper App 签名、Homebrew formula）
+
+---
+
+## Phase 3 FR 追溯
+
+| FR | 来源 | Epic | SDK 依赖 | 说明 |
+|----|------|------|----------|------|
+| FR50 (多窗口状态追踪) | Phase 3 新增 | Epic 8 | 无 | 扩展 list_windows 和 Plan 模型 |
+| FR51 (跨应用工作流) | Phase 3 新增 | Epic 8 | 无 | Planner + Executor 跨窗口协调 |
+| FR52 (窗口布局管理) | Phase 3 新增 | Epic 8 | 无 | Helper 新增窗口定位能力 |
+| FR53 (操作录制) | Phase 3 新增 | Epic 9 | 无 | Helper 新增事件监听模式 |
+| FR54 (录制编译) | Phase 3 新增 | Epic 9 | 无 | 录制 → 技能的编译管道 |
+| FR55 (技能执行) | Phase 3 新增 | Epic 9 | 无 | 本地回放，无 LLM 调用 |
+| FR56 (技能管理 CLI) | Phase 3 新增 | Epic 9 | 无 | axion skill 命令组 |
+| FR57 (菜单栏 UI) | Phase 3 新增 | Epic 10 | 无 | 独立 macOS App |
+| FR58 (任务管理面板) | Phase 3 新增 | Epic 10 | 依赖 Epic 5 HTTP API | 通过 API 与后端通信 |
+| FR59 (全局热键) | Phase 3 新增 | Epic 10 | 无 | macOS Accessibility API |
+| FR60 (项目模板) | Phase 3 新增 | Epic 11 | SDK 提供脚手架 | SPM 模板 |
+| FR61 (插件化工具) | Phase 3 新增 | Epic 11 | SDK 工具注册 API | @Tool 宏 |
+| FR62 (开发者文档) | Phase 3 新增 | Epic 11 | 无 | 文档和示例 |
+
+## Phase 3 新增 NFR
+
+- NFR30: 多窗口操作时，窗口切换延迟 < 300ms（从激活窗口到获取焦点）
+- NFR31: 技能执行响应时间 < 100ms（本地回放，无 LLM 调用，首步执行延迟）
+- NFR32: 菜单栏 App 常驻内存 < 15MB
+- NFR33: 录制模式下的 CPU 开销 < 5%（不影响用户正常桌面操作体验）
+- NFR34: 技能编译后的执行准确率 >= 95%（相同窗口布局和分辨率下）
+- NFR35: 全局热键响应延迟 < 200ms（从按键到触发动作）
+- NFR36: 技能文件大小 < 100KB（单技能，包含步骤序列和元数据）
+
+## Phase 3 优先级与依赖
+
+| 优先级 | Epic | SDK 依赖 | 理由 |
+|--------|------|----------|------|
+| P0 | Epic 8 (多窗口工作流) | 无 | 扩展现有核心能力，解锁最常见的高级使用场景 |
+| P1 | Epic 9 (录制技能) | 无 | 从 LLM 依赖进化到本地执行，降本提效，纯应用层 |
+| P2 | Epic 10 (菜单栏 UI) | 依赖 Epic 5 HTTP API | 拓宽用户群到非技术用户，需要后端 API 支撑 |
+| P3 | Epic 11 (SDK 生态) | SDK 持续完善 | 长期生态价值，依赖 SDK 文档化和模板化 |
+
+**实施建议顺序：Epic 8 → Epic 9 → Epic 10 → Epic 11**
+
+**理由：**
+- Epic 8（多窗口）和 Epic 9（录制技能）无外部 SDK 依赖，可立即推进
+- Epic 8 优先于 Epic 9：多窗口是跨应用工作流的基础，录制技能也会涉及多窗口操作
+- Epic 10 在 Epic 8/9 之后：菜单栏 UI 是入口升级，核心能力先完善
+- Epic 11 最后：生态建设需要 Axion 自身成熟度足够高，文档和模板才有参考价值
+
+**关键技术决策（Phase 3 实施前需确定）：**
+
+| 决策 | 说明 | 影响 | 状态 |
+|------|------|------|------|
+| D9: 录制引擎实现方式 | AX Observer（系统事件监听）vs 辅助功能监听 vs 轮询 | 录制精度、CPU 开销、权限要求 | ✅ 已决定：CGEvent Tap (listen-only) + NSWorkspace Notification（Epic 9） |
+| D10: 菜单栏 App 架构 | 独立 App vs Framework + App Extension | 进程模型、通信方式、分发策略 | ✅ 已决定：独立 SPM executable target（AxionBar），SwiftUI App + AppKit NSStatusItem 混合方案，通过 HTTP API 与 CLI 后端通信（Epic 10） |
+| D11: 技能文件格式 | 纯 JSON vs DSL（YAML/Markdown）vs Swift Codable | 可读性、可编辑性、参数化能力 | ✅ 已决定：纯 JSON + Codable（Epic 9） |
+| D12: 跨应用数据传递机制 | 剪贴板 vs 临时文件 vs AX 值提取 | 可靠性、数据类型支持、隐私 | ✅ 已决定：剪贴板（Epic 8） |

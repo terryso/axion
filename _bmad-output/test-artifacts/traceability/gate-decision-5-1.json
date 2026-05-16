@@ -1,0 +1,24 @@
+{
+  "schema_version": "0.1.0",
+  "evaluated_at": "2026-05-13T15:55:00+08:00",
+  "repo": "axion",
+  "target": {
+    "type": "story",
+    "id": "5.1",
+    "label": "HTTP API 基础与任务管理"
+  },
+  "collection_status": "COLLECTED",
+  "gate_basis": "priority_thresholds",
+  "gate_status": "PASS",
+  "rationale": "P0 coverage is 100%, P1 coverage is 100% (no P1 requirements detected), and overall coverage is 100% (minimum: 80%). All 6 acceptance criteria fully covered by 46 passing tests across unit and integration levels.",
+  "p0_status": "MET",
+  "p1_status": "MET",
+  "overall_status": "MET",
+  "critical_open": 0,
+  "links": {
+    "trace_report_path": "_bmad-output/test-artifacts/traceability-matrix-5-1.md",
+    "trace_report_url": "",
+    "artifact_url": "",
+    "journey_evidence_url": ""
+  }
+}

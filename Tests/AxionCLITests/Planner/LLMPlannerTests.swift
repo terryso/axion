@@ -1,11 +1,7 @@
-import XCTest
+import Testing
+import Foundation
 @testable import AxionCLI
 @testable import AxionCore
-
-// [P0] 基础设施验证
-// [P1] 行为验证
-
-// MARK: - Mock LLMClient
 
 /// Mock 实现 LLMClientProtocol，用于测试 LLMPlanner 而不调用真实 LLM
 final class MockLLMClient: LLMClientProtocol {
@@ -43,8 +39,6 @@ final class MockLLMClient: LLMClientProtocol {
     }
 }
 
-// MARK: - Mock MCP Client
-
 /// Mock 实现 MCPClientProtocol，用于测试 Planner 的上下文获取
 final class MockPlannerMCPClient: MCPClientProtocol {
     var stubbedTools: [String] = ["launch_app", "click", "type_text", "screenshot", "get_accessibility_tree"]
@@ -74,21 +68,21 @@ final class MockPlannerMCPClient: MCPClientProtocol {
     }
 }
 
-final class LLMPlannerTests: XCTestCase {
+@Suite("LLMPlanner")
+struct LLMPlannerTests {
 
-    // MARK: - P0 类型存在性
-
-    func test_llmPlanner_typeExists() async throws {
+    @Test("type exists")
+    func llmPlannerTypeExists() async throws {
         let _ = LLMPlanner.self
     }
 
-    func test_llmClientProtocol_typeExists() async throws {
+    @Test("LLMClientProtocol type exists")
+    func llmClientProtocolTypeExists() async throws {
         let _ = MockLLMClient.self
     }
 
-    // MARK: - P0 createPlan 核心流程 (AC2)
-
-    func test_createPlan_callsLLMWithCorrectPrompt() async throws {
+    @Test("createPlan calls LLM with correct prompt")
+    func createPlanCallsLLMWithCorrectPrompt() async throws {
         let mockLLM = MockLLMClient(stubbedResponse: """
         {
             "steps": [{"tool": "launch_app", "args": {"name": "Calculator"}, "purpose": "Open Calculator", "expected_change": "Calculator opens"}],
@@ -110,13 +104,14 @@ final class LLMPlannerTests: XCTestCase {
 
         _ = try await planner.createPlan(for: "Open Calculator", context: context)
 
-        XCTAssertEqual(mockLLM.promptCallCount, 1)
-        XCTAssertNotNil(mockLLM.lastSystemPrompt)
-        XCTAssertNotNil(mockLLM.lastUserMessage)
-        XCTAssertTrue(mockLLM.lastUserMessage?.contains("Open Calculator") == true)
+        #expect(mockLLM.promptCallCount == 1)
+        #expect(mockLLM.lastSystemPrompt != nil)
+        #expect(mockLLM.lastUserMessage != nil)
+        #expect(mockLLM.lastUserMessage?.contains("Open Calculator") == true)
     }
 
-    func test_createPlan_returnsPlanWithSteps() async throws {
+    @Test("createPlan returns plan with steps")
+    func createPlanReturnsPlanWithSteps() async throws {
         let mockLLM = MockLLMClient(stubbedResponse: """
         {
             "steps": [
@@ -141,16 +136,15 @@ final class LLMPlannerTests: XCTestCase {
 
         let plan = try await planner.createPlan(for: "Open Calculator and compute 1+1", context: context)
 
-        XCTAssertEqual(plan.steps.count, 2)
-        XCTAssertEqual(plan.steps[0].tool, "launch_app")
-        XCTAssertEqual(plan.steps[1].tool, "click")
-        XCTAssertEqual(plan.task, "Open Calculator and compute 1+1")
-        XCTAssertFalse(plan.stopWhen.isEmpty)
+        #expect(plan.steps.count == 2)
+        #expect(plan.steps[0].tool == "launch_app")
+        #expect(plan.steps[1].tool == "click")
+        #expect(plan.task == "Open Calculator and compute 1+1")
+        #expect(!plan.stopWhen.isEmpty)
     }
 
-    // MARK: - P0 createPlan 错误处理
-
-    func test_createPlan_llmThrowsError_propagatesError() async throws {
+    @Test("createPlan LLM throws error propagates error")
+    func createPlanLLMThrowsErrorPropagatesError() async throws {
         let mockLLM = MockLLMClient()
         mockLLM.shouldThrow = true
         mockLLM.throwError = AxionError.planningFailed(reason: "Network timeout")
@@ -170,13 +164,14 @@ final class LLMPlannerTests: XCTestCase {
 
         do {
             _ = try await planner.createPlan(for: "test task", context: context)
-            XCTFail("Should have thrown")
+            Issue.record("Should have thrown")
         } catch {
             // 验证错误传播
         }
     }
 
-    func test_createPlan_parseFailure_throwsInvalidPlan() async throws {
+    @Test("createPlan parse failure throws invalidPlan")
+    func createPlanParseFailureThrowsInvalidPlan() async throws {
         let mockLLM = MockLLMClient(stubbedResponse: "This is not valid JSON at all")
         let mockMCP = MockPlannerMCPClient()
         let config = AxionConfig.default
@@ -193,19 +188,18 @@ final class LLMPlannerTests: XCTestCase {
 
         do {
             _ = try await planner.createPlan(for: "test task", context: context)
-            XCTFail("Should have thrown")
+            Issue.record("Should have thrown")
         } catch let error as AxionError {
             if case .invalidPlan = error {
                 // Expected
             } else {
-                XCTFail("Expected invalidPlan error, got: \(error)")
+                Issue.record("Expected invalidPlan error, got: \(error)")
             }
         }
     }
 
-    // MARK: - P0 重试逻辑 (AC6)
-
-    func test_createPlan_retriesOnNetworkError_upToMaxRetries() async throws {
+    @Test("createPlan retries on network error up to max retries")
+    func createPlanRetriesOnNetworkErrorUpToMaxRetries() async throws {
         let mockLLM = MockLLMClient()
         mockLLM.shouldThrow = true
         mockLLM.throwError = AxionError.planningFailed(reason: "Network timeout")
@@ -230,10 +224,11 @@ final class LLMPlannerTests: XCTestCase {
         }
 
         // 验证重试次数: 1 initial + 3 retries = 4 次调用
-        XCTAssertEqual(mockLLM.promptCallCount, 4, "Should attempt 1 initial + 3 retries = 4 calls")
+        #expect(mockLLM.promptCallCount == 4)
     }
 
-    func test_createPlan_succeedsOnRetry_afterInitialFailure() async throws {
+    @Test("createPlan succeeds on retry after initial failure")
+    func createPlanSucceedsOnRetryAfterInitialFailure() async throws {
         let mockLLM = MockLLMClient(stubbedResponse: """
         {
             "steps": [{"tool": "launch_app", "args": {"name": "Calc"}, "purpose": "open", "expected_change": "opened"}],
@@ -261,12 +256,13 @@ final class LLMPlannerTests: XCTestCase {
 
         // 第一次失败，第二次重试成功
         let plan = try await planner.createPlan(for: "test task", context: context)
-        XCTAssertEqual(plan.steps.count, 1)
+        #expect(plan.steps.count == 1)
         // 应该总共调用 2 次（1 失败 + 1 成功）
-        XCTAssertEqual(mockLLM.promptCallCount, 2)
+        #expect(mockLLM.promptCallCount == 2)
     }
 
-    func test_createPlan_doesNotRetryOnParseError() async throws {
+    @Test("createPlan does not retry on parse error")
+    func createPlanDoesNotRetryOnParseError() async throws {
         let mockLLM = MockLLMClient(stubbedResponse: "Invalid JSON response, not a network error")
         let mockMCP = MockPlannerMCPClient()
         let config = AxionConfig.default
@@ -288,12 +284,11 @@ final class LLMPlannerTests: XCTestCase {
         }
 
         // 验证只调用了一次（无重试，因为解析错误不触发重试）
-        XCTAssertEqual(mockLLM.promptCallCount, 1, "Parse error should not trigger retry")
+        #expect(mockLLM.promptCallCount == 1)
     }
 
-    // MARK: - P0 重规划 (AC2)
-
-    func test_replan_includesFailureContext() async throws {
+    @Test("replan includes failure context")
+    func replanIncludesFailureContext() async throws {
         let mockLLM = MockLLMClient(stubbedResponse: """
         {
             "steps": [{"tool": "click", "args": {"x": 150, "y": 300}, "purpose": "Click corrected button", "expected_change": "Button clicked"}],
@@ -337,19 +332,17 @@ final class LLMPlannerTests: XCTestCase {
         )
 
         // 验证 LLM 被调用
-        XCTAssertEqual(mockLLM.promptCallCount, 1)
+        #expect(mockLLM.promptCallCount == 1)
         // 验证 userMessage 包含失败上下文
         let userMessage = mockLLM.lastUserMessage ?? ""
-        XCTAssertTrue(userMessage.contains("REPLAN") || userMessage.contains("failed") || userMessage.contains("Element not found"),
-                      "Replan prompt should include failure context")
+        #expect(userMessage.contains("REPLAN") || userMessage.contains("failed") || userMessage.contains("Element not found"))
         // 验证返回了新的 Plan
-        XCTAssertEqual(replannedPlan.task, "Open Calculator and compute 1+1")
-        XCTAssertFalse(replannedPlan.steps.isEmpty)
+        #expect(replannedPlan.task == "Open Calculator and compute 1+1")
+        #expect(!replannedPlan.steps.isEmpty)
     }
 
-    // MARK: - P1 当前状态获取（截图 + AX tree）
-
-    func test_createPlan_capturesCurrentState_callsMCPTools() async throws {
+    @Test("createPlan captures current state calls MCP tools")
+    func createPlanCapturesCurrentStateCallsMCPTools() async throws {
         let mockLLM = MockLLMClient(stubbedResponse: """
         {
             "steps": [{"tool": "launch_app", "args": {"name": "Calc"}, "purpose": "open", "expected_change": "opened"}],
@@ -374,10 +367,11 @@ final class LLMPlannerTests: XCTestCase {
         // 验证 prompt 中包含了上下文信息
         // Planner 应该获取截图和 AX tree 作为上下文
         // 如果截图失败也应能降级工作
-        XCTAssertNotNil(mockLLM.lastUserMessage)
+        #expect(mockLLM.lastUserMessage != nil)
     }
 
-    func test_createPlan_screenshotFailure_degradesGracefully() async throws {
+    @Test("createPlan screenshot failure degrades gracefully")
+    func createPlanScreenshotFailureDegradesGracefully() async throws {
         let mockLLM = MockLLMClient(stubbedResponse: """
         {
             "steps": [{"tool": "launch_app", "args": {"name": "Calc"}, "purpose": "open", "expected_change": "opened"}],
@@ -401,12 +395,11 @@ final class LLMPlannerTests: XCTestCase {
 
         // 即使截图/AX tree 失败，Planner 也应该能工作（降级模式）
         let plan = try await planner.createPlan(for: "Open Calculator", context: context)
-        XCTAssertEqual(plan.steps.count, 1)
+        #expect(plan.steps.count == 1)
     }
 
-    // MARK: - P1 ReplanContext 传递
-
-    func test_replan_passesExecutedStepsToPrompt() async throws {
+    @Test("replan passes executed steps to prompt")
+    func replanPassesExecutedStepsToPrompt() async throws {
         let mockLLM = MockLLMClient(stubbedResponse: """
         {
             "steps": [{"tool": "type_text", "args": {"text": "test"}, "purpose": "type text", "expected_change": "typed"}],
@@ -449,13 +442,11 @@ final class LLMPlannerTests: XCTestCase {
 
         let userMessage = mockLLM.lastUserMessage ?? ""
         // Replan prompt 应包含已执行步骤信息
-        XCTAssertTrue(userMessage.contains("launch_app") || userMessage.contains("executed") || userMessage.contains("REPLAN"),
-                      "Replan prompt should include executed steps info")
+        #expect(userMessage.contains("launch_app") || userMessage.contains("executed") || userMessage.contains("REPLAN"))
     }
 
-    // MARK: - P1 初始化
-
-    func test_llmPlanner_init_withConfigAndClients() async throws {
+    @Test("LLMPlanner init with config and clients")
+    func llmPlannerInitWithConfigAndClients() async throws {
         let mockLLM = MockLLMClient()
         let mockMCP = MockPlannerMCPClient()
         let config = AxionConfig.default
@@ -463,9 +454,8 @@ final class LLMPlannerTests: XCTestCase {
         let _ = planner
     }
 
-    // MARK: - P1 system prompt 包含工具列表
-
-    func test_createPlan_systemPromptContainsToolList() async throws {
+    @Test("createPlan system prompt contains tool list")
+    func createPlanSystemPromptContainsToolList() async throws {
         let mockLLM = MockLLMClient(stubbedResponse: """
         {
             "steps": [{"tool": "launch_app", "args": {"name": "Calc"}, "purpose": "open", "expected_change": "opened"}],
@@ -489,7 +479,6 @@ final class LLMPlannerTests: XCTestCase {
         _ = try await planner.createPlan(for: "test", context: context)
 
         let systemPrompt = mockLLM.lastSystemPrompt ?? ""
-        XCTAssertTrue(systemPrompt.contains("launch_app") || systemPrompt.contains("tool"),
-                      "System prompt should contain tool information")
+        #expect(systemPrompt.contains("launch_app") || systemPrompt.contains("tool"))
     }
 }

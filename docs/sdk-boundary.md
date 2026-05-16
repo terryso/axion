@@ -1,6 +1,6 @@
 # SDK 边界文档 — OpenAgentSDK vs Axion 应用层
 
-_文档版本: 1.0 | 日期: 2026-05-10 | Story 3-8_
+_文档版本: 2.0 | 日期: 2026-05-15 | 更新: Phase 2-3 SDK 集成_
 
 ---
 
@@ -127,14 +127,93 @@ RunCommand 的核心流程：
 - **状态：** 非短板，正确的边界决策
 - **理由：** 加载外部 Markdown prompt 文件、变量替换是应用特有逻辑
 
-### 4.7 SDK 缺失但 Axion 当前不需要的能力
+### 4.7 SDK 能力使用状态
 
 | 能力 | 说明 | 当前状态 |
 |------|------|---------|
 | Session 管理 | 保存/恢复对话上下文 | SDK 提供 API 但 Axion 未使用（单次运行模式） |
-| Memory | 跨运行记忆 | Axion 不需要（每次运行独立） |
+| Memory | 跨运行记忆 | ✅ SDK MemoryStore 已在 Epic 4 集成（`FileBasedMemoryStore`） |
+| AgentMCPServer | Agent 作为 MCP Server | ✅ 已在 Epic 6 集成（`MCPServerRunner`） |
+| Pause Protocol | 用户接管机制 | ✅ 已在 Epic 7 集成（`PauseForHumanTool`） |
 | 多模型切换 | 运行时切换 LLM 模型 | 通过配置实现，不需要 SDK 支持 |
 | 批量操作 | 并行执行多个任务 | Axion 当前是单任务模式 |
+
+---
+
+## 5.5. Phase 2 SDK 集成（Epic 4-7）
+
+### Memory 集成（Epic 4）
+
+| SDK API | 使用位置 | 用途 |
+|---------|---------|------|
+| `MemoryStoreProtocol` | `MemoryContextProvider.swift` | 跨任务记忆存储接口 |
+| `FileBasedMemoryStore(memoryDir:)` | `RunCommand.swift` | 基于文件系统的 Memory 持久化 |
+| `ToolContext.memoryStore` | 工具执行上下文 | 工具内访问 Memory |
+| `memoryStore.save(domain:knowledge:)` | `AppMemoryExtractor.swift` | 保存 App 操作模式 |
+| `memoryStore.query(domain:)` | `MemoryContextProvider.swift` | 读取历史操作经验 |
+
+**边界决策：** Memory 存储属于 SDK，但"提取什么经验"和"如何利用经验"属于应用层。
+
+### AgentMCPServer — Agent 作为 MCP Server（Epic 6）
+
+| SDK API | 使用位置 | 用途 |
+|---------|---------|------|
+| `AgentMCPServer(name:tools:)` | `MCPServerRunner.swift` | 将 Axion 暴露为 MCP stdio server |
+| `McpServer.run()` | `MCPServerRunner.swift` | 启动 MCP server 监听 stdin |
+
+**边界决策：** MCP Server 框架属于 SDK，但 Axion 暴露的具体工具（`run_task`、`query_task_status`）属于应用层。
+
+### Pause Protocol — 用户接管（Epic 7）
+
+| SDK API | 使用位置 | 用途 |
+|---------|---------|------|
+| `PauseForHumanTool` | `RunCommand.swift` | SDK 内置的暂停工具 |
+| `Agent.pause(reason:)` | 概念上通过 SDK Agent Loop | 暂停 Agent 执行 |
+| `Agent.resume(context:)` | 概念上通过 SDK Agent Loop | 恢复 Agent 执行 |
+
+**边界决策：** 暂停协议属于 SDK，但"如何向用户展示暂停提示"和"用户输入如何传递回 Agent"属于应用层。
+
+---
+
+## 5.6. Phase 3 SDK 集成（Epic 8-11）
+
+### 技能系统（Epic 9）
+
+技能系统是纯应用层实现，使用 SDK 的标准 Agent Loop 和 MCP 工具调用通道执行技能。
+
+| 应用层组件 | 说明 |
+|-----------|------|
+| `SkillExecutor` | 技能执行引擎，通过 MCP 调用 Helper 执行技能步骤 |
+| `SkillCompiler` | 录制 → 技能编译管道 |
+| `OperationRecorder` | CGEvent Tap 录制引擎 |
+
+**边界决策：** 技能格式（JSON）、录制引擎、编译管道全是应用层。SDK 不感知技能概念。
+
+### AxionBar 菜单栏 App（Epic 10）
+
+AxionBar 是独立 macOS App，通过 HTTP API（非 SDK）与 Axion CLI 后端通信。
+
+**关键边界：**
+- AxionBar 不 import `OpenAgentSDK`（不需要）
+- AxionBar 仅 import `AxionCore`（共享模型）
+- 通信通过 HTTP API（`localhost:4242`），不走 MCP stdio
+
+### SDK 生态 — ScaffoldCLI（Epic 11）
+
+| SDK 组件 | 位置 | 说明 |
+|---------|------|------|
+| `ScaffoldCLI` | OpenAgentSDK 仓库 | 独立可执行目标，生成 Agent 项目模板 |
+| `defineTool()` | SDK `ToolBuilder.swift` | 4 种重载覆盖所有工具定义场景 |
+| `ToolProtocol` | SDK `ToolTypes.swift` | 工具协议，所有工具的统一类型 |
+| `HookRegistry` | SDK `HookRegistry.swift` | 22 个生命周期事件拦截 |
+| `assembleToolPool()` | SDK `ToolRegistry.swift` | 工具池组装（base → custom → MCP，同名去重） |
+| `McpServerConfig` | SDK MCP 模块 | MCP server 配置（stdio/sse/http/sdk） |
+
+**ScaffoldCLI 生成的模板覆盖：**
+- basic: 最小 Agent 骨架（`createAgent` + `defineTool` + `agent.prompt`）
+- mcp-integration: 集成 Axion 桌面操作（`McpStdioConfig` + `axion mcp`）
+
+**边界决策：** ScaffoldCLI 属于 SDK 仓库，模板代码只使用 SDK 公共 API，不引用 Axion 特有模块。
 
 ---
 

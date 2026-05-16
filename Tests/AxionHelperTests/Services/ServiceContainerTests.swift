@@ -1,38 +1,47 @@
-import XCTest
+import Testing
 @testable import AxionHelper
 
-final class ServiceContainerTests: XCTestCase {
+extension ToolsTests {
+@Suite("ServiceContainer")
+struct ServiceContainerTests {
 
     // MARK: - Shared Instance
 
-    func test_shared_isInitialized() {
+    @Test("shared is initialized")
+    func sharedIsInitialized() {
         let container = ServiceContainer.shared
-        XCTAssertNotNil(container as Any, "ServiceContainer.shared should be initialized")
+        #expect(container as Any != nil, "ServiceContainer.shared should be initialized")
     }
 
-    func test_shared_hasAppLauncher() {
+    @Test("shared has appLauncher")
+    func sharedHasAppLauncher() {
         let _ = ServiceContainer.shared.appLauncher
     }
 
-    func test_shared_hasAccessibilityEngine() {
+    @Test("shared has accessibilityEngine")
+    func sharedHasAccessibilityEngine() {
         let _ = ServiceContainer.shared.accessibilityEngine
     }
 
-    func test_shared_hasInputSimulation() {
+    @Test("shared has inputSimulation")
+    func sharedHasInputSimulation() {
         let _ = ServiceContainer.shared.inputSimulation
     }
 
-    func test_shared_hasScreenshotCapture() {
+    @Test("shared has screenshotCapture")
+    func sharedHasScreenshotCapture() {
         let _ = ServiceContainer.shared.screenshotCapture
     }
 
-    func test_shared_hasURLOpener() {
+    @Test("shared has urlOpener")
+    func sharedHasURLOpener() {
         let _ = ServiceContainer.shared.urlOpener
     }
 
     // MARK: - ServiceContainerFixture
 
-    func test_fixture_applyAndRestore() {
+    @Test("fixture apply and restore")
+    func fixtureApplyAndRestore() {
         let original = ServiceContainer.shared
 
         let mockLauncher = MockAppLauncher(
@@ -40,32 +49,33 @@ final class ServiceContainerTests: XCTestCase {
             listRunningAppsHandler: { [] }
         )
         let restore = ServiceContainerFixture.apply(appLauncher: mockLauncher)
-        XCTAssertFalse(ServiceContainer.shared.appLauncher is AppLauncherService,
-                       "After apply, appLauncher should be mock")
+        #expect(!(ServiceContainer.shared.appLauncher is AppLauncherService),
+                "After apply, appLauncher should be mock")
 
         restore()
 
-        // Verify original is restored
         let restoredLauncher = ServiceContainer.shared.appLauncher
-        XCTAssertTrue(type(of: restoredLauncher) == type(of: original.appLauncher),
-                       "After restore, appLauncher should be original type")
+        #expect(type(of: restoredLauncher) == type(of: original.appLauncher),
+               "After restore, appLauncher should be original type")
     }
 
-    func test_fixture_partialOverride_keepsOthers() {
+    @Test("fixture partial override keeps others")
+    func fixturePartialOverrideKeepsOthers() {
         let original = ServiceContainer.shared
 
         let mockURLOpener = MockURLOpener(openURLHandler: { _ in })
         let restore = ServiceContainerFixture.apply(urlOpener: mockURLOpener)
 
         // URL opener is mocked
-        XCTAssertFalse(ServiceContainer.shared.urlOpener is URLOpenerService)
+        #expect(!(ServiceContainer.shared.urlOpener is URLOpenerService))
         // Others remain original
-        XCTAssertTrue(type(of: ServiceContainer.shared.appLauncher) == type(of: original.appLauncher))
+        #expect(type(of: ServiceContainer.shared.appLauncher) == type(of: original.appLauncher))
 
         restore()
     }
 
-    func test_fixture_fullOverride() {
+    @Test("fixture full override")
+    func fixtureFullOverride() {
         let restore = ServiceContainerFixture.apply(
             appLauncher: MockAppLauncher(
                 launchAppHandler: { _ in AppInfo(pid: 1, appName: "Test", bundleId: nil) },
@@ -101,10 +111,11 @@ final class ServiceContainerTests: XCTestCase {
         defer { restore() }
 
         // All services should be mocks now
-        XCTAssertTrue(ServiceContainer.shared.appLauncher is MockAppLauncher)
-        XCTAssertTrue(ServiceContainer.shared.accessibilityEngine is MockAccessibilityEngine)
-        XCTAssertTrue(ServiceContainer.shared.inputSimulation is MockInputSimulation)
-        XCTAssertTrue(ServiceContainer.shared.screenshotCapture is MockScreenshotCapture)
-        XCTAssertTrue(ServiceContainer.shared.urlOpener is MockURLOpener)
+        #expect(ServiceContainer.shared.appLauncher is MockAppLauncher)
+        #expect(ServiceContainer.shared.accessibilityEngine is MockAccessibilityEngine)
+        #expect(ServiceContainer.shared.inputSimulation is MockInputSimulation)
+        #expect(ServiceContainer.shared.screenshotCapture is MockScreenshotCapture)
+        #expect(ServiceContainer.shared.urlOpener is MockURLOpener)
     }
+}
 }

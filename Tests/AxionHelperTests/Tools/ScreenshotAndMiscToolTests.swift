@@ -1,14 +1,14 @@
 import Foundation
 import MCP
 import MCPTool
-import XCTest
+import Testing
 @testable import AxionHelper
 @testable import AxionCore
 
-// Unit tests for screenshot, get_accessibility_tree, open_url, activate_window tools.
-
 @MainActor
-final class ScreenshotAndMiscToolTests: XCTestCase {
+extension ToolsTests {
+@Suite("ScreenshotAndMiscTool")
+struct ScreenshotAndMiscToolTests {
 
     private func makeRegisteredServer() async throws -> MCPServer {
         let server = MCPServer(name: "AxionHelper", version: "0.1.0")
@@ -40,9 +40,8 @@ final class ScreenshotAndMiscToolTests: XCTestCase {
         getAXTreeHandler: { _, _ in AXElement(role: "AXWindow", title: "T", value: nil, bounds: nil, children: []) }
     )
 
-    // MARK: - screenshot (full screen)
-
-    func test_screenshot_fullScreen_returnsBase64() async throws {
+    @Test("screenshot full screen returns base64")
+    func screenshotFullScreenReturnsBase64() async throws {
         let restore = ServiceContainerFixture.apply(
             screenshotCapture: MockScreenshotCapture(
                 captureWindowHandler: { _ in "window_b64" },
@@ -57,14 +56,13 @@ final class ScreenshotAndMiscToolTests: XCTestCase {
         )
 
         let json = try JSONSerialization.jsonObject(with: textContent(result).data(using: .utf8)!) as! [String: Any]
-        XCTAssertEqual(json["success"] as? Bool, true)
-        XCTAssertEqual(json["action"] as? String, "screenshot")
-        XCTAssertEqual(json["image_data"] as? String, "fullscreen_b64")
+        #expect(json["success"] as? Bool == true)
+        #expect(json["action"] as? String == "screenshot")
+        #expect(json["image_data"] as? String == "fullscreen_b64")
     }
 
-    // MARK: - screenshot (window)
-
-    func test_screenshot_window_returnsBase64() async throws {
+    @Test("screenshot window returns base64")
+    func screenshotWindowReturnsBase64() async throws {
         let restore = ServiceContainerFixture.apply(
             screenshotCapture: MockScreenshotCapture(
                 captureWindowHandler: { _ in "window_b64" },
@@ -79,10 +77,11 @@ final class ScreenshotAndMiscToolTests: XCTestCase {
         )
 
         let json = try JSONSerialization.jsonObject(with: textContent(result).data(using: .utf8)!) as! [String: Any]
-        XCTAssertEqual(json["image_data"] as? String, "window_b64")
+        #expect(json["image_data"] as? String == "window_b64")
     }
 
-    func test_screenshot_error_returnsErrorPayload() async throws {
+    @Test("screenshot error returns error payload")
+    func screenshotErrorReturnsErrorPayload() async throws {
         let restore = ServiceContainerFixture.apply(
             screenshotCapture: MockScreenshotCapture(
                 captureWindowHandler: { _ in throw ScreenshotError.windowCaptureFailed(windowId: 99) },
@@ -97,12 +96,11 @@ final class ScreenshotAndMiscToolTests: XCTestCase {
         )
 
         let json = try JSONSerialization.jsonObject(with: textContent(result).data(using: .utf8)!) as! [String: Any]
-        XCTAssertEqual(json["error"] as? String, "window_capture_failed")
+        #expect(json["error"] as? String == "window_capture_failed")
     }
 
-    // MARK: - get_accessibility_tree
-
-    func test_getAccessibilityTree_returnsEncodedTree() async throws {
+    @Test("get accessibility tree returns encoded tree")
+    func getAccessibilityTreeReturnsEncodedTree() async throws {
         let tree = AXElement(role: "AXButton", title: "OK", value: nil, bounds: nil, children: [])
         let restore = ServiceContainerFixture.apply(
             accessibilityEngine: MockAccessibilityEngine(
@@ -119,18 +117,19 @@ final class ScreenshotAndMiscToolTests: XCTestCase {
         )
 
         let json = try JSONSerialization.jsonObject(with: textContent(result).data(using: .utf8)!) as! [String: Any]
-        XCTAssertEqual(json["role"] as? String, "AXButton")
-        XCTAssertEqual(json["title"] as? String, "OK")
+        #expect(json["role"] as? String == "AXButton")
+        #expect(json["title"] as? String == "OK")
     }
 
-    func test_getAccessibilityTree_withMaxNodes() async throws {
+    @Test("get accessibility tree with max nodes")
+    func getAccessibilityTreeWithMaxNodes() async throws {
         let tree = AXElement(role: "AXWindow", title: "W", value: nil, bounds: nil, children: [])
         let restore = ServiceContainerFixture.apply(
             accessibilityEngine: MockAccessibilityEngine(
                 listWindowsHandler: { _ in [] },
                 getWindowStateHandler: { _ in fatalError() },
                 getAXTreeHandler: { wid, maxNodes in
-                    XCTAssertEqual(maxNodes, 200)
+                    #expect(maxNodes == 200)
                     return tree
                 }
             )
@@ -145,14 +144,15 @@ final class ScreenshotAndMiscToolTests: XCTestCase {
         )
     }
 
-    func test_getAccessibilityTree_defaultMaxNodes() async throws {
+    @Test("get accessibility tree default max nodes")
+    func getAccessibilityTreeDefaultMaxNodes() async throws {
         let tree = AXElement(role: "AXWindow", title: "W", value: nil, bounds: nil, children: [])
         let restore = ServiceContainerFixture.apply(
             accessibilityEngine: MockAccessibilityEngine(
                 listWindowsHandler: { _ in [] },
                 getWindowStateHandler: { _ in fatalError() },
                 getAXTreeHandler: { _, maxNodes in
-                    XCTAssertEqual(maxNodes, 500)
+                    #expect(maxNodes == 500)
                     return tree
                 }
             )
@@ -165,7 +165,8 @@ final class ScreenshotAndMiscToolTests: XCTestCase {
         )
     }
 
-    func test_getAccessibilityTree_error_returnsErrorPayload() async throws {
+    @Test("get accessibility tree error returns error payload")
+    func getAccessibilityTreeErrorReturnsErrorPayload() async throws {
         let restore = ServiceContainerFixture.apply(
             accessibilityEngine: MockAccessibilityEngine(
                 listWindowsHandler: { _ in [] },
@@ -181,12 +182,11 @@ final class ScreenshotAndMiscToolTests: XCTestCase {
         )
 
         let json = try JSONSerialization.jsonObject(with: textContent(result).data(using: .utf8)!) as! [String: Any]
-        XCTAssertEqual(json["error"] as? String, "window_not_found")
+        #expect(json["error"] as? String == "window_not_found")
     }
 
-    // MARK: - open_url
-
-    func test_openUrl_success() async throws {
+    @Test("open URL success")
+    func openUrlSuccess() async throws {
         let restore = ServiceContainerFixture.apply(
             urlOpener: MockURLOpener(openURLHandler: { _ in })
         )
@@ -198,11 +198,12 @@ final class ScreenshotAndMiscToolTests: XCTestCase {
         )
 
         let json = try JSONSerialization.jsonObject(with: textContent(result).data(using: .utf8)!) as! [String: Any]
-        XCTAssertEqual(json["success"] as? Bool, true)
-        XCTAssertEqual(json["url"] as? String, "https://example.com")
+        #expect(json["success"] as? Bool == true)
+        #expect(json["url"] as? String == "https://example.com")
     }
 
-    func test_openUrl_error_returnsErrorPayload() async throws {
+    @Test("open URL error returns error payload")
+    func openUrlErrorReturnsErrorPayload() async throws {
         let restore = ServiceContainerFixture.apply(
             urlOpener: MockURLOpener(openURLHandler: { _ in throw URLOpenerError.invalidURL("not-a-url") })
         )
@@ -214,12 +215,11 @@ final class ScreenshotAndMiscToolTests: XCTestCase {
         )
 
         let json = try JSONSerialization.jsonObject(with: textContent(result).data(using: .utf8)!) as! [String: Any]
-        XCTAssertEqual(json["error"] as? String, "invalid_url")
+        #expect(json["error"] as? String == "invalid_url")
     }
 
-    // MARK: - activate_window
-
-    func test_activateWindow_success_withWindowId() async throws {
+    @Test("activate window success with window id")
+    func activateWindowSuccessWithWindowId() async throws {
         let restore = ServiceContainerFixture.apply(accessibilityEngine: mockEngine)
         defer { restore() }
 
@@ -229,12 +229,13 @@ final class ScreenshotAndMiscToolTests: XCTestCase {
         )
 
         let json = try JSONSerialization.jsonObject(with: textContent(result).data(using: .utf8)!) as! [String: Any]
-        XCTAssertEqual(json["success"] as? Bool, true)
-        XCTAssertEqual(json["pid"] as? Int, 123)
-        XCTAssertEqual(json["window_id"] as? Int, 45)
+        #expect(json["success"] as? Bool == true)
+        #expect(json["pid"] as? Int == 123)
+        #expect(json["window_id"] as? Int == 45)
     }
 
-    func test_activateWindow_success_withoutWindowId() async throws {
+    @Test("activate window success without window id")
+    func activateWindowSuccessWithoutWindowId() async throws {
         let restore = ServiceContainerFixture.apply(accessibilityEngine: mockEngine)
         defer { restore() }
 
@@ -244,11 +245,12 @@ final class ScreenshotAndMiscToolTests: XCTestCase {
         )
 
         let json = try JSONSerialization.jsonObject(with: textContent(result).data(using: .utf8)!) as! [String: Any]
-        XCTAssertEqual(json["success"] as? Bool, true)
-        XCTAssertNil(json["window_id"])
+        #expect(json["success"] as? Bool == true)
+        #expect(json["window_id"] == nil)
     }
 
-    func test_activateWindow_error_returnsErrorPayload() async throws {
+    @Test("activate window error returns error payload")
+    func activateWindowErrorReturnsErrorPayload() async throws {
         let restore = ServiceContainerFixture.apply(
             accessibilityEngine: MockAccessibilityEngine(
                 listWindowsHandler: { _ in [] },
@@ -265,6 +267,7 @@ final class ScreenshotAndMiscToolTests: XCTestCase {
         )
 
         let json = try JSONSerialization.jsonObject(with: textContent(result).data(using: .utf8)!) as! [String: Any]
-        XCTAssertEqual(json["error"] as? String, "app_not_found")
+        #expect(json["error"] as? String == "app_not_found")
     }
+}
 }

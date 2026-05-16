@@ -115,12 +115,14 @@ struct AppLauncherService: AppLaunching {
             searchName = "\(name).app"
         }
 
+        // Bundle identifier lookup (e.g., "com.apple.calculator")
         if name.split(separator: ".").count >= 3 {
             if let url = NSWorkspace.shared.urlForApplication(withBundleIdentifier: name) {
                 return url
             }
         }
 
+        // Exact filename match
         for dirPath in searchPaths {
             let url = URL(fileURLWithPath: dirPath).appendingPathComponent(searchName)
             if FileManager.default.fileExists(atPath: url.path) {
@@ -128,6 +130,7 @@ struct AppLauncherService: AppLaunching {
             }
         }
 
+        // Case-insensitive filename match
         for dirPath in searchPaths {
             if let contents = try? FileManager.default.contentsOfDirectory(atPath: dirPath) {
                 for item in contents {
@@ -138,6 +141,35 @@ struct AppLauncherService: AppLaunching {
             }
         }
 
+        // Localized display name match (e.g., "计算器" → Calculator.app)
+        for dirPath in searchPaths {
+            if let match = findAppByDisplayName(name, in: dirPath) {
+                return match
+            }
+        }
+
         throw AppLauncherError.appNotFound(name: name)
+    }
+
+    /// Searches a directory for an .app bundle whose display name matches the given name.
+    private func findAppByDisplayName(_ name: String, in directory: String) -> URL? {
+        let normalizedName = name.lowercased()
+        guard let contents = try? FileManager.default.contentsOfDirectory(atPath: directory) else {
+            return nil
+        }
+        for item in contents where item.hasSuffix(".app") {
+            let appURL = URL(fileURLWithPath: directory).appendingPathComponent(item)
+            if let displayName = appDisplayName(appURL), displayName.lowercased() == normalizedName {
+                return appURL
+            }
+        }
+        return nil
+    }
+
+    /// Returns the localized display name for an app bundle.
+    private func appDisplayName(_ appURL: URL) -> String? {
+        guard let bundle = Bundle(url: appURL) else { return nil }
+        return (bundle.object(forInfoDictionaryKey: "CFBundleDisplayName") as? String)
+            ?? (bundle.object(forInfoDictionaryKey: "CFBundleName") as? String)
     }
 }

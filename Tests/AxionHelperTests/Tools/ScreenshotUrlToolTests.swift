@@ -1,24 +1,14 @@
 import Foundation
 import MCP
 import MCPTool
-import XCTest
+import Testing
 @testable import AxionHelper
 @testable import AxionCore
 
-// ATDD Red-Phase Test Scaffolds for Story 1.5
-// AC: #1 - screenshot 窗口截图 (base64, <=5MB)
-// AC: #2 - screenshot 全屏截图 (base64)
-// AC: #3 - get_accessibility_tree 完整树 (role/title/value/bounds/children)
-// AC: #4 - get_accessibility_tree 截断 (maxNodes=500)
-// AC: #5 - open_url URL 打开 (默认浏览器)
-// These tests verify AxionHelper's screenshot, AX tree, and URL opening tools
-// using mock services — no real macOS system calls.
-// Priority: P0 (core tool wiring for screenshot, get_accessibility_tree, open_url)
-
 @MainActor
-final class ScreenshotUrlToolTests: XCTestCase {
-
-    // MARK: - Helpers
+extension ToolsTests {
+@Suite("ScreenshotUrlTool")
+struct ScreenshotUrlToolTests {
 
     private func makeRegisteredServer() async throws -> MCPServer {
         let server = MCPServer(name: "AxionHelper", version: "0.1.0")
@@ -49,10 +39,8 @@ final class ScreenshotUrlToolTests: XCTestCase {
         }.joined()
     }
 
-    /// A short valid base64 string for mock screenshot results.
     private let mockBase64 = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg=="
 
-    /// Creates a MockScreenshotCapture that returns a valid base64 string for all calls.
     private func makeSuccessScreenshotMock() -> MockScreenshotCapture {
         let base64 = mockBase64
         return MockScreenshotCapture(
@@ -61,15 +49,12 @@ final class ScreenshotUrlToolTests: XCTestCase {
         )
     }
 
-    /// Creates a MockURLOpener that succeeds for all calls.
     private func makeSuccessURLOpenerMock() -> MockURLOpener {
         MockURLOpener(openURLHandler: { _ in })
     }
 
-    // MARK: - AC1: screenshot 窗口截图
-
-    // [P0] screenshot with window_id returns base64 encoded image data
-    func test_screenshot_withWindowId_returnsBase64Json() async throws {
+    @Test("screenshot with window id returns base64 JSON")
+    func screenshotWithWindowIdReturnsBase64Json() async throws {
         let restore = ServiceContainerFixture.apply(
             screenshotCapture: makeSuccessScreenshotMock(),
             urlOpener: makeSuccessURLOpenerMock()
@@ -86,13 +71,13 @@ final class ScreenshotUrlToolTests: XCTestCase {
         let text = textContent(result)
         let json = try JSONSerialization.jsonObject(with: text.data(using: .utf8)!) as? [String: Any]
 
-        XCTAssertEqual(json?["success"] as? Bool, true)
-        XCTAssertEqual(json?["action"] as? String, "screenshot")
-        XCTAssertNotNil(json?["image_data"] as? String, "Should contain image_data field with base64")
+        #expect(json?["success"] as? Bool == true)
+        #expect(json?["action"] as? String == "screenshot")
+        #expect((json?["image_data"] as? String) != nil)
     }
 
-    // [P0] screenshot with window_id passes correct window_id to service
-    func test_screenshot_withWindowId_passesCorrectWindowId() async throws {
+    @Test("screenshot with window id passes correct window id")
+    func screenshotWithWindowIdPassesCorrectWindowId() async throws {
         let box = Box<Int?>(value: nil)
         let base64 = mockBase64
         let mock = MockScreenshotCapture(
@@ -115,11 +100,11 @@ final class ScreenshotUrlToolTests: XCTestCase {
             context: makeTestContext()
         )
 
-        XCTAssertEqual(box.value, 42, "Should pass window_id=42 to captureWindow")
+        #expect(box.value == 42)
     }
 
-    // [P0] screenshot with invalid window_id returns window_capture_failed error
-    func test_screenshot_invalidWindowId_returnsErrorJson() async throws {
+    @Test("screenshot invalid window id returns error JSON")
+    func screenshotInvalidWindowIdReturnsErrorJson() async throws {
         let base64 = mockBase64
         let mock = MockScreenshotCapture(
             captureWindowHandler: { windowId in
@@ -143,15 +128,13 @@ final class ScreenshotUrlToolTests: XCTestCase {
         let text = textContent(result)
         let json = try JSONSerialization.jsonObject(with: text.data(using: .utf8)!) as? [String: Any]
 
-        XCTAssertEqual(json?["error"] as? String, "window_capture_failed")
-        XCTAssertNotNil(json?["message"])
-        XCTAssertNotNil(json?["suggestion"])
+        #expect(json?["error"] as? String == "window_capture_failed")
+        #expect(json?["message"] != nil)
+        #expect(json?["suggestion"] != nil)
     }
 
-    // MARK: - AC2: screenshot 全屏截图
-
-    // [P0] screenshot without window_id returns full screen base64
-    func test_screenshot_noWindowId_returnsFullScreenBase64Json() async throws {
+    @Test("screenshot no window id returns full screen base64 JSON")
+    func screenshotNoWindowIdReturnsFullScreenBase64Json() async throws {
         let restore = ServiceContainerFixture.apply(
             screenshotCapture: makeSuccessScreenshotMock(),
             urlOpener: makeSuccessURLOpenerMock()
@@ -168,13 +151,13 @@ final class ScreenshotUrlToolTests: XCTestCase {
         let text = textContent(result)
         let json = try JSONSerialization.jsonObject(with: text.data(using: .utf8)!) as? [String: Any]
 
-        XCTAssertEqual(json?["success"] as? Bool, true)
-        XCTAssertEqual(json?["action"] as? String, "screenshot")
-        XCTAssertNotNil(json?["image_data"] as? String)
+        #expect(json?["success"] as? Bool == true)
+        #expect(json?["action"] as? String == "screenshot")
+        #expect((json?["image_data"] as? String) != nil)
     }
 
-    // [P0] screenshot without window_id calls captureFullScreen (not captureWindow)
-    func test_screenshot_noWindowId_callsCaptureFullScreen() async throws {
+    @Test("screenshot no window id calls capture full screen")
+    func screenshotNoWindowIdCallsCaptureFullScreen() async throws {
         let box = Box<Bool>(value: false)
         let base64 = mockBase64
         let mock = MockScreenshotCapture(
@@ -197,11 +180,11 @@ final class ScreenshotUrlToolTests: XCTestCase {
             context: makeTestContext()
         )
 
-        XCTAssertTrue(box.value, "Should call captureFullScreen when no window_id")
+        #expect(box.value == true)
     }
 
-    // [P0] screenshot full screen failure returns fullscreen_capture_failed error
-    func test_screenshot_fullScreenFailure_returnsErrorJson() async throws {
+    @Test("screenshot full screen failure returns error JSON")
+    func screenshotFullScreenFailureReturnsErrorJson() async throws {
         let base64 = mockBase64
         let mock = MockScreenshotCapture(
             captureWindowHandler: { _ in base64 },
@@ -225,15 +208,13 @@ final class ScreenshotUrlToolTests: XCTestCase {
         let text = textContent(result)
         let json = try JSONSerialization.jsonObject(with: text.data(using: .utf8)!) as? [String: Any]
 
-        XCTAssertEqual(json?["error"] as? String, "fullscreen_capture_failed")
-        XCTAssertNotNil(json?["message"])
-        XCTAssertNotNil(json?["suggestion"])
+        #expect(json?["error"] as? String == "fullscreen_capture_failed")
+        #expect(json?["message"] != nil)
+        #expect(json?["suggestion"] != nil)
     }
 
-    // MARK: - AC3: get_accessibility_tree 完整树
-
-    // [P0] get_accessibility_tree returns AX tree with role/title/value/bounds/children
-    func test_getAccessibilityTree_validWindowId_returnsAXTreeJson() async throws {
+    @Test("get accessibility tree valid window id returns AX tree JSON")
+    func getAccessibilityTreeValidWindowIdReturnsAXTreeJson() async throws {
         let mockEngine = MockAccessibilityEngine(
             listWindowsHandler: { _ in [] },
             getWindowStateHandler: { _ in
@@ -277,14 +258,14 @@ final class ScreenshotUrlToolTests: XCTestCase {
         let text = textContent(result)
         let json = try JSONSerialization.jsonObject(with: text.data(using: .utf8)!) as? [String: Any]
 
-        XCTAssertEqual(json?["role"] as? String, "AXWindow")
-        XCTAssertEqual(json?["title"] as? String, "Calculator")
-        XCTAssertNotNil(json?["bounds"], "AX tree should contain bounds")
-        XCTAssertNotNil(json?["children"] as? [[String: Any]], "AX tree should contain children array")
+        #expect(json?["role"] as? String == "AXWindow")
+        #expect(json?["title"] as? String == "Calculator")
+        #expect(json?["bounds"] != nil)
+        #expect((json?["children"] as? [[String: Any]]) != nil)
     }
 
-    // [P0] get_accessibility_tree passes window_id to service
-    func test_getAccessibilityTree_passesCorrectWindowId() async throws {
+    @Test("get accessibility tree passes correct window id")
+    func getAccessibilityTreePassesCorrectWindowId() async throws {
         let box = Box<Int?>(value: nil)
         let mockEngine = MockAccessibilityEngine(
             listWindowsHandler: { _ in [] },
@@ -312,11 +293,11 @@ final class ScreenshotUrlToolTests: XCTestCase {
             context: makeTestContext()
         )
 
-        XCTAssertEqual(box.value, 77, "Should pass window_id=77 to getAXTree")
+        #expect(box.value == 77)
     }
 
-    // [P0] get_accessibility_tree for invalid window returns window_not_found error
-    func test_getAccessibilityTree_windowNotFound_returnsErrorJson() async throws {
+    @Test("get accessibility tree window not found returns error JSON")
+    func getAccessibilityTreeWindowNotFoundReturnsErrorJson() async throws {
         let mockEngine = MockAccessibilityEngine(
             listWindowsHandler: { _ in [] },
             getWindowStateHandler: { _ in
@@ -345,15 +326,13 @@ final class ScreenshotUrlToolTests: XCTestCase {
         let text = textContent(result)
         let json = try JSONSerialization.jsonObject(with: text.data(using: .utf8)!) as? [String: Any]
 
-        XCTAssertEqual(json?["error"] as? String, "window_not_found")
-        XCTAssertNotNil(json?["message"])
-        XCTAssertNotNil(json?["suggestion"])
+        #expect(json?["error"] as? String == "window_not_found")
+        #expect(json?["message"] != nil)
+        #expect(json?["suggestion"] != nil)
     }
 
-    // MARK: - AC4: get_accessibility_tree 截断
-
-    // [P0] get_accessibility_tree passes max_nodes parameter to service
-    func test_getAccessibilityTree_withMaxNodes_passesMaxNodesToService() async throws {
+    @Test("get accessibility tree with max nodes passes max nodes to service")
+    func getAccessibilityTreeWithMaxNodesPassesMaxNodesToService() async throws {
         let box = Box<Int?>(value: nil)
         let mockEngine = MockAccessibilityEngine(
             listWindowsHandler: { _ in [] },
@@ -381,11 +360,11 @@ final class ScreenshotUrlToolTests: XCTestCase {
             context: makeTestContext()
         )
 
-        XCTAssertEqual(box.value, 50, "Should pass max_nodes=50 to getAXTree")
+        #expect(box.value == 50)
     }
 
-    // [P0] get_accessibility_tree defaults max_nodes to 500 when not specified
-    func test_getAccessibilityTree_defaultMaxNodes_is500() async throws {
+    @Test("get accessibility tree default max nodes is 500")
+    func getAccessibilityTreeDefaultMaxNodesIs500() async throws {
         let box = Box<Int?>(value: nil)
         let mockEngine = MockAccessibilityEngine(
             listWindowsHandler: { _ in [] },
@@ -413,13 +392,11 @@ final class ScreenshotUrlToolTests: XCTestCase {
             context: makeTestContext()
         )
 
-        XCTAssertEqual(box.value, 500, "Default max_nodes should be 500")
+        #expect(box.value == 500)
     }
 
-    // MARK: - AC5: open_url URL 打开
-
-    // [P0] open_url with valid https URL returns success
-    func test_openUrl_validHttpsUrl_returnsSuccessJson() async throws {
+    @Test("open URL valid HTTPS returns success JSON")
+    func openUrlValidHttpsReturnsSuccessJson() async throws {
         let restore = ServiceContainerFixture.apply(
             screenshotCapture: makeSuccessScreenshotMock(),
             urlOpener: makeSuccessURLOpenerMock()
@@ -436,13 +413,13 @@ final class ScreenshotUrlToolTests: XCTestCase {
         let text = textContent(result)
         let json = try JSONSerialization.jsonObject(with: text.data(using: .utf8)!) as? [String: Any]
 
-        XCTAssertEqual(json?["success"] as? Bool, true)
-        XCTAssertEqual(json?["action"] as? String, "open_url")
-        XCTAssertEqual(json?["url"] as? String, "https://example.com")
+        #expect(json?["success"] as? Bool == true)
+        #expect(json?["action"] as? String == "open_url")
+        #expect(json?["url"] as? String == "https://example.com")
     }
 
-    // [P0] open_url passes correct URL string to service
-    func test_openUrl_passesCorrectUrl() async throws {
+    @Test("open URL passes correct URL")
+    func openUrlPassesCorrectUrl() async throws {
         let box = Box<String?>(value: nil)
         let mock = MockURLOpener(openURLHandler: { url in
             box.value = url
@@ -460,11 +437,11 @@ final class ScreenshotUrlToolTests: XCTestCase {
             context: makeTestContext()
         )
 
-        XCTAssertEqual(box.value, "https://example.com", "Should pass URL to openURL")
+        #expect(box.value == "https://example.com")
     }
 
-    // [P0] open_url with invalid URL returns invalid_url error
-    func test_openUrl_invalidUrl_returnsErrorJson() async throws {
+    @Test("open URL invalid URL returns error JSON")
+    func openUrlInvalidUrlReturnsErrorJson() async throws {
         let mock = MockURLOpener(openURLHandler: { url in
             throw URLOpenerError.invalidURL(url)
         })
@@ -484,13 +461,13 @@ final class ScreenshotUrlToolTests: XCTestCase {
         let text = textContent(result)
         let json = try JSONSerialization.jsonObject(with: text.data(using: .utf8)!) as? [String: Any]
 
-        XCTAssertEqual(json?["error"] as? String, "invalid_url")
-        XCTAssertNotNil(json?["message"])
-        XCTAssertNotNil(json?["suggestion"])
+        #expect(json?["error"] as? String == "invalid_url")
+        #expect(json?["message"] != nil)
+        #expect(json?["suggestion"] != nil)
     }
 
-    // [P0] open_url with unsupported scheme returns unsupported_scheme error
-    func test_openUrl_unsupportedScheme_returnsErrorJson() async throws {
+    @Test("open URL unsupported scheme returns error JSON")
+    func openUrlUnsupportedSchemeReturnsErrorJson() async throws {
         let mock = MockURLOpener(openURLHandler: { url in
             throw URLOpenerError.unsupportedScheme(url)
         })
@@ -510,13 +487,13 @@ final class ScreenshotUrlToolTests: XCTestCase {
         let text = textContent(result)
         let json = try JSONSerialization.jsonObject(with: text.data(using: .utf8)!) as? [String: Any]
 
-        XCTAssertEqual(json?["error"] as? String, "unsupported_scheme")
-        XCTAssertNotNil(json?["message"])
-        XCTAssertNotNil(json?["suggestion"])
+        #expect(json?["error"] as? String == "unsupported_scheme")
+        #expect(json?["message"] != nil)
+        #expect(json?["suggestion"] != nil)
     }
 
-    // [P0] open_url failure to open returns failed_to_open error
-    func test_openUrl_failedToOpen_returnsErrorJson() async throws {
+    @Test("open URL failed to open returns error JSON")
+    func openUrlFailedToOpenReturnsErrorJson() async throws {
         let mock = MockURLOpener(openURLHandler: { url in
             throw URLOpenerError.failedToOpen(url)
         })
@@ -536,15 +513,13 @@ final class ScreenshotUrlToolTests: XCTestCase {
         let text = textContent(result)
         let json = try JSONSerialization.jsonObject(with: text.data(using: .utf8)!) as? [String: Any]
 
-        XCTAssertEqual(json?["error"] as? String, "failed_to_open")
-        XCTAssertNotNil(json?["message"])
-        XCTAssertNotNil(json?["suggestion"])
+        #expect(json?["error"] as? String == "failed_to_open")
+        #expect(json?["message"] != nil)
+        #expect(json?["suggestion"] != nil)
     }
 
-    // MARK: - No stub responses (Story 1.5 tools)
-
-    // [P0] screenshot tool does not return "Not yet implemented" stub text
-    func test_screenshot_doesNotReturnStubText() async throws {
+    @Test("screenshot does not return stub text")
+    func screenshotDoesNotReturnStubText() async throws {
         let restore = ServiceContainerFixture.apply(
             screenshotCapture: makeSuccessScreenshotMock(),
             urlOpener: makeSuccessURLOpenerMock()
@@ -559,11 +534,11 @@ final class ScreenshotUrlToolTests: XCTestCase {
         )
 
         let text = textContent(result)
-        XCTAssertFalse(text.hasPrefix("Not yet implemented"), "Tool should not return stub text")
+        #expect(!text.hasPrefix("Not yet implemented"))
     }
 
-    // [P0] get_accessibility_tree tool does not return "Not yet implemented" stub text
-    func test_getAccessibilityTree_doesNotReturnStubText() async throws {
+    @Test("get accessibility tree does not return stub text")
+    func getAccessibilityTreeDoesNotReturnStubText() async throws {
         let mockEngine = MockAccessibilityEngine(
             listWindowsHandler: { _ in [] },
             getWindowStateHandler: { _ in
@@ -590,11 +565,11 @@ final class ScreenshotUrlToolTests: XCTestCase {
         )
 
         let text = textContent(result)
-        XCTAssertFalse(text.hasPrefix("Not yet implemented"), "Tool should not return stub text")
+        #expect(!text.hasPrefix("Not yet implemented"))
     }
 
-    // [P0] open_url tool does not return "Not yet implemented" stub text
-    func test_openUrl_doesNotReturnStubText() async throws {
+    @Test("open URL does not return stub text")
+    func openUrlDoesNotReturnStubText() async throws {
         let restore = ServiceContainerFixture.apply(
             screenshotCapture: makeSuccessScreenshotMock(),
             urlOpener: makeSuccessURLOpenerMock()
@@ -609,14 +584,11 @@ final class ScreenshotUrlToolTests: XCTestCase {
         )
 
         let text = textContent(result)
-        XCTAssertFalse(text.hasPrefix("Not yet implemented"), "Tool should not return stub text")
+        #expect(!text.hasPrefix("Not yet implemented"))
     }
 }
+}
 
-// MARK: - Sendable Box for capturing values in @Sendable closures
-
-/// A thread-safe box for capturing values from @Sendable closures.
-/// Used to work around Swift 6 strict concurrency checking in tests.
 final class Box<T>: @unchecked Sendable {
     var value: T
     init(value: T) { self.value = value }

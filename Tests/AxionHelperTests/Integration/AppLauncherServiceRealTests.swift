@@ -1,103 +1,113 @@
-import XCTest
+import Testing
 @testable import AxionHelper
 
-/// Tests that directly call real AppLauncherService to maximize code coverage.
-/// These exercise actual NSWorkspace/FileManager code paths on macOS.
-final class AppLauncherServiceRealTests: XCTestCase {
+@Suite("AppLauncherService Real")
+struct AppLauncherServiceRealTests {
 
     private let service = AppLauncherService()
 
     // MARK: - listRunningApps
 
-    func test_listRunningApps_returnsNonEmptyArray() {
+    @Test("listRunningApps returns non-empty array")
+    func listRunningAppsReturnsNonEmptyArray() {
         let apps = service.listRunningApps()
-        XCTAssertFalse(apps.isEmpty, "Should return at least one running app")
+        #expect(!apps.isEmpty, "Should return at least one running app")
     }
 
-    func test_listRunningApps_eachAppHasNonEmptyName() {
+    @Test("listRunningApps each app has non-empty name")
+    func listRunningAppsEachAppHasNonEmptyName() {
         let apps = service.listRunningApps()
         for app in apps {
-            XCTAssertFalse(app.appName.isEmpty, "Each app should have a non-empty name")
+            #expect(!app.appName.isEmpty, "Each app should have a non-empty name")
         }
     }
 
-    func test_listRunningApps_eachAppHasValidPid() {
+    @Test("listRunningApps each app has valid PID")
+    func listRunningAppsEachAppHasValidPid() {
         let apps = service.listRunningApps()
         for app in apps {
-            XCTAssertGreaterThan(app.pid, 0, "Each app should have a valid PID")
+            #expect(app.pid > 0, "Each app should have a valid PID")
         }
     }
 
-    func test_listRunningApps_finderIsRunning() {
+    @Test("listRunningApps Finder is running")
+    func listRunningAppsFinderIsRunning() {
         let apps = service.listRunningApps()
         let finderApps = apps.filter { $0.bundleId == "com.apple.finder" }
-        XCTAssertFalse(finderApps.isEmpty, "Finder should always be running on macOS")
+        #expect(!finderApps.isEmpty, "Finder should always be running on macOS")
     }
 
-    func test_listRunningApps_hasBundleId() {
+    @Test("listRunningApps has bundle IDs")
+    func listRunningAppsHasBundleId() {
         let apps = service.listRunningApps()
         let withBundleId = apps.filter { $0.bundleId != nil }
-        XCTAssertTrue(withBundleId.count > 0, "Most apps should have a bundle ID")
+        #expect(withBundleId.count > 0, "Most apps should have a bundle ID")
     }
 
     // MARK: - launchApp (already running apps)
 
-    func test_launchApp_finderIsAlreadyRunning_returnsExistingInfo() async throws {
+    @Test("launchApp Finder already running returns existing info")
+    func launchAppFinderAlreadyRunning() async throws {
         let info = try await service.launchApp(name: "Finder")
-        XCTAssertGreaterThan(info.pid, 0)
-        XCTAssertNotNil(info.bundleId)
+        #expect(info.pid > 0)
+        #expect(info.bundleId != nil)
     }
 
-    func test_launchApp_caseInsensitive_findsRunningApp() async throws {
+    @Test("launchApp case insensitive finds running app")
+    func launchAppCaseInsensitive() async throws {
         let info = try await service.launchApp(name: "finder")
-        XCTAssertGreaterThan(info.pid, 0)
+        #expect(info.pid > 0)
     }
 
-    func test_launchApp_withAppSuffix_findsRunningApp() async throws {
+    @Test("launchApp with .app suffix finds running app")
+    func launchAppWithAppSuffix() async throws {
         let info = try await service.launchApp(name: "Finder.app")
-        XCTAssertGreaterThan(info.pid, 0)
+        #expect(info.pid > 0)
     }
 
     // MARK: - launchApp (app not found)
 
-    func test_launchApp_nonExistentApp_throwsAppNotFound() async {
+    @Test("launchApp non-existent app throws appNotFound")
+    func launchAppNonExistentAppThrowsAppNotFound() async {
         do {
             _ = try await service.launchApp(name: "ThisAppDefinitelyDoesNotExist12345")
-            XCTFail("Should throw appNotFound")
+            Issue.record("Should throw appNotFound")
         } catch let error as AppLauncherError {
             if case .appNotFound = error {
                 // expected
             } else {
-                XCTFail("Expected appNotFound, got \(error)")
+                Issue.record("Expected appNotFound, got \(error)")
             }
         } catch {
-            XCTFail("Unexpected error: \(error)")
+            Issue.record("Unexpected error: \(error)")
         }
     }
 
-    func test_launchApp_nonExistentApp_errorHasDescription() async {
+    @Test("launchApp non-existent app error has description")
+    func launchAppNonExistentAppErrorHasDescription() async {
         do {
             _ = try await service.launchApp(name: "NoApp12345")
-            XCTFail("Should throw")
+            Issue.record("Should throw")
         } catch let error as AppLauncherError {
-            XCTAssertFalse(error.errorDescription?.isEmpty ?? true)
+            #expect(!(error.errorDescription?.isEmpty ?? true))
         } catch {
-            XCTFail("Unexpected error: \(error)")
+            Issue.record("Unexpected error: \(error)")
         }
     }
 
     // MARK: - launchApp (bundle ID lookup)
 
-    func test_launchApp_withBundleId_launchesSystemApp() async throws {
-        // Use a bundle ID that exists on all macOS systems
+    @Test("launchApp with bundle ID launches system app")
+    func launchAppWithBundleId() async throws {
         let info = try await service.launchApp(name: "com.apple.finder")
-        XCTAssertGreaterThan(info.pid, 0)
+        #expect(info.pid > 0)
     }
 
     // MARK: - launchApp returns AppInfo with correct fields
 
-    func test_launchApp_returnsInfoWithBundleId() async throws {
+    @Test("launchApp returns info with bundle ID")
+    func launchAppReturnsInfoWithBundleId() async throws {
         let info = try await service.launchApp(name: "Finder")
-        XCTAssertNotNil(info.bundleId)
+        #expect(info.bundleId != nil)
     }
 }

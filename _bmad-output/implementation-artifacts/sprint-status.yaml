@@ -1,5 +1,19 @@
 # generated: 2026-05-08
-# last_updated: 2026-05-13
+# last_updated: 2026-05-15
+# retro-epic-11: 2026-05-15
+# story-11.3-created: 2026-05-15
+# story-11.2-created: 2026-05-15
+# story-11.1-created: 2026-05-15
+# retro-epic-10: 2026-05-15
+# story-10.1-created: 2026-05-15
+# story-10.2-created: 2026-05-15
+# story-10.3-created: 2026-05-15
+# retro-epic-4: 2026-05-14
+# retro-epic-5: 2026-05-14
+# retro-epic-6: 2026-05-14
+# retro-epic-7: 2026-05-14
+# retro-epic-8: 2026-05-14
+# retro-epic-9: 2026-05-15
 # project: axion
 # project_key: NOKEY
 # tracking_system: file-system
@@ -35,7 +49,7 @@
 # - Dev moves story to 'review', then runs code-review (fresh context, different LLM recommended)
 
 generated: 2026-05-08
-last_updated: 2026-05-13
+last_updated: 2026-05-15
 project: axion
 project_key: NOKEY
 tracking_system: file-system
@@ -78,31 +92,63 @@ development_status:
   epic-3-retrospective: optional
 
   # ============================================================
-  # Phase 2 — 成长功能
+  # Phase 2 — 成长功能 (已完成 2026-05-14)
   # ============================================================
 
   # Epic 4: 本地 App Memory — 跨任务学习系统
-  epic-4: backlog
-  4-1-sdk-memorystore-app-memory-extraction: backlog
-  4-2-app-profile-auto-accumulation: backlog
-  4-3-memory-enhanced-planning: backlog
-  epic-4-retrospective: optional
+  epic-4: done
+  4-1-sdk-memorystore-app-memory-extraction: done
+  4-2-app-profile-auto-accumulation: done
+  4-3-memory-enhanced-planning: done
+  epic-4-retrospective: done
 
   # Epic 5: HTTP API Server — 外部集成服务
-  epic-5: backlog
-  5-1-http-api-foundation-task-management: backlog
-  5-2-sse-event-stream-realtime-progress: backlog
-  5-3-server-command-api-authentication: backlog
-  epic-5-retrospective: optional
+  epic-5: done
+  5-1-http-api-foundation-task-management: done
+  5-2-sse-event-stream-realtime-progress: done
+  5-3-server-command-api-authentication: done
+  epic-5-retrospective: done
 
   # Epic 6: MCP Server Mode — Agent 协作
-  epic-6: backlog
-  6-1-sdk-agentmcpserver-expose-axion: backlog
-  6-2-axion-mcp-command-agent-integration: backlog
-  epic-6-retrospective: optional
+  epic-6: done
+  6-1-sdk-agentmcpserver-expose-axion: done
+  6-2-axion-mcp-command-agent-integration: done
+  epic-6-retrospective: done
 
   # Epic 7: 执行增强 — Takeover 与 Fast Mode
-  epic-7: backlog
-  7-1-sdk-pause-protocol-user-takeover: backlog
-  7-2-fast-mode: backlog
-  epic-7-retrospective: optional
+  epic-7: done
+  7-1-sdk-pause-protocol-user-takeover: done
+  7-2-fast-mode: done
+  epic-7-retrospective: done
+
+  # ============================================================
+  # Phase 3 — 愿景功能
+  # ============================================================
+
+  # Epic 8: 多窗口、多 App 工作流
+  epic-8: done
+  8-1-multi-window-state-tracking-context-management: done
+  8-2-cross-app-workflow-orchestration: done
+  8-3-window-layout-management: done
+  epic-8-retrospective: done
+
+  # Epic 9: 录制 → 编译 → 技能复用
+  epic-9: done
+  9-1-operation-recording-engine: done
+  9-2-recording-compile-reusable-skill: done
+  9-3-skill-library-management-execution: done
+  epic-9-retrospective: done
+
+  # Epic 10: macOS 菜单栏 UI
+  epic-10: done
+  10-1-menubar-status-service-communication: done
+  10-2-task-management-realtime-panel: done
+  10-3-global-hotkey-skill-quick-trigger: done
+  epic-10-retrospective: done
+
+  # Epic 11: 第三方 SDK 生态
+  epic-11: done
+  11-1-agent-project-template-scaffold-cli: done
+  11-2-plugin-tool-registration-agent-extension: done
+  11-3-developer-documentation-examples: done
+  epic-11-retrospective: done

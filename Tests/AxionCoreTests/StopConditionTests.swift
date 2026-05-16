@@ -1,81 +1,92 @@
-import XCTest
+import Foundation
+import Testing
 @testable import AxionCore
 
-final class StopConditionTests: XCTestCase {
+@Suite("StopCondition")
+struct StopConditionTests {
 
     // MARK: - StopType Cases
 
-    func test_stopType_allCases() {
+    @Test("stopType all cases")
+    func stopTypeAllCases() {
         let expected: [StopType] = [
             .windowAppears, .windowDisappears, .fileExists,
             .textAppears, .processExits, .maxStepsReached, .custom,
         ]
-        XCTAssertEqual(expected.count, 7)
+        #expect(expected.count == 7)
     }
 
-    func test_stopType_rawValues() {
-        XCTAssertEqual(StopType.windowAppears.rawValue, "windowAppears")
-        XCTAssertEqual(StopType.windowDisappears.rawValue, "windowDisappears")
-        XCTAssertEqual(StopType.fileExists.rawValue, "fileExists")
-        XCTAssertEqual(StopType.textAppears.rawValue, "textAppears")
-        XCTAssertEqual(StopType.processExits.rawValue, "processExits")
-        XCTAssertEqual(StopType.maxStepsReached.rawValue, "maxStepsReached")
-        XCTAssertEqual(StopType.custom.rawValue, "custom")
+    @Test("stopType raw values")
+    func stopTypeRawValues() {
+        #expect(StopType.windowAppears.rawValue == "windowAppears")
+        #expect(StopType.windowDisappears.rawValue == "windowDisappears")
+        #expect(StopType.fileExists.rawValue == "fileExists")
+        #expect(StopType.textAppears.rawValue == "textAppears")
+        #expect(StopType.processExits.rawValue == "processExits")
+        #expect(StopType.maxStepsReached.rawValue == "maxStepsReached")
+        #expect(StopType.custom.rawValue == "custom")
     }
 
-    func test_stopType_initFromRawValue() {
-        XCTAssertEqual(StopType(rawValue: "windowAppears"), .windowAppears)
-        XCTAssertEqual(StopType(rawValue: "custom"), .custom)
-        XCTAssertNil(StopType(rawValue: "nonexistent"))
+    @Test("stopType init from raw value")
+    func stopTypeInitFromRawValue() {
+        #expect(StopType(rawValue: "windowAppears") == .windowAppears)
+        #expect(StopType(rawValue: "custom") == .custom)
+        #expect(StopType(rawValue: "nonexistent") == nil)
     }
 
     // MARK: - StopCondition Codable
 
-    func test_stopCondition_roundTrip_withValue() throws {
+    @Test("stopCondition round trip with value")
+    func stopConditionRoundTripWithValue() throws {
         let condition = StopCondition(type: .textAppears, value: "Example Domain")
         let data = try JSONEncoder().encode(condition)
         let decoded = try JSONDecoder().decode(StopCondition.self, from: data)
-        XCTAssertEqual(decoded, condition)
+        #expect(decoded == condition)
     }
 
-    func test_stopCondition_roundTrip_nilValue() throws {
+    @Test("stopCondition round trip nil value")
+    func stopConditionRoundTripNilValue() throws {
         let condition = StopCondition(type: .maxStepsReached, value: nil)
         let data = try JSONEncoder().encode(condition)
         let decoded = try JSONDecoder().decode(StopCondition.self, from: data)
-        XCTAssertEqual(decoded.type, .maxStepsReached)
-        XCTAssertNil(decoded.value)
+        #expect(decoded.type == .maxStepsReached)
+        #expect(decoded.value == nil)
     }
 
-    func test_stopCondition_roundTrip_emptyValue() throws {
+    @Test("stopCondition round trip empty value")
+    func stopConditionRoundTripEmptyValue() throws {
         let condition = StopCondition(type: .custom, value: "")
         let data = try JSONEncoder().encode(condition)
         let decoded = try JSONDecoder().decode(StopCondition.self, from: data)
-        XCTAssertEqual(decoded.value, "")
+        #expect(decoded.value == "")
     }
 
-    func test_stopCondition_jsonStructure() throws {
+    @Test("stopCondition json structure")
+    func stopConditionJsonStructure() throws {
         let condition = StopCondition(type: .fileExists, value: "/tmp/test.txt")
         let data = try JSONEncoder().encode(condition)
         let json = try JSONSerialization.jsonObject(with: data) as! [String: Any]
 
-        XCTAssertEqual(json["type"] as? String, "fileExists")
-        XCTAssertEqual(json["value"] as? String, "/tmp/test.txt")
+        #expect(json["type"] as? String == "fileExists")
+        #expect(json["value"] as? String == "/tmp/test.txt")
     }
 
     // MARK: - Equality
 
-    func test_stopCondition_equality() {
+    @Test("stopCondition equality")
+    func stopConditionEquality() {
         let a = StopCondition(type: .textAppears, value: "hello")
         let b = StopCondition(type: .textAppears, value: "hello")
         let c = StopCondition(type: .textAppears, value: "world")
         let d = StopCondition(type: .windowAppears, value: "hello")
 
-        XCTAssertEqual(a, b)
-        XCTAssertNotEqual(a, c)
-        XCTAssertNotEqual(a, d)
+        #expect(a == b)
+        #expect(a != c)
+        #expect(a != d)
     }
 
-    func test_stopCondition_allTypes_roundTrip() throws {
+    @Test("stopCondition all types round trip")
+    func stopConditionAllTypesRoundTrip() throws {
         let types: [StopType] = [
             .windowAppears, .windowDisappears, .fileExists,
             .textAppears, .processExits, .maxStepsReached, .custom,
@@ -84,7 +95,7 @@ final class StopConditionTests: XCTestCase {
             let condition = StopCondition(type: type, value: "test_\(type.rawValue)")
             let data = try JSONEncoder().encode(condition)
             let decoded = try JSONDecoder().decode(StopCondition.self, from: data)
-            XCTAssertEqual(decoded, condition, "Round-trip failed for \(type.rawValue)")
+            #expect(decoded == condition, "Round-trip failed for \(type.rawValue)")
         }
     }
 }

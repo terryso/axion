@@ -1,4 +1,4 @@
-import XCTest
+import Testing
 import Foundation
 import Darwin
 
@@ -9,10 +9,10 @@ import Darwin
 // This is 方案 B from the story's test strategy: process-level integration tests.
 // Priority: P0 (smoke test for the complete MCP stdio communication)
 
-final class HelperProcessSmokeTests: XCTestCase {
+@Suite("Helper Process Smoke")
+struct HelperProcessSmokeTests {
 
-    override class func setUp() {
-        super.setUp()
+    init() {
         // Ignore SIGPIPE to prevent test runner crash when child process pipe breaks
         signal(SIGPIPE, SIG_IGN)
     }
@@ -49,10 +49,11 @@ final class HelperProcessSmokeTests: XCTestCase {
     // MARK: - AC1: MCP initialize 响应（进程级）
 
     // [P0] AxionHelper 进程可以通过 MCP JSON-RPC 初始化
-    func test_helperProcess_initializeResponds() async throws {
+    @Test("helper process initialize responds")
+    func helperProcessInitializeResponds() async throws {
         // Given: AxionHelper 已编译
         guard FileManager.default.fileExists(atPath: helperExecutablePath) else {
-            XCTFail("AxionHelper not found at \(helperExecutablePath). Run `swift build` first.")
+            Issue.record("AxionHelper not found at \(helperExecutablePath). Run `swift build` first.")
             return
         }
 
@@ -71,7 +72,7 @@ final class HelperProcessSmokeTests: XCTestCase {
 
         """
         guard let requestData = initializeRequest.data(using: .utf8) else {
-            XCTFail("Failed to encode initialize request")
+            Issue.record("Failed to encode initialize request")
             return
         }
         stdinPipe.fileHandleForWriting.write(requestData)
@@ -89,15 +90,15 @@ final class HelperProcessSmokeTests: XCTestCase {
             }
         }
 
-        XCTAssertGreaterThan(responseData.count, 0, "Should receive response from AxionHelper")
+        #expect(responseData.count > 0)
 
         // Parse response as JSON
         let responseDataObj = try JSONSerialization.jsonObject(with: responseData)
-        let responseDict = try XCTUnwrap(responseDataObj as? [String: Any])
+        let responseDict = try #require(responseDataObj as? [String: Any])
 
-        XCTAssertEqual(responseDict["jsonrpc"] as? String, "2.0")
-        XCTAssertEqual(responseDict["id"] as? Int, 1)
-        XCTAssertNotNil(responseDict["result"], "Response should contain 'result' field")
+        #expect(responseDict["jsonrpc"] as? String == "2.0")
+        #expect(responseDict["id"] as? Int == 1)
+        #expect(responseDict["result"] != nil)
 
         // Clean up: close stdin to let process exit gracefully
         stdinPipe.fileHandleForWriting.closeFile()
@@ -113,10 +114,11 @@ final class HelperProcessSmokeTests: XCTestCase {
     // MARK: - AC4: EOF 优雅退出
 
     // [P0] stdin EOF 时 AxionHelper 优雅退出，无崩溃
-    func test_helperProcess_gracefulExitOnEOF() async throws {
+    @Test("helper process graceful exit on EOF")
+    func helperProcessGracefulExitOnEOF() async throws {
         // Given: AxionHelper 进程正在运行
         guard FileManager.default.fileExists(atPath: helperExecutablePath) else {
-            XCTFail("AxionHelper not found at \(helperExecutablePath). Run `swift build` first.")
+            Issue.record("AxionHelper not found at \(helperExecutablePath). Run `swift build` first.")
             return
         }
 
@@ -126,7 +128,7 @@ final class HelperProcessSmokeTests: XCTestCase {
 
         // When: 启动进程
         try process.run()
-        XCTAssertTrue(process.isRunning, "AxionHelper should be running after launch")
+        #expect(process.isRunning)
 
         // Give the process a moment to initialize
         try await Task.sleep(nanoseconds: 500_000_000) // 500ms
@@ -141,37 +143,29 @@ final class HelperProcessSmokeTests: XCTestCase {
             try await Task.sleep(nanoseconds: 100_000_000) // 100ms polling
         }
 
-        XCTAssertFalse(process.isRunning, "AxionHelper should exit within 3 seconds after stdin EOF")
+        #expect(!process.isRunning)
 
         // Verify exit code is 0 (clean exit, not crash)
         let exitCode = process.terminationStatus
-        XCTAssertEqual(exitCode, 0, "AxionHelper should exit with code 0 (graceful), got \(exitCode)")
+        #expect(exitCode == 0)
 
         // Verify no crash signals
         let terminationReason = process.terminationReason
-        XCTAssertEqual(
-            terminationReason, .exit,
-            "AxionHelper should terminate normally (.exit), not by signal (.uncaughtSignal). Got: \(terminationReason)"
-        )
+        #expect(terminationReason == .exit)
 
         // Verify stderr doesn't contain crash indicators
         let stderrData = stderrPipe.fileHandleForReading.availableData
         let stderrOutput = String(data: stderrData, encoding: .utf8) ?? ""
-        XCTAssertFalse(
-            stderrOutput.contains("Fatal error"),
-            "No fatal error in stderr. Output: \(stderrOutput)"
-        )
-        XCTAssertFalse(
-            stderrOutput.contains("Segmentation fault"),
-            "No segfault in stderr. Output: \(stderrOutput)"
-        )
+        #expect(!stderrOutput.contains("Fatal error"))
+        #expect(!stderrOutput.contains("Segmentation fault"))
     }
 
     // [P1] Helper exits cleanly after MCP initialize → stdin EOF sequence (AC5: Helper 随 CLI 退出)
-    func test_helperProcess_initializeThenEOF_exitsCleanly() async throws {
+    @Test("helper process initialize then EOF exits cleanly")
+    func helperProcessInitializeThenEOFExitsCleanly() async throws {
         // Given: AxionHelper 已编译
         guard FileManager.default.fileExists(atPath: helperExecutablePath) else {
-            XCTFail("AxionHelper not found at \(helperExecutablePath). Run `swift build` first.")
+            Issue.record("AxionHelper not found at \(helperExecutablePath). Run `swift build` first.")
             return
         }
 
@@ -190,7 +184,7 @@ final class HelperProcessSmokeTests: XCTestCase {
 
         """
         guard let requestData = initializeRequest.data(using: .utf8) else {
-            XCTFail("Failed to encode initialize request")
+            Issue.record("Failed to encode initialize request")
             return
         }
         stdinPipe.fileHandleForWriting.write(requestData)
@@ -205,13 +199,13 @@ final class HelperProcessSmokeTests: XCTestCase {
             else { try await Task.sleep(nanoseconds: 50_000_000) }
         }
 
-        XCTAssertGreaterThan(responseData.count, 0, "Should receive initialize response")
+        #expect(responseData.count > 0)
 
         // Verify the response is valid JSON-RPC with result
         let responseObj = try JSONSerialization.jsonObject(with: responseData)
-        let responseDict = try XCTUnwrap(responseObj as? [String: Any])
-        XCTAssertNotNil(responseDict["result"], "Initialize should return result")
-        XCTAssertEqual(responseDict["id"] as? Int, 1, "Response ID should match request")
+        let responseDict = try #require(responseObj as? [String: Any])
+        #expect(responseDict["result"] != nil)
+        #expect(responseDict["id"] as? Int == 1)
 
         // When: 关闭 stdin（模拟 CLI 退出）
         stdinPipe.fileHandleForWriting.closeFile()
@@ -222,16 +216,17 @@ final class HelperProcessSmokeTests: XCTestCase {
             try await Task.sleep(nanoseconds: 100_000_000)
         }
 
-        XCTAssertFalse(process.isRunning, "Helper should exit after stdin EOF (no residual process)")
-        XCTAssertEqual(process.terminationStatus, 0, "Helper should exit cleanly with code 0")
-        XCTAssertEqual(process.terminationReason, .exit, "Helper should terminate normally, not by signal")
+        #expect(!process.isRunning)
+        #expect(process.terminationStatus == 0)
+        #expect(process.terminationReason == .exit)
     }
 
     // [P1] AxionHelper 启动响应时间满足 NFR2 (< 500ms)
-    func test_helperProcess_startupTime_meetsNFR2() async throws {
+    @Test("helper process startup time meets NFR2")
+    func helperProcessStartupTimeMeetsNFR2() async throws {
         // Given: AxionHelper 已编译
         guard FileManager.default.fileExists(atPath: helperExecutablePath) else {
-            XCTFail("AxionHelper not found at \(helperExecutablePath). Run `swift build` first.")
+            Issue.record("AxionHelper not found at \(helperExecutablePath). Run `swift build` first.")
             return
         }
 
@@ -248,7 +243,7 @@ final class HelperProcessSmokeTests: XCTestCase {
 
         """
         guard let requestData = initializeRequest.data(using: .utf8) else {
-            XCTFail("Failed to encode initialize request")
+            Issue.record("Failed to encode initialize request")
             return
         }
 
@@ -273,11 +268,8 @@ final class HelperProcessSmokeTests: XCTestCase {
         let elapsed = Date().timeIntervalSince(startTime)
 
         // Then: NFR2 要求 AxionHelper 启动到 MCP 连接就绪 < 500ms
-        XCTAssertGreaterThan(responseData.count, 0, "Should receive response from AxionHelper")
-        XCTAssertLessThan(
-            elapsed, 0.5,
-            "AxionHelper startup to initialize response should be < 500ms (NFR2), took \(elapsed)s"
-        )
+        #expect(responseData.count > 0)
+        #expect(elapsed < 0.5)
 
         // Clean up
         stdinPipe.fileHandleForWriting.closeFile()

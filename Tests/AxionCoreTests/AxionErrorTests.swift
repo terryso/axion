@@ -1,65 +1,74 @@
-import XCTest
+import Foundation
+import Testing
 @testable import AxionCore
 
-final class AxionErrorTests: XCTestCase {
+@Suite("AxionError")
+struct AxionErrorTests {
 
     // MARK: - MCP ToolResult Error Format
 
-    func test_error_toToolResultJSON_containsRequiredFields() throws {
+    @Test("error toToolResultJSON contains required fields")
+    func errorToToolResultJSONContainsRequiredFields() throws {
         let error = AxionError.helperNotRunning
         let jsonString = error.toToolResultJSON()
         let json = try JSONSerialization.jsonObject(with: Data(jsonString.utf8)) as! [String: Any]
 
-        XCTAssertNotNil(json["error"])
-        XCTAssertNotNil(json["message"])
-        XCTAssertNotNil(json["suggestion"])
+        #expect(json["error"] != nil)
+        #expect(json["message"] != nil)
+        #expect(json["suggestion"] != nil)
     }
 
-    func test_error_planningFailed_format() throws {
+    @Test("error planningFailed format")
+    func errorPlanningFailedFormat() throws {
         let error = AxionError.planningFailed(reason: "could not parse task")
         let payload = error.errorPayload
 
-        XCTAssertEqual(payload.error, "planning_failed")
-        XCTAssertTrue(payload.message.contains("could not parse task"))
-        XCTAssertFalse(payload.suggestion.isEmpty)
+        #expect(payload.error == "planning_failed")
+        #expect(payload.message.contains("could not parse task"))
+        #expect(!payload.suggestion.isEmpty)
     }
 
-    func test_error_executionFailed_format() throws {
+    @Test("error executionFailed format")
+    func errorExecutionFailedFormat() throws {
         let error = AxionError.executionFailed(step: 3, reason: "app not found")
         let payload = error.errorPayload
 
-        XCTAssertEqual(payload.error, "execution_failed")
-        XCTAssertTrue(payload.message.contains("Step 3"))
-        XCTAssertTrue(payload.message.contains("app not found"))
+        #expect(payload.error == "execution_failed")
+        #expect(payload.message.contains("Step 3"))
+        #expect(payload.message.contains("app not found"))
     }
 
-    func test_error_helperNotRunning_format() throws {
+    @Test("error helperNotRunning format")
+    func errorHelperNotRunningFormat() throws {
         let error = AxionError.helperNotRunning
         let payload = error.errorPayload
 
-        XCTAssertEqual(payload.error, "helper_not_running")
-        XCTAssertEqual(payload.message, "AxionHelper is not running.")
-        XCTAssertFalse(payload.suggestion.isEmpty)
+        #expect(payload.error == "helper_not_running")
+        #expect(payload.message == "AxionHelper is not running.")
+        #expect(!payload.suggestion.isEmpty)
     }
 
-    func test_error_mcpError_format() throws {
+    @Test("error mcpError format")
+    func errorMcpErrorFormat() throws {
         let error = AxionError.mcpError(tool: "click", reason: "coordinates out of bounds")
         let payload = error.errorPayload
 
-        XCTAssertEqual(payload.error, "mcp_error")
-        XCTAssertTrue(payload.message.contains("click"))
-        XCTAssertTrue(payload.message.contains("coordinates out of bounds"))
+        #expect(payload.error == "mcp_error")
+        #expect(payload.message.contains("click"))
+        #expect(payload.message.contains("coordinates out of bounds"))
     }
 
-    func test_error_maxRetriesExceeded_format() throws {
+    @Test("error maxRetriesExceeded format")
+    func errorMaxRetriesExceededFormat() throws {
         let error = AxionError.maxRetriesExceeded(retries: 5)
         let payload = error.errorPayload
 
-        XCTAssertEqual(payload.error, "max_retries_exceeded")
-        XCTAssertTrue(payload.message.contains("5"))
+        #expect(payload.error == "max_retries_exceeded")
+        #expect(payload.message.contains("5"))
     }
 
-    func test_error_toToolResultJSON_validJSON() throws {
+    @Test("error toToolResultJSON valid JSON for all cases")
+    func errorToToolResultJSONValidJSONForAllCases() throws {
         let allErrors: [AxionError] = [
             .planningFailed(reason: "test"),
             .executionFailed(step: 0, reason: "test"),
@@ -82,93 +91,100 @@ final class AxionErrorTests: XCTestCase {
             let data = jsonString.data(using: .utf8)!
             let json = try JSONSerialization.jsonObject(with: data) as! [String: Any]
 
-            XCTAssertNotNil(json["error"], "Missing 'error' field for \(error)")
-            XCTAssertNotNil(json["message"], "Missing 'message' field for \(error)")
-            XCTAssertNotNil(json["suggestion"], "Missing 'suggestion' field for \(error)")
+            #expect(json["error"] != nil, "Missing 'error' field for \(error)")
+            #expect(json["message"] != nil, "Missing 'message' field for \(error)")
+            #expect(json["suggestion"] != nil, "Missing 'suggestion' field for \(error)")
         }
     }
 
     // MARK: - All Error Cases
 
-    func test_error_verificationFailed_format() throws {
+    @Test("error verificationFailed format")
+    func errorVerificationFailedFormat() throws {
         let error = AxionError.verificationFailed(step: 5, reason: "window not visible")
         let payload = error.errorPayload
 
-        XCTAssertEqual(payload.error, "verification_failed")
-        XCTAssertTrue(payload.message.contains("step 5"))
-        XCTAssertTrue(payload.message.contains("window not visible"))
-        XCTAssertFalse(payload.suggestion.isEmpty)
+        #expect(payload.error == "verification_failed")
+        #expect(payload.message.contains("step 5"))
+        #expect(payload.message.contains("window not visible"))
+        #expect(!payload.suggestion.isEmpty)
     }
 
-    func test_error_helperConnectionFailed_format() throws {
+    @Test("error helperConnectionFailed format")
+    func errorHelperConnectionFailedFormat() throws {
         let error = AxionError.helperConnectionFailed(reason: "timeout")
         let payload = error.errorPayload
 
-        XCTAssertEqual(payload.error, "helper_connection_failed")
-        XCTAssertTrue(payload.message.contains("timeout"))
-        XCTAssertFalse(payload.suggestion.isEmpty)
+        #expect(payload.error == "helper_connection_failed")
+        #expect(payload.message.contains("timeout"))
+        #expect(!payload.suggestion.isEmpty)
     }
 
-    func test_error_configError_format() throws {
+    @Test("error configError format")
+    func errorConfigErrorFormat() throws {
         let error = AxionError.configError(reason: "missing apiKey")
         let payload = error.errorPayload
 
-        XCTAssertEqual(payload.error, "config_error")
-        XCTAssertTrue(payload.message.contains("missing apiKey"))
-        XCTAssertFalse(payload.suggestion.isEmpty)
+        #expect(payload.error == "config_error")
+        #expect(payload.message.contains("missing apiKey"))
+        #expect(!payload.suggestion.isEmpty)
     }
 
-    func test_error_invalidPlan_format() throws {
+    @Test("error invalidPlan format")
+    func errorInvalidPlanFormat() throws {
         let error = AxionError.invalidPlan(reason: "no steps")
         let payload = error.errorPayload
 
-        XCTAssertEqual(payload.error, "invalid_plan")
-        XCTAssertTrue(payload.message.contains("no steps"))
-        XCTAssertFalse(payload.suggestion.isEmpty)
+        #expect(payload.error == "invalid_plan")
+        #expect(payload.message.contains("no steps"))
+        #expect(!payload.suggestion.isEmpty)
     }
 
-    func test_error_timeout_format() throws {
+    @Test("error timeout format")
+    func errorTimeoutFormat() throws {
         let error = AxionError.timeout(operation: "launch", seconds: 30.0)
         let payload = error.errorPayload
 
-        XCTAssertEqual(payload.error, "timeout")
-        XCTAssertTrue(payload.message.contains("launch"))
-        XCTAssertTrue(payload.message.contains("30"))
-        XCTAssertFalse(payload.suggestion.isEmpty)
+        #expect(payload.error == "timeout")
+        #expect(payload.message.contains("launch"))
+        #expect(payload.message.contains("30"))
+        #expect(!payload.suggestion.isEmpty)
     }
 
-    func test_error_cancelled_format() throws {
+    @Test("error cancelled format")
+    func errorCancelledFormat() throws {
         let error = AxionError.cancelled
         let payload = error.errorPayload
 
-        XCTAssertEqual(payload.error, "cancelled")
-        XCTAssertFalse(payload.suggestion.isEmpty)
+        #expect(payload.error == "cancelled")
+        #expect(!payload.suggestion.isEmpty)
     }
 
-    func test_error_unknown_format() throws {
+    @Test("error unknown format")
+    func errorUnknownFormat() throws {
         let error = AxionError.unknown(reason: "something unexpected")
         let payload = error.errorPayload
 
-        XCTAssertEqual(payload.error, "unknown")
-        XCTAssertTrue(payload.message.contains("something unexpected"))
-        XCTAssertFalse(payload.suggestion.isEmpty)
+        #expect(payload.error == "unknown")
+        #expect(payload.message.contains("something unexpected"))
+        #expect(!payload.suggestion.isEmpty)
     }
 
     // MARK: - toToolResultJSON Format
 
-    func test_toToolResultJSON_producesSortedKeys() throws {
+    @Test("toToolResultJSON produces sorted keys")
+    func toToolResultJSONProducesSortedKeys() throws {
         let error = AxionError.mcpError(tool: "click", reason: "failed")
         let jsonString = error.toToolResultJSON()
         let data = Data(jsonString.utf8)
 
-        // Verify it's valid JSON
         let json = try JSONSerialization.jsonObject(with: data) as! [String: Any]
-        // SortedKeys encoder should produce keys in order
         let sortedKeys = Array(json.keys).sorted()
-        XCTAssertEqual(sortedKeys, ["error", "message", "suggestion"])
+        #expect(sortedKeys == ["error", "message", "suggestion"])
     }
 
-    func test_toToolResultJSON_allCases_produceValidJSON() throws {
+    @Test("toToolResultJSON all cases produce valid JSON")
+    func toToolResultJSONAllCasesProduceValidJSON() throws {
         let allErrors: [AxionError] = [
             .planningFailed(reason: "r"),
             .executionFailed(step: 1, reason: "r"),
@@ -189,48 +205,51 @@ final class AxionErrorTests: XCTestCase {
             let jsonString = error.toToolResultJSON()
             let data = Data(jsonString.utf8)
             let json = try JSONSerialization.jsonObject(with: data) as? [String: Any]
-            XCTAssertNotNil(json, "toToolResultJSON should produce valid JSON for \(error)")
-            XCTAssertEqual(json?["error"] as? String, error.errorPayload.error)
+            #expect(json != nil, "toToolResultJSON should produce valid JSON for \(error)")
+            #expect(json?["error"] as? String == error.errorPayload.error)
         }
     }
 
     // MARK: - MCPErrorPayload
 
-    func test_mcpErrorPayload_equality() {
+    @Test("MCPErrorPayload equality")
+    func mcpErrorPayloadEquality() {
         let a = AxionError.MCPErrorPayload(error: "e", message: "m", suggestion: "s")
         let b = AxionError.MCPErrorPayload(error: "e", message: "m", suggestion: "s")
         let c = AxionError.MCPErrorPayload(error: "x", message: "m", suggestion: "s")
-        XCTAssertEqual(a, b)
-        XCTAssertNotEqual(a, c)
+        #expect(a == b)
+        #expect(a != c)
     }
 
     // MARK: - Equality
 
-    func test_error_equality() {
-        XCTAssertEqual(AxionError.helperNotRunning, AxionError.helperNotRunning)
-        XCTAssertNotEqual(AxionError.helperNotRunning, AxionError.cancelled)
-        XCTAssertEqual(
-            AxionError.planningFailed(reason: "a"),
+    @Test("error equality")
+    func errorEquality() {
+        #expect(AxionError.helperNotRunning == AxionError.helperNotRunning)
+        #expect(AxionError.helperNotRunning != AxionError.cancelled)
+        #expect(
             AxionError.planningFailed(reason: "a")
+            == AxionError.planningFailed(reason: "a")
         )
-        XCTAssertNotEqual(
-            AxionError.planningFailed(reason: "a"),
-            AxionError.planningFailed(reason: "b")
+        #expect(
+            AxionError.planningFailed(reason: "a")
+            != AxionError.planningFailed(reason: "b")
         )
     }
 
-    func test_error_equality_allCases() {
-        XCTAssertEqual(AxionError.cancelled, AxionError.cancelled)
-        XCTAssertEqual(AxionError.timeout(operation: "a", seconds: 1.0), AxionError.timeout(operation: "a", seconds: 1.0))
-        XCTAssertNotEqual(AxionError.timeout(operation: "a", seconds: 1.0), AxionError.timeout(operation: "b", seconds: 1.0))
-        XCTAssertNotEqual(AxionError.timeout(operation: "a", seconds: 1.0), AxionError.timeout(operation: "a", seconds: 2.0))
-        XCTAssertEqual(AxionError.maxRetriesExceeded(retries: 3), AxionError.maxRetriesExceeded(retries: 3))
-        XCTAssertNotEqual(AxionError.maxRetriesExceeded(retries: 3), AxionError.maxRetriesExceeded(retries: 4))
-        XCTAssertEqual(AxionError.stepBudgetExceeded(steps: 10, limit: 10), AxionError.stepBudgetExceeded(steps: 10, limit: 10))
-        XCTAssertNotEqual(AxionError.stepBudgetExceeded(steps: 10, limit: 10), AxionError.stepBudgetExceeded(steps: 11, limit: 10))
-        XCTAssertEqual(AxionError.batchBudgetExceeded(batches: 6, limit: 6), AxionError.batchBudgetExceeded(batches: 6, limit: 6))
-        XCTAssertNotEqual(AxionError.batchBudgetExceeded(batches: 6, limit: 6), AxionError.batchBudgetExceeded(batches: 7, limit: 6))
-        XCTAssertEqual(AxionError.unknown(reason: "x"), AxionError.unknown(reason: "x"))
-        XCTAssertNotEqual(AxionError.unknown(reason: "x"), AxionError.unknown(reason: "y"))
+    @Test("error equality all cases")
+    func errorEqualityAllCases() {
+        #expect(AxionError.cancelled == AxionError.cancelled)
+        #expect(AxionError.timeout(operation: "a", seconds: 1.0) == AxionError.timeout(operation: "a", seconds: 1.0))
+        #expect(AxionError.timeout(operation: "a", seconds: 1.0) != AxionError.timeout(operation: "b", seconds: 1.0))
+        #expect(AxionError.timeout(operation: "a", seconds: 1.0) != AxionError.timeout(operation: "a", seconds: 2.0))
+        #expect(AxionError.maxRetriesExceeded(retries: 3) == AxionError.maxRetriesExceeded(retries: 3))
+        #expect(AxionError.maxRetriesExceeded(retries: 3) != AxionError.maxRetriesExceeded(retries: 4))
+        #expect(AxionError.stepBudgetExceeded(steps: 10, limit: 10) == AxionError.stepBudgetExceeded(steps: 10, limit: 10))
+        #expect(AxionError.stepBudgetExceeded(steps: 10, limit: 10) != AxionError.stepBudgetExceeded(steps: 11, limit: 10))
+        #expect(AxionError.batchBudgetExceeded(batches: 6, limit: 6) == AxionError.batchBudgetExceeded(batches: 6, limit: 6))
+        #expect(AxionError.batchBudgetExceeded(batches: 6, limit: 6) != AxionError.batchBudgetExceeded(batches: 7, limit: 6))
+        #expect(AxionError.unknown(reason: "x") == AxionError.unknown(reason: "x"))
+        #expect(AxionError.unknown(reason: "x") != AxionError.unknown(reason: "y"))
     }
 }

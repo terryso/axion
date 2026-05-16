@@ -1,11 +1,7 @@
-import XCTest
+import Testing
+import Foundation
 @testable import AxionCLI
 @testable import AxionCore
-
-// [P0] Built-in condition evaluation
-// [P1] Edge cases and multi-condition logic
-
-// MARK: - StopConditionEvaluator ATDD Tests
 
 /// ATDD red-phase tests for StopConditionEvaluator (Story 3-4 AC2).
 /// Tests the local rule-matching evaluation of stop conditions against
@@ -13,25 +9,22 @@ import XCTest
 ///
 /// TDD RED PHASE: These tests will not compile until StopConditionEvaluator and
 /// StopEvaluationResult are implemented in Sources/AxionCLI/Verifier/StopConditionEvaluator.swift.
-final class StopConditionEvaluatorTests: XCTestCase {
+@Suite("StopConditionEvaluator")
+struct StopConditionEvaluatorTests {
 
-    // MARK: - P0 Type Existence
-
-    func test_stopEvaluationResult_hasExpectedCases() {
-        // StopEvaluationResult must have: .satisfied, .notSatisfied, .uncertain
+    @Test("StopEvaluationResult has expected cases")
+    func stopEvaluationResultHasExpectedCases() {
         let satisfied = StopEvaluationResult.satisfied
         let notSatisfied = StopEvaluationResult.notSatisfied
         let uncertain = StopEvaluationResult.uncertain
 
-        // Verify they are distinct
-        XCTAssertNotEqual(satisfied, notSatisfied)
-        XCTAssertNotEqual(satisfied, uncertain)
-        XCTAssertNotEqual(notSatisfied, uncertain)
+        #expect(satisfied != notSatisfied)
+        #expect(satisfied != uncertain)
+        #expect(notSatisfied != uncertain)
     }
 
-    // MARK: - P0 textAppears (AC2)
-
-    func test_evaluate_textAppears_textFoundInAxTree_returnsSatisfied() {
+    @Test("textAppears — text found in AX tree returns satisfied")
+    func evaluateTextAppearsTextFoundInAxTreeReturnsSatisfied() {
         let evaluator = StopConditionEvaluator()
         let conditions = [StopCondition(type: .textAppears, value: "391")]
         let axTree = """
@@ -44,10 +37,11 @@ final class StopConditionEvaluatorTests: XCTestCase {
             executedSteps: [],
             maxSteps: 20
         )
-        XCTAssertEqual(result, .satisfied)
+        #expect(result == .satisfied)
     }
 
-    func test_evaluate_textAppears_textNotFound_returnsNotSatisfied() {
+    @Test("textAppears — text not found returns notSatisfied")
+    func evaluateTextAppearsTextNotFoundReturnsNotSatisfied() {
         let evaluator = StopConditionEvaluator()
         let conditions = [StopCondition(type: .textAppears, value: "999")]
         let axTree = """
@@ -60,12 +54,11 @@ final class StopConditionEvaluatorTests: XCTestCase {
             executedSteps: [],
             maxSteps: 20
         )
-        XCTAssertEqual(result, .notSatisfied)
+        #expect(result == .notSatisfied)
     }
 
-    // MARK: - P1 textAppears edge cases
-
-    func test_evaluate_textAppears_caseInsensitive() {
+    @Test("textAppears is case insensitive")
+    func evaluateTextAppearsCaseInsensitive() {
         let evaluator = StopConditionEvaluator()
         let conditions = [StopCondition(type: .textAppears, value: "calculator")]
         let axTree = """
@@ -78,10 +71,11 @@ final class StopConditionEvaluatorTests: XCTestCase {
             executedSteps: [],
             maxSteps: 20
         )
-        XCTAssertEqual(result, .satisfied)
+        #expect(result == .satisfied)
     }
 
-    func test_evaluate_textAppears_nilAxTree_returnsUncertain() {
+    @Test("textAppears with nil AX tree returns uncertain")
+    func evaluateTextAppearsNilAxTreeReturnsUncertain() {
         let evaluator = StopConditionEvaluator()
         let conditions = [StopCondition(type: .textAppears, value: "391")]
         let result = evaluator.evaluate(
@@ -91,12 +85,11 @@ final class StopConditionEvaluatorTests: XCTestCase {
             executedSteps: [],
             maxSteps: 20
         )
-        XCTAssertEqual(result, .uncertain)
+        #expect(result == .uncertain)
     }
 
-    // MARK: - P0 windowAppears (AC2)
-
-    func test_evaluate_windowAppears_windowTitleFound_returnsSatisfied() {
+    @Test("windowAppears — window title found returns satisfied")
+    func evaluateWindowAppearsWindowTitleFoundReturnsSatisfied() {
         let evaluator = StopConditionEvaluator()
         let conditions = [StopCondition(type: .windowAppears, value: "Calculator")]
         let axTree = """
@@ -109,10 +102,11 @@ final class StopConditionEvaluatorTests: XCTestCase {
             executedSteps: [],
             maxSteps: 20
         )
-        XCTAssertEqual(result, .satisfied)
+        #expect(result == .satisfied)
     }
 
-    func test_evaluate_windowAppears_windowNotFound_returnsNotSatisfied() {
+    @Test("windowAppears — window not found returns notSatisfied")
+    func evaluateWindowAppearsWindowNotFoundReturnsNotSatisfied() {
         let evaluator = StopConditionEvaluator()
         let conditions = [StopCondition(type: .windowAppears, value: "TextEdit")]
         let axTree = """
@@ -125,10 +119,11 @@ final class StopConditionEvaluatorTests: XCTestCase {
             executedSteps: [],
             maxSteps: 20
         )
-        XCTAssertEqual(result, .notSatisfied)
+        #expect(result == .notSatisfied)
     }
 
-    func test_evaluate_windowAppears_nilAxTree_returnsUncertain() {
+    @Test("windowAppears with nil AX tree returns uncertain")
+    func evaluateWindowAppearsNilAxTreeReturnsUncertain() {
         let evaluator = StopConditionEvaluator()
         let conditions = [StopCondition(type: .windowAppears, value: "Calculator")]
         let result = evaluator.evaluate(
@@ -138,12 +133,11 @@ final class StopConditionEvaluatorTests: XCTestCase {
             executedSteps: [],
             maxSteps: 20
         )
-        XCTAssertEqual(result, .uncertain)
+        #expect(result == .uncertain)
     }
 
-    // MARK: - P0 windowDisappears (AC2)
-
-    func test_evaluate_windowDisappears_windowGone_returnsSatisfied() {
+    @Test("windowDisappears — window gone returns satisfied")
+    func evaluateWindowDisappearsWindowGoneReturnsSatisfied() {
         let evaluator = StopConditionEvaluator()
         let conditions = [StopCondition(type: .windowDisappears, value: "Dialog")]
         let axTree = """
@@ -156,10 +150,11 @@ final class StopConditionEvaluatorTests: XCTestCase {
             executedSteps: [],
             maxSteps: 20
         )
-        XCTAssertEqual(result, .satisfied)
+        #expect(result == .satisfied)
     }
 
-    func test_evaluate_windowDisappears_windowStillPresent_returnsNotSatisfied() {
+    @Test("windowDisappears — window still present returns notSatisfied")
+    func evaluateWindowDisappearsWindowStillPresentReturnsNotSatisfied() {
         let evaluator = StopConditionEvaluator()
         let conditions = [StopCondition(type: .windowDisappears, value: "Calculator")]
         let axTree = """
@@ -172,12 +167,11 @@ final class StopConditionEvaluatorTests: XCTestCase {
             executedSteps: [],
             maxSteps: 20
         )
-        XCTAssertEqual(result, .notSatisfied)
+        #expect(result == .notSatisfied)
     }
 
-    // MARK: - P0 maxStepsReached (AC2)
-
-    func test_evaluate_maxStepsReached_stepsEqualMax_returnsSatisfied() {
+    @Test("maxStepsReached — steps equal max returns satisfied")
+    func evaluateMaxStepsReachedStepsEqualMaxReturnsSatisfied() {
         let evaluator = StopConditionEvaluator()
         let conditions = [StopCondition(type: .maxStepsReached, value: nil)]
         let steps = (0..<20).map { i in
@@ -197,10 +191,11 @@ final class StopConditionEvaluatorTests: XCTestCase {
             executedSteps: steps,
             maxSteps: 20
         )
-        XCTAssertEqual(result, .satisfied)
+        #expect(result == .satisfied)
     }
 
-    func test_evaluate_maxStepsReached_stepsBelowMax_returnsNotSatisfied() {
+    @Test("maxStepsReached — steps below max returns notSatisfied")
+    func evaluateMaxStepsReachedStepsBelowMaxReturnsNotSatisfied() {
         let evaluator = StopConditionEvaluator()
         let conditions = [StopCondition(type: .maxStepsReached, value: nil)]
         let steps = (0..<10).map { i in
@@ -220,12 +215,11 @@ final class StopConditionEvaluatorTests: XCTestCase {
             executedSteps: steps,
             maxSteps: 20
         )
-        XCTAssertEqual(result, .notSatisfied)
+        #expect(result == .notSatisfied)
     }
 
-    // MARK: - P0 custom and fileExists (AC2)
-
-    func test_evaluate_customType_returnsUncertain() {
+    @Test("custom type returns uncertain")
+    func evaluateCustomTypeReturnsUncertain() {
         let evaluator = StopConditionEvaluator()
         let conditions = [StopCondition(type: .custom, value: "Calculator displays the correct result")]
         let result = evaluator.evaluate(
@@ -235,10 +229,11 @@ final class StopConditionEvaluatorTests: XCTestCase {
             executedSteps: [],
             maxSteps: 20
         )
-        XCTAssertEqual(result, .uncertain)
+        #expect(result == .uncertain)
     }
 
-    func test_evaluate_fileExists_returnsUncertain() {
+    @Test("fileExists returns uncertain")
+    func evaluateFileExistsReturnsUncertain() {
         let evaluator = StopConditionEvaluator()
         let conditions = [StopCondition(type: .fileExists, value: "/tmp/output.txt")]
         let result = evaluator.evaluate(
@@ -248,12 +243,11 @@ final class StopConditionEvaluatorTests: XCTestCase {
             executedSteps: [],
             maxSteps: 20
         )
-        XCTAssertEqual(result, .uncertain)
+        #expect(result == .uncertain)
     }
 
-    // MARK: - P1 Multi-Condition Logic
-
-    func test_evaluate_emptyConditions_returnsSatisfied() {
+    @Test("empty conditions returns satisfied")
+    func evaluateEmptyConditionsReturnsSatisfied() {
         let evaluator = StopConditionEvaluator()
         let result = evaluator.evaluate(
             stopConditions: [],
@@ -262,10 +256,11 @@ final class StopConditionEvaluatorTests: XCTestCase {
             executedSteps: [],
             maxSteps: 20
         )
-        XCTAssertEqual(result, .satisfied)
+        #expect(result == .satisfied)
     }
 
-    func test_evaluate_multipleConditions_allSatisfied_returnsSatisfied() {
+    @Test("multiple conditions all satisfied returns satisfied")
+    func evaluateMultipleConditionsAllSatisfiedReturnsSatisfied() {
         let evaluator = StopConditionEvaluator()
         let conditions = [
             StopCondition(type: .textAppears, value: "391"),
@@ -285,10 +280,11 @@ final class StopConditionEvaluatorTests: XCTestCase {
             executedSteps: [],
             maxSteps: 20
         )
-        XCTAssertEqual(result, .satisfied)
+        #expect(result == .satisfied)
     }
 
-    func test_evaluate_multipleConditions_oneNotSatisfied_returnsNotSatisfied() {
+    @Test("multiple conditions one not satisfied returns notSatisfied")
+    func evaluateMultipleConditionsOneNotSatisfiedReturnsNotSatisfied() {
         let evaluator = StopConditionEvaluator()
         let conditions = [
             StopCondition(type: .textAppears, value: "391"),
@@ -304,12 +300,11 @@ final class StopConditionEvaluatorTests: XCTestCase {
             executedSteps: [],
             maxSteps: 20
         )
-        XCTAssertEqual(result, .notSatisfied)
+        #expect(result == .notSatisfied)
     }
 
-    // MARK: - P1 processExits
-
-    func test_evaluate_processExits_processGone_returnsSatisfied() {
+    @Test("processExits — process gone returns satisfied")
+    func evaluateProcessExitsProcessGoneReturnsSatisfied() {
         let evaluator = StopConditionEvaluator()
         let conditions = [StopCondition(type: .processExits, value: "Calculator")]
         // Simulate: last list_apps result does not contain Calculator
@@ -346,6 +341,6 @@ final class StopConditionEvaluatorTests: XCTestCase {
             executedSteps: steps,
             maxSteps: 20
         )
-        XCTAssertEqual(result, .satisfied)
+        #expect(result == .satisfied)
     }
 }

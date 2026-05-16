@@ -1,21 +1,18 @@
-import XCTest
+import Testing
+import Foundation
 @testable import AxionCLI
 @testable import AxionCore
 
-// [P0] 基础设施验证
-// [P1] 行为验证
+@Suite("PlanParser")
+struct PlanParserTests {
 
-final class PlanParserTests: XCTestCase {
-
-    // MARK: - P0 类型存在性
-
-    func test_planParser_typeExists() async throws {
+    @Test("type exists")
+    func typeExists() async throws {
         let _ = PlanParser.self
     }
 
-    // MARK: - P0 Markdown 围栏解析 (AC4)
-
-    func test_stripFences_jsonInBackticks_extractsJSON() async throws {
+    @Test("strips fences from JSON in backticks")
+    func stripFencesJsonInBackticksExtractsJSON() async throws {
         let input = """
         Here is the plan:
         ```json
@@ -23,25 +20,25 @@ final class PlanParserTests: XCTestCase {
         ```
         """
         let result = try PlanParser.stripFences(input)
-        XCTAssertTrue(result.contains("\"status\""))
-        XCTAssertTrue(result.contains("\"steps\""))
-        XCTAssertFalse(result.contains("```"))
+        #expect(result.contains("\"status\""))
+        #expect(result.contains("\"steps\""))
+        #expect(!result.contains("```"))
     }
 
-    func test_stripFences_jsonInPlainBackticks_extractsJSON() async throws {
+    @Test("strips fences from JSON in plain backticks")
+    func stripFencesJsonInPlainBackticksExtractsJSON() async throws {
         let input = """
         ```
         {"status": "ready", "steps": [], "stopWhen": "task complete"}
         ```
         """
         let result = try PlanParser.stripFences(input)
-        XCTAssertTrue(result.contains("\"status\""))
-        XCTAssertFalse(result.contains("```"))
+        #expect(result.contains("\"status\""))
+        #expect(!result.contains("```"))
     }
 
-    // MARK: - P0 前导文本解析 (AC5)
-
-    func test_stripFences_proseBeforeJSON_extractsJSON() async throws {
+    @Test("strips fences from prose before JSON")
+    func stripFencesProseBeforeJSONExtractsJSON() async throws {
         let input = """
         Looking at the current screen state, I can see the Calculator is not yet open.
         Let me plan the steps:
@@ -49,46 +46,44 @@ final class PlanParserTests: XCTestCase {
         {"status": "ready", "steps": [{"tool": "launch_app", "args": {"name": "Calculator"}, "purpose": "Open Calculator", "expected_change": "Calculator opens"}], "stopWhen": "Result 391 is visible"}
         """
         let result = try PlanParser.stripFences(input)
-        XCTAssertTrue(result.hasPrefix("{"))
-        XCTAssertTrue(result.contains("\"status\""))
-        XCTAssertTrue(result.contains("\"launch_app\""))
+        #expect(result.hasPrefix("{"))
+        #expect(result.contains("\"status\""))
+        #expect(result.contains("\"launch_app\""))
     }
 
-    func test_stripFences_jsonWithTrailingText_extractsJSON() async throws {
+    @Test("strips fences from JSON with trailing text")
+    func stripFencesJsonWithTrailingTextExtractsJSON() async throws {
         let input = """
         {"status": "ready", "steps": [], "stopWhen": "done"}
         And some trailing text after.
         """
         let result = try PlanParser.stripFences(input)
-        XCTAssertTrue(result.hasPrefix("{"))
+        #expect(result.hasPrefix("{"))
         // JSON should end at the closing brace, not include trailing text
-        XCTAssertTrue(result.contains("\"stopWhen\""))
+        #expect(result.contains("\"stopWhen\""))
     }
 
-    // MARK: - P0 字符串内嵌套花括号处理
-
-    func test_stripFences_nestedBracesInStrings_handlesCorrectly() async throws {
+    @Test("strips fences with nested braces in strings")
+    func stripFencesNestedBracesInStringsHandlesCorrectly() async throws {
         let input = """
         {"status": "ready", "steps": [{"tool": "click", "args": {"selector": "div.container { color: red }"}, "purpose": "Click element", "expected_change": "clicked"}], "stopWhen": "done"}
         """
         let result = try PlanParser.stripFences(input)
-        XCTAssertTrue(result.contains("\"selector\""))
-        XCTAssertTrue(result.contains("color: red"))
+        #expect(result.contains("\"selector\""))
+        #expect(result.contains("color: red"))
     }
 
-    // MARK: - P0 纯 JSON 输入 (无围栏无前导)
-
-    func test_stripFences_pureJSON_returnsAsIs() async throws {
+    @Test("pure JSON returns as is")
+    func stripFencesPureJSONReturnsAsIs() async throws {
         let input = """
         {"status": "ready", "steps": [], "stopWhen": "task complete"}
         """
         let result = try PlanParser.stripFences(input)
-        XCTAssertEqual(result.trimmingCharacters(in: .whitespacesAndNewlines), input.trimmingCharacters(in: .whitespacesAndNewlines))
+        #expect(result.trimmingCharacters(in: .whitespacesAndNewlines) == input.trimmingCharacters(in: .whitespacesAndNewlines))
     }
 
-    // MARK: - P0 完整 Plan 解析 (AC2, AC3)
-
-    func test_parsePlan_validResponse_returnsPlan() async throws {
+    @Test("valid response returns plan")
+    func parsePlanValidResponseReturnsPlan() async throws {
         let llmResponse = """
         ```json
         {
@@ -113,16 +108,17 @@ final class PlanParserTests: XCTestCase {
         """
         let plan = try PlanParser.parse(llmResponse, task: "Open Calculator and compute 17 * 23", maxSteps: 10)
 
-        XCTAssertEqual(plan.task, "Open Calculator and compute 17 * 23")
-        XCTAssertEqual(plan.steps.count, 2)
-        XCTAssertEqual(plan.steps[0].tool, "launch_app")
-        XCTAssertEqual(plan.steps[0].purpose, "Open Calculator")
-        XCTAssertEqual(plan.steps[0].expectedChange, "Calculator is open")
-        XCTAssertEqual(plan.steps[1].tool, "click")
-        XCTAssertFalse(plan.stopWhen.isEmpty)
+        #expect(plan.task == "Open Calculator and compute 17 * 23")
+        #expect(plan.steps.count == 2)
+        #expect(plan.steps[0].tool == "launch_app")
+        #expect(plan.steps[0].purpose == "Open Calculator")
+        #expect(plan.steps[0].expectedChange == "Calculator is open")
+        #expect(plan.steps[1].tool == "click")
+        #expect(!plan.stopWhen.isEmpty)
     }
 
-    func test_parsePlan_stepStructure_hasAllRequiredFields() async throws {
+    @Test("step structure has all required fields")
+    func parsePlanStepStructureHasAllRequiredFields() async throws {
         let llmResponse = """
         {
             "steps": [
@@ -139,88 +135,111 @@ final class PlanParserTests: XCTestCase {
         let plan = try PlanParser.parse(llmResponse, task: "Type hello", maxSteps: 5)
 
         let step = plan.steps[0]
-        XCTAssertEqual(step.tool, "type_text")
-        XCTAssertNotNil(step.parameters["text"])
-        XCTAssertEqual(step.purpose, "Type greeting")
-        XCTAssertEqual(step.expectedChange, "Text entered")
+        #expect(step.tool == "type_text")
+        #expect(step.parameters["text"] != nil)
+        #expect(step.purpose == "Type greeting")
+        #expect(step.expectedChange == "Text entered")
     }
 
-    // MARK: - P0 解析失败处理 (AC7, NFR7)
-
-    func test_parsePlan_invalidJSON_throwsInvalidPlan() async throws {
+    @Test("invalid JSON throws invalidPlan")
+    func parsePlanInvalidJSONThrowsInvalidPlan() async throws {
         let invalidResponse = "This is not JSON at all, just plain text."
-        XCTAssertThrowsError(try PlanParser.parse(invalidResponse, task: "test", maxSteps: 5)) { error in
-            // 验证抛出的是 AxionError.invalidPlan
-            if let axionError = error as? AxionError {
-                guard case .invalidPlan = axionError else {
-                    XCTFail("Expected invalidPlan error, got: \(axionError)")
-                    return
-                }
+        do {
+            try PlanParser.parse(invalidResponse, task: "test", maxSteps: 5)
+            Issue.record("Should have thrown")
+        } catch let error as AxionError {
+            if case .invalidPlan = error {
+                // Expected
+            } else {
+                Issue.record("Expected invalidPlan error, got: \(error)")
             }
         }
     }
 
-    func test_parsePlan_failurePreservesRawResponse_NFR7() async throws {
+    @Test("failure preserves raw response")
+    func parsePlanFailurePreservesRawResponse() async throws {
         // NFR7: 解析失败时原始 LLM 响应不丢失
         let badResponse = "I cannot parse this {broken json"
         do {
             _ = try PlanParser.parse(badResponse, task: "test", maxSteps: 5)
-            XCTFail("Should have thrown an error")
+            Issue.record("Should have thrown an error")
         } catch let error as AxionError {
             // 错误原因中应包含原始响应或其部分内容
             switch error {
             case .invalidPlan(let reason):
-                XCTAssertTrue(reason.contains("broken") || reason.contains("cannot parse") || reason.contains("JSON decode failed"),
-                              "Error reason should contain raw response context, got: \(reason)")
+                #expect(reason.contains("broken") || reason.contains("cannot parse") || reason.contains("JSON decode failed"))
             default:
-                XCTFail("Expected invalidPlan error, got: \(error)")
+                Issue.record("Expected invalidPlan error, got: \(error)")
             }
         }
     }
 
-    func test_parsePlan_emptySteps_throwsInvalidPlan() async throws {
+    @Test("empty steps throws invalidPlan")
+    func parsePlanEmptyStepsThrowsInvalidPlan() async throws {
         let emptySteps = """
         {
             "steps": [],
             "stopWhen": "done"
         }
         """
-        XCTAssertThrowsError(try PlanParser.parse(emptySteps, task: "test", maxSteps: 5))
+        do {
+            try PlanParser.parse(emptySteps, task: "test", maxSteps: 5)
+            Issue.record("Should have thrown")
+        } catch _ as AxionError {
+            // Expected
+        }
     }
 
-    func test_parsePlan_missingStopWhen_throwsInvalidPlan() async throws {
+    @Test("missing stopWhen throws invalidPlan")
+    func parsePlanMissingStopWhenThrowsInvalidPlan() async throws {
         let noStopWhen = """
         {
             "steps": [{"tool": "click", "args": {}, "purpose": "click", "expected_change": "clicked"}],
             "stopWhen": ""
         }
         """
-        XCTAssertThrowsError(try PlanParser.parse(noStopWhen, task: "test", maxSteps: 5))
+        do {
+            try PlanParser.parse(noStopWhen, task: "test", maxSteps: 5)
+            Issue.record("Should have thrown")
+        } catch _ as AxionError {
+            // Expected
+        }
     }
 
-    func test_parsePlan_stepMissingTool_throwsInvalidPlan() async throws {
+    @Test("step missing tool throws invalidPlan")
+    func parsePlanStepMissingToolThrowsInvalidPlan() async throws {
         let missingTool = """
         {
             "steps": [{"args": {}, "purpose": "click", "expected_change": "clicked"}],
             "stopWhen": "done"
         }
         """
-        XCTAssertThrowsError(try PlanParser.parse(missingTool, task: "test", maxSteps: 5))
+        do {
+            try PlanParser.parse(missingTool, task: "test", maxSteps: 5)
+            Issue.record("Should have thrown")
+        } catch _ as AxionError {
+            // Expected
+        }
     }
 
-    func test_parsePlan_stepMissingPurpose_throwsInvalidPlan() async throws {
+    @Test("step missing purpose throws invalidPlan")
+    func parsePlanStepMissingPurposeThrowsInvalidPlan() async throws {
         let missingPurpose = """
         {
             "steps": [{"tool": "click", "args": {}, "expected_change": "clicked"}],
             "stopWhen": "done"
         }
         """
-        XCTAssertThrowsError(try PlanParser.parse(missingPurpose, task: "test", maxSteps: 5))
+        do {
+            try PlanParser.parse(missingPurpose, task: "test", maxSteps: 5)
+            Issue.record("Should have thrown")
+        } catch _ as AxionError {
+            // Expected
+        }
     }
 
-    // MARK: - P0 步骤数超限
-
-    func test_parsePlan_exceedsMaxSteps_throwsInvalidPlan() async throws {
+    @Test("exceeds max steps throws invalidPlan")
+    func parsePlanExceedsMaxStepsThrowsInvalidPlan() async throws {
         var stepsJSON = ""
         for i in 0..<15 {
             if i > 0 { stepsJSON += "," }
@@ -234,19 +253,20 @@ final class PlanParserTests: XCTestCase {
             "stopWhen": "all done"
         }
         """
-        XCTAssertThrowsError(try PlanParser.parse(response, task: "test", maxSteps: 10)) { error in
-            if let axionError = error as? AxionError {
-                guard case .invalidPlan = axionError else {
-                    XCTFail("Expected invalidPlan error")
-                    return
-                }
+        do {
+            try PlanParser.parse(response, task: "test", maxSteps: 10)
+            Issue.record("Should have thrown")
+        } catch let error as AxionError {
+            if case .invalidPlan = error {
+                // Expected
+            } else {
+                Issue.record("Expected invalidPlan error")
             }
         }
     }
 
-    // MARK: - P1 stopWhen 映射
-
-    func test_parsePlan_stopWhenString_mapsToStopCondition() async throws {
+    @Test("stopWhen string maps to stop condition")
+    func parsePlanStopWhenStringMapsToStopCondition() async throws {
         let response = """
         {
             "steps": [{"tool": "launch_app", "args": {"name": "Calc"}, "purpose": "open", "expected_change": "opened"}],
@@ -254,14 +274,13 @@ final class PlanParserTests: XCTestCase {
         }
         """
         let plan = try PlanParser.parse(response, task: "Open Calculator", maxSteps: 5)
-        XCTAssertFalse(plan.stopWhen.isEmpty)
-        XCTAssertEqual(plan.stopWhen[0].type, .custom)
-        XCTAssertEqual(plan.stopWhen[0].value, "Calculator window appears with result")
+        #expect(!plan.stopWhen.isEmpty)
+        #expect(plan.stopWhen[0].type == .custom)
+        #expect(plan.stopWhen[0].value == "Calculator window appears with result")
     }
 
-    // MARK: - P1 参数映射 args -> parameters
-
-    func test_parsePlan_argsField_mapsToParameters() async throws {
+    @Test("args field maps to parameters")
+    func parsePlanArgsFieldMapsToParameters() async throws {
         let response = """
         {
             "steps": [{"tool": "launch_app", "args": {"name": "Calculator"}, "purpose": "open", "expected_change": "opened"}],
@@ -269,12 +288,11 @@ final class PlanParserTests: XCTestCase {
         }
         """
         let plan = try PlanParser.parse(response, task: "test", maxSteps: 5)
-        XCTAssertEqual(plan.steps[0].parameters["name"], .string("Calculator"))
+        #expect(plan.steps[0].parameters["name"] == .string("Calculator"))
     }
 
-    // MARK: - P1 expected_change -> expectedChange 映射
-
-    func test_parsePlan_expectedChangeField_snakeCaseMapped() async throws {
+    @Test("expected_change field snake case mapped")
+    func parsePlanExpectedChangeFieldSnakeCaseMapped() async throws {
         let response = """
         {
             "steps": [{"tool": "click", "args": {"x": 10}, "purpose": "click", "expected_change": "Button activated"}],
@@ -282,12 +300,11 @@ final class PlanParserTests: XCTestCase {
         }
         """
         let plan = try PlanParser.parse(response, task: "test", maxSteps: 5)
-        XCTAssertEqual(plan.steps[0].expectedChange, "Button activated")
+        #expect(plan.steps[0].expectedChange == "Button activated")
     }
 
-    // MARK: - P1 validatePlan (AC3)
-
-    func test_validatePlan_validPlan_returnsPlan() async throws {
+    @Test("validatePlan valid plan returns plan")
+    func validatePlanValidPlanReturnsPlan() async throws {
         let plan = Plan(
             id: UUID(),
             task: "test task",
@@ -298,10 +315,11 @@ final class PlanParserTests: XCTestCase {
             maxRetries: 3
         )
         let validated = try PlanParser.validatePlan(plan, maxSteps: 10)
-        XCTAssertEqual(validated.steps.count, 1)
+        #expect(validated.steps.count == 1)
     }
 
-    func test_validatePlan_emptySteps_throwsInvalidPlan() async throws {
+    @Test("validatePlan empty steps throws invalidPlan")
+    func validatePlanEmptyStepsThrowsInvalidPlan() async throws {
         let plan = Plan(
             id: UUID(),
             task: "test task",
@@ -309,10 +327,16 @@ final class PlanParserTests: XCTestCase {
             stopWhen: [StopCondition(type: .custom, value: "done")],
             maxRetries: 3
         )
-        XCTAssertThrowsError(try PlanParser.validatePlan(plan, maxSteps: 10))
+        do {
+            try PlanParser.validatePlan(plan, maxSteps: 10)
+            Issue.record("Should have thrown")
+        } catch _ as AxionError {
+            // Expected
+        }
     }
 
-    func test_validatePlan_emptyStopWhen_throwsInvalidPlan() async throws {
+    @Test("validatePlan empty stopWhen throws invalidPlan")
+    func validatePlanEmptyStopWhenThrowsInvalidPlan() async throws {
         let plan = Plan(
             id: UUID(),
             task: "test task",
@@ -322,12 +346,16 @@ final class PlanParserTests: XCTestCase {
             stopWhen: [],
             maxRetries: 3
         )
-        XCTAssertThrowsError(try PlanParser.validatePlan(plan, maxSteps: 10))
+        do {
+            try PlanParser.validatePlan(plan, maxSteps: 10)
+            Issue.record("Should have thrown")
+        } catch _ as AxionError {
+            // Expected
+        }
     }
 
-    // MARK: - P1 status 字段处理
-
-    func test_parsePlan_doneStatus_returnsEmptyStepsPlan() async throws {
+    @Test("done status returns empty steps plan")
+    func parsePlanDoneStatusReturnsEmptyStepsPlan() async throws {
         // LLM 可能返回 status: "done" 表示任务已完成
         let response = """
         {
@@ -339,10 +367,11 @@ final class PlanParserTests: XCTestCase {
         """
         // done 状态的 Plan 应该是有效的（0 步骤表示不需要执行）
         let plan = try PlanParser.parse(response, task: "test", maxSteps: 5)
-        XCTAssertEqual(plan.steps.count, 0)
+        #expect(plan.steps.count == 0)
     }
 
-    func test_parsePlan_needsClarificationStatus_throwsAppropriateError() async throws {
+    @Test("needs_clarification status throws appropriate error")
+    func parsePlanNeedsClarificationStatusThrowsAppropriateError() async throws {
         let response = """
         {
             "status": "needs_clarification",
@@ -352,18 +381,18 @@ final class PlanParserTests: XCTestCase {
         }
         """
         // needs_clarification 应该抛出包含 message 的错误
-        XCTAssertThrowsError(try PlanParser.parse(response, task: "open app", maxSteps: 5)) { error in
-            if let axionError = error as? AxionError {
-                switch axionError {
-                case .planningFailed(let reason):
-                    XCTAssertTrue(reason.contains("clarify") || reason.contains("Clarification"),
-                                  "Error should mention clarification, got: \(reason)")
-                case .invalidPlan:
-                    // 也可以接受 invalidPlan
-                    break
-                default:
-                    XCTFail("Expected planningFailed or invalidPlan, got: \(axionError)")
-                }
+        do {
+            try PlanParser.parse(response, task: "open app", maxSteps: 5)
+            Issue.record("Should have thrown")
+        } catch let error as AxionError {
+            switch error {
+            case .planningFailed(let reason):
+                #expect(reason.contains("clarify") || reason.contains("Clarification"))
+            case .invalidPlan:
+                // 也可以接受 invalidPlan
+                break
+            default:
+                Issue.record("Expected planningFailed or invalidPlan, got: \(error)")
             }
         }
     }

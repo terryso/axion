@@ -1,29 +1,25 @@
-import XCTest
+import Testing
+import Foundation
 @testable import AxionCLI
 @testable import AxionCore
 
-// [P0] 基础设施验证
-// [P1] 行为验证
-
-// MARK: - PlaceholderResolver ATDD Tests
-
 /// ATDD 红色阶段测试 — 覆盖 Story 3-3 AC2 ($pid 占位符解析) 和 AC3 ($window_id 占位符解析)
 /// 这些测试将在 PlaceholderResolver 实现后通过 (TDD red-green-refactor)
-final class PlaceholderResolverTests: XCTestCase {
+@Suite("PlaceholderResolver")
+struct PlaceholderResolverTests {
 
-    // MARK: - P0 类型存在性
-
-    func test_placeholderResolver_typeExists() {
+    @Test("placeholderResolver type exists")
+    func placeholderResolverTypeExists() {
         let _ = PlaceholderResolver.self
     }
 
-    func test_executionContext_typeExists() {
+    @Test("executionContext type exists")
+    func executionContextTypeExists() {
         let _ = ExecutionContext.self
     }
 
-    // MARK: - P0 $pid 占位符解析 (AC2)
-
-    func test_resolve_pidPlaceholder_replacesWithPid() {
+    @Test("$pid placeholder is replaced with actual pid")
+    func resolvePidPlaceholderReplacesWithPid() {
         let resolver = PlaceholderResolver()
         let context = ExecutionContext(pid: 1234, windowId: nil)
         let step = Step(
@@ -40,12 +36,13 @@ final class PlaceholderResolverTests: XCTestCase {
 
         let resolved = resolver.resolve(step: step, context: context)
 
-        XCTAssertEqual(resolved.parameters["pid"], .int(1234))
-        XCTAssertEqual(resolved.parameters["x"], .int(100))
-        XCTAssertEqual(resolved.parameters["y"], .int(200))
+        #expect(resolved.parameters["pid"] == .int(1234))
+        #expect(resolved.parameters["x"] == .int(100))
+        #expect(resolved.parameters["y"] == .int(200))
     }
 
-    func test_resolve_pidPlaceholder_notSet_preservesPlaceholder() {
+    @Test("$pid placeholder preserved when pid not set")
+    func resolvePidPlaceholderNotSetPreservesPlaceholder() {
         let resolver = PlaceholderResolver()
         let context = ExecutionContext(pid: nil, windowId: nil)
         let step = Step(
@@ -63,12 +60,11 @@ final class PlaceholderResolverTests: XCTestCase {
         let resolved = resolver.resolve(step: step, context: context)
 
         // When pid is not yet set, placeholder should remain unchanged
-        XCTAssertEqual(resolved.parameters["pid"], .placeholder("$pid"))
+        #expect(resolved.parameters["pid"] == .placeholder("$pid"))
     }
 
-    // MARK: - P0 $window_id 占位符解析 (AC3)
-
-    func test_resolve_windowIdPlaceholder_replacesWithWindowId() {
+    @Test("$window_id placeholder is replaced with actual windowId")
+    func resolveWindowIdPlaceholderReplacesWithWindowId() {
         let resolver = PlaceholderResolver()
         let context = ExecutionContext(pid: 1234, windowId: 42)
         let step = Step(
@@ -85,12 +81,13 @@ final class PlaceholderResolverTests: XCTestCase {
 
         let resolved = resolver.resolve(step: step, context: context)
 
-        XCTAssertEqual(resolved.parameters["pid"], .int(1234))
-        XCTAssertEqual(resolved.parameters["window_id"], .int(42))
-        XCTAssertEqual(resolved.parameters["text"], .string("17*23="))
+        #expect(resolved.parameters["pid"] == .int(1234))
+        #expect(resolved.parameters["window_id"] == .int(42))
+        #expect(resolved.parameters["text"] == .string("17*23="))
     }
 
-    func test_resolve_windowIdPlaceholder_notSet_preservesPlaceholder() {
+    @Test("$window_id placeholder preserved when windowId not set")
+    func resolveWindowIdPlaceholderNotSetPreservesPlaceholder() {
         let resolver = PlaceholderResolver()
         let context = ExecutionContext(pid: 1234, windowId: nil)
         let step = Step(
@@ -107,12 +104,11 @@ final class PlaceholderResolverTests: XCTestCase {
 
         let resolved = resolver.resolve(step: step, context: context)
 
-        XCTAssertEqual(resolved.parameters["window_id"], .placeholder("$window_id"))
+        #expect(resolved.parameters["window_id"] == .placeholder("$window_id"))
     }
 
-    // MARK: - P0 多占位符混合
-
-    func test_resolve_multiplePlaceholders_allResolved() {
+    @Test("multiple placeholders all resolved")
+    func resolveMultiplePlaceholdersAllResolved() {
         let resolver = PlaceholderResolver()
         let context = ExecutionContext(pid: 5678, windowId: 99)
         let step = Step(
@@ -130,13 +126,14 @@ final class PlaceholderResolverTests: XCTestCase {
 
         let resolved = resolver.resolve(step: step, context: context)
 
-        XCTAssertEqual(resolved.parameters["pid"], .int(5678))
-        XCTAssertEqual(resolved.parameters["window_id"], .int(99))
-        XCTAssertEqual(resolved.parameters["x"], .int(300))
-        XCTAssertEqual(resolved.parameters["y"], .int(400))
+        #expect(resolved.parameters["pid"] == .int(5678))
+        #expect(resolved.parameters["window_id"] == .int(99))
+        #expect(resolved.parameters["x"] == .int(300))
+        #expect(resolved.parameters["y"] == .int(400))
     }
 
-    func test_resolve_noPlaceholders_preservesAllParams() {
+    @Test("no placeholders preserves all params")
+    func resolveNoPlaceholdersPreservesAllParams() {
         let resolver = PlaceholderResolver()
         let context = ExecutionContext(pid: 1234, windowId: 42)
         let step = Step(
@@ -149,13 +146,12 @@ final class PlaceholderResolverTests: XCTestCase {
 
         let resolved = resolver.resolve(step: step, context: context)
 
-        XCTAssertEqual(resolved.parameters["app_name"], .string("Calculator"))
-        XCTAssertEqual(resolved, step)
+        #expect(resolved.parameters["app_name"] == .string("Calculator"))
+        #expect(resolved == step)
     }
 
-    // MARK: - P0 未知占位符保留
-
-    func test_resolve_unknownPlaceholder_preservesOriginal() {
+    @Test("unknown placeholder preserved")
+    func resolveUnknownPlaceholderPreservesOriginal() {
         let resolver = PlaceholderResolver()
         let context = ExecutionContext(pid: 1234, windowId: 42)
         let step = Step(
@@ -168,10 +164,11 @@ final class PlaceholderResolverTests: XCTestCase {
 
         let resolved = resolver.resolve(step: step, context: context)
 
-        XCTAssertEqual(resolved.parameters["ref"], .placeholder("$unknown_ref"))
+        #expect(resolved.parameters["ref"] == .placeholder("$unknown_ref"))
     }
 
-    func test_resolve_mixedResolvedAndUnresolved() {
+    @Test("mixed resolved and unresolved placeholders")
+    func resolveMixedResolvedAndUnresolved() {
         let resolver = PlaceholderResolver()
         let context = ExecutionContext(pid: 100, windowId: nil)
         let step = Step(
@@ -188,14 +185,13 @@ final class PlaceholderResolverTests: XCTestCase {
 
         let resolved = resolver.resolve(step: step, context: context)
 
-        XCTAssertEqual(resolved.parameters["pid"], .int(100))
-        XCTAssertEqual(resolved.parameters["window_id"], .placeholder("$window_id"))
-        XCTAssertEqual(resolved.parameters["x"], .int(10))
+        #expect(resolved.parameters["pid"] == .int(100))
+        #expect(resolved.parameters["window_id"] == .placeholder("$window_id"))
+        #expect(resolved.parameters["x"] == .int(10))
     }
 
-    // MARK: - P0 步骤元数据保留
-
-    func test_resolve_preservesStepMetadata() {
+    @Test("step metadata preserved after resolve")
+    func resolvePreservesStepMetadata() {
         let resolver = PlaceholderResolver()
         let context = ExecutionContext(pid: 1234, windowId: 42)
         let step = Step(
@@ -208,15 +204,14 @@ final class PlaceholderResolverTests: XCTestCase {
 
         let resolved = resolver.resolve(step: step, context: context)
 
-        XCTAssertEqual(resolved.index, 5)
-        XCTAssertEqual(resolved.tool, "type_text")
-        XCTAssertEqual(resolved.purpose, "Type hello")
-        XCTAssertEqual(resolved.expectedChange, "Text entered")
+        #expect(resolved.index == 5)
+        #expect(resolved.tool == "type_text")
+        #expect(resolved.purpose == "Type hello")
+        #expect(resolved.expectedChange == "Text entered")
     }
 
-    // MARK: - P1 absorbResult — 从 launch_app 结果提取 pid
-
-    func test_absorbResult_launchApp_extractsPid() {
+    @Test("absorbResult from launch_app extracts pid")
+    func absorbResultLaunchAppExtractsPid() {
         let resolver = PlaceholderResolver()
         var context = ExecutionContext(pid: nil, windowId: nil)
         let result = """
@@ -225,13 +220,12 @@ final class PlaceholderResolverTests: XCTestCase {
 
         resolver.absorbResult(tool: "launch_app", result: result, context: &context)
 
-        XCTAssertEqual(context.pid, 9876)
-        XCTAssertNil(context.windowId)
+        #expect(context.pid == 9876)
+        #expect(context.windowId == nil)
     }
 
-    // MARK: - P1 absorbResult — 从 list_windows 结果提取 window_id
-
-    func test_absorbResult_listWindows_extractsWindowId() {
+    @Test("absorbResult from list_windows extracts window_id")
+    func absorbResultListWindowsExtractsWindowId() {
         let resolver = PlaceholderResolver()
         var context = ExecutionContext(pid: nil, windowId: nil)
         let result = """
@@ -240,13 +234,12 @@ final class PlaceholderResolverTests: XCTestCase {
 
         resolver.absorbResult(tool: "list_windows", result: result, context: &context)
 
-        XCTAssertEqual(context.windowId, 42)
-        XCTAssertEqual(context.pid, 1234)
+        #expect(context.windowId == 42)
+        #expect(context.pid == 1234)
     }
 
-    // MARK: - P1 absorbResult — 从 get_window_state 结果提取 window_id
-
-    func test_absorbResult_getWindowState_extractsWindowId() {
+    @Test("absorbResult from get_window_state extracts window_id")
+    func absorbResultGetWindowStateExtractsWindowId() {
         let resolver = PlaceholderResolver()
         var context = ExecutionContext(pid: nil, windowId: nil)
         let result = """
@@ -255,13 +248,12 @@ final class PlaceholderResolverTests: XCTestCase {
 
         resolver.absorbResult(tool: "get_window_state", result: result, context: &context)
 
-        XCTAssertEqual(context.windowId, 77)
-        XCTAssertEqual(context.pid, 5555)
+        #expect(context.windowId == 77)
+        #expect(context.pid == 5555)
     }
 
-    // MARK: - P1 absorbResult — 非 pid/window_id 产出工具不改变 context
-
-    func test_absorbResult_nonContextTool_doesNothing() {
+    @Test("absorbResult for non-context tool does nothing")
+    func absorbResultNonContextToolDoesNothing() {
         let resolver = PlaceholderResolver()
         var context = ExecutionContext(pid: nil, windowId: nil)
         let result = """
@@ -270,11 +262,12 @@ final class PlaceholderResolverTests: XCTestCase {
 
         resolver.absorbResult(tool: "click", result: result, context: &context)
 
-        XCTAssertNil(context.pid)
-        XCTAssertNil(context.windowId)
+        #expect(context.pid == nil)
+        #expect(context.windowId == nil)
     }
 
-    func test_absorbResult_invalidJSON_doesNotCrash() {
+    @Test("absorbResult with invalid JSON does not crash")
+    func absorbResultInvalidJSONDoesNotCrash() {
         let resolver = PlaceholderResolver()
         var context = ExecutionContext(pid: 111, windowId: 22)
         let result = "not valid json {{{"
@@ -282,11 +275,12 @@ final class PlaceholderResolverTests: XCTestCase {
         resolver.absorbResult(tool: "launch_app", result: result, context: &context)
 
         // Context should remain unchanged on invalid JSON
-        XCTAssertEqual(context.pid, 111)
-        XCTAssertEqual(context.windowId, 22)
+        #expect(context.pid == 111)
+        #expect(context.windowId == 22)
     }
 
-    func test_absorbResult_launchAppWithoutPid_doesNotOverwrite() {
+    @Test("absorbResult from launch_app without pid does not overwrite")
+    func absorbResultLaunchAppWithoutPidDoesNotOverwrite() {
         let resolver = PlaceholderResolver()
         var context = ExecutionContext(pid: 100, windowId: nil)
         let result = """
@@ -296,10 +290,11 @@ final class PlaceholderResolverTests: XCTestCase {
         resolver.absorbResult(tool: "launch_app", result: result, context: &context)
 
         // Existing pid should not be cleared
-        XCTAssertEqual(context.pid, 100)
+        #expect(context.pid == 100)
     }
 
-    func test_absorbResult_listWindowsEmptyArray_doesNotOverwrite() {
+    @Test("absorbResult from list_windows with empty array does not overwrite")
+    func absorbResultListWindowsEmptyArrayDoesNotOverwrite() {
         let resolver = PlaceholderResolver()
         var context = ExecutionContext(pid: 100, windowId: 50)
         let result = """
@@ -309,7 +304,7 @@ final class PlaceholderResolverTests: XCTestCase {
         resolver.absorbResult(tool: "list_windows", result: result, context: &context)
 
         // Existing context should not be cleared
-        XCTAssertEqual(context.pid, 100)
-        XCTAssertEqual(context.windowId, 50)
+        #expect(context.pid == 100)
+        #expect(context.windowId == 50)
     }
 }

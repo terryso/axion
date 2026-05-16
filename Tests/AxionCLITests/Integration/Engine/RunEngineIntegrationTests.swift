@@ -1,18 +1,10 @@
-import XCTest
+import Foundation
+import Testing
 @testable import AxionCLI
 @testable import AxionCore
 
-/// Integration tests for Story 3-6: RunEngine state machine.
-///
-/// Tests the full plan -> execute -> verify -> replan loop with real Helper process
-/// and real MCP calls. Only the Planner and LLM (for verification) are mocked.
-///
-/// Prerequisites:
-/// - AxionHelper.app built at .build/AxionHelper.app
-/// - macOS Accessibility permissions granted to Terminal/iTerm
-/// - Screen Recording permission granted (for screenshots)
-/// - Run with: AXION_HELPER_PATH="$(pwd)/.build/AxionHelper.app/Contents/MacOS/AxionHelper" swift test --filter "AxionCLIIntegrationTests.RunEngineIntegrationTests"
-final class RunEngineIntegrationTests: XCTestCase {
+@Suite("RunEngine Integration")
+struct RunEngineIntegrationTests {
 
     // MARK: - Helper -> MCPClientProtocol Adapter
 
@@ -70,54 +62,37 @@ final class RunEngineIntegrationTests: XCTestCase {
         }
     }
 
-    // MARK: - Properties
+    // MARK: - Setup Helper
 
-    private var manager: HelperProcessManager?
-    private var mcpClient: RealMCPAdapter?
-    private var tempDir: URL?
-
-    // MARK: - Setup / Teardown
-
-    override func setUp() async throws {
-        try await super.setUp()
-
+    private func setUpMCPClient() async throws -> (HelperProcessManager, RealMCPAdapter, URL) {
         let mgr = HelperProcessManager()
         do {
             try await mgr.start()
         } catch {
-            throw XCTSkip("AxionHelper not available — build it first or set AXION_HELPER_PATH.")
+            throw NSError(domain: "AxionHelper not available", code: 1)
         }
 
         let running = await mgr.isRunning()
-        XCTAssertTrue(running, "Helper should be running after start()")
+        #expect(running, "Helper should be running after start()")
 
-        self.manager = mgr
-        self.mcpClient = RealMCPAdapter(manager: mgr)
+        let mcpClient = RealMCPAdapter(manager: mgr)
 
-        self.tempDir = FileManager.default.temporaryDirectory
+        let tempDir = FileManager.default.temporaryDirectory
             .appendingPathComponent("RunEngineIntegTests-\(UUID().uuidString)")
-        try FileManager.default.createDirectory(at: tempDir!, withIntermediateDirectories: true)
-    }
+        try FileManager.default.createDirectory(at: tempDir, withIntermediateDirectories: true)
 
-    override func tearDown() async throws {
-        if let manager {
-            await manager.stop()
-        }
-        self.manager = nil
-        self.mcpClient = nil
-
-        if let tempDir {
-            try? FileManager.default.removeItem(at: tempDir)
-        }
-        self.tempDir = nil
-
-        try await super.tearDown()
+        return (mgr, mcpClient, tempDir)
     }
 
     // MARK: - AC1, AC2: Happy path — plan -> execute -> verify -> done
 
-    func test_real_happyPath_launchAndVerifyCalculator() async throws {
-        guard let mcpClient else { throw XCTSkip("AxionHelper not available — build it first or set AXION_HELPER_PATH.") }
+    @Test("real happy path launch and verify Calculator")
+    func realHappyPathLaunchAndVerifyCalculator() async throws {
+        let (manager, mcpClient, tempDir) = try await setUpMCPClient()
+        defer {
+            Task { await manager.stop() }
+            try? FileManager.default.removeItem(at: tempDir)
+        }
 
         let plan = Plan(
             id: UUID(), task: "Launch Calculator",
@@ -153,32 +128,30 @@ final class RunEngineIntegrationTests: XCTestCase {
             options: RunEngineOptions()
         )
 
-        // AC1: State machine goes through planning -> executing -> verifying
-        // AC2: Final state is .done
-        XCTAssertEqual(result.currentState, .done,
-            "Happy path should end in .done state")
+        #expect(result.currentState == .done,
+                "Happy path should end in .done state")
 
-        // Planner was called once
-        XCTAssertEqual(planner.createPlanCallCount, 1)
+        #expect(planner.createPlanCallCount == 1)
 
-        // Output contains run info
         let combined = capturedOutput.joined(separator: "\n")
-        XCTAssertTrue(combined.contains("[axion]"),
-            "All output should have [axion] prefix")
+        #expect(combined.contains("[axion]"),
+                "All output should have [axion] prefix")
+        #expect(combined.contains("步骤"), "Should show step progress")
+        #expect(combined.contains("验证"), "Should show verification result")
+        #expect(combined.contains("完成"), "Should show completion summary")
 
-        // Output shows plan, execution, verification, and summary
-        XCTAssertTrue(combined.contains("步骤"), "Should show step progress")
-        XCTAssertTrue(combined.contains("验证"), "Should show verification result")
-        XCTAssertTrue(combined.contains("完成"), "Should show completion summary")
-
-        // Cleanup: quit Calculator
         cleanupCalculator()
     }
 
     // MARK: - AC8: Dryrun mode — plan only, no execution
 
-    func test_real_dryrunMode_plansWithoutExecution() async throws {
-        guard let mcpClient else { throw XCTSkip("AxionHelper not available — build it first or set AXION_HELPER_PATH.") }
+    @Test("real dryrun mode plans without execution")
+    func realDryrunModePlansWithoutExecution() async throws {
+        let (manager, mcpClient, tempDir) = try await setUpMCPClient()
+        defer {
+            Task { await manager.stop() }
+            try? FileManager.default.removeItem(at: tempDir)
+        }
 
         let plan = Plan(
             id: UUID(), task: "Launch Calculator",
@@ -218,28 +191,26 @@ final class RunEngineIntegrationTests: XCTestCase {
             options: options
         )
 
-        // Dryrun should reach .done without executing
-        XCTAssertEqual(result.currentState, .done)
+        #expect(result.currentState == .done)
+        #expect(planner.createPlanCallCount == 1)
 
-        // Planner was called (generates the plan)
-        XCTAssertEqual(planner.createPlanCallCount, 1)
-
-        // Output shows plan
         let combined = capturedOutput.joined(separator: "\n")
-        XCTAssertTrue(combined.contains("[axion]"))
-        XCTAssertTrue(combined.contains("规划完成"), "Dryrun should display the plan")
-
-        // Dryrun should NOT show step execution results
-        XCTAssertFalse(combined.contains("ok"),
-            "Dryrun should not show step execution results")
+        #expect(combined.contains("[axion]"))
+        #expect(combined.contains("规划完成"), "Dryrun should display the plan")
+        #expect(!combined.contains("ok"),
+                "Dryrun should not show step execution results")
     }
 
     // MARK: - AC12: Step failure triggers replan
 
-    func test_real_stepFailureTriggersReplan() async throws {
-        guard let mcpClient else { throw XCTSkip("AxionHelper not available — build it first or set AXION_HELPER_PATH.") }
+    @Test("real step failure triggers replan")
+    func realStepFailureTriggersReplan() async throws {
+        let (manager, mcpClient, tempDir) = try await setUpMCPClient()
+        defer {
+            Task { await manager.stop() }
+            try? FileManager.default.removeItem(at: tempDir)
+        }
 
-        // Plan 1: use click (foreground op) in shared-seat mode — safety check will fail
         let plan1 = Plan(
             id: UUID(), task: "Click a button",
             steps: [
@@ -251,7 +222,6 @@ final class RunEngineIntegrationTests: XCTestCase {
             maxRetries: 3
         )
 
-        // Plan 2 (replan): launch Calculator (will succeed)
         let plan2 = Plan(
             id: UUID(), task: "Open Calculator instead",
             steps: [
@@ -289,26 +259,27 @@ final class RunEngineIntegrationTests: XCTestCase {
             options: RunEngineOptions()
         )
 
-        // Should reach .done after replan
-        XCTAssertEqual(result.currentState, .done,
-            "Should reach .done after replan with valid app")
+        #expect(result.currentState == .done,
+                "Should reach .done after replan with valid app")
+        #expect(planner.replanCallCount == 1,
+                "Replan should be called exactly once")
 
-        // Replan was called once
-        XCTAssertEqual(planner.replanCallCount, 1,
-            "Replan should be called exactly once")
-
-        // Output contains replan info
         let combined = capturedOutput.joined(separator: "\n")
-        XCTAssertTrue(combined.contains("重规划"),
-            "Should show replan message in output")
+        #expect(combined.contains("重规划"),
+                "Should show replan message in output")
 
         cleanupCalculator()
     }
 
     // MARK: - AC3, AC4: Blocked verification triggers replan
 
-    func test_real_blockedVerificationTriggersReplan() async throws {
-        guard let mcpClient else { throw XCTSkip("AxionHelper not available — build it first or set AXION_HELPER_PATH.") }
+    @Test("real blocked verification triggers replan")
+    func realBlockedVerificationTriggersReplan() async throws {
+        let (manager, mcpClient, tempDir) = try await setUpMCPClient()
+        defer {
+            Task { await manager.stop() }
+            try? FileManager.default.removeItem(at: tempDir)
+        }
 
         let plan1 = Plan(
             id: UUID(), task: "Launch Calculator",
@@ -335,7 +306,6 @@ final class RunEngineIntegrationTests: XCTestCase {
         let planner = IntegrationMockPlanner(plans: [plan1, plan2])
         let executor = StepExecutor(mcpClient: mcpClient, config: .default)
 
-        // Verifier that returns blocked first, then done
         let verifier = BlockedThenDoneVerifier(
             mcpClient: mcpClient,
             blockedLLM: IntegrationMockLLM(promptResult: """
@@ -366,25 +336,26 @@ final class RunEngineIntegrationTests: XCTestCase {
             options: RunEngineOptions()
         )
 
-        // Should reach .done after replan
-        XCTAssertEqual(result.currentState, .done,
-            "Should reach .done after blocked -> replan -> done")
+        #expect(result.currentState == .done,
+                "Should reach .done after blocked -> replan -> done")
+        #expect(planner.replanCallCount == 1)
 
-        // Replan was called
-        XCTAssertEqual(planner.replanCallCount, 1)
-
-        // Output contains replan and verification messages
         let combined = capturedOutput.joined(separator: "\n")
-        XCTAssertTrue(combined.contains("重规划"),
-            "Should show replan message")
+        #expect(combined.contains("重规划"),
+                "Should show replan message")
 
         cleanupCalculator()
     }
 
     // MARK: - Output recording through RunEngine
 
-    func test_real_outputRecording() async throws {
-        guard let mcpClient else { throw XCTSkip("AxionHelper not available — build it first or set AXION_HELPER_PATH.") }
+    @Test("real output recording")
+    func realOutputRecording() async throws {
+        let (manager, mcpClient, tempDir) = try await setUpMCPClient()
+        defer {
+            Task { await manager.stop() }
+            try? FileManager.default.removeItem(at: tempDir)
+        }
 
         let plan = Plan(
             id: UUID(), task: "Launch Calculator",
@@ -420,29 +391,18 @@ final class RunEngineIntegrationTests: XCTestCase {
             options: RunEngineOptions()
         )
 
-        // === Verify TerminalOutput ===
         let combined = capturedOutput.joined(separator: "\n")
 
-        // Every non-empty line has [axion] prefix
         for line in capturedOutput where !line.trimmingCharacters(in: .whitespaces).isEmpty {
-            XCTAssertTrue(line.contains("[axion]"),
-                "Output line missing [axion] prefix: '\(line)'")
+            #expect(line.contains("[axion]"),
+                    "Output line missing [axion] prefix: '\(line)'")
         }
 
-        // Run start info
-        XCTAssertTrue(combined.contains("运行"), "Should show run start info")
-
-        // Plan display
-        XCTAssertTrue(combined.contains("规划完成"), "Should show plan info")
-
-        // Step execution
-        XCTAssertTrue(combined.contains("步骤"), "Should show step execution")
-
-        // Verification result
-        XCTAssertTrue(combined.contains("验证"), "Should show verification")
-
-        // Summary
-        XCTAssertTrue(combined.contains("完成"), "Should show completion summary")
+        #expect(combined.contains("运行"), "Should show run start info")
+        #expect(combined.contains("规划完成"), "Should show plan info")
+        #expect(combined.contains("步骤"), "Should show step execution")
+        #expect(combined.contains("验证"), "Should show verification")
+        #expect(combined.contains("完成"), "Should show completion summary")
 
         cleanupCalculator()
     }
@@ -459,8 +419,6 @@ final class RunEngineIntegrationTests: XCTestCase {
 
 // MARK: - BlockedThenDoneVerifier
 
-/// A verifier wrapper that returns .blocked on the first call, then .done on subsequent calls.
-/// Uses real TaskVerifier with different mock LLMs to test the replan path.
 private final class BlockedThenDoneVerifier: VerifierProtocol {
     private let mcpClient: MCPClientProtocol
     private let blockedLLM: LLMClientProtocol

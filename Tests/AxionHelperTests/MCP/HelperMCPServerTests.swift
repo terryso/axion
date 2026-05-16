@@ -1,4 +1,5 @@
-import XCTest
+import Foundation
+import Testing
 import MCP
 import MCPTool
 @testable import AxionHelper
@@ -12,7 +13,8 @@ import MCPTool
 // These tests verify AxionHelper's MCP Server foundation using MCPServer + ToolRegistrar.
 // Priority: P0 (foundational - all Helper communication depends on this)
 
-final class HelperMCPServerTests: XCTestCase {
+@Suite("HelperMCP Server")
+struct HelperMCPServerTests {
 
     // MARK: - Helpers
 
@@ -47,7 +49,8 @@ final class HelperMCPServerTests: XCTestCase {
     // MARK: - AC1: MCP initialize 响应
 
     // [P0] MCPServer 创建成功，包含正确的 name 和 version
-    func test_mcpServer_creation_hasCorrectNameAndVersion() async throws {
+    @Test("MCP server creation has correct name and version")
+    func mcpServerCreationHasCorrectNameAndVersion() async throws {
         // Given: AxionHelper 启动
         let server = MCPServer(
             name: "AxionHelper",
@@ -58,30 +61,29 @@ final class HelperMCPServerTests: XCTestCase {
         // Then: 返回正确的 name 和 version
         let name = await server.name
         let version = await server.version
-        XCTAssertEqual(name, "AxionHelper", "Server name should be AxionHelper")
-        XCTAssertEqual(version, "0.1.0", "Server version should be 0.1.0")
+        #expect(name == "AxionHelper")
+        #expect(version == "0.1.0")
     }
 
     // [P0] MCPServer initialize 响应包含服务端能力声明（tools capability）
-    func test_mcpServer_initialize_includesToolsCapability() async throws {
+    @Test("MCP server initialize includes tools capability")
+    func mcpServerInitializeIncludesToolsCapability() async throws {
         // Given: AxionHelper 启动并注册了工具
         let server = try await makeRegisteredServer()
 
         // When: 通过 MCP 协议发送 initialize 请求
-        // MCPServer 的 createSession() 方法构建带有工具能力的 Server 实例
-        let session = await server.createSession()
+        _ = await server.createSession()
 
         // Then: 返回正确的 initialize 响应，包含服务端能力声明
-        // 验证 session 存在（证明 initialize 可以成功）
-        // 验证 server 的 toolRegistry 不为空
         let tools = await server.toolRegistry.definitions
-        XCTAssertFalse(tools.isEmpty, "Server should have tools registered after initialize")
+        #expect(!tools.isEmpty)
     }
 
     // MARK: - AC2: tools/list 响应
 
     // [P0] ToolRegistrar 注册所有 15 个工具
-    func test_toolsList_returnsAllRegisteredTools() async throws {
+    @Test("tools/list returns all registered tools")
+    func toolsListReturnsAllRegisteredTools() async throws {
         // Given: MCP 连接已建立（通过 ToolRegistrar 注册所有工具）
         let server = try await makeRegisteredServer()
 
@@ -89,25 +91,27 @@ final class HelperMCPServerTests: XCTestCase {
         let tools = await server.toolRegistry.definitions
 
         // Then: 返回所有已注册工具的列表（至少 15 个）
-        XCTAssertGreaterThanOrEqual(tools.count, 15, "Should register at least 15 tools")
+        #expect(tools.count >= 15)
     }
 
     // [P0] 每个工具包含 name、description 和 inputSchema
-    func test_toolsList_eachToolHasNameDescriptionAndSchema() async throws {
+    @Test("each tool has name description and schema")
+    func toolsListEachToolHasNameDescriptionAndSchema() async throws {
         // Given: 所有工具已注册
         let server = try await makeRegisteredServer()
         let tools = await server.toolRegistry.definitions
 
         // Then: 每个工具包含 name、description 和 inputSchema
         for tool in tools {
-            XCTAssertFalse(tool.name.isEmpty, "Each tool must have a non-empty name")
-            XCTAssertNotNil(tool.description, "Each tool must have a description")
-            XCTAssertNotNil(tool.inputSchema, "Each tool must have an inputSchema")
+            #expect(!tool.name.isEmpty)
+            #expect(tool.description != nil)
+            #expect(tool.inputSchema != nil)
         }
     }
 
     // [P0] 所有预期的工具名都存在（与 ToolNames.swift 常量一致）
-    func test_toolsList_containsAllExpectedToolNames() async throws {
+    @Test("tools/list contains all expected tool names")
+    func toolsListContainsAllExpectedToolNames() async throws {
         // Given: 所有工具已注册
         let server = try await makeRegisteredServer()
         let tools = await server.toolRegistry.definitions
@@ -133,34 +137,33 @@ final class HelperMCPServerTests: XCTestCase {
         ]
 
         for expected in expectedTools {
-            XCTAssertTrue(
-                toolNames.contains(expected),
-                "Tool '\(expected)' should be registered. Available: \(toolNames.sorted())"
-            )
+            #expect(toolNames.contains(expected))
         }
     }
 
     // [P0] 工具名与 AxionCore/Constants/ToolNames.swift 保持一致
-    func test_toolsList_matchesToolNamesConstants() async throws {
+    @Test("tool names match ToolNames constants")
+    func toolsListMatchesToolNamesConstants() async throws {
         // Given: 所有工具已注册
         let server = try await makeRegisteredServer()
         let tools = await server.toolRegistry.definitions
         let toolNames = Set(tools.map { $0.name })
 
         // Then: 关键工具名与 AxionCore 常量一致
-        XCTAssertTrue(toolNames.contains(ToolNames.launchApp))
-        XCTAssertTrue(toolNames.contains(ToolNames.click))
-        XCTAssertTrue(toolNames.contains(ToolNames.typeText))
-        XCTAssertTrue(toolNames.contains(ToolNames.pressKey))
-        XCTAssertTrue(toolNames.contains(ToolNames.screenshot))
-        XCTAssertTrue(toolNames.contains(ToolNames.getAccessibilityTree))
-        XCTAssertTrue(toolNames.contains(ToolNames.openUrl))
-        XCTAssertTrue(toolNames.contains(ToolNames.listWindows))
+        #expect(toolNames.contains(ToolNames.launchApp))
+        #expect(toolNames.contains(ToolNames.click))
+        #expect(toolNames.contains(ToolNames.typeText))
+        #expect(toolNames.contains(ToolNames.pressKey))
+        #expect(toolNames.contains(ToolNames.screenshot))
+        #expect(toolNames.contains(ToolNames.getAccessibilityTree))
+        #expect(toolNames.contains(ToolNames.openUrl))
+        #expect(toolNames.contains(ToolNames.listWindows))
     }
 
     // [P1] Story 1.5 实现后，screenshot 工具不再返回 stub 文本
     // 验证所有 Story 1.5 工具（screenshot, get_accessibility_tree, open_url）已实现
-    func test_story15_tools_doNotReturnStubText() async throws {
+    @Test("Story 1.5 tools do not return stub text")
+    func story15ToolsDoNotReturnStubText() async throws {
         // Given: 所有工具已注册（Story 1.5 已实现）
         let server = try await makeRegisteredServer()
 
@@ -189,16 +192,14 @@ final class HelperMCPServerTests: XCTestCase {
         }.joined()
 
         // Then: 不应返回 "Not yet implemented"
-        XCTAssertFalse(
-            text.lowercased().contains("not yet implemented"),
-            "screenshot tool should not return stub text after Story 1.5 implementation"
-        )
+        #expect(!text.lowercased().contains("not yet implemented"))
     }
 
     // MARK: - AC3: 未知工具调用错误
 
     // [P0] 调用未注册的工具名返回错误
-    func test_unknownTool_returnsError() async throws {
+    @Test("unknown tool returns error")
+    func unknownToolReturnsError() async throws {
         // Given: Helper 收到未知工具名调用
         let server = try await makeRegisteredServer()
 
@@ -210,20 +211,20 @@ final class HelperMCPServerTests: XCTestCase {
                 arguments: nil,
                 context: makeTestContext()
             )
-            XCTFail("Expected error for unknown tool, but got success")
+            Issue.record("Expected error for unknown tool, but got success")
         } catch {
             // MCPServer 对未知工具抛出 MCPError.invalidParams
             // This satisfies AC3: 返回 isError=true 的 ToolResult，message 说明工具不存在
             let errorDescription = String(describing: error)
-            XCTAssertTrue(
-                errorDescription.contains("Unknown tool") || errorDescription.contains("nonexistent_tool"),
-                "Error should mention unknown tool, got: \(errorDescription)"
+            #expect(
+                errorDescription.contains("Unknown tool") || errorDescription.contains("nonexistent_tool")
             )
         }
     }
 
     // [P1] 多个未知工具名都正确返回错误
-    func test_unknownTool_variousNames_returnErrors() async throws {
+    @Test("various unknown tool names return errors")
+    func unknownToolVariousNamesReturnErrors() async throws {
         // Given: MCP server 已注册所有工具
         let server = try await makeRegisteredServer()
 
@@ -236,7 +237,7 @@ final class HelperMCPServerTests: XCTestCase {
                     arguments: nil,
                     context: makeTestContext()
                 )
-                XCTFail("Expected error for unknown tool '\(name)', but got success")
+                Issue.record("Expected error for unknown tool '\(name)', but got success")
             } catch {
                 // Expected: error for unknown tool
             }
@@ -248,8 +249,9 @@ final class HelperMCPServerTests: XCTestCase {
     // [P0] stdin EOF 时 MCPServer 优雅退出
     // Note: This test verifies the API contract that HelperMCPServer.run() uses.
     // The actual EOF behavior (process exit on stdin close) is verified by the
-    // process-level smoke test (HelperProcessSmokeTests.test_helperProcess_gracefulExitOnEOF).
-    func test_mcpServer_runStdio_exitsOnEOF() async throws {
+    // process-level smoke test (HelperProcessSmokeTests.helperProcessGracefulExitOnEOF).
+    @Test("MCP server run stdio exits on EOF")
+    func mcpServerRunStdioExitsOnEOF() async throws {
         // Given: An MCPServer configured like AxionHelper
         let server = MCPServer(name: "AxionHelper", version: "0.1.0")
         try await ToolRegistrar.registerAll(to: server)
@@ -258,22 +260,20 @@ final class HelperMCPServerTests: XCTestCase {
         let session = await server.createSession()
         let transport = StdioTransport()
 
-        // Then: session.start() and session.waitUntilCompleted() are callable
+        // Then: session and transport are created successfully
         // This verifies the API contract that HelperMCPServer.run() depends on.
-        // We cannot call session.start() in a test because it blocks on stdin,
-        // but we verify that the session and transport can be created successfully.
-        XCTAssertNotNil(session, "Session should be created from MCPServer")
-        XCTAssertNotNil(transport, "StdioTransport should be constructable")
+        _ = (session, transport)
 
         // Verify tools are registered in the session's server
         let tools = await server.toolRegistry.definitions
-        XCTAssertGreaterThanOrEqual(tools.count, 15, "Server should have all tools registered")
+        #expect(tools.count >= 15)
     }
 
     // MARK: - ToolRegistrar Tests
 
     // [P0] ToolRegistrar.registerAll 方法存在且可调用
-    func test_toolRegistrar_registerAll_isCallable() async throws {
+    @Test("ToolRegistrar registerAll is callable")
+    func toolRegistrarRegisterAllIsCallable() async throws {
         // Given: 一个 MCPServer 实例
         let server = MCPServer(name: "TestHelper", version: "0.1.0")
 
@@ -282,11 +282,12 @@ final class HelperMCPServerTests: XCTestCase {
 
         // Then: server 的 toolRegistry 不为空
         let tools = await server.toolRegistry.definitions
-        XCTAssertFalse(tools.isEmpty, "ToolRegistrar should register at least one tool")
+        #expect(!tools.isEmpty)
     }
 
     // [P1] ToolRegistrar 不注册重复工具名
-    func test_toolRegistrar_noDuplicateToolNames() async throws {
+    @Test("ToolRegistrar has no duplicate tool names")
+    func toolRegistrarNoDuplicateToolNames() async throws {
         // Given: 所有工具已注册
         let server = try await makeRegisteredServer()
         let tools = await server.toolRegistry.definitions
@@ -294,15 +295,12 @@ final class HelperMCPServerTests: XCTestCase {
         // Then: 没有重复的工具名
         let names = tools.map { $0.name }
         let uniqueNames = Set(names)
-        XCTAssertEqual(
-            names.count,
-            uniqueNames.count,
-            "Tool names should be unique, but found duplicates: \(names.filter { name in names.filter { $0 == name }.count > 1 })"
-        )
+        #expect(names.count == uniqueNames.count)
     }
 
     // [P1] 所有工具使用 snake_case 命名
-    func test_toolRegistrar_allToolsUseSnakeCase() async throws {
+    @Test("all tools use snake_case naming")
+    func toolRegistrarAllToolsUseSnakeCase() async throws {
         // Given: 所有工具已注册
         let server = try await makeRegisteredServer()
         let tools = await server.toolRegistry.definitions
@@ -313,10 +311,7 @@ final class HelperMCPServerTests: XCTestCase {
         for tool in tools {
             let range = NSRange(tool.name.startIndex..., in: tool.name)
             let matches = regex.matches(in: tool.name, range: range)
-            XCTAssertGreaterThan(
-                matches.count, 0,
-                "Tool name '\(tool.name)' should be snake_case (lowercase + underscores)"
-            )
+            #expect(matches.count > 0)
         }
     }
 }

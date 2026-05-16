@@ -1,210 +1,161 @@
-import XCTest
+import Testing
+import Foundation
 @testable import AxionCLI
 
-// [P0] 基础设施验证 — HelperPathResolver 类型存在性和路径解析策略
-// [P1] 行为验证 — 环境变量覆盖、相对路径解析、开发模式回退
-// Story 2.5 AC: #3, #6
+@Suite("HelperPathResolver")
+struct HelperPathResolverTests {
 
-final class HelperPathResolverTests: XCTestCase {
-
-    // MARK: - 测试辅助
-
-    private var savedEnvPath: String?
-
-    override func setUp() async throws {
-        try await super.setUp()
-        // 保存当前环境变量状态
-        savedEnvPath = ProcessInfo.processInfo.environment["AXION_HELPER_PATH"]
-        unsetenv("AXION_HELPER_PATH")
-    }
-
-    override func tearDown() async throws {
-        // 恢复环境变量
-        if let saved = savedEnvPath {
-            setenv("AXION_HELPER_PATH", saved, 1)
-        } else {
-            unsetenv("AXION_HELPER_PATH")
+    private func withHelperEnv(_ value: String?, body: @Sendable () async throws -> Void) async throws {
+        try await EnvGate.shared.withSavedEnv(["AXION_HELPER_PATH"]) {
+            if let value {
+                setenv("AXION_HELPER_PATH", value, 1)
+            }
+            try await body()
         }
-        try await super.tearDown()
     }
 
-    // MARK: - [P0] 类型存在性
-
-    // AC6: HelperPathResolver 类型存在
-    func test_helperPathResolver_typeExists() throws {
+    @Test("HelperPathResolver type exists")
+    func helperPathResolverTypeExists() throws {
         _ = HelperPathResolver.self
     }
 
-    // AC6: resolveHelperPath 方法存在且返回 String?
-    func test_helperPathResolver_resolveMethodExists() throws {
+    @Test("resolveHelperPath method exists and returns String?")
+    func resolveMethodExists() throws {
         let result: String? = HelperPathResolver.resolveHelperPath()
         _ = result
     }
 
-    // MARK: - [P0] AC6: 环境变量覆盖（策略 1 — 最高优先级）
-
-    // 环境变量 AXION_HELPER_PATH 设置时，直接返回该路径
-    func test_resolve_envVariable_returnsEnvPath() throws {
-        let expectedPath = "/tmp/test/AxionHelper.app/Contents/MacOS/AxionHelper"
-        setenv("AXION_HELPER_PATH", expectedPath, 1)
-
-        let result = HelperPathResolver.resolveHelperPath()
-        XCTAssertEqual(result, expectedPath, "环境变量 AXION_HELPER_PATH 应直接返回")
-    }
-
-    // 环境变量路径无需验证文件是否存在（调用方负责）
-    func test_resolve_envVariable_returnsEvenIfNotExists() throws {
-        let nonexistentPath = "/nonexistent/path/AxionHelper.app/Contents/MacOS/AxionHelper"
-        setenv("AXION_HELPER_PATH", nonexistentPath, 1)
-
-        let result = HelperPathResolver.resolveHelperPath()
-        XCTAssertEqual(result, nonexistentPath, "环境变量路径无需验证文件存在性")
-    }
-
-    // MARK: - [P0] AC6: 相对于可执行文件的路径解析（策略 2）
-
-    // Homebrew 安装路径解析: bin/axion -> ../libexec/axion/AxionHelper.app/Contents/MacOS/AxionHelper
-    func test_resolve_relativePath_buildsHomebrewStylePath() throws {
-        // 此测试验证路径构建逻辑（不依赖实际文件系统布局）
-        // 在有 Helper App 的环境中应该能解析到正确路径
-        let result = HelperPathResolver.resolveHelperPath()
-        // 结果应为 nil（测试环境中无 Homebrew 安装）或正确路径
-        if let path = result {
-            XCTAssertTrue(
-                path.hasSuffix("AxionHelper.app/Contents/MacOS/AxionHelper")
-                    || path.hasSuffix("AxionHelper"),
-                "解析路径应以 AxionHelper 可执行文件结尾: \(path)"
-            )
+    @Test("env variable AXION_HELPER_PATH returns that path")
+    func resolveEnvVariableReturnsEnvPath() async throws {
+        try await withHelperEnv("/tmp/test/AxionHelper.app/Contents/MacOS/AxionHelper") {
+            let result = HelperPathResolver.resolveHelperPath()
+            #expect(result == "/tmp/test/AxionHelper.app/Contents/MacOS/AxionHelper")
         }
     }
 
-    // 解析路径应包含 libexec/axion 组件（Homebrew 布局）
-    func test_resolve_homebrewPath_containsLibexecAxion() throws {
-        // 模拟 Homebrew 路径布局
-        let result = HelperPathResolver.resolveHelperPath()
-        if let path = result, path.contains("libexec") {
-            XCTAssertTrue(path.contains("libexec/axion"), "Homebrew 路径应包含 libexec/axion")
+    @Test("env variable path returned even if file does not exist")
+    func resolveEnvVariableReturnsEvenIfNotExists() async throws {
+        try await withHelperEnv("/nonexistent/path/AxionHelper.app/Contents/MacOS/AxionHelper") {
+            let result = HelperPathResolver.resolveHelperPath()
+            #expect(result == "/nonexistent/path/AxionHelper.app/Contents/MacOS/AxionHelper")
         }
     }
 
-    // MARK: - [P0] AC6: 开发模式回退（策略 3）
-
-    // 可执行文件在 .build 目录中时使用开发模式回退
-    func test_resolve_developmentMode_detectsBuildDirectory() throws {
-        // 在 swift test 环境中，可执行文件在 .build 目录
-        // 如果 Helper App 已通过 build-helper-app.sh 构建，应能找到
-        let result = HelperPathResolver.resolveHelperPath()
-        // 测试环境中可能无法找到（未构建 Helper App），结果可以是 nil
-        // 关键是不崩溃、不抛出异常
-        _ = result
-    }
-
-    // 开发模式路径应包含 .build/AxionHelper.app
-    func test_resolve_developmentMode_buildPathFormat() throws {
-        let result = HelperPathResolver.resolveHelperPath()
-        if let path = result, path.contains(".build") {
-            XCTAssertTrue(
-                path.contains("AxionHelper.app"),
-                "开发模式路径应包含 AxionHelper.app: \(path)"
-            )
+    @Test("relative path builds Homebrew-style path")
+    func resolveRelativePathBuildsHomebrewStylePath() async throws {
+        try await withHelperEnv(nil) {
+            let result = HelperPathResolver.resolveHelperPath()
+            if let path = result {
+                #expect(
+                    path.hasSuffix("AxionHelper.app/Contents/MacOS/AxionHelper")
+                        || path.hasSuffix("AxionHelper")
+                )
+            }
         }
     }
 
-    // MARK: - [P0] AC3: 路径未找到返回 nil（不抛异常）
-
-    // 所有策略都无法找到 Helper 时返回 nil
-    func test_resolve_noHelperFound_returnsNil() throws {
-        // 在无 Helper App 且无环境变量的环境中
-        let result = HelperPathResolver.resolveHelperPath()
-        // 应返回 nil（不抛异常），或者如果 .build 中有残留则返回路径
-        // 关键验证：不崩溃
-        _ = result
+    @Test("Homebrew path contains libexec/axion")
+    func resolveHomebrewPathContainsLibexecAxion() async throws {
+        try await withHelperEnv(nil) {
+            let result = HelperPathResolver.resolveHelperPath()
+            if let path = result, path.contains("libexec") {
+                #expect(path.contains("libexec/axion"))
+            }
+        }
     }
 
-    // MARK: - [P1] 优先级验证
+    @Test("development mode detects .build directory")
+    func resolveDevelopmentModeDetectsBuildDirectory() async throws {
+        try await withHelperEnv(nil) {
+            let result = HelperPathResolver.resolveHelperPath()
+            _ = result
+        }
+    }
 
-    // 环境变量优先级高于相对路径解析
-    func test_resolve_envVariableTakesPriorityOverRelativePath() throws {
+    @Test("development mode path contains .build/AxionHelper.app")
+    func resolveDevelopmentModeBuildPathFormat() async throws {
+        try await withHelperEnv(nil) {
+            let result = HelperPathResolver.resolveHelperPath()
+            if let path = result, path.contains(".build") {
+                #expect(path.contains("AxionHelper.app"))
+            }
+        }
+    }
+
+    @Test("no helper found returns nil without crashing")
+    func resolveNoHelperFoundReturnsNil() async throws {
+        try await withHelperEnv(nil) {
+            let result = HelperPathResolver.resolveHelperPath()
+            _ = result
+        }
+    }
+
+    @Test("env variable takes priority over relative path")
+    func resolveEnvVariableTakesPriorityOverRelativePath() async throws {
         let envPath = "/custom/env/AxionHelper.app/Contents/MacOS/AxionHelper"
-        setenv("AXION_HELPER_PATH", envPath, 1)
-
-        let result = HelperPathResolver.resolveHelperPath()
-        XCTAssertEqual(result, envPath, "环境变量应优先于相对路径解析")
+        try await withHelperEnv(envPath) {
+            let result = HelperPathResolver.resolveHelperPath()
+            #expect(result == envPath)
+        }
     }
 
-    // 空字符串环境变量不视为有效覆盖
-    func test_resolve_emptyEnvVariable_fallsThrough() throws {
-        setenv("AXION_HELPER_PATH", "", 1)
-
-        let result = HelperPathResolver.resolveHelperPath()
-        // 空字符串不应被视为有效路径，应继续尝试其他策略
-        XCTAssertNotEqual(result, "", "空环境变量不应作为有效路径返回")
+    @Test("empty env variable falls through to other strategies")
+    func resolveEmptyEnvVariableFallsThrough() async throws {
+        try await EnvGate.shared.withSavedEnv(["AXION_HELPER_PATH"]) {
+            setenv("AXION_HELPER_PATH", "", 1)
+            let result = HelperPathResolver.resolveHelperPath()
+            #expect(result != "")
+        }
     }
 
-    // MARK: - [P1] 路径格式验证
-
-    // 返回路径指向 AxionHelper 可执行文件（非 .app 目录）
-    func test_resolve_resultPath_pointsToExecutable() throws {
+    @Test("result path points to executable not .app directory")
+    func resolveResultPathPointsToExecutable() async throws {
         let envPath = "/opt/homebrew/Cellar/axion/0.1.0/libexec/axion/AxionHelper.app/Contents/MacOS/AxionHelper"
-        setenv("AXION_HELPER_PATH", envPath, 1)
-
-        let result = HelperPathResolver.resolveHelperPath()
-        if let path = result {
-            // 路径应以可执行文件结尾，而非 .app 目录
-            XCTAssertFalse(
-                path.hasSuffix(".app"),
-                "路径应指向可执行文件而非 .app 目录"
-            )
-            XCTAssertTrue(
-                path.hasSuffix("AxionHelper"),
-                "路径应以 AxionHelper 可执行文件名结尾"
-            )
+        try await withHelperEnv(envPath) {
+            let result = HelperPathResolver.resolveHelperPath()
+            if let path = result {
+                #expect(!path.hasSuffix(".app"))
+                #expect(path.hasSuffix("AxionHelper"))
+            }
         }
     }
 
-    // 返回路径是绝对路径
-    func test_resolve_resultPath_isAbsolute() throws {
+    @Test("result path is absolute")
+    func resolveResultPathIsAbsolute() async throws {
         let envPath = "/absolute/path/AxionHelper"
-        setenv("AXION_HELPER_PATH", envPath, 1)
-
-        let result = HelperPathResolver.resolveHelperPath()
-        if let path = result {
-            XCTAssertTrue(path.hasPrefix("/"), "返回路径应为绝对路径: \(path)")
+        try await withHelperEnv(envPath) {
+            let result = HelperPathResolver.resolveHelperPath()
+            if let path = result {
+                #expect(path.hasPrefix("/"))
+            }
         }
     }
 
-    // MARK: - [P1] Apple Silicon vs Intel Homebrew 路径兼容性
-
-    // 支持 /opt/homebrew 路径（Apple Silicon）
-    func test_resolve_supportsOptHomebrewPath() throws {
+    @Test("supports /opt/homebrew path (Apple Silicon)")
+    func resolveSupportsOptHomebrewPath() async throws {
         let armPath = "/opt/homebrew/Cellar/axion/0.1.0/libexec/axion/AxionHelper.app/Contents/MacOS/AxionHelper"
-        setenv("AXION_HELPER_PATH", armPath, 1)
-
-        let result = HelperPathResolver.resolveHelperPath()
-        XCTAssertEqual(result, armPath, "应支持 Apple Silicon Homebrew 路径")
+        try await withHelperEnv(armPath) {
+            let result = HelperPathResolver.resolveHelperPath()
+            #expect(result == armPath)
+        }
     }
 
-    // 支持 /usr/local 路径（Intel Mac）
-    func test_resolve_supportsUsrLocalPath() throws {
+    @Test("supports /usr/local path (Intel Mac)")
+    func resolveSupportsUsrLocalPath() async throws {
         let intelPath = "/usr/local/Cellar/axion/0.1.0/libexec/axion/AxionHelper.app/Contents/MacOS/AxionHelper"
-        setenv("AXION_HELPER_PATH", intelPath, 1)
-
-        let result = HelperPathResolver.resolveHelperPath()
-        XCTAssertEqual(result, intelPath, "应支持 Intel Mac Homebrew 路径")
+        try await withHelperEnv(intelPath) {
+            let result = HelperPathResolver.resolveHelperPath()
+            #expect(result == intelPath)
+        }
     }
 
-    // MARK: - [P1] 无硬编码路径
-
-    // HelperPathResolver 不应包含硬编码的绝对路径常量
-    func test_resolver_noHardcodedPaths() throws {
-        // 验证实现不依赖硬编码路径
-        // 通过环境变量测试和相对路径测试已间接验证
-        // 此测试作为设计约束的文档化断言
-        let result = HelperPathResolver.resolveHelperPath()
-        if let path = result {
-            // 不应硬编码 /usr/local 或 /opt/homebrew
-            // 路径应来自 Bundle.main.executableURL 或环境变量
-            _ = path
+    @Test("no hardcoded paths in resolver")
+    func resolverNoHardcodedPaths() async throws {
+        try await withHelperEnv(nil) {
+            let result = HelperPathResolver.resolveHelperPath()
+            if let path = result {
+                _ = path
+            }
         }
     }
 }

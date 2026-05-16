@@ -1,232 +1,343 @@
 import CoreGraphics
-import XCTest
+import Testing
 @testable import AxionHelper
 
-/// Tests that directly call InputSimulationService real implementations
-/// to maximize code coverage on the non-CGEvent paths.
-final class InputSimulationRealTests: XCTestCase {
+@Suite("InputSimulation Real")
+struct InputSimulationRealTests {
 
     private let service = InputSimulationService()
 
     // MARK: - keyCodeForName (all keys)
 
-    func test_keyMap_hasAllExpectedKeys() {
+    @Test("keyMap has all expected keys")
+    func keyMapHasAllExpectedKeys() {
         let expectedKeys = [
             "return", "enter", "tab", "space", "escape", "esc",
             "delete", "backspace", "forwarddelete", "home", "end",
             "pageup", "pagedown", "left", "right", "down", "up",
         ]
         for key in expectedKeys {
-            XCTAssertNotNil(service.keyCodeForName(key), "'\(key)' should be in keyMap")
+            #expect(service.keyCodeForName(key) != nil, "'\(key)' should be in keyMap")
         }
     }
 
-    func test_keyMap_hasAllFunctionKeys() {
+    @Test("keyMap has all function keys")
+    func keyMapHasAllFunctionKeys() {
         for i in 1...12 {
             let name = "f\(i)"
-            XCTAssertNotNil(service.keyCodeForName(name), "'\(name)' should be in keyMap")
+            #expect(service.keyCodeForName(name) != nil, "'\(name)' should be in keyMap")
         }
     }
 
-    func test_keyMap_hasAllLetters() {
+    @Test("keyMap has all letters")
+    func keyMapHasAllLetters() {
         for c in "abcdefghijklmnopqrstuvwxyz" {
             let name = String(c)
-            XCTAssertNotNil(service.keyCodeForName(name), "'\(name)' should be in keyMap")
+            #expect(service.keyCodeForName(name) != nil, "'\(name)' should be in keyMap")
         }
     }
 
-    func test_keyMap_returnsNilForUnknown() {
-        XCTAssertNil(service.keyCodeForName("notakey"))
+    @Test("keyMap returns nil for unknown")
+    func keyMapReturnsNilForUnknown() {
+        #expect(service.keyCodeForName("notakey") == nil)
     }
 
     // MARK: - parseHotkey (all modifier combinations)
 
-    func test_parseHotkey_cmdOnly() throws {
+    @Test("parseHotkey cmd only")
+    func parseHotkeyCmdOnly() throws {
         let result = try service.parseHotkey("cmd+a")
-        XCTAssertTrue(result.flags.contains(.maskCommand))
-        XCTAssertFalse(result.flags.contains(.maskShift))
-        XCTAssertFalse(result.flags.contains(.maskControl))
-        XCTAssertFalse(result.flags.contains(.maskAlternate))
+        #expect(result.flags.contains(.maskCommand))
+        #expect(!result.flags.contains(.maskShift))
+        #expect(!result.flags.contains(.maskControl))
+        #expect(!result.flags.contains(.maskAlternate))
     }
 
-    func test_parseHotkey_shiftOnly() throws {
+    @Test("parseHotkey shift only")
+    func parseHotkeyShiftOnly() throws {
         let result = try service.parseHotkey("shift+a")
-        XCTAssertTrue(result.flags.contains(.maskShift))
+        #expect(result.flags.contains(.maskShift))
     }
 
-    func test_parseHotkey_ctrlOnly() throws {
+    @Test("parseHotkey ctrl only")
+    func parseHotkeyCtrlOnly() throws {
         let result = try service.parseHotkey("ctrl+a")
-        XCTAssertTrue(result.flags.contains(.maskControl))
+        #expect(result.flags.contains(.maskControl))
     }
 
-    func test_parseHotkey_altOnly() throws {
+    @Test("parseHotkey alt only")
+    func parseHotkeyAltOnly() throws {
         let result = try service.parseHotkey("alt+a")
-        XCTAssertTrue(result.flags.contains(.maskAlternate))
+        #expect(result.flags.contains(.maskAlternate))
     }
 
-    func test_parseHotkey_allModifierAliases() throws {
-        // command = cmd
+    @Test("parseHotkey all modifier aliases")
+    func parseHotkeyAllModifierAliases() throws {
         let r1 = try service.parseHotkey("command+a")
-        XCTAssertTrue(r1.flags.contains(.maskCommand))
+        #expect(r1.flags.contains(.maskCommand))
 
-        // control = ctrl
         let r2 = try service.parseHotkey("control+a")
-        XCTAssertTrue(r2.flags.contains(.maskControl))
+        #expect(r2.flags.contains(.maskControl))
 
-        // option = alt
         let r3 = try service.parseHotkey("option+a")
-        XCTAssertTrue(r3.flags.contains(.maskAlternate))
+        #expect(r3.flags.contains(.maskAlternate))
     }
 
-    func test_parseHotkey_throwsForSingleKey() {
-        XCTAssertThrowsError(try service.parseHotkey("a"))
+    @Test("parseHotkey throws for single key")
+    func parseHotkeyThrowsForSingleKey() {
+        do {
+            _ = try service.parseHotkey("a")
+            Issue.record("Should throw for single key")
+        } catch {
+            // Expected
+        }
     }
 
-    func test_parseHotkey_throwsForUnknownModifier() {
-        XCTAssertThrowsError(try service.parseHotkey("super+a"))
+    @Test("parseHotkey throws for unknown modifier")
+    func parseHotkeyThrowsForUnknownModifier() {
+        do {
+            _ = try service.parseHotkey("super+a")
+            Issue.record("Should throw for unknown modifier")
+        } catch {
+            // Expected
+        }
     }
 
-    func test_parseHotkey_throwsForUnknownMainKey() {
-        XCTAssertThrowsError(try service.parseHotkey("cmd+unknownkey"))
+    @Test("parseHotkey throws for unknown main key")
+    func parseHotkeyThrowsForUnknownMainKey() {
+        do {
+            _ = try service.parseHotkey("cmd+unknownkey")
+            Issue.record("Should throw for unknown main key")
+        } catch {
+            // Expected
+        }
     }
 
     // MARK: - scrollValueForDirection
 
-    func test_scrollValueForDirection_up() throws {
-        XCTAssertEqual(try service.scrollValueForDirection("up", amount: 5), 5)
+    @Test("scrollValueForDirection up")
+    func scrollValueForDirectionUp() throws {
+        #expect(try service.scrollValueForDirection("up", amount: 5) == 5)
     }
 
-    func test_scrollValueForDirection_down() throws {
-        XCTAssertEqual(try service.scrollValueForDirection("down", amount: 3), -3)
+    @Test("scrollValueForDirection down")
+    func scrollValueForDirectionDown() throws {
+        #expect(try service.scrollValueForDirection("down", amount: 3) == -3)
     }
 
-    func test_scrollValueForDirection_invalid() {
-        XCTAssertThrowsError(try service.scrollValueForDirection("left", amount: 1))
+    @Test("scrollValueForDirection invalid throws")
+    func scrollValueForDirectionInvalid() {
+        do {
+            _ = try service.scrollValueForDirection("left", amount: 1)
+            Issue.record("Should throw for invalid direction")
+        } catch {
+            // Expected
+        }
     }
 
-    func test_scrollValueForDirection_caseInsensitive() throws {
-        XCTAssertEqual(try service.scrollValueForDirection("UP", amount: 2), 2)
-        XCTAssertEqual(try service.scrollValueForDirection("Down", amount: 4), -4)
+    @Test("scrollValueForDirection case insensitive")
+    func scrollValueForDirectionCaseInsensitive() throws {
+        #expect(try service.scrollValueForDirection("UP", amount: 2) == 2)
+        #expect(try service.scrollValueForDirection("Down", amount: 4) == -4)
     }
 
     // MARK: - validateCoordinates
 
-    func test_validateCoordinates_validPoint() throws {
-        XCTAssertNoThrow(try service.validateCoordinates(x: 0, y: 0))
+    @Test("validateCoordinates valid point")
+    func validateCoordinatesValidPoint() throws {
+        try service.validateCoordinates(x: 0, y: 0)
     }
 
-    func test_validateCoordinates_negativeX_throws() {
-        XCTAssertThrowsError(try service.validateCoordinates(x: -1, y: 0))
+    @Test("validateCoordinates negative X throws")
+    func validateCoordinatesNegativeX() {
+        do {
+            try service.validateCoordinates(x: -1, y: 0)
+            Issue.record("Should throw for negative X")
+        } catch {
+            // Expected
+        }
     }
 
-    func test_validateCoordinates_negativeY_throws() {
-        XCTAssertThrowsError(try service.validateCoordinates(x: 0, y: -1))
+    @Test("validateCoordinates negative Y throws")
+    func validateCoordinatesNegativeY() {
+        do {
+            try service.validateCoordinates(x: 0, y: -1)
+            Issue.record("Should throw for negative Y")
+        } catch {
+            // Expected
+        }
     }
 
-    func test_validateCoordinates_tooLarge_throws() {
-        XCTAssertThrowsError(try service.validateCoordinates(x: 99999, y: 99999))
+    @Test("validateCoordinates too large throws")
+    func validateCoordinatesTooLarge() {
+        do {
+            try service.validateCoordinates(x: 99999, y: 99999)
+            Issue.record("Should throw for too large coordinates")
+        } catch {
+            // Expected
+        }
     }
 
-    func test_validateCoordinates_atScreenEdge() throws {
+    @Test("validateCoordinates at screen edge")
+    func validateCoordinatesAtScreenEdge() throws {
         let bounds = CGDisplayBounds(CGMainDisplayID())
-        XCTAssertNoThrow(try service.validateCoordinates(x: Int(bounds.width), y: Int(bounds.height)))
+        try service.validateCoordinates(x: Int(bounds.width), y: Int(bounds.height))
     }
 
     // MARK: - scroll method (direct call, exercises switch statement)
 
-    func test_scroll_up_doesNotThrow() throws {
-        // This actually calls CGEvent — may or may not work in CI
-        // but exercises the switch branches
+    @Test("scroll up does not throw")
+    func scrollUpDoesNotThrow() throws {
         try service.scroll(direction: "up", amount: 1)
     }
 
-    func test_scroll_down_doesNotThrow() throws {
+    @Test("scroll down does not throw")
+    func scrollDownDoesNotThrow() throws {
         try service.scroll(direction: "down", amount: 1)
     }
 
-    func test_scroll_left_doesNotThrow() throws {
+    @Test("scroll left does not throw")
+    func scrollLeftDoesNotThrow() throws {
         try service.scroll(direction: "left", amount: 1)
     }
 
-    func test_scroll_right_doesNotThrow() throws {
+    @Test("scroll right does not throw")
+    func scrollRightDoesNotThrow() throws {
         try service.scroll(direction: "right", amount: 1)
     }
 
-    func test_scroll_invalidDirection_throws() {
-        XCTAssertThrowsError(try service.scroll(direction: "diagonal", amount: 1))
+    @Test("scroll invalid direction throws")
+    func scrollInvalidDirection() {
+        do {
+            try service.scroll(direction: "diagonal", amount: 1)
+            Issue.record("Should throw for invalid direction")
+        } catch {
+            // Expected
+        }
     }
 
     // MARK: - typeText (exercises the loop and CGEvent creation)
 
-    func test_typeText_emptyString_doesNotThrow() throws {
+    @Test("typeText empty string does not throw")
+    func typeTextEmptyString() throws {
         try service.typeText("")
     }
 
-    func test_typeText_singleChar_doesNotThrow() throws {
+    @Test("typeText single char does not throw")
+    func typeTextSingleChar() throws {
         try service.typeText("a")
     }
 
-    func test_typeText_unicode_doesNotThrow() throws {
+    @Test("typeText unicode does not throw")
+    func typeTextUnicode() throws {
         try service.typeText("你好")
     }
 
     // MARK: - pressKey (exercises keyMap lookup and CGEvent)
 
-    func test_pressKey_return_doesNotThrow() throws {
+    @Test("pressKey return does not throw")
+    func pressKeyReturn() throws {
         try service.pressKey("return")
     }
 
-    func test_pressKey_invalidKey_throws() {
-        XCTAssertThrowsError(try service.pressKey("nonexistent_key_xyz"))
+    @Test("pressKey invalid key throws")
+    func pressKeyInvalidKey() {
+        do {
+            try service.pressKey("nonexistent_key_xyz")
+            Issue.record("Should throw for invalid key")
+        } catch {
+            // Expected
+        }
     }
 
     // MARK: - hotkey (exercises parseHotkey + CGEvent)
 
-    func test_hotkey_cmdA_doesNotThrow() throws {
+    @Test("hotkey cmd+a does not throw")
+    func hotkeyCmdA() throws {
         try service.hotkey("cmd+a")
     }
 
-    func test_hotkey_invalidFormat_throws() {
-        XCTAssertThrowsError(try service.hotkey("a"))
+    @Test("hotkey invalid format throws")
+    func hotkeyInvalidFormat() {
+        do {
+            try service.hotkey("a")
+            Issue.record("Should throw for invalid format")
+        } catch {
+            // Expected
+        }
     }
 
     // MARK: - click operations (exercise validateCoordinates + CGEvent)
 
-    func test_click_validCoords_doesNotThrow() throws {
+    @Test("click valid coords does not throw")
+    func clickValidCoords() throws {
         try service.click(x: 0, y: 0)
     }
 
-    func test_click_negativeCoords_throws() {
-        XCTAssertThrowsError(try service.click(x: -1, y: -1))
+    @Test("click negative coords throws")
+    func clickNegativeCoords() {
+        do {
+            try service.click(x: -1, y: -1)
+            Issue.record("Should throw for negative coords")
+        } catch {
+            // Expected
+        }
     }
 
-    func test_doubleClick_validCoords_doesNotThrow() throws {
+    @Test("doubleClick valid coords does not throw")
+    func doubleClickValidCoords() throws {
         try service.doubleClick(x: 0, y: 0)
     }
 
-    func test_doubleClick_negativeCoords_throws() {
-        XCTAssertThrowsError(try service.doubleClick(x: -1, y: -1))
+    @Test("doubleClick negative coords throws")
+    func doubleClickNegativeCoords() {
+        do {
+            try service.doubleClick(x: -1, y: -1)
+            Issue.record("Should throw for negative coords")
+        } catch {
+            // Expected
+        }
     }
 
-    func test_rightClick_validCoords_doesNotThrow() throws {
+    @Test("rightClick valid coords does not throw")
+    func rightClickValidCoords() throws {
         try service.rightClick(x: 0, y: 0)
     }
 
-    func test_rightClick_negativeCoords_throws() {
-        XCTAssertThrowsError(try service.rightClick(x: -1, y: -1))
+    @Test("rightClick negative coords throws")
+    func rightClickNegativeCoords() {
+        do {
+            try service.rightClick(x: -1, y: -1)
+            Issue.record("Should throw for negative coords")
+        } catch {
+            // Expected
+        }
     }
 
     // MARK: - drag (exercise both validateCoordinates + CGEvent loop)
 
-    func test_drag_validCoords_doesNotThrow() throws {
+    @Test("drag valid coords does not throw")
+    func dragValidCoords() throws {
         try service.drag(fromX: 0, fromY: 0, toX: 10, toY: 10)
     }
 
-    func test_drag_negativeFromCoords_throws() {
-        XCTAssertThrowsError(try service.drag(fromX: -1, fromY: 0, toX: 10, toY: 10))
+    @Test("drag negative from coords throws")
+    func dragNegativeFromCoords() {
+        do {
+            try service.drag(fromX: -1, fromY: 0, toX: 10, toY: 10)
+            Issue.record("Should throw for negative from coords")
+        } catch {
+            // Expected
+        }
     }
 
-    func test_drag_negativeToCoords_throws() {
-        XCTAssertThrowsError(try service.drag(fromX: 0, fromY: 0, toX: -1, toY: -1))
+    @Test("drag negative to coords throws")
+    func dragNegativeToCoords() {
+        do {
+            try service.drag(fromX: 0, fromY: 0, toX: -1, toY: -1)
+            Issue.record("Should throw for negative to coords")
+        } catch {
+            // Expected
+        }
     }
 }

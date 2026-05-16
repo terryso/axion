@@ -1,158 +1,163 @@
 import Foundation
-import XCTest
+import Testing
 @testable import AxionHelper
 
-// ATDD Red-Phase Test Scaffolds for Story 1.5
-// Tests for ScreenshotService logic: base64 encoding, size limits, error types.
-// Actual CGWindowListCreateImage calls are NOT tested here (need real macOS display).
-// Priority: P0 (core logic for screenshot tool)
-
+@Suite("ScreenshotService")
 @MainActor
-final class ScreenshotServiceTests: XCTestCase {
+struct ScreenshotServiceTests {
 
-    // MARK: - ScreenshotError Format (cross-cutting)
+    // MARK: - ScreenshotError Format
 
-    // [P0] ScreenshotError.windowCaptureFailed has required fields
-    func test_screenshotError_windowCaptureFailed_hasRequiredFields() {
+    @Test("windowCaptureFailed error has required fields")
+    func screenshotErrorWindowCaptureFailedHasRequiredFields() {
         let error = ScreenshotError.windowCaptureFailed(windowId: 12345)
-        XCTAssertEqual(error.errorCode, "window_capture_failed")
-        XCTAssertNotNil(error.errorDescription)
-        XCTAssertFalse(error.suggestion.isEmpty)
+        #expect(error.errorCode == "window_capture_failed")
+        #expect(error.errorDescription != nil)
+        #expect(!error.suggestion.isEmpty)
     }
 
-    // [P0] ScreenshotError.fullScreenCaptureFailed has required fields
-    func test_screenshotError_fullScreenCaptureFailed_hasRequiredFields() {
+    @Test("fullScreenCaptureFailed error has required fields")
+    func screenshotErrorFullScreenCaptureFailedHasRequiredFields() {
         let error = ScreenshotError.fullScreenCaptureFailed
-        XCTAssertEqual(error.errorCode, "fullscreen_capture_failed")
-        XCTAssertNotNil(error.errorDescription)
-        XCTAssertFalse(error.suggestion.isEmpty)
+        #expect(error.errorCode == "fullscreen_capture_failed")
+        #expect(error.errorDescription != nil)
+        #expect(!error.suggestion.isEmpty)
     }
 
-    // [P0] ScreenshotError.imageConversionFailed has required fields
-    func test_screenshotError_imageConversionFailed_hasRequiredFields() {
+    @Test("imageConversionFailed error has required fields")
+    func screenshotErrorImageConversionFailedHasRequiredFields() {
         let error = ScreenshotError.imageConversionFailed
-        XCTAssertEqual(error.errorCode, "image_conversion_failed")
-        XCTAssertNotNil(error.errorDescription)
-        XCTAssertFalse(error.suggestion.isEmpty)
+        #expect(error.errorCode == "image_conversion_failed")
+        #expect(error.errorDescription != nil)
+        #expect(!error.suggestion.isEmpty)
     }
 
-    // [P0] ScreenshotError.screenshotTooLarge has required fields
-    func test_screenshotError_screenshotTooLarge_hasRequiredFields() {
+    @Test("screenshotTooLarge error has required fields")
+    func screenshotErrorScreenshotTooLargeHasRequiredFields() {
         let error = ScreenshotError.screenshotTooLarge(sizeBytes: 6 * 1024 * 1024)
-        XCTAssertEqual(error.errorCode, "screenshot_too_large")
-        XCTAssertNotNil(error.errorDescription)
-        XCTAssertFalse(error.suggestion.isEmpty)
+        #expect(error.errorCode == "screenshot_too_large")
+        #expect(error.errorDescription != nil)
+        #expect(!error.suggestion.isEmpty)
     }
 
     // MARK: - ScreenshotCapturing Protocol Conformance
 
-    // [P0] ScreenshotService conforms to ScreenshotCapturing protocol
-    func test_screenshotService_conformsToScreenshotCapturing() {
+    @Test("conforms to ScreenshotCapturing protocol")
+    func screenshotServiceConformsToScreenshotCapturing() {
         let service = ScreenshotService()
-        XCTAssertTrue(service is ScreenshotCapturing,
-                      "ScreenshotService should conform to ScreenshotCapturing protocol")
+        #expect(service is ScreenshotCapturing,
+               "ScreenshotService should conform to ScreenshotCapturing protocol")
     }
 
-    // MARK: - Base64 Encoding Validation (using mock data)
+    // MARK: - Base64 Encoding Validation
 
-    // [P0] A valid base64 string can be decoded back to binary data
-    func test_base64Encoding_validBase64_roundTrips() {
+    @Test("valid base64 round-trips correctly")
+    func base64EncodingValidBase64RoundTrips() {
         let originalData = Data("Hello, Screenshot!".utf8)
         let base64String = originalData.base64EncodedString()
         let decodedData = Data(base64Encoded: base64String)
 
-        XCTAssertEqual(decodedData, originalData,
-                       "Base64 encode/decode should round-trip correctly")
+        #expect(decodedData == originalData,
+                "Base64 encode/decode should round-trip correctly")
     }
 
-    // [P0] Base64 string contains only valid base64 characters
-    func test_base64Encoding_containsOnlyValidCharacters() {
+    @Test("base64 string contains only valid characters")
+    func base64EncodingContainsOnlyValidCharacters() {
         let originalData = Data([0x00, 0x01, 0x02, 0xFF, 0xFE, 0xFD])
         let base64String = originalData.base64EncodedString()
 
         let validBase64 = CharacterSet(charactersIn: "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/=")
         for char in base64String.unicodeScalars {
-            XCTAssertTrue(validBase64.contains(char),
-                          "Character '\(char)' should be valid base64")
+            #expect(validBase64.contains(char),
+                    "Character '\(char)' should be valid base64")
         }
     }
 
     // MARK: - Size Limit Logic
 
-    // [P0] 5MB size limit constant is correct
-    func test_sizeLimit_fiveMB_isCorrectValue() {
+    @Test("5MB size limit is correct value")
+    func sizeLimitFiveMBIsCorrectValue() {
         let fiveMB = 5 * 1024 * 1024
-        XCTAssertEqual(fiveMB, 5_242_880, "5MB should be 5,242,880 bytes")
+        #expect(fiveMB == 5_242_880, "5MB should be 5,242,880 bytes")
     }
 
-    // [P0] Data smaller than 5MB base64 should pass size check
-    func test_sizeLimit_smallData_passesCheck() {
+    @Test("small data passes size check")
+    func sizeLimitSmallDataPassesCheck() {
         let smallData = Data(repeating: 0xAA, count: 1024) // 1KB
         let base64Data = smallData.base64EncodedData()
-        XCTAssertTrue(base64Data.count <= 5 * 1024 * 1024,
-                      "1KB data base64 should be well under 5MB limit")
+        #expect(base64Data.count <= 5 * 1024 * 1024,
+                "1KB data base64 should be well under 5MB limit")
     }
 
     // MARK: - Error Description Content
 
-    func test_screenshotError_windowCaptureFailed_containsWindowId() {
+    @Test("windowCaptureFailed description contains window ID")
+    func screenshotErrorWindowCaptureFailedContainsWindowId() {
         let error = ScreenshotError.windowCaptureFailed(windowId: 999)
         let desc = error.errorDescription
-        XCTAssertNotNil(desc)
-        XCTAssertTrue(desc!.contains("999"), "Description should contain window ID")
+        #expect(desc != nil)
+        #expect(desc!.contains("999"), "Description should contain window ID")
     }
 
-    func test_screenshotError_screenshotTooLarge_containsSize() {
+    @Test("screenshotTooLarge description contains size")
+    func screenshotErrorScreenshotTooLargeContainsSize() {
         let size = 7 * 1024 * 1024
         let error = ScreenshotError.screenshotTooLarge(sizeBytes: size)
         let desc = error.errorDescription
-        XCTAssertNotNil(desc)
-        XCTAssertTrue(desc!.contains(String(size)), "Description should contain size in bytes")
+        #expect(desc != nil)
+        #expect(desc!.contains(String(size)), "Description should contain size in bytes")
     }
 
-    func test_screenshotError_imageConversionFailed_description() {
+    @Test("imageConversionFailed description")
+    func screenshotErrorImageConversionFailedDescription() {
         let error = ScreenshotError.imageConversionFailed
-        XCTAssertEqual(error.errorDescription, "Failed to convert screenshot image to JPEG")
+        #expect(error.errorDescription == "Failed to convert screenshot image to JPEG")
     }
 
-    func test_screenshotError_fullScreenCaptureFailed_description() {
+    @Test("fullScreenCaptureFailed description")
+    func screenshotErrorFullScreenCaptureFailedDescription() {
         let error = ScreenshotError.fullScreenCaptureFailed
-        XCTAssertEqual(error.errorDescription, "Failed to capture full screen")
+        #expect(error.errorDescription == "Failed to capture full screen")
     }
 
     // MARK: - Error Suggestions
 
-    func test_screenshotError_suggestions_notEmpty() {
-        XCTAssertFalse(ScreenshotError.windowCaptureFailed(windowId: 1).suggestion.isEmpty)
-        XCTAssertFalse(ScreenshotError.fullScreenCaptureFailed.suggestion.isEmpty)
-        XCTAssertFalse(ScreenshotError.imageConversionFailed.suggestion.isEmpty)
-        XCTAssertFalse(ScreenshotError.screenshotTooLarge(sizeBytes: 1).suggestion.isEmpty)
+    @Test("suggestions are not empty")
+    func screenshotErrorSuggestionsNotEmpty() {
+        #expect(!ScreenshotError.windowCaptureFailed(windowId: 1).suggestion.isEmpty)
+        #expect(!ScreenshotError.fullScreenCaptureFailed.suggestion.isEmpty)
+        #expect(!ScreenshotError.imageConversionFailed.suggestion.isEmpty)
+        #expect(!ScreenshotError.screenshotTooLarge(sizeBytes: 1).suggestion.isEmpty)
     }
 
-    func test_screenshotError_windowCaptureFailed_suggestsListWindows() {
+    @Test("windowCaptureFailed suggests list_windows")
+    func screenshotErrorWindowCaptureFailedSuggestsListWindows() {
         let error = ScreenshotError.windowCaptureFailed(windowId: 1)
-        XCTAssertTrue(error.suggestion.contains("list_windows"))
+        #expect(error.suggestion.contains("list_windows"))
     }
 
-    func test_screenshotError_fullScreenCaptureFailed_suggestsPermission() {
+    @Test("fullScreenCaptureFailed suggests permission")
+    func screenshotErrorFullScreenCaptureFailedSuggestsPermission() {
         let error = ScreenshotError.fullScreenCaptureFailed
-        XCTAssertTrue(error.suggestion.contains("screen recording"))
+        #expect(error.suggestion.contains("screen recording"))
     }
 
-    func test_screenshotError_screenshotTooLarge_suggestsWindowCapture() {
+    @Test("screenshotTooLarge suggests window capture")
+    func screenshotErrorScreenshotTooLargeSuggestsWindowCapture() {
         let error = ScreenshotError.screenshotTooLarge(sizeBytes: 9999999)
-        XCTAssertTrue(error.suggestion.lowercased().contains("window"))
+        #expect(error.suggestion.lowercased().contains("window"))
     }
 
     // MARK: - Error Codes Distinct
 
-    func test_screenshotError_allErrorCodesDistinct() {
+    @Test("all error codes are distinct")
+    func screenshotErrorAllErrorCodesDistinct() {
         let codes = [
             ScreenshotError.windowCaptureFailed(windowId: 1).errorCode,
             ScreenshotError.fullScreenCaptureFailed.errorCode,
             ScreenshotError.imageConversionFailed.errorCode,
             ScreenshotError.screenshotTooLarge(sizeBytes: 1).errorCode,
         ]
-        XCTAssertEqual(Set(codes).count, codes.count, "All error codes should be distinct")
+        #expect(Set(codes).count == codes.count, "All error codes should be distinct")
     }
 }

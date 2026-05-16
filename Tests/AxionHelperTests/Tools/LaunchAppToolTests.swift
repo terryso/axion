@@ -1,18 +1,14 @@
 import Foundation
 import MCP
 import MCPTool
-import XCTest
+import Testing
 @testable import AxionHelper
 @testable import AxionCore
 
-// Unit tests for launch_app and list_apps tools using mock services.
-// These tests do NOT launch real applications — all system interaction is mocked.
-// Priority: P0 (core tool wiring)
-
 @MainActor
-final class LaunchAppToolTests: XCTestCase {
-
-    // MARK: - Helpers
+extension ToolsTests {
+@Suite("LaunchAppTool")
+struct LaunchAppToolTests {
 
     private func makeRegisteredServer() async throws -> MCPServer {
         let server = MCPServer(name: "AxionHelper", version: "0.1.0")
@@ -43,9 +39,8 @@ final class LaunchAppToolTests: XCTestCase {
         }.joined()
     }
 
-    // MARK: - launch_app
-
-    func test_launchApp_success_returnsJsonWithPid() async throws {
+    @Test("launch app success returns JSON with pid")
+    func launchAppSuccessReturnsJsonWithPid() async throws {
         let restore = ServiceContainerFixture.apply(
             appLauncher: MockAppLauncher(
                 launchAppHandler: { name in
@@ -66,11 +61,12 @@ final class LaunchAppToolTests: XCTestCase {
         let text = textContent(result)
         let json = try JSONSerialization.jsonObject(with: text.data(using: .utf8)!) as? [String: Any]
 
-        XCTAssertEqual(json?["pid"] as? Int, 12345)
-        XCTAssertEqual(json?["app_name"] as? String, "Calculator")
+        #expect(json?["pid"] as? Int == 12345)
+        #expect(json?["app_name"] as? String == "Calculator")
     }
 
-    func test_launchApp_appNotFound_returnsErrorJson() async throws {
+    @Test("launch app not found returns error JSON")
+    func launchAppNotFoundReturnsErrorJson() async throws {
         let restore = ServiceContainerFixture.apply(
             appLauncher: MockAppLauncher(
                 launchAppHandler: { _ in throw AppLauncherError.appNotFound(name: "NoApp") },
@@ -89,12 +85,13 @@ final class LaunchAppToolTests: XCTestCase {
         let text = textContent(result)
         let json = try JSONSerialization.jsonObject(with: text.data(using: .utf8)!) as? [String: Any]
 
-        XCTAssertEqual(json?["error"] as? String, "app_not_found")
-        XCTAssertNotNil(json?["message"])
-        XCTAssertNotNil(json?["suggestion"])
+        #expect(json?["error"] as? String == "app_not_found")
+        #expect(json?["message"] != nil)
+        #expect(json?["suggestion"] != nil)
     }
 
-    func test_launchApp_alreadyRunning_returnsExistingPid() async throws {
+    @Test("launch app already running returns existing pid")
+    func launchAppAlreadyRunningReturnsExistingPid() async throws {
         let callCount = LockedCounter()
         let restore = ServiceContainerFixture.apply(
             appLauncher: MockAppLauncher(
@@ -119,12 +116,11 @@ final class LaunchAppToolTests: XCTestCase {
             context: makeTestContext()
         )
 
-        XCTAssertEqual(callCount.value, 2, "Both calls should succeed via mock")
+        #expect(callCount.value == 2)
     }
 
-    // MARK: - list_apps
-
-    func test_listApps_returnsJsonArray() async throws {
+    @Test("list apps returns JSON array")
+    func listAppsReturnsJsonArray() async throws {
         let restore = ServiceContainerFixture.apply(
             appLauncher: MockAppLauncher(
                 launchAppHandler: { _ in AppInfo(pid: 1, appName: "A", bundleId: nil) },
@@ -149,12 +145,13 @@ final class LaunchAppToolTests: XCTestCase {
         let data = text.data(using: .utf8)!
         let apps = try JSONSerialization.jsonObject(with: data) as? [[String: Any]]
 
-        XCTAssertEqual(apps?.count, 2)
-        XCTAssertEqual(apps?[0]["app_name"] as? String, "Finder")
-        XCTAssertEqual(apps?[1]["app_name"] as? String, "Safari")
+        #expect(apps?.count == 2)
+        #expect(apps?[0]["app_name"] as? String == "Finder")
+        #expect(apps?[1]["app_name"] as? String == "Safari")
     }
 
-    func test_listApps_eachAppHasPidAndName() async throws {
+    @Test("list apps each app has pid and name")
+    func listAppsEachAppHasPidAndName() async throws {
         let restore = ServiceContainerFixture.apply(
             appLauncher: MockAppLauncher(
                 launchAppHandler: { _ in fatalError("should not be called") },
@@ -177,13 +174,13 @@ final class LaunchAppToolTests: XCTestCase {
         let apps = try JSONSerialization.jsonObject(with: data) as? [[String: Any]] ?? []
 
         for app in apps {
-            XCTAssertNotNil(app["pid"], "Each app should have pid")
-            XCTAssertNotNil(app["app_name"], "Each app should have app_name")
+            #expect(app["pid"] != nil)
+            #expect(app["app_name"] != nil)
         }
     }
 }
+}
 
-/// Thread-safe counter for verifying mock call counts.
 private final class LockedCounter: @unchecked Sendable {
     private var _value = 0
     private let lock = NSLock()

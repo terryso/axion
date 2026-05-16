@@ -12,6 +12,44 @@ private struct ToolErrorPayload: Codable {
     let suggestion: String
 }
 
+// MARK: - Blocking Dialog Detection (Epic 8)
+
+/// Information about a blocking dialog detected after launching an app.
+/// Follows OpenClick's approach: detect and report to the Planner so it can
+/// decide whether to dismiss or interact with the dialog.
+struct BlockingDialogInfo: Codable {
+    let windowId: Int
+    let title: String
+
+    enum CodingKeys: String, CodingKey {
+        case windowId = "window_id"
+        case title
+    }
+}
+
+/// Checks the window list for a topmost window that looks like a blocking
+/// open/save/import dialog. Detection is based on window title keywords and
+/// minimum size, not app-specific logic.
+private func detectBlockingDialog(windows: [WindowInfo], appPid: Int32) -> BlockingDialogInfo? {
+    // Filter to windows belonging to the launched app, on-screen, with
+    // meaningful size (not menu bar strips at 37px height).
+    let candidates = windows
+        .filter { $0.pid == appPid }
+        .filter { $0.bounds.width >= 200 && $0.bounds.height >= 120 }
+        .sorted { $0.zOrder < $1.zOrder } // lower zOrder = more frontmost
+
+    guard let top = candidates.first,
+          let title = top.title?.trimmingCharacters(in: .whitespaces),
+          !title.isEmpty else { return nil }
+
+    // Match common open/save dialog title patterns (locale-aware)
+    let dialogKeywords = ["open", "save", "import", "export", "place", "choose", "select", "打开", "存储", "导入", "导出"]
+    let lowerTitle = title.lowercased()
+    guard dialogKeywords.contains(where: { lowerTitle.contains($0) || lowerTitle.contains($0.lowercased()) }) else { return nil }
+
+    return BlockingDialogInfo(windowId: top.windowId, title: title)
+}
+
 // MARK: - Tool Result Types (Story 1.4)
 
 private struct CoordinateActionResult: Codable {
@@ -105,6 +143,10 @@ enum ToolRegistrar {
             GetAccessibilityTreeTool.self
             ValidateWindowTool.self
             OpenUrlTool.self
+            ResizeWindowTool.self
+            ArrangeWindowsTool.self
+            StartRecordingTool.self
+            StopRecordingTool.self
         }
     }
 }
@@ -122,10 +164,44 @@ struct LaunchAppTool {
     func perform() async throws -> String {
         do {
             let appInfo = try await ServiceContainer.shared.appLauncher.launchApp(name: appName)
+
+            // Detect blocking dialogs (open/save panels) that the app may have
+            // shown on launch. This follows OpenClick's approach: detect and
+            // report to the Planner, letting it decide whether to dismiss.
+            // Wait briefly for the app to present its initial UI.
+            try? await Task.sleep(nanoseconds: 1_500_000_000) // 1.5s
+            let windows = ServiceContainer.shared.accessibilityEngine.listWindows(pid: appInfo.pid)
+            let blocker = detectBlockingDialog(windows: windows, appPid: appInfo.pid)
+
             let encoder = JSONEncoder()
             encoder.outputFormatting = [.sortedKeys]
-            let data = try encoder.encode(appInfo)
-            return String(data: data, encoding: .utf8) ?? "{}"
+
+            if let blocker {
+                struct LaunchResult: Codable {
+                    let pid: Int32
+                    let appName: String
+                    let bundleId: String?
+                    let blockingDialog: BlockingDialogInfo
+
+                    enum CodingKeys: String, CodingKey {
+                        case pid
+                        case appName = "app_name"
+                        case bundleId = "bundle_id"
+                        case blockingDialog = "blocking_dialog"
+                    }
+                }
+                let result = LaunchResult(
+                    pid: appInfo.pid,
+                    appName: appInfo.appName,
+                    bundleId: appInfo.bundleId,
+                    blockingDialog: blocker
+                )
+                let data = try encoder.encode(result)
+                return String(data: data, encoding: .utf8) ?? "{}"
+            } else {
+                let data = try encoder.encode(appInfo)
+                return String(data: data, encoding: .utf8) ?? "{}"
+            }
         } catch let error as AppLauncherError {
             let payload = ToolErrorPayload(
                 error: error.errorCode,
@@ -715,5 +791,291 @@ struct OpenUrlTool {
             let data = try encoder.encode(payload)
             return String(data: data, encoding: .utf8) ?? "{}"
         }
+    }
+}
+
+// MARK: - Window Layout Tools (Story 8.3)
+
+private struct WindowBoundsResult: Codable {
+    let success: Bool
+    let action: String
+    let windowId: Int
+    let x: Int
+    let y: Int
+    let width: Int
+    let height: Int
+
+    enum CodingKeys: String, CodingKey {
+        case success, action
+        case windowId = "window_id"
+        case x, y, width, height
+    }
+}
+
+@Tool
+struct ResizeWindowTool {
+    static let name = "resize_window"
+    static let description = "Move and/or resize a window by setting position and/or dimensions"
+
+    @Parameter(key: "window_id", description: "Window identifier")
+    var windowId: Int
+
+    @Parameter(description: "New X position (optional, keeps current if omitted)")
+    var x: Int?
+
+    @Parameter(description: "New Y position (optional, keeps current if omitted)")
+    var y: Int?
+
+    @Parameter(description: "New width (optional, keeps current if omitted)")
+    var width: Int?
+
+    @Parameter(description: "New height (optional, keeps current if omitted)")
+    var height: Int?
+
+    func perform() async throws -> String {
+        do {
+            try ServiceContainer.shared.accessibilityEngine.setWindowBounds(
+                windowId: windowId, x: x, y: y, width: width, height: height
+            )
+            // Return approximate new bounds by reading back
+            let state = try ServiceContainer.shared.accessibilityEngine.getWindowState(windowId: windowId)
+            let result = WindowBoundsResult(
+                success: true, action: "resize_window", windowId: windowId,
+                x: state.bounds.x, y: state.bounds.y,
+                width: state.bounds.width, height: state.bounds.height
+            )
+            let encoder = JSONEncoder()
+            encoder.outputFormatting = [.sortedKeys]
+            let data = try encoder.encode(result)
+            return String(data: data, encoding: .utf8) ?? "{}"
+        } catch let error as AccessibilityEngineError {
+            let payload = ToolErrorPayload(
+                error: error.errorCode,
+                message: error.localizedDescription,
+                suggestion: error.suggestion
+            )
+            let encoder = JSONEncoder()
+            encoder.outputFormatting = [.sortedKeys]
+            let data = try encoder.encode(payload)
+            return String(data: data, encoding: .utf8) ?? "{}"
+        }
+    }
+}
+
+private struct ArrangeResult: Codable {
+    let success: Bool
+    let action: String
+    let layout: String
+    let windows: [WindowBoundsResult]
+}
+
+private enum WindowLayoutKind: String, CaseIterable {
+    case tileLeftRight = "tile-left-right"
+    case tileTopBottom = "tile-top-bottom"
+    case cascade = "cascade"
+}
+
+@Tool
+struct ArrangeWindowsTool {
+    static let name = "arrange_windows"
+    static let description = "Arrange multiple windows in a layout pattern (tile-left-right, tile-top-bottom, cascade)"
+
+    @Parameter(description: "Layout type: 'tile-left-right', 'tile-top-bottom', or 'cascade'")
+    var layout: String
+
+    @Parameter(key: "window_ids", description: "Window identifiers to arrange (2+ windows)")
+    var windowIds: [Int]
+
+    func perform() async throws -> String {
+        guard windowIds.count >= 2 else {
+            let payload = ToolErrorPayload(
+                error: "invalid_params",
+                message: "At least 2 window_ids required for arrangement",
+                suggestion: "Provide 2 or more window_ids."
+            )
+            let encoder = JSONEncoder()
+            encoder.outputFormatting = [.sortedKeys]
+            let data = try encoder.encode(payload)
+            return String(data: data, encoding: .utf8) ?? "{}"
+        }
+
+        guard let screen = NSScreen.main else {
+            let payload = ToolErrorPayload(
+                error: "no_screen",
+                message: "No main screen available",
+                suggestion: "Ensure a display is connected."
+            )
+            let encoder = JSONEncoder()
+            encoder.outputFormatting = [.sortedKeys]
+            let data = try encoder.encode(payload)
+            return String(data: data, encoding: .utf8) ?? "{}"
+        }
+        let screenRect = screen.visibleFrame
+
+        do {
+            switch layout {
+            case WindowLayoutKind.tileLeftRight.rawValue:
+                let halfWidth = Int(screenRect.width) / 2
+                let fullWidth = Int(screenRect.width)
+                let fullHeight = Int(screenRect.height)
+                try ServiceContainer.shared.accessibilityEngine.setWindowBounds(
+                    windowId: windowIds[0],
+                    x: Int(screenRect.origin.x), y: Int(screenRect.origin.y),
+                    width: halfWidth, height: fullHeight
+                )
+                try ServiceContainer.shared.accessibilityEngine.setWindowBounds(
+                    windowId: windowIds[1],
+                    x: Int(screenRect.origin.x) + halfWidth, y: Int(screenRect.origin.y),
+                    width: fullWidth - halfWidth, height: fullHeight
+                )
+            case WindowLayoutKind.tileTopBottom.rawValue:
+                let halfHeight = Int(screenRect.height) / 2
+                let fullWidth = Int(screenRect.width)
+                let fullHeight = Int(screenRect.height)
+                try ServiceContainer.shared.accessibilityEngine.setWindowBounds(
+                    windowId: windowIds[0],
+                    x: Int(screenRect.origin.x), y: Int(screenRect.origin.y),
+                    width: fullWidth, height: halfHeight
+                )
+                try ServiceContainer.shared.accessibilityEngine.setWindowBounds(
+                    windowId: windowIds[1],
+                    x: Int(screenRect.origin.x), y: Int(screenRect.origin.y) + halfHeight,
+                    width: fullWidth, height: fullHeight - halfHeight
+                )
+            case WindowLayoutKind.cascade.rawValue:
+                let cascadeOffset = 30
+                let cascadeWidth = Int(screenRect.width) - cascadeOffset * (windowIds.count - 1)
+                let cascadeHeight = Int(screenRect.height) - cascadeOffset * (windowIds.count - 1)
+                for (i, wid) in windowIds.enumerated() {
+                    try ServiceContainer.shared.accessibilityEngine.setWindowBounds(
+                        windowId: wid,
+                        x: Int(screenRect.origin.x) + cascadeOffset * i,
+                        y: Int(screenRect.origin.y) + cascadeOffset * i,
+                        width: max(cascadeWidth, 200),
+                        height: max(cascadeHeight, 200)
+                    )
+                }
+            default:
+                let validLayouts = WindowLayoutKind.allCases.map(\.rawValue).joined(separator: ", ")
+                let payload = ToolErrorPayload(
+                    error: "invalid_layout",
+                    message: "Unknown layout: \(layout)",
+                    suggestion: "Use one of: \(validLayouts)."
+                )
+                let encoder = JSONEncoder()
+                encoder.outputFormatting = [.sortedKeys]
+                let data = try encoder.encode(payload)
+                return String(data: data, encoding: .utf8) ?? "{}"
+            }
+
+            var results: [WindowBoundsResult] = []
+            for wid in windowIds {
+                let state = try ServiceContainer.shared.accessibilityEngine.getWindowState(windowId: wid)
+                results.append(WindowBoundsResult(
+                    success: true, action: "arrange_windows", windowId: wid,
+                    x: state.bounds.x, y: state.bounds.y,
+                    width: state.bounds.width, height: state.bounds.height
+                ))
+            }
+
+            let result = ArrangeResult(success: true, action: "arrange_windows", layout: layout, windows: results)
+            let encoder = JSONEncoder()
+            encoder.outputFormatting = [.sortedKeys]
+            let data = try encoder.encode(result)
+            return String(data: data, encoding: .utf8) ?? "{}"
+        } catch let error as AccessibilityEngineError {
+            let payload = ToolErrorPayload(
+                error: error.errorCode,
+                message: error.localizedDescription,
+                suggestion: error.suggestion
+            )
+            let encoder = JSONEncoder()
+            encoder.outputFormatting = [.sortedKeys]
+            let data = try encoder.encode(payload)
+            return String(data: data, encoding: .utf8) ?? "{}"
+        }
+    }
+}
+
+// MARK: - Recording Tools (Story 9.1)
+
+private struct RecordingActionResult: Codable {
+    let success: Bool
+    let action: String
+    let message: String
+}
+
+private struct StopRecordingResult: Codable {
+    let success: Bool
+    let action: String
+    let eventCount: Int
+    let events: [String]
+    let windowSnapshots: [String]
+
+    enum CodingKeys: String, CodingKey {
+        case success, action
+        case eventCount = "event_count"
+        case events
+        case windowSnapshots = "window_snapshots"
+    }
+}
+
+@Tool
+struct StartRecordingTool {
+    static let name = "start_recording"
+    static let description = "Start recording user input events (mouse clicks, keyboard, app switches) in listen-only mode"
+
+    func perform() async throws -> String {
+        do {
+            try ServiceContainer.shared.eventRecorder.startRecording()
+            let result = RecordingActionResult(
+                success: true, action: "start_recording",
+                message: "Recording started. Events are being captured in listen-only mode."
+            )
+            let encoder = JSONEncoder()
+            encoder.outputFormatting = [.sortedKeys]
+            let data = try encoder.encode(result)
+            return String(data: data, encoding: .utf8) ?? "{}"
+        } catch let error as EventRecorderError {
+            let payload = ToolErrorPayload(
+                error: error.errorCode,
+                message: error.localizedDescription,
+                suggestion: error.suggestion
+            )
+            let encoder = JSONEncoder()
+            encoder.outputFormatting = [.sortedKeys]
+            let data = try encoder.encode(payload)
+            return String(data: data, encoding: .utf8) ?? "{}"
+        }
+    }
+}
+
+@Tool
+struct StopRecordingTool {
+    static let name = "stop_recording"
+    static let description = "Stop recording and return all captured events as JSON"
+
+    func perform() async throws -> String {
+        let recordingResult = ServiceContainer.shared.eventRecorder.stopRecording()
+        let encoder = JSONEncoder()
+        encoder.outputFormatting = [.sortedKeys]
+
+        let eventStrings = recordingResult.events.compactMap { event -> String? in
+            guard let data = try? encoder.encode(event) else { return nil }
+            return String(data: data, encoding: .utf8)
+        }
+
+        let snapshotStrings = recordingResult.windowSnapshots.compactMap { snapshot -> String? in
+            guard let data = try? encoder.encode(snapshot) else { return nil }
+            return String(data: data, encoding: .utf8)
+        }
+
+        let result = StopRecordingResult(
+            success: true, action: "stop_recording",
+            eventCount: recordingResult.events.count, events: eventStrings,
+            windowSnapshots: snapshotStrings
+        )
+        let data = try encoder.encode(result)
+        return String(data: data, encoding: .utf8) ?? "{}"
     }
 }

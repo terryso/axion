@@ -1,5 +1,6 @@
 import Foundation
 import JSONSchemaBuilder
+import MCP
 
 @Schemable
 struct SelectorQuery: Codable, Equatable, Sendable {

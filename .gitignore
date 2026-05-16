@@ -21,3 +21,8 @@ xcuserdata/
 
 # Distribution generated files
 Distribution/homebrew/axion.rb
+.claude/.story-automator-active
+
+# Story automator runtime state
+_bmad-output/story-automator/
+.playwright-mcp/

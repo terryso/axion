@@ -1,11 +1,7 @@
-import XCTest
+import Testing
+import Foundation
 @testable import AxionCLI
 @testable import AxionCore
-
-// [P0] Core verification flow with MCP/LLM mocks
-// [P1] Degradation and edge cases
-
-// MARK: - Mock MCP Client for TaskVerifier Tests
 
 /// Mock MCPClientProtocol for testing TaskVerifier without real MCP calls.
 /// Supports stubbed responses per tool name and error injection.
@@ -30,8 +26,6 @@ final class MockVerifierMCPClient: MCPClientProtocol {
     }
 }
 
-// MARK: - Mock LLM Client for TaskVerifier Tests
-
 /// Mock LLMClientProtocol for testing TaskVerifier without real LLM calls.
 struct MockVerifierLLMClient: LLMClientProtocol {
     let promptResult: String
@@ -41,16 +35,12 @@ struct MockVerifierLLMClient: LLMClientProtocol {
     }
 }
 
-// MARK: - Failing Mock LLM Client
-
 /// Mock LLM client that always throws, simulating LLM failure.
 struct FailingMockLLMClient: LLMClientProtocol {
     func prompt(systemPrompt: String, userMessage: String, imagePaths: [String]) async throws -> String {
         throw AxionError.planningFailed(reason: "LLM service unavailable")
     }
 }
-
-// MARK: - TaskVerifier ATDD Tests
 
 /// ATDD red-phase tests for TaskVerifier (Story 3-4 AC1, AC2, AC3, AC4, AC5).
 /// Tests the full verification flow: MCP context capture, stop condition evaluation,
@@ -59,9 +49,8 @@ struct FailingMockLLMClient: LLMClientProtocol {
 /// TDD RED PHASE: These tests will not compile until TaskVerifier is implemented
 /// in Sources/AxionCLI/Verifier/TaskVerifier.swift and VerifierProtocol is updated
 /// in Sources/AxionCore/Protocols/VerifierProtocol.swift.
-final class TaskVerifierTests: XCTestCase {
-
-    // MARK: - Helpers
+@Suite("TaskVerifier")
+struct TaskVerifierTests {
 
     /// Creates a minimal Plan with the given stop conditions.
     private func makePlan(stopWhen: [StopCondition] = []) -> Plan {
@@ -133,13 +122,13 @@ final class TaskVerifierTests: XCTestCase {
         """
     }
 
-    // MARK: - P0 Type Existence (AC1)
-
-    func test_taskVerifier_typeExists() {
+    @Test("TaskVerifier type exists")
+    func taskVerifierTypeExists() {
         let _ = TaskVerifier.self
     }
 
-    func test_taskVerifier_conformsToVerifierProtocol() {
+    @Test("TaskVerifier conforms to VerifierProtocol")
+    func taskVerifierConformsToVerifierProtocol() {
         let mockMCP = MockVerifierMCPClient()
         let mockLLM = MockVerifierLLMClient(promptResult: "")
         let config = AxionConfig.default
@@ -147,9 +136,8 @@ final class TaskVerifierTests: XCTestCase {
         let _ = verifier as VerifierProtocol
     }
 
-    // MARK: - P0 Full Verification Flow — Done (AC1, AC2, AC3)
-
-    func test_verify_screenshotAndAxTreeCaptured_returnsDone() async throws {
+    @Test("screenshot and AX tree captured returns done")
+    func verifyScreenshotAndAxTreeCapturedReturnsDone() async throws {
         let mockMCP = MockVerifierMCPClient()
         mockMCP.stubbedResults[ToolNames.screenshot] = "{\"image_base64\": \"iVBORwkg==\", \"success\": true}"
         mockMCP.stubbedResults[ToolNames.getAccessibilityTree] = calculatorAxTree
@@ -165,15 +153,13 @@ final class TaskVerifierTests: XCTestCase {
 
         let result = try await verifier.verify(plan: plan, executedSteps: makeExecutedSteps(), context: context)
 
-        XCTAssertEqual(result.state, .done)
-        // MCP should have been called for screenshot and AX tree
-        XCTAssertTrue(mockMCP.callHistory.contains(where: { $0.name == ToolNames.screenshot }))
-        XCTAssertTrue(mockMCP.callHistory.contains(where: { $0.name == ToolNames.getAccessibilityTree }))
+        #expect(result.state == .done)
+        #expect(mockMCP.callHistory.contains(where: { $0.name == ToolNames.screenshot }))
+        #expect(mockMCP.callHistory.contains(where: { $0.name == ToolNames.getAccessibilityTree }))
     }
 
-    // MARK: - P0 Stop Condition Not Met — Blocked (AC4)
-
-    func test_verify_stopConditionNotMet_returnsBlocked() async throws {
+    @Test("stop condition not met returns blocked")
+    func verifyStopConditionNotMetReturnsBlocked() async throws {
         let mockMCP = MockVerifierMCPClient()
         mockMCP.stubbedResults[ToolNames.screenshot] = "{\"image_base64\": \"abc\", \"success\": true}"
         mockMCP.stubbedResults[ToolNames.getAccessibilityTree] = """
@@ -195,13 +181,12 @@ final class TaskVerifierTests: XCTestCase {
 
         let result = try await verifier.verify(plan: plan, executedSteps: makeExecutedSteps(), context: context)
 
-        XCTAssertEqual(result.state, .blocked)
-        XCTAssertNotNil(result.reason)
+        #expect(result.state == .blocked)
+        #expect(result.reason != nil)
     }
 
-    // MARK: - P0 LLM Returns Needs Clarification (AC5)
-
-    func test_verify_llmReturnsNeedsClarification_returnsNeedsClarification() async throws {
+    @Test("LLM returns needsClarification")
+    func verifyLLMReturnsNeedsClarificationReturnsNeedsClarification() async throws {
         let mockMCP = MockVerifierMCPClient()
         mockMCP.stubbedResults[ToolNames.screenshot] = "{\"image_base64\": \"abc\", \"success\": true}"
         mockMCP.stubbedResults[ToolNames.getAccessibilityTree] = calculatorAxTree
@@ -217,13 +202,12 @@ final class TaskVerifierTests: XCTestCase {
 
         let result = try await verifier.verify(plan: plan, executedSteps: makeExecutedSteps(), context: context)
 
-        XCTAssertEqual(result.state, .needsClarification)
-        XCTAssertEqual(result.reason, "Multiple windows found, which one to verify?")
+        #expect(result.state == .needsClarification)
+        #expect(result.reason == "Multiple windows found, which one to verify?")
     }
 
-    // MARK: - P0 LLM Returns Done (AC3)
-
-    func test_verify_llmReturnsDone_returnsDone() async throws {
+    @Test("LLM returns done")
+    func verifyLLMReturnsDoneReturnsDone() async throws {
         let mockMCP = MockVerifierMCPClient()
         mockMCP.stubbedResults[ToolNames.screenshot] = "{\"image_base64\": \"abc\", \"success\": true}"
         mockMCP.stubbedResults[ToolNames.getAccessibilityTree] = calculatorAxTree
@@ -239,12 +223,11 @@ final class TaskVerifierTests: XCTestCase {
 
         let result = try await verifier.verify(plan: plan, executedSteps: makeExecutedSteps(), context: context)
 
-        XCTAssertEqual(result.state, .done)
+        #expect(result.state == .done)
     }
 
-    // MARK: - P0 LLM Returns Blocked (AC4)
-
-    func test_verify_llmReturnsBlocked_returnsBlocked() async throws {
+    @Test("LLM returns blocked")
+    func verifyLLMReturnsBlockedReturnsBlocked() async throws {
         let mockMCP = MockVerifierMCPClient()
         mockMCP.stubbedResults[ToolNames.screenshot] = "{\"image_base64\": \"abc\", \"success\": true}"
         mockMCP.stubbedResults[ToolNames.getAccessibilityTree] = """
@@ -262,13 +245,12 @@ final class TaskVerifierTests: XCTestCase {
 
         let result = try await verifier.verify(plan: plan, executedSteps: makeExecutedSteps(), context: context)
 
-        XCTAssertEqual(result.state, .blocked)
-        XCTAssertEqual(result.reason, "Application window disappeared")
+        #expect(result.state == .blocked)
+        #expect(result.reason == "Application window disappeared")
     }
 
-    // MARK: - P0 LLM Failure — Safe Degradation (AC2)
-
-    func test_verify_llmFailure_returnsBlocked() async throws {
+    @Test("LLM failure returns blocked")
+    func verifyLLMFailureReturnsBlocked() async throws {
         let mockMCP = MockVerifierMCPClient()
         mockMCP.stubbedResults[ToolNames.screenshot] = "{\"image_base64\": \"abc\", \"success\": true}"
         mockMCP.stubbedResults[ToolNames.getAccessibilityTree] = calculatorAxTree
@@ -282,14 +264,12 @@ final class TaskVerifierTests: XCTestCase {
 
         let result = try await verifier.verify(plan: plan, executedSteps: makeExecutedSteps(), context: context)
 
-        XCTAssertEqual(result.state, .blocked)
-        // Reason should mention LLM failure or degradation
-        XCTAssertNotNil(result.reason)
+        #expect(result.state == .blocked)
+        #expect(result.reason != nil)
     }
 
-    // MARK: - P1 LLM Invalid JSON — Safe Degradation (AC2)
-
-    func test_verify_llmInvalidJSON_returnsBlocked() async throws {
+    @Test("LLM invalid JSON returns blocked")
+    func verifyLLMInvalidJSONReturnsBlocked() async throws {
         let mockMCP = MockVerifierMCPClient()
         mockMCP.stubbedResults[ToolNames.screenshot] = "{\"image_base64\": \"abc\", \"success\": true}"
         mockMCP.stubbedResults[ToolNames.getAccessibilityTree] = calculatorAxTree
@@ -303,12 +283,11 @@ final class TaskVerifierTests: XCTestCase {
 
         let result = try await verifier.verify(plan: plan, executedSteps: makeExecutedSteps(), context: context)
 
-        XCTAssertEqual(result.state, .blocked)
+        #expect(result.state == .blocked)
     }
 
-    // MARK: - P1 MCP Screenshot Failure — Degrades Gracefully (AC1)
-
-    func test_verify_mcpScreenshotFailure_degradesGracefully() async throws {
+    @Test("MCP screenshot failure degrades gracefully")
+    func verifyMCPScreenshotFailureDegradesGracefully() async throws {
         let mockMCP = MockVerifierMCPClient()
         // Screenshot fails but AX tree succeeds
         mockMCP.stubbedResults[ToolNames.screenshot] = "{\"error\": \"Permission denied\"}"
@@ -326,12 +305,11 @@ final class TaskVerifierTests: XCTestCase {
         let result = try await verifier.verify(plan: plan, executedSteps: makeExecutedSteps(), context: context)
 
         // Should still return a result (not crash), using AX tree only
-        XCTAssertNotEqual(result.state, .planning) // just verify it's a terminal state
+        #expect(result.state != .planning) // just verify it's a terminal state
     }
 
-    // MARK: - P1 MCP AX Tree Failure — Degrades Gracefully (AC1)
-
-    func test_verify_mcpAxTreeFailure_degradesGracefully() async throws {
+    @Test("MCP AX tree failure degrades gracefully")
+    func verifyMCPAxTreeFailureDegradesGracefully() async throws {
         let mockMCP = MockVerifierMCPClient()
         mockMCP.stubbedResults[ToolNames.screenshot] = "{\"image_base64\": \"abc\", \"success\": true}"
         // AX tree fails
@@ -349,12 +327,11 @@ final class TaskVerifierTests: XCTestCase {
         let result = try await verifier.verify(plan: plan, executedSteps: makeExecutedSteps(), context: context)
 
         // Should still return a result, falling back to LLM
-        XCTAssertNotEqual(result.state, .planning)
+        #expect(result.state != .planning)
     }
 
-    // MARK: - P1 MCP Both Fail — Degrades Gracefully (AC1)
-
-    func test_verify_mcpBothFail_degradesGracefully() async throws {
+    @Test("MCP both fail degrades gracefully")
+    func verifyMCPBothFailDegradesGracefully() async throws {
         let mockMCP = MockVerifierMCPClient()
         mockMCP.shouldThrow = true
         mockMCP.throwError = AxionError.mcpError(tool: "screenshot", reason: "Helper not responding")
@@ -372,12 +349,11 @@ final class TaskVerifierTests: XCTestCase {
 
         // Both MCP calls failed, but verifier should still return a result (not crash)
         // Likely blocked since no visual context is available
-        XCTAssertEqual(result.state, .blocked)
+        #expect(result.state == .blocked)
     }
 
-    // MARK: - P1 Correct MCP Arguments (AC1)
-
-    func test_verify_callsScreenshotWithCorrectWindowId() async throws {
+    @Test("calls screenshot with correct window_id")
+    func verifyCallsScreenshotWithCorrectWindowId() async throws {
         let mockMCP = MockVerifierMCPClient()
         mockMCP.stubbedResults[ToolNames.screenshot] = "{\"image_base64\": \"abc\", \"success\": true}"
         mockMCP.stubbedResults[ToolNames.getAccessibilityTree] = calculatorAxTree
@@ -394,12 +370,13 @@ final class TaskVerifierTests: XCTestCase {
         _ = try await verifier.verify(plan: plan, executedSteps: makeExecutedSteps(), context: context)
 
         let screenshotCall = mockMCP.callHistory.first(where: { $0.name == ToolNames.screenshot })
-        XCTAssertNotNil(screenshotCall)
+        #expect(screenshotCall != nil)
         // Should include window_id=42 from the executed steps
-        XCTAssertEqual(screenshotCall?.arguments["window_id"], .int(42))
+        #expect(screenshotCall?.arguments["window_id"] == .int(42))
     }
 
-    func test_verify_callsGetAccessibilityTreeWithCorrectPid() async throws {
+    @Test("calls getAccessibilityTree with correct pid")
+    func verifyCallsGetAccessibilityTreeWithCorrectPid() async throws {
         let mockMCP = MockVerifierMCPClient()
         mockMCP.stubbedResults[ToolNames.screenshot] = "{\"image_base64\": \"abc\", \"success\": true}"
         mockMCP.stubbedResults[ToolNames.getAccessibilityTree] = calculatorAxTree
@@ -416,14 +393,13 @@ final class TaskVerifierTests: XCTestCase {
         _ = try await verifier.verify(plan: plan, executedSteps: makeExecutedSteps(), context: context)
 
         let axTreeCall = mockMCP.callHistory.first(where: { $0.name == ToolNames.getAccessibilityTree })
-        XCTAssertNotNil(axTreeCall)
+        #expect(axTreeCall != nil)
         // Should include pid=1234 from the executed steps
-        XCTAssertEqual(axTreeCall?.arguments["pid"], .int(1234))
+        #expect(axTreeCall?.arguments["pid"] == .int(1234))
     }
 
-    // MARK: - P1 No Stop Conditions (AC3)
-
-    func test_verify_noStopConditions_returnsDone() async throws {
+    @Test("no stop conditions returns done")
+    func verifyNoStopConditionsReturnsDone() async throws {
         let mockMCP = MockVerifierMCPClient()
         mockMCP.stubbedResults[ToolNames.screenshot] = "{\"image_base64\": \"abc\", \"success\": true}"
         mockMCP.stubbedResults[ToolNames.getAccessibilityTree] = calculatorAxTree
@@ -439,12 +415,11 @@ final class TaskVerifierTests: XCTestCase {
 
         let result = try await verifier.verify(plan: plan, executedSteps: makeExecutedSteps(), context: context)
 
-        XCTAssertEqual(result.state, .done)
+        #expect(result.state == .done)
     }
 
-    // MARK: - P1 Local Match Skips LLM (AC2)
-
-    func test_verify_textAppears_matchedLocally_skipsLLM() async throws {
+    @Test("textAppears matched locally skips LLM")
+    func verifyTextAppearsMatchedLocallySkipsLLM() async throws {
         let mockMCP = MockVerifierMCPClient()
         mockMCP.stubbedResults[ToolNames.screenshot] = "{\"image_base64\": \"abc\", \"success\": true}"
         mockMCP.stubbedResults[ToolNames.getAccessibilityTree] = calculatorAxTree
@@ -462,12 +437,11 @@ final class TaskVerifierTests: XCTestCase {
         let result = try await verifier.verify(plan: plan, executedSteps: makeExecutedSteps(), context: context)
 
         // Should return .done based on local match, not LLM
-        XCTAssertEqual(result.state, .done)
+        #expect(result.state == .done)
     }
 
-    // MARK: - P0 Custom Condition Triggers LLM (AC2)
-
-    func test_verify_customCondition_callsLLM() async throws {
+    @Test("custom condition calls LLM")
+    func verifyCustomConditionCallsLLM() async throws {
         let mockMCP = MockVerifierMCPClient()
         mockMCP.stubbedResults[ToolNames.screenshot] = "{\"image_base64\": \"abc\", \"success\": true}"
         mockMCP.stubbedResults[ToolNames.getAccessibilityTree] = calculatorAxTree
@@ -483,12 +457,11 @@ final class TaskVerifierTests: XCTestCase {
 
         let result = try await verifier.verify(plan: plan, executedSteps: makeExecutedSteps(), context: context)
 
-        XCTAssertEqual(result.state, .done)
+        #expect(result.state == .done)
     }
 
-    // MARK: - P1 Context Without PID (AC1)
-
-    func test_verify_contextWithoutPid_callsMCPWithoutPid() async throws {
+    @Test("context without pid calls MCP without pid")
+    func verifyContextWithoutPidCallsMCPWithoutPid() async throws {
         let mockMCP = MockVerifierMCPClient()
         mockMCP.stubbedResults[ToolNames.screenshot] = "{\"image_base64\": \"abc\", \"success\": true}"
         mockMCP.stubbedResults[ToolNames.getAccessibilityTree] = calculatorAxTree
@@ -525,8 +498,8 @@ final class TaskVerifierTests: XCTestCase {
         _ = try await verifier.verify(plan: plan, executedSteps: steps, context: context)
 
         let axTreeCall = mockMCP.callHistory.first(where: { $0.name == ToolNames.getAccessibilityTree })
-        XCTAssertNotNil(axTreeCall)
+        #expect(axTreeCall != nil)
         // Without pid, arguments should not contain pid key (or be empty)
-        XCTAssertNil(axTreeCall?.arguments["pid"])
+        #expect(axTreeCall?.arguments["pid"] == nil)
     }
 }

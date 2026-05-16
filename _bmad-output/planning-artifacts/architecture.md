@@ -107,13 +107,14 @@ axion/
 ├── Sources/
 │   ├── AxionCLI/                    # CLI 主程序（可执行目标）
 │   │   ├── main.swift               # 入口，ArgumentParser 根命令
-│   │   ├── Commands/                # 子命令：RunCommand, SetupCommand, DoctorCommand
+│   │   ├── Commands/                # 子命令：RunCommand, SetupCommand, DoctorCommand, ServerCommand, McpCommand, MemoryCommand
 │   │   ├── Planner/                 # 规划引擎：LLM 调用、plan 解析、prompt 管理
 │   │   ├── Executor/                # 执行引擎：步骤执行、MCP 调用、占位符解析
 │   │   ├── Verifier/                # 验证引擎：截图/AX 验证、stopWhen 评估
 │   │   ├── Config/                  # 配置管理：读写 ~/.axion/config.json
 │   │   ├── Trace/                   # Trace 记录器：运行轨迹持久化
-│   │   └── Output/                  # 输出格式化：终端进度、JSON 输出
+│   │   ├── Output/                  # 输出格式化：终端进度、JSON 输出
+│   │   ├── Memory/                  # App Memory 系统（Epic 4）：跨任务学习
 │   ├── AxionHelper/                 # Helper App（可执行目标，独立 macOS App）
 │   │   ├── main.swift               # 入口，启动 MCP Server
 │   │   ├── MCP/                     # MCP Server 实现：工具注册、JSON-RPC 处理
@@ -211,13 +212,13 @@ let package = Package(
 | D7 | Trace 记录格式 | 可观测性、调试效率 |
 | D8 | Helper 进程生命周期管理 | 可靠性（NFR5, NFR8） |
 
-**延迟决策（MVP 后）：**
+**延迟决策（MVP 后）— 已实施状态：**
 
-| 决策 | 延迟理由 |
-|------|----------|
-| HTTP API server 框架 | 成长功能，MVP 不需要 |
-| Memory 持久化方案 | 成长功能，MVP 不需要 |
-| MCP server 模式（供外部调用） | 成长功能，MVP 不需要 |
+| 决策 | 延迟理由 | 状态 |
+|------|----------|------|
+| HTTP API server 框架 | 成长功能，MVP 不需要 | ✅ 已实施（Epic 5，Hummingbird 2.x） |
+| Memory 持久化方案 | 成长功能，MVP 不需要 | ✅ 已实施（Epic 4，SDK FileBasedMemoryStore） |
+| MCP server 模式（供外部调用） | 成长功能，MVP 不需要 | ✅ 已实施（Epic 6，SDK AgentMCPServer） |
 
 ---
 
@@ -770,7 +771,12 @@ axion/
 │   │   │   ├── AxionCommand.swift             # 根命令（注册子命令）
 │   │   │   ├── RunCommand.swift               # FR6–FR10: axion run
 │   │   │   ├── SetupCommand.swift             # FR2: axion setup
-│   │   │   └── DoctorCommand.swift            # FR3: axion doctor
+│   │   │   ├── DoctorCommand.swift            # FR3: axion doctor
+│   │   │   ├── ServerCommand.swift            # FR45–FR46: axion server（Epic 5）
+│   │   │   ├── McpCommand.swift               # FR47: axion mcp（Epic 6）
+│   │   │   ├── MemoryCommand.swift            # FR44: axion memory 命令组（Epic 4）
+│   │   │   ├── MemoryListCommand.swift        # FR44: axion memory list
+│   │   │   └── MemoryClearCommand.swift       # FR44: axion memory clear --app
 │   │   ├── Planner/
 │   │   │   ├── LLMPlanner.swift               # FR11–FR14: 调用 LLM 生成 Plan
 │   │   │   ├── PlanParser.swift               # FR14–FR15: 解析 LLM 输出为 Plan
@@ -794,6 +800,25 @@ axion/
 │   │   └── Output/
 │   │       ├── TerminalOutput.swift            # FR33–FR34: 终端实时输出
 │   │       └── JSONOutput.swift               # FR35: JSON 结构化输出
+│   │   ├── Memory/                              # Epic 4: App Memory 系统
+│   │   │   ├── AppMemoryExtractor.swift        # 从消息流提取 App 操作摘要
+│   │   │   ├── MemoryCleanupService.swift      # 30 天过期清理
+│   │   │   ├── AppProfileAnalyzer.swift        # 模式识别 + 高频路径 + 失败经验
+│   │   │   ├── FamiliarityTracker.swift        # 熟悉度追踪（>= 3 次成功标记 familiar）
+│   │   │   └── MemoryContextProvider.swift      # 构建 Planner Memory 上下文
+│   │   ├── API/                                # Epic 5: HTTP API Server
+│   │   │   ├── AgentRunner.swift              # Agent 执行封装
+│   │   │   ├── RunTracker.swift               # 任务状态追踪
+│   │   │   ├── AxionAPI.swift                 # Hummingbird 路由注册
+│   │   │   ├── EventBroadcaster.swift         # SSE 事件广播
+│   │   │   ├── AuthMiddleware.swift           # Bearer token 认证
+│   │   │   ├── ConcurrencyLimiter.swift       # 并发槽位管理
+│   │   │   └── Models/APITypes.swift          # API 请求/响应模型
+│   │   ├── MCP/                                # Epic 6: MCP Server Mode
+│   │   │   ├── MCPServerRunner.swift          # MCP 编排器
+│   │   │   ├── RunTaskTool.swift              # run_task 工具实现
+│   │   │   ├── QueryTaskStatusTool.swift      # query_task_status 工具实现
+│   │   │   └── TaskQueue.swift                # 任务串行化 Actor
 │   │
 │   └── AxionHelper/                           # Helper App（可执行目标）
 │       ├── main.swift                         # 入口：启动 MCP Server
@@ -810,6 +835,31 @@ axion/
 │       └── Models/
 │           ├── WindowState.swift              # 窗口状态模型
 │           └── AXElement.swift                # AX 元素模型
+│
+│   ├── AxionBar/                              # Epic 10: 菜单栏 App（独立 executable）
+│       ├── App.swift                          # @main, MenuBarExtra 生命周期
+│       ├── StatusBarController.swift          # NSStatusItem + ConnectionState
+│       ├── Models/
+│       │   ├── ConnectionState.swift          # .disconnected / .connected / .running
+│       │   ├── HealthCheckResponse.swift
+│       │   ├── RunModels.swift                # Bar 前缀 API 模型
+│       │   ├── SkillModels.swift
+│       │   └── HotkeyConfig.swift
+│       ├── Services/
+│       │   ├── BackendHealthChecker.swift     # 5 秒轮询 GET /v1/health
+│       │   ├── ServerProcessManager.swift     # Process 启动/停止 axion server
+│       │   ├── TaskSubmissionService.swift
+│       │   ├── SSEEventClient.swift           # URLSession bytes stream SSE
+│       │   ├── RunHistoryService.swift
+│       │   ├── SkillService.swift
+│       │   └── GlobalHotkeyService.swift      # NSEvent 全局热键
+│       ├── Views/
+│       │   ├── QuickRunWindow.swift
+│       │   ├── TaskDetailPanel.swift
+│       │   ├── RunHistoryWindow.swift
+│       │   └── SettingsWindow.swift
+│       └── MenuBar/
+│           └── MenuBarBuilder.swift
 │
 ├── Prompts/                                   # D6: 外部 Prompt 文件
 │   ├── planner-system.md                      # Planner system prompt
@@ -838,6 +888,29 @@ axion/
 │   │   │   └── StopConditionEvaluatorTests.swift
 │   │   └── Engine/
 │   │       └── RunEngineTests.swift
+│   │   ├── Memory/                                # Epic 4: Memory 测试
+│   │   │   ├── AppMemoryExtractorTests.swift
+│   │   │   ├── MemoryCleanupServiceTests.swift
+│   │   │   ├── AppProfileAnalyzerTests.swift
+│   │   │   ├── FamiliarityTrackerTests.swift
+│   │   │   └── MemoryContextProviderTests.swift
+│   ├── AxionBarTests/                                # Epic 10: 菜单栏 App 测试
+│   │   ├── Models/
+│   │   │   ├── RunModelsTests.swift
+│   │   │   ├── SkillModelsTests.swift
+│   │   │   └── HotkeyConfigTests.swift
+│   │   ├── Services/
+│   │   │   ├── BackendHealthCheckerTests.swift
+│   │   │   ├── ServerProcessManagerTests.swift
+│   │   │   ├── TaskSubmissionServiceTests.swift
+│   │   │   ├── SSEEventClientTests.swift
+│   │   │   ├── RunHistoryServiceTests.swift
+│   │   │   ├── SkillServiceTests.swift
+│   │   │   └── GlobalHotkeyServiceTests.swift
+│   │   ├── StatusBar/
+│   │   │   └── StatusBarControllerTests.swift
+│   │   └── MenuBar/
+│   │       └── MenuBarBuilderTests.swift
 │   └── AxionHelperTests/
 │       ├── Services/
 │       │   ├── AccessibilityEngineTests.swift
@@ -865,7 +938,8 @@ axion/
 │  AxionCLI → ArgumentParser（直接 import）                  │
 │  AxionCLI ↛ AxionHelper（禁止直接 import）                 │
 │                                                         │
-│  唯一通信通道：MCP stdio（stdin/stdout JSON-RPC）          │
+│  与 Helper 通信：MCP stdio（stdin/stdout JSON-RPC）       │
+│  与 AxionBar 通信：HTTP API（localhost:4242）              │
 ├─────────────────────────────────────────────────────────┤
 │ AxionHelper 进程                                        │
 │                                                         │
@@ -873,6 +947,15 @@ axion/
 │  AxionHelper → mcp-swift-sdk（直接 import）               │
 │  AxionHelper ↛ OpenAgentSDK（不需要）                     │
 │  AxionHelper ↛ AxionCLI（禁止）                          │
+├─────────────────────────────────────────────────────────┤
+│ AxionBar 进程（Epic 10 — 独立 macOS App）                │
+│                                                         │
+│  AxionBar → AxionCore（直接 import）                      │
+│  AxionBar → SwiftUI + AppKit（系统框架）                  │
+│  AxionBar ↛ AxionCLI（禁止 — 通过 HTTP API 通信）         │
+│  AxionBar ↛ OpenAgentSDK（不需要）                        │
+│                                                         │
+│  与 CLI 通信：HTTP API（localhost:4242 REST + SSE）       │
 └─────────────────────────────────────────────────────────┘
 ```
 
@@ -881,9 +964,11 @@ axion/
 ```
 AxionCore ← 无外部依赖（纯模型 + 协议 + 常量）
     ↑
-AxionCLI ← OpenAgentSDK + ArgumentParser
+AxionCLI ← OpenAgentSDK + ArgumentParser + Hummingbird
     ↑ (MCP stdio, 非 import)
 AxionHelper ← mcp-swift-sdk
+    ↑ (HTTP API, 非 import)
+AxionBar ← SwiftUI + AppKit（独立 macOS App）
 ```
 
 ### 需求到结构的映射
@@ -910,6 +995,9 @@ AxionHelper ← mcp-swift-sdk
 | FR33–FR35 | TerminalOutput.swift + JSONOutput.swift | 输出格式 |
 | FR36–FR40 | RunEngine.swift + SDK 集成 | SDK 使用 |
 | FR41 | 本文档 + SDK 边界文档 | 边界记录 |
+| FR42 | AppMemoryExtractor.swift + MemoryCleanupService.swift | Memory 提取（Epic 4） |
+| FR43 | AppProfileAnalyzer.swift + MemoryContextProvider.swift | Memory 增强规划（Epic 4） |
+| FR44 | MemoryCommand.swift + MemoryListCommand.swift + MemoryClearCommand.swift | Memory 管理 CLI（Epic 4） |
 
 **跨切关注点到位置的映射：**
 
@@ -921,6 +1009,7 @@ AxionHelper ← mcp-swift-sdk
 | 安全策略 | AxionCLI/Executor/SafetyChecker.swift | 共享座椅模式 |
 | 可观测性 | AxionCLI/Trace/TraceRecorder.swift | JSONL trace |
 | 输出格式 | AxionCLI/Output/ | 终端 + JSON 双输出 |
+| Memory 系统 | AxionCLI/Memory/ | App 操作经验积累 + Planner 上下文注入 |
 
 ### 集成点
 

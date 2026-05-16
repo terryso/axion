@@ -52,6 +52,12 @@ struct MockAccessibilityEngine: @unchecked Sendable, WindowManaging {
     func resolveSelector(windowId: Int, query: SelectorQuery) throws -> AccessibilityEngineService.SelectorMatchResult {
         try resolveSelectorHandler(windowId, query)
     }
+
+    var setWindowBoundsHandler: @Sendable (Int, Int?, Int?, Int?, Int?) throws -> Void = { _, _, _, _, _ in }
+
+    func setWindowBounds(windowId: Int, x: Int?, y: Int?, width: Int?, height: Int?) throws {
+        try setWindowBoundsHandler(windowId, x, y, width, height)
+    }
 }
 
 /// Mock implementation of `ScreenshotCapturing` for unit testing.
@@ -131,7 +137,8 @@ enum ServiceContainerFixture {
         accessibilityEngine: (any WindowManaging)? = nil,
         inputSimulation: (any InputSimulating)? = nil,
         screenshotCapture: (any ScreenshotCapturing)? = nil,
-        urlOpener: (any URLOpening)? = nil
+        urlOpener: (any URLOpening)? = nil,
+        eventRecorder: (any EventRecording)? = nil
     ) -> @Sendable () -> Void {
         let original = ServiceContainer.shared
         ServiceContainer.shared = ServiceContainer(
@@ -139,7 +146,8 @@ enum ServiceContainerFixture {
             accessibilityEngine: accessibilityEngine ?? original.accessibilityEngine,
             inputSimulation: inputSimulation ?? original.inputSimulation,
             screenshotCapture: screenshotCapture ?? original.screenshotCapture,
-            urlOpener: urlOpener ?? original.urlOpener
+            urlOpener: urlOpener ?? original.urlOpener,
+            eventRecorder: eventRecorder ?? original.eventRecorder
         )
         return { ServiceContainer.shared = original }
     }

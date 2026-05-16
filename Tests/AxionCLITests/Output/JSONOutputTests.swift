@@ -1,69 +1,61 @@
-import XCTest
+import Foundation
+import Testing
 @testable import AxionCLI
 @testable import AxionCore
-
-// [P0] JSON structure validation: finalize produces valid JSON with required fields
-// [P1] Data accumulation: steps, state transitions, verification results
-
-// MARK: - JSONOutput ATDD Tests
 
 /// ATDD red-phase tests for JSONOutput (Story 3-5 AC5).
 /// Tests that JSONOutput accumulates output data and produces a valid JSON string
 /// via its finalize() method.
-///
-/// TDD RED PHASE: These tests will not compile until JSONOutput is implemented
-/// in Sources/AxionCLI/Output/JSONOutput.swift.
-final class JSONOutputTests: XCTestCase {
+@Suite("JSONOutput")
+struct JSONOutputTests {
 
-    // MARK: - P0 Type Existence
-
-    func test_jsonOutput_typeExists() {
+    @Test("type exists")
+    func jsonOutputTypeExists() {
         let _ = JSONOutput.self
     }
 
-    func test_jsonOutput_conformsToOutputProtocol() {
-        // JSONOutput must conform to OutputProtocol
+    @Test("conforms to OutputProtocol")
+    func jsonOutputConformsToOutputProtocol() {
         let output = JSONOutput()
         let _: OutputProtocol = output
     }
 
-    // MARK: - P0 AC5: JSON Structured Output
-
-    func test_jsonOutput_finalize_producesValidJSON() {
+    @Test("finalize produces valid JSON")
+    func jsonOutputFinalizeProducesValidJSON() {
         let output = JSONOutput()
         output.displayRunStart(runId: "20260510-abc123", task: "Open Calculator", mode: "plan_execute")
 
         let json = output.finalize()
 
-        // Must be valid JSON
         let jsonData = json.data(using: .utf8)!
         let parsed = try? JSONSerialization.jsonObject(with: jsonData)
-        XCTAssertNotNil(parsed, "finalize() must produce valid JSON: \(json)")
+        #expect(parsed != nil)
     }
 
-    func test_jsonOutput_finalize_containsRunId() {
+    @Test("finalize contains runId")
+    func jsonOutputFinalizeContainsRunId() {
         let output = JSONOutput()
         output.displayRunStart(runId: "20260510-abc123", task: "Open Calculator", mode: "plan_execute")
 
         let json = output.finalize()
         let dict = parseJSON(json)
 
-        XCTAssertEqual(dict?["runId"] as? String, "20260510-abc123",
-            "JSON must contain correct runId")
+        #expect(dict?["runId"] as? String == "20260510-abc123")
     }
 
-    func test_jsonOutput_finalize_containsTask() {
+    @Test("finalize contains task")
+    func jsonOutputFinalizeContainsTask() {
         let output = JSONOutput()
         output.displayRunStart(runId: "20260510-abc123", task: "Open Calculator", mode: "plan_execute")
 
         let json = output.finalize()
         let dict = parseJSON(json)
 
-        XCTAssertEqual(dict?["task"] as? String, "Open Calculator",
-            "JSON must contain correct task")
+        #expect(dict?["task"] as? String == "Open Calculator")
     }
 
-    func test_jsonOutput_finalize_containsSteps() {
+    @Test("finalize contains steps")
+    func jsonOutputFinalizeContainsSteps() {
         let output = JSONOutput()
         output.displayRunStart(runId: "test", task: "test", mode: "test")
 
@@ -76,13 +68,13 @@ final class JSONOutputTests: XCTestCase {
         let json = output.finalize()
         let dict = parseJSON(json)
 
-        XCTAssertNotNil(dict?["steps"] as? [[String: Any]],
-            "JSON must contain steps array")
         let steps = dict?["steps"] as? [[String: Any]]
-        XCTAssertEqual(steps?.count, 1, "steps array should have 1 entry")
+        #expect(steps != nil)
+        #expect(steps?.count == 1)
     }
 
-    func test_jsonOutput_finalize_containsSummary() {
+    @Test("finalize contains summary")
+    func jsonOutputFinalizeContainsSummary() {
         let output = JSONOutput()
         output.displayRunStart(runId: "test", task: "test", mode: "test")
 
@@ -101,13 +93,11 @@ final class JSONOutputTests: XCTestCase {
         let json = output.finalize()
         let dict = parseJSON(json)
 
-        XCTAssertNotNil(dict?["summary"] as? [String: Any],
-            "JSON must contain summary object")
+        #expect(dict?["summary"] as? [String: Any] != nil)
     }
 
-    // MARK: - P0 AC5: Steps Array Correctness
-
-    func test_jsonOutput_stepsArray_reflectsExecutedSteps() {
+    @Test("steps array reflects executed steps")
+    func jsonOutputStepsArrayReflectsExecutedSteps() {
         let output = JSONOutput()
         output.displayRunStart(runId: "test", task: "test", mode: "test")
 
@@ -126,10 +116,11 @@ final class JSONOutputTests: XCTestCase {
         let dict = parseJSON(json)
         let steps = dict?["steps"] as? [[String: Any]]
 
-        XCTAssertEqual(steps?.count, 2, "steps array should have 2 entries")
+        #expect(steps?.count == 2)
     }
 
-    func test_jsonOutput_summary_computesTotalSteps() {
+    @Test("summary computes totalSteps")
+    func jsonOutputSummaryComputesTotalSteps() {
         let output = JSONOutput()
         output.displayRunStart(runId: "test", task: "test", mode: "test")
 
@@ -149,11 +140,11 @@ final class JSONOutputTests: XCTestCase {
         let dict = parseJSON(json)
         let summary = dict?["summary"] as? [String: Any]
 
-        XCTAssertEqual(summary?["totalSteps"] as? Int, 1,
-            "summary.totalSteps should be 1")
+        #expect(summary?["totalSteps"] as? Int == 1)
     }
 
-    func test_jsonOutput_summary_computesSuccessfulSteps() {
+    @Test("summary computes successfulSteps")
+    func jsonOutputSummaryComputesSuccessfulSteps() {
         let output = JSONOutput()
         output.displayRunStart(runId: "test", task: "test", mode: "test")
 
@@ -178,11 +169,11 @@ final class JSONOutputTests: XCTestCase {
         let dict = parseJSON(json)
         let summary = dict?["summary"] as? [String: Any]
 
-        XCTAssertEqual(summary?["successfulSteps"] as? Int, 1,
-            "summary.successfulSteps should be 1")
+        #expect(summary?["successfulSteps"] as? Int == 1)
     }
 
-    func test_jsonOutput_summary_computesFailedSteps() {
+    @Test("summary computes failedSteps")
+    func jsonOutputSummaryComputesFailedSteps() {
         let output = JSONOutput()
         output.displayRunStart(runId: "test", task: "test", mode: "test")
 
@@ -207,25 +198,24 @@ final class JSONOutputTests: XCTestCase {
         let dict = parseJSON(json)
         let summary = dict?["summary"] as? [String: Any]
 
-        XCTAssertEqual(summary?["failedSteps"] as? Int, 1,
-            "summary.failedSteps should be 1")
+        #expect(summary?["failedSteps"] as? Int == 1)
     }
 
-    // MARK: - P1 AC5: Data Accumulation
-
-    func test_jsonOutput_displayRunStart_storesRunInfo() {
+    @Test("displayRunStart stores run info")
+    func jsonOutputDisplayRunStartStoresRunInfo() {
         let output = JSONOutput()
         output.displayRunStart(runId: "20260510-xyz789", task: "Calculate 17*23", mode: "plan_execute")
 
         let json = output.finalize()
         let dict = parseJSON(json)
 
-        XCTAssertEqual(dict?["runId"] as? String, "20260510-xyz789")
-        XCTAssertEqual(dict?["task"] as? String, "Calculate 17*23")
-        XCTAssertEqual(dict?["mode"] as? String, "plan_execute")
+        #expect(dict?["runId"] as? String == "20260510-xyz789")
+        #expect(dict?["task"] as? String == "Calculate 17*23")
+        #expect(dict?["mode"] as? String == "plan_execute")
     }
 
-    func test_jsonOutput_displayError_recordsError() {
+    @Test("displayError records error")
+    func jsonOutputDisplayErrorRecordsError() {
         let output = JSONOutput()
         output.displayRunStart(runId: "test", task: "test", mode: "test")
         output.displayError(.planningFailed(reason: "LLM timeout"))
@@ -233,13 +223,13 @@ final class JSONOutputTests: XCTestCase {
         let json = output.finalize()
         let dict = parseJSON(json)
 
-        // Error should appear somewhere in the output
         let errors = dict?["errors"] as? [[String: Any]]
-        XCTAssertNotNil(errors, "JSON should contain errors array")
-        XCTAssertGreaterThan(errors?.count ?? 0, 0, "errors array should have at least 1 entry")
+        #expect(errors != nil)
+        #expect((errors?.count ?? 0) > 0)
     }
 
-    func test_jsonOutput_displayStateChange_recordsTransition() {
+    @Test("displayStateChange records transition")
+    func jsonOutputDisplayStateChangeRecordsTransition() {
         let output = JSONOutput()
         output.displayRunStart(runId: "test", task: "test", mode: "test")
         output.displayStateChange(from: .planning, to: .executing)
@@ -247,13 +237,13 @@ final class JSONOutputTests: XCTestCase {
         let json = output.finalize()
         let dict = parseJSON(json)
 
-        // State transitions should appear somewhere
         let transitions = dict?["stateTransitions"] as? [[String: Any]]
-        XCTAssertNotNil(transitions, "JSON should contain stateTransitions array")
-        XCTAssertGreaterThan(transitions?.count ?? 0, 0, "stateTransitions should have at least 1 entry")
+        #expect(transitions != nil)
+        #expect((transitions?.count ?? 0) > 0)
     }
 
-    func test_jsonOutput_displayVerificationResult_recordsResult() {
+    @Test("displayVerificationResult records result")
+    func jsonOutputDisplayVerificationResultRecordsResult() {
         let output = JSONOutput()
         output.displayRunStart(runId: "test", task: "test", mode: "test")
         output.displayVerificationResult(.done(reason: "Task complete"))
@@ -262,11 +252,9 @@ final class JSONOutputTests: XCTestCase {
         let dict = parseJSON(json)
 
         let results = dict?["verificationResults"] as? [[String: Any]]
-        XCTAssertNotNil(results, "JSON should contain verificationResults array")
-        XCTAssertGreaterThan(results?.count ?? 0, 0, "verificationResults should have at least 1 entry")
+        #expect(results != nil)
+        #expect((results?.count ?? 0) > 0)
     }
-
-    // MARK: - Helper
 
     private func parseJSON(_ string: String) -> [String: Any]? {
         guard let data = string.data(using: .utf8) else { return nil }

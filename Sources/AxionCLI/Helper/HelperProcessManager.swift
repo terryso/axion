@@ -298,7 +298,7 @@ actor HelperProcessManager {
         }
     }
 
-    /// Extracts text content from MCP content blocks.
+    /// Extracts text content from MCP tool result content.
     private func extractText(from content: [ContentBlock]) -> String {
         let textParts = content.compactMap { block -> String? in
             if case .text(let text, _, _) = block { return text }

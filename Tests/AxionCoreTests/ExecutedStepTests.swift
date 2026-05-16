@@ -1,12 +1,14 @@
 import Foundation
-import XCTest
+import Testing
 @testable import AxionCore
 
-final class ExecutedStepTests: XCTestCase {
+@Suite("ExecutedStep")
+struct ExecutedStepTests {
 
     private let fixedDate = Date(timeIntervalSince1970: 1700000000)
 
-    func test_roundTrip_withAllFieldTypes() throws {
+    @Test("round trip with all field types")
+    func roundTripWithAllFieldTypes() throws {
         let step = ExecutedStep(
             stepIndex: 0,
             tool: "click",
@@ -23,16 +25,17 @@ final class ExecutedStepTests: XCTestCase {
         )
         let data = try JSONEncoder().encode(step)
         let decoded = try JSONDecoder().decode(ExecutedStep.self, from: data)
-        XCTAssertEqual(decoded.stepIndex, 0)
-        XCTAssertEqual(decoded.tool, "click")
-        XCTAssertEqual(decoded.parameters["x"], .int(100))
-        XCTAssertEqual(decoded.parameters["label"], .string("submit"))
-        XCTAssertEqual(decoded.parameters["verified"], .bool(true))
-        XCTAssertEqual(decoded.result, "Clicked at (100, 200)")
-        XCTAssertTrue(decoded.success)
+        #expect(decoded.stepIndex == 0)
+        #expect(decoded.tool == "click")
+        #expect(decoded.parameters["x"] == .int(100))
+        #expect(decoded.parameters["label"] == .string("submit"))
+        #expect(decoded.parameters["verified"] == .bool(true))
+        #expect(decoded.result == "Clicked at (100, 200)")
+        #expect(decoded.success)
     }
 
-    func test_roundTrip_failedStep() throws {
+    @Test("round trip failed step")
+    func roundTripFailedStep() throws {
         let step = ExecutedStep(
             stepIndex: 3,
             tool: "launch_app",
@@ -43,11 +46,12 @@ final class ExecutedStepTests: XCTestCase {
         )
         let data = try JSONEncoder().encode(step)
         let decoded = try JSONDecoder().decode(ExecutedStep.self, from: data)
-        XCTAssertFalse(decoded.success)
-        XCTAssertEqual(decoded.stepIndex, 3)
+        #expect(!decoded.success)
+        #expect(decoded.stepIndex == 3)
     }
 
-    func test_roundTrip_emptyParameters() throws {
+    @Test("round trip empty parameters")
+    func roundTripEmptyParameters() throws {
         let step = ExecutedStep(
             stepIndex: 0,
             tool: "list_apps",
@@ -58,10 +62,11 @@ final class ExecutedStepTests: XCTestCase {
         )
         let data = try JSONEncoder().encode(step)
         let decoded = try JSONDecoder().decode(ExecutedStep.self, from: data)
-        XCTAssertTrue(decoded.parameters.isEmpty)
+        #expect(decoded.parameters.isEmpty)
     }
 
-    func test_equality_sameSteps() {
+    @Test("equality same steps")
+    func equalitySameSteps() {
         let step = ExecutedStep(
             stepIndex: 1, tool: "click",
             parameters: ["x": .int(10)],
@@ -74,10 +79,11 @@ final class ExecutedStepTests: XCTestCase {
             result: "ok", success: true,
             timestamp: fixedDate
         )
-        XCTAssertEqual(step, step2)
+        #expect(step == step2)
     }
 
-    func test_equality_differentSteps() {
+    @Test("equality different steps")
+    func equalityDifferentSteps() {
         let a = ExecutedStep(
             stepIndex: 0, tool: "click",
             parameters: [:], result: "a", success: true,
@@ -88,10 +94,11 @@ final class ExecutedStepTests: XCTestCase {
             parameters: [:], result: "b", success: true,
             timestamp: fixedDate
         )
-        XCTAssertNotEqual(a, b)
+        #expect(a != b)
     }
 
-    func test_jsonStructure_hasExpectedKeys() throws {
+    @Test("json structure has expected keys")
+    func jsonStructureHasExpectedKeys() throws {
         let step = ExecutedStep(
             stepIndex: 0, tool: "click",
             parameters: ["x": .int(1)],
@@ -101,11 +108,11 @@ final class ExecutedStepTests: XCTestCase {
         let data = try JSONEncoder().encode(step)
         let json = try JSONSerialization.jsonObject(with: data) as! [String: Any]
 
-        XCTAssertNotNil(json["stepIndex"])
-        XCTAssertNotNil(json["tool"])
-        XCTAssertNotNil(json["parameters"])
-        XCTAssertNotNil(json["result"])
-        XCTAssertNotNil(json["success"])
-        XCTAssertNotNil(json["timestamp"])
+        #expect(json["stepIndex"] != nil)
+        #expect(json["tool"] != nil)
+        #expect(json["parameters"] != nil)
+        #expect(json["result"] != nil)
+        #expect(json["success"] != nil)
+        #expect(json["timestamp"] != nil)
     }
 }
