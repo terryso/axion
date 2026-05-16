@@ -308,35 +308,70 @@ try await withTaskCancellationHandler {
 
 ---
 
-## Memory 系统（Epic 4）
+## Memory 系统（Epic 4 + Epic 12）
 
-Axion 的跨任务学习系统，基于 SDK FileBasedMemoryStore 实现。
+Axion 的跨任务学习系统，基于证据驱动的知识生命周期管理。
 
-**存储路径：** `~/.axion/memory/`（自定义路径，非 SDK 默认的 `~/.agent/memory/`）
+**存储路径：** `~/.axion/memory/`
+- 旧格式：`{domain}.json` — KnowledgeEntry 数组（SDK 兼容）
+- 新格式：`{domain}-facts.json` — AppMemoryFact 数组（Epic 12+）
 
 **目录结构：**
 ```
 Sources/AxionCLI/Memory/
-├── AppMemoryExtractor.swift       # 从 SDK 消息流提取 App 操作摘要
-├── MemoryCleanupService.swift     # 30 天过期清理
-├── AppProfileAnalyzer.swift       # 模式识别 + 高频路径 + 失败经验
-├── FamiliarityTracker.swift       # 熟悉度追踪（>= 3 次成功标记 familiar）
-└── MemoryContextProvider.swift    # 构建 Planner prompt 中的 Memory 上下文
+├── AppMemoryFact.swift              # Epic 12: 模型（MemoryFactStatus/Source/Kind 枚举）+ normalizeFact + factId (djb2)
+├── MemoryLifecycleService.swift     # Epic 12: candidate→active→retired 生命周期管理
+├── MemoryFactStore.swift            # Epic 12: actor 隔离持久化层 + 惰性迁移
+├── MemoryBundle.swift               # Epic 12: 导入/导出 bundle 模型
+├── MemoryBundleExportService.swift  # Epic 12: 全量/按 domain 导出
+├── MemoryBundleImportService.swift  # Epic 12: 降级导入 + 合并逻辑
+├── AppMemoryExtractor.swift         # Epic 4: 从 SDK 消息流提取 App 操作摘要（Epic 12: 新增 extractFacts() + classifyKind()）
+├── MemoryCleanupService.swift       # Epic 4: 30 天过期清理（保留，不再主动调用）
+├── AppProfileAnalyzer.swift         # Epic 4: 模式识别 + 高频路径 + 失败经验
+├── FamiliarityTracker.swift         # Epic 4: 熟悉度追踪（>= 3 次成功标记 familiar）
+└── MemoryContextProvider.swift      # Epic 4: Memory 上下文（Epic 12: 新增 buildFactMemoryContext 三类分类注入）
 ```
 
+**AppMemoryFact 生命周期状态机（Epic 12）：**
+```
+candidate ──(evidenceCount >= 2 && confidence >= 0.65)──► active
+    ▲                                                       │
+    │                                              (30 天未验证)
+    │                                                       ▼
+    └──────────────(再次观察到)────────────────────── retired
+```
+
+**三类记忆分类（Epic 12）：**
+- **affordance** — 成功发现的操作能力（confidence=0.72，直接操作占比高）
+- **avoid** — 失败经验的软性避坑规则（confidence=0.5）
+- **observation** — 环境信息记录（confidence=0.7）
+
+**Prompt 注入格式：**
+- affordance → "推荐路径" section
+- avoid → "注意事项" section（软性建议，非硬性禁止）
+- observation → "环境备注" section
+- 每类最多 5 条（按 confidence 降序），附带 "soft hints, not hard rules" 声明
+
 **CLI 命令：**
-- `axion memory list` — 显示已积累 Memory 的 App 列表
+- `axion memory list` — 显示已积累 Memory（含状态图标 ✓/○/✗、分类标签、evidence_count）
 - `axion memory clear --app <domain>` — 清除指定 App 的 Memory
+- `axion memory export <file>` — 全量或按 App 导出 Memory Bundle（JSON）
+- `axion memory export --app <domain> <file>` — 按 App 过滤导出
+- `axion memory import <file>` — 导入 Memory（降级为 candidate + confidence 封顶 0.55）
 - `axion run "任务" --no-memory` — 禁用 Memory 上下文注入
 
 **关键设计决策：**
 - Memory 操作失败不阻塞任务执行（do/catch 防护 + warning 日志）
 - Memory 上下文注入到 system prompt 末尾（`buildFullSystemPrompt`），不在 user prompt
 - Domain 使用 App bundle identifier（如 `com.apple.calculator`）
-- KnowledgeEntry content 使用中文标签，状态标签用英文（success/failure）
+- **不修改 SDK KnowledgeEntry** — AppMemoryFact 是独立的 AxionCLI 层模型
+- **factId 使用 djb2 确定性 hash** — 跨进程稳定（不使用 Swift hashValue）
+- **导入降级**：source=imported, status=candidate, confidence=min(original, 0.55)
+- **合并策略**：max confidence, stronger status, local source 优先, evidenceCount +1
+- **惰性迁移**：读旧 KnowledgeEntry 时自动转为 AppMemoryFact，无需强制迁移脚本
 - 熟悉 App 使用紧凑规划策略（减少 list_windows/get_window_state 验证步骤）
 
-**SDK 依赖：**
+**SDK 依赖（Epic 4 兼容层）：**
 - `FileBasedMemoryStore(memoryDir:)` — 自定义存储路径
 - `KnowledgeEntry` — 存储单元（id, content, tags, createdAt, sourceRunId）
 - `MemoryStoreProtocol` — save/query/delete/listDomains

@@ -1,5 +1,6 @@
 # generated: 2026-05-08
 # last_updated: 2026-05-17
+# retro-epic-12: 2026-05-17
 # story-12.3-created: 2026-05-17
 # story-12.1-created: 2026-05-16
 # retro-epic-11: 2026-05-15
@@ -160,11 +161,11 @@ development_status:
   # ============================================================
 
   # Epic 12: Memory 生命周期与质量控制
-  epic-12: in-progress
+  epic-12: done
   12-1-memory-fact-model-upgrade: done
   12-2-three-category-memory-classification: done
   12-3-memory-import-export: done
-  epic-12-retrospective: optional
+  epic-12-retrospective: done
 
   # Epic 13: 执行安全与成本控制
   epic-13: backlog

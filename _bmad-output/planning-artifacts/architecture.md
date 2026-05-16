@@ -114,7 +114,7 @@ axion/
 │   │   ├── Config/                  # 配置管理：读写 ~/.axion/config.json
 │   │   ├── Trace/                   # Trace 记录器：运行轨迹持久化
 │   │   ├── Output/                  # 输出格式化：终端进度、JSON 输出
-│   │   ├── Memory/                  # App Memory 系统（Epic 4）：跨任务学习
+│   │   ├── Memory/                  # App Memory 系统（Epic 4 + Epic 12）：跨任务学习 + 知识生命周期
 │   ├── AxionHelper/                 # Helper App（可执行目标，独立 macOS App）
 │   │   ├── main.swift               # 入口，启动 MCP Server
 │   │   ├── MCP/                     # MCP Server 实现：工具注册、JSON-RPC 处理
@@ -217,7 +217,7 @@ let package = Package(
 | 决策 | 延迟理由 | 状态 |
 |------|----------|------|
 | HTTP API server 框架 | 成长功能，MVP 不需要 | ✅ 已实施（Epic 5，Hummingbird 2.x） |
-| Memory 持久化方案 | 成长功能，MVP 不需要 | ✅ 已实施（Epic 4，SDK FileBasedMemoryStore） |
+| Memory 持久化方案 | 成长功能，MVP 不需要 | ✅ 已实施（Epic 4 SDK FileBasedMemoryStore + Epic 12 AppMemoryFact 生命周期） |
 | MCP server 模式（供外部调用） | 成长功能，MVP 不需要 | ✅ 已实施（Epic 6，SDK AgentMCPServer） |
 
 ---
@@ -774,9 +774,11 @@ axion/
 │   │   │   ├── DoctorCommand.swift            # FR3: axion doctor
 │   │   │   ├── ServerCommand.swift            # FR45–FR46: axion server（Epic 5）
 │   │   │   ├── McpCommand.swift               # FR47: axion mcp（Epic 6）
-│   │   │   ├── MemoryCommand.swift            # FR44: axion memory 命令组（Epic 4）
-│   │   │   ├── MemoryListCommand.swift        # FR44: axion memory list
-│   │   │   └── MemoryClearCommand.swift       # FR44: axion memory clear --app
+│   │   │   ├── MemoryCommand.swift            # FR44: axion memory 命令组（Epic 4 + Epic 12）
+│   │   │   ├── MemoryListCommand.swift        # FR44: axion memory list（Epic 12: 状态图标 + 分类标签）
+│   │   │   ├── MemoryClearCommand.swift       # FR44: axion memory clear --app
+│   │   │   ├── MemoryExportCommand.swift      # Epic 12: axion memory export [--app] <file>
+│   │   │   └── MemoryImportCommand.swift      # Epic 12: axion memory import <file>
 │   │   ├── Planner/
 │   │   │   ├── LLMPlanner.swift               # FR11–FR14: 调用 LLM 生成 Plan
 │   │   │   ├── PlanParser.swift               # FR14–FR15: 解析 LLM 输出为 Plan
@@ -800,12 +802,18 @@ axion/
 │   │   └── Output/
 │   │       ├── TerminalOutput.swift            # FR33–FR34: 终端实时输出
 │   │       └── JSONOutput.swift               # FR35: JSON 结构化输出
-│   │   ├── Memory/                              # Epic 4: App Memory 系统
-│   │   │   ├── AppMemoryExtractor.swift        # 从消息流提取 App 操作摘要
-│   │   │   ├── MemoryCleanupService.swift      # 30 天过期清理
+│   │   ├── Memory/                              # Epic 4 + Epic 12: App Memory 系统
+│   │   │   ├── AppMemoryFact.swift              # Epic 12: 生命周期模型 + djb2 factId
+│   │   │   ├── MemoryLifecycleService.swift     # Epic 12: candidate→active→retired 管理
+│   │   │   ├── MemoryFactStore.swift            # Epic 12: actor 持久化层 + 惰性迁移
+│   │   │   ├── MemoryBundle.swift               # Epic 12: 导入/导出 bundle 模型
+│   │   │   ├── MemoryBundleExportService.swift  # Epic 12: 全量/按 domain 导出
+│   │   │   ├── MemoryBundleImportService.swift  # Epic 12: 降级导入 + 合并逻辑
+│   │   │   ├── AppMemoryExtractor.swift        # 从消息流提取 App 操作摘要（+ extractFacts + classifyKind）
+│   │   │   ├── MemoryCleanupService.swift      # 30 天过期清理（保留，不再主动调用）
 │   │   │   ├── AppProfileAnalyzer.swift        # 模式识别 + 高频路径 + 失败经验
 │   │   │   ├── FamiliarityTracker.swift        # 熟悉度追踪（>= 3 次成功标记 familiar）
-│   │   │   └── MemoryContextProvider.swift      # 构建 Planner Memory 上下文
+│   │   │   └── MemoryContextProvider.swift      # 构建 Planner Memory 上下文（+ 三类分类注入）
 │   │   ├── API/                                # Epic 5: HTTP API Server
 │   │   │   ├── AgentRunner.swift              # Agent 执行封装
 │   │   │   ├── RunTracker.swift               # 任务状态追踪
@@ -888,7 +896,13 @@ axion/
 │   │   │   └── StopConditionEvaluatorTests.swift
 │   │   └── Engine/
 │   │       └── RunEngineTests.swift
-│   │   ├── Memory/                                # Epic 4: Memory 测试
+│   │   ├── Memory/                                # Epic 4 + Epic 12: Memory 测试
+│   │   │   ├── AppMemoryFactTests.swift             # Epic 12: 模型 Codable + normalizeFact + factId
+│   │   │   ├── MemoryLifecycleServiceTests.swift    # Epic 12: promote/demote/reactivate 生命周期
+│   │   │   ├── MemoryFactStoreTests.swift           # Epic 12: actor CRUD + 惰性迁移
+│   │   │   ├── MemoryBundleTests.swift              # Epic 12: bundle Codable round-trip
+│   │   │   ├── MemoryBundleExportServiceTests.swift # Epic 12: 导出服务测试
+│   │   │   ├── MemoryBundleImportServiceTests.swift # Epic 12: 导入 + 降级 + 合并测试
 │   │   │   ├── AppMemoryExtractorTests.swift
 │   │   │   ├── MemoryCleanupServiceTests.swift
 │   │   │   ├── AppProfileAnalyzerTests.swift
