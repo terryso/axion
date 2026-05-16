@@ -383,6 +383,8 @@ public class Agent: CustomStringConvertible, CustomDebugStringConvertible, @unch
             let result: String = await withCheckedContinuation { cont in
                 self._pauseLock.withLock {
                     self._pauseContinuation = cont
+                    self._paused = true
+                    self._pauseReason = reason
                 }
 
                 // Start timeout task if configured
@@ -437,6 +439,8 @@ public class Agent: CustomStringConvertible, CustomDebugStringConvertible, @unch
             let result: String = await withCheckedContinuation { cont in
                 self._pauseLock.withLock {
                     self._pauseContinuation = cont
+                    self._paused = true
+                    self._pauseReason = reason
                 }
 
                 // Start timeout task if configured
