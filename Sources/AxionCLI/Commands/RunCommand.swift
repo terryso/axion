@@ -185,6 +185,24 @@ struct RunCommand: AsyncParsableCommand {
             fputs("[axion] warning: memory cleanup failed: \(error.localizedDescription)\n", stderr)
         }
 
+        // Demote retired memory facts at run start (Story 12.1 AC5, AC8)
+        do {
+            let factStore = MemoryFactStore(memoryDir: memoryDir)
+            let lifecycleService = MemoryLifecycleService()
+            let cutoffDate = Date().addingTimeInterval(-MemoryLifecycleService.demotionInterval)
+            let domains = try await factStore.listDomains()
+            for domain in domains {
+                let facts = try await factStore.query(domain: domain)
+                let demoted = lifecycleService.demoteRetired(facts: facts, lastVerifiedBefore: cutoffDate)
+                let changed = zip(facts, demoted).filter { $0.status != $1.status }
+                for (_, demotedFact) in changed {
+                    try await factStore.save(domain: domain, fact: demotedFact)
+                }
+            }
+        } catch {
+            fputs("[axion] warning: memory fact lifecycle demotion failed: \(error.localizedDescription)\n", stderr)
+        }
+
         var totalSteps = 0
         let startTime = ContinuousClock.now
 
@@ -290,6 +308,24 @@ struct RunCommand: AsyncParsableCommand {
                     .dropFirst("app:".count).description ?? "unknown"
                 try await memoryStore.save(domain: domain, knowledge: entry)
                 processedDomains.insert(domain)
+            }
+
+            // Story 12.1: Also extract AppMemoryFact entries (AC2, AC8)
+            let factStore = MemoryFactStore(memoryDir: memoryDir)
+            let lifecycleService = MemoryLifecycleService()
+            let facts = extractor.extractFacts(
+                from: collectedPairs,
+                task: task,
+                runId: runId
+            )
+            for fact in facts {
+                do {
+                    let existing = try await factStore.query(domain: fact.domain)
+                    let result = lifecycleService.addFact(fact, mergingWith: existing)
+                    try await factStore.save(domain: fact.domain, fact: result)
+                } catch {
+                    fputs("[axion] warning: memory fact save failed for \(fact.domain): \(error.localizedDescription)\n", stderr)
+                }
             }
 
             // Story 4.2: Profile analysis and familiarity tracking

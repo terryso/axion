@@ -17,6 +17,53 @@ struct AppMemoryExtractor {
 
     // MARK: - Public API
 
+    /// Extract memory facts from a sequence of tool-use/result pairs.
+    ///
+    /// - Parameters:
+    ///   - pairs: The collected toolUse/toolResult pairs from the SDK message stream.
+    ///   - task: The original task description provided by the user.
+    ///   - runId: The run ID for this execution.
+    /// - Returns: An array of ``AppMemoryFact`` objects, one per distinct App domain encountered.
+    func extractFacts(
+        from pairs: [ToolPair],
+        task: String,
+        runId: String
+    ) -> [AppMemoryFact] {
+        guard !pairs.isEmpty else { return [] }
+
+        let appGroups = groupByAppDomain(pairs: pairs)
+
+        var facts: [AppMemoryFact] = []
+
+        for (domain, groupPairs) in appGroups {
+            let appName = extractAppName(from: groupPairs) ?? domain
+            let bundleId = extractBundleId(from: groupPairs)
+            facts.append(buildFact(
+                pairs: groupPairs,
+                task: task,
+                runId: runId,
+                domain: domain,
+                appName: appName,
+                bundleId: bundleId
+            ))
+        }
+
+        // If no app-specific domain was found (no launch_app), create a single
+        // generic fact so the tool sequence is still captured.
+        if facts.isEmpty {
+            facts.append(buildFact(
+                pairs: pairs,
+                task: task,
+                runId: runId,
+                domain: "unknown",
+                appName: nil,
+                bundleId: nil
+            ))
+        }
+
+        return facts
+    }
+
     /// Extract knowledge entries from a sequence of tool-use/result pairs.
     ///
     /// - Parameters:
@@ -24,6 +71,7 @@ struct AppMemoryExtractor {
     ///   - task: The original task description provided by the user.
     ///   - runId: The run ID for this execution (used as `sourceRunId`).
     /// - Returns: An array of ``KnowledgeEntry`` objects, one per distinct App domain encountered.
+    @available(*, deprecated, message: "Use extractFacts(for:task:runId:) instead")
     func extract(
         from pairs: [ToolPair],
         task: String,
@@ -63,6 +111,90 @@ struct AppMemoryExtractor {
     }
 
     // MARK: - Private Helpers
+
+    /// Build a single AppMemoryFact from a set of tool pairs.
+    private func buildFact(
+        pairs: [ToolPair],
+        task: String,
+        runId: String,
+        domain: String,
+        appName: String?,
+        bundleId: String?
+    ) -> AppMemoryFact {
+        let hasError = pairs.contains { pair in
+            if pair.toolResult.isError { return true }
+            return contentContainsErrorPayload(pair.toolResult.content)
+        }
+        let workaround = extractWorkaround(from: pairs)
+
+        // Determine kind and confidence (AC2)
+        let kind: MemoryKind
+        let confidence: Double
+        let cause: String?
+
+        if hasError && workaround != nil {
+            // Had error but recovered with workaround
+            kind = .observation
+            confidence = 0.6
+            cause = "workaround"
+        } else if hasError {
+            kind = .avoid
+            confidence = 0.5
+            cause = nil
+        } else {
+            kind = .observation
+            confidence = 0.7
+            cause = nil
+        }
+
+        let stepCount = pairs.count
+        let successLabel = hasError ? "failure" : "success"
+
+        let toolSequenceWithParams = pairs.map { pair -> String in
+            let name = stripMcpPrefix(pair.toolUse.toolName)
+            let param = extractToolParamSummary(name: name, input: pair.toolUse.input)
+            return param != nil ? "\(name)(\(param!))" : name
+        }.joined(separator: " -> ")
+
+        var description = ""
+        if let appName, let bundleId {
+            description += "App: \(appName) (\(bundleId))\n"
+        } else if let appName {
+            description += "App: \(appName)\n"
+        }
+        description += """
+        任务: \(task)
+        结果: \(successLabel)
+        工具序列: \(toolSequenceWithParams)
+        步骤数: \(stepCount)
+        """
+
+        let axSummary = extractAxTreeSummary(from: pairs)
+        let keyControls = extractKeyControls(from: pairs)
+        let failureMarker = extractFailureMarker(from: pairs)
+
+        if !axSummary.isEmpty {
+            description += "\nAX特征: \(axSummary)"
+        }
+        if !keyControls.isEmpty {
+            description += "\n关键控件: \(keyControls)"
+        }
+        if let failure = failureMarker {
+            description += "\n失败标记: \(failure)"
+        }
+        if let workaround {
+            description += "\n修正路径: \(workaround)"
+        }
+
+        return AppMemoryFact.create(
+            domain: domain,
+            kind: kind,
+            description: description,
+            confidence: confidence,
+            cause: cause,
+            evidence: [runId]
+        )
+    }
 
     /// Group tool pairs by the App domain extracted from launch_app results.
     ///

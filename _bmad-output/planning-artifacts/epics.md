@@ -1635,3 +1635,625 @@ So that 我可以快速上手并避免踩坑.
 | D10: 菜单栏 App 架构 | 独立 App vs Framework + App Extension | 进程模型、通信方式、分发策略 | ✅ 已决定：独立 SPM executable target（AxionBar），SwiftUI App + AppKit NSStatusItem 混合方案，通过 HTTP API 与 CLI 后端通信（Epic 10） |
 | D11: 技能文件格式 | 纯 JSON vs DSL（YAML/Markdown）vs Swift Codable | 可读性、可编辑性、参数化能力 | ✅ 已决定：纯 JSON + Codable（Epic 9） |
 | D12: 跨应用数据传递机制 | 剪贴板 vs 临时文件 vs AX 值提取 | 可靠性、数据类型支持、隐私 | ✅ 已决定：剪贴板（Epic 8） |
+
+---
+
+# Phase 4 — 执行质量与 API 成熟度 Epics
+
+> Phase 1-3（Epic 1-11）均已完成。以下为基于竞品 OpenClick 对比分析提炼的 Phase 4 Epics，聚焦 Axion 在 Memory 质量、执行安全、API 规范和运维便利性方面的差距补齐。
+>
+> **核心理念：** Phase 1-3 构建了完整的功能版图（从 CLI 到 MCP Server 到菜单栏 UI），Phase 4 专注于让这些功能更可靠、更省钱、更易集成。
+>
+> **无新增 SDK 依赖：** Phase 4 所有 Epic 均为应用层改进，不依赖 OpenAgentSDK 新增能力。
+
+## Phase 4 Epic List
+
+### Epic 12: Memory 生命周期与质量控制
+
+将 Axion 的 Memory 系统从「记录-检索」升级为结构化的知识生命周期管理。引入 candidate → active → retired 状态流转、置信度评分、证据计数和三类记忆分类（affordance / avoid / observation），确保记忆质量随使用不断提升，避免一次性失败产生错误的长期记忆。同时增加 Memory 导入/导出能力，支持在多台机器间共享经验。
+
+**核心价值：** 用得越多越聪明，但必须「聪明得对」——一条错误记忆比没有记忆更糟。
+**依赖：** Epic 4（Memory 基础设施）
+**竞品参考：** OpenClick `src/memory.ts` — AppMemoryFact 模型（candidate/active/retired、confidence、evidence_count）
+
+### Epic 13: 执行安全与成本控制
+
+三个互补的执行增强能力：(1) 桌面级运行锁——同一时刻只有一个 live run 控制桌面，防止多任务冲突；(2) 视觉增量检查——在调用 LLM verifier 前先做本地截图对比，画面无变化则跳过验证调用，节省成本；(3) 精细预算控制——新增 `--max-model-calls` 和 `--max-screenshots` 限制，加上 trace 中的成本遥测。
+
+**核心价值：** 安全不贵，贵的是不安全。一次桌面冲突事故的成本远高于预防机制。
+**依赖：** Epic 3（执行循环）、Epic 5（HTTP API Server，用于 run lock 检查）
+**竞品参考：** OpenClick `run.lock` 文件锁、`visual-delta` 检查、`--max-model-calls`/`--max-screenshots` 参数
+
+### Epic 14: API 规范化与集成友好度
+
+将 Axion HTTP API 的输出契约升级为 OpenClick 的 StandardTaskOutput 规范，增加结构化的 result.kind（answer vs confirmation）、intervention 数据、schema_version 版本控制。新增 Capabilities 端点和 Settings API，让外部集成方可以程序化发现能力、管理配置。
+
+**核心价值：** API 是 Axion 从「工具」变成「平台」的关键接口，规范的契约决定集成成本。
+**依赖：** Epic 5（HTTP API Server）
+**竞品参考：** OpenClick `src/api-runs.ts` — StandardTaskOutput、ApiRunStatus、Capabilities endpoint
+
+### Epic 15: Takeover 学习与桌面活动感知
+
+两个互补的能力：(1) Takeover 学习——用户手动接管后，系统自动将接管经验记录为结构化 Memory（成功为 affordance，失败为 avoid 规则），使人工干预转化为可复用的自动化知识；(2) 桌面活动检测——在 shared-seat 模式下检测用户手动操作，自动禁用该次 run 的学习，防止「污染证据」变成错误记忆。
+
+**核心价值：** 用户的手动操作是最有价值的训练数据，但不能让噪音污染信号。
+**依赖：** Epic 7（Takeover 机制）、Epic 4（Memory 基础设施）、Epic 12（Memory 生命周期）
+**竞品参考：** OpenClick `memory learn-takeover` 命令、external seat activity detection
+
+### Epic 16: Daemon 模式与运维便利性
+
+Axion server 可安装为 macOS launchd 用户守护进程，开机自启、崩溃自动重启。新增 `axion daemon install/status/uninstall` 命令，以及 HTTP API 中的 Settings 管理（GET/POST/DELETE api-key），让 API 部署和维护更接近生产级。
+
+**核心价值：** 从「手动启动服务」到「开机即用」，是从开发工具到生产服务的最后一公里。
+**依赖：** Epic 5（HTTP API Server）
+**竞品参考：** OpenClick `src/daemon.ts` — launchd daemon install/status/uninstall
+
+---
+
+## Epic 12: Memory 生命周期与质量控制
+
+### Story 12.1: Memory Fact 模型升级
+
+As a 系统,
+I want Memory 条目有生命周期状态和置信度评分,
+So that 记忆质量随使用不断提升，一次性失败不会产生错误的长期记忆.
+
+**OpenClick 参考：**
+- `src/memory.ts:11-32` — `AppMemoryFact` 接口定义：status（candidate/active/retired）、confidence（number）、evidence_count（number）、source（local/imported）
+- `src/memory.ts:120-170` — `addAppMemoryFact()` 函数：新增记忆时设 status=candidate、confidence=0.5、evidence_count=1；合并已有记忆时累加 evidence_count 并取 max confidence
+- `src/memory.ts:411-425` — `promoteOrRetire()` 函数：evidence_count >= 2 且 confidence >= 0.65 时提升为 active；retired 状态的记忆不再变化
+- `src/memory.ts:318-338` — `normalizeFact()` 函数：校验 confidence 范围 [0,1]、evidence_count >= 0、默认 status 为 candidate
+- `src/memory.ts:362-375` — `mergeMemoryFacts()` 函数：合并导入记忆时取 max confidence、累加 evidence_count
+- `src/memory.ts:391-398` — `selectActiveFacts()` 函数：只选 active 状态的记忆，按 confidence 排序
+
+**Acceptance Criteria:**
+
+**Given** 当前 KnowledgeEntry 模型
+**When** 升级为 AppMemoryFact 模型
+**Then** 新增字段：status（candidate/active/retired）、confidence（0.0-1.0）、evidence_count（Int）、source（local/imported）、scope（可选 String）、cause（可选 String）
+
+**Given** 一次任务执行产生新的记忆
+**When** 提取 App 操作模式
+**Then** 新记忆以 candidate 状态写入，confidence 初始值为 0.5-0.7（根据操作复杂度调整）
+
+**Given** 同一事实被后续运行重复观察到
+**When** evidence_count 累积到 2 次
+**Then** 自动提升为 active 状态，confidence 提升 0.1
+
+**Given** 同一事实的后续观察与已有记忆矛盾
+**When** 冲突检测
+**Then** 不自动覆盖，而是创建新的 candidate 条目，由证据累积决定最终状态
+
+**Given** active 状态的记忆连续 30 天未被验证（未在后续运行中观察到）
+**When** MemoryCleanupService 执行
+**Then** 自动降级为 retired 状态
+
+**Given** retired 状态的记忆再次被观察到
+**When** 重新激活
+**Then** 恢复为 candidate 状态，evidence_count 重置为 1
+
+### Story 12.2: 三类记忆分类
+
+As a Planner,
+I want 记忆分为 affordance（可用能力）、avoid（避坑规则）和 observation（观察）三类,
+So that planner prompt 可以根据类型注入不同策略的上下文.
+
+**OpenClick 参考：**
+- `src/memory.ts:46` — `MemoryKind` 类型定义：`"affordance" | "avoid" | "observation"`
+- `src/memory.ts:22-31` — `AppMemory` 接口：按 `affordances`、`avoid`、`observations` 三个数组组织记忆
+- `src/memory.ts:226-250` — `renderRelevantMemoriesForPrompt()` 函数：将三类记忆渲染为 planner prompt 文本，affordance 标注为推荐能力、avoid 标注为 caution 警告、observation 标注为环境备注
+- `src/memory.ts:48-83` — `recordTakeoverLearning()` 函数：成功接管 → affordance，失败接管 → avoid
+
+**Acceptance Criteria:**
+
+**Given** 任务成功完成，发现新的操作路径
+**When** 提取记忆
+**Then** 记录为 affordance 类型（如 "Finder 中 Cmd+Shift+G 可直接导航到指定路径"）
+
+**Given** 任务执行中某操作失败，触发重规划后成功
+**When** 提取记忆
+**Then** 失败操作记录为 avoid 类型（如 "避免在 Chrome 中使用 AX 定位地址栏，截图坐标更可靠"）
+
+**Given** 任务执行中发现非操作性的环境信息
+**When** 提取记忆
+**Then** 记录为 observation 类型（如 "Calculator 在 macOS 14 中的窗口标题为 'Calculator'"）
+
+**Given** Planner 生成计划时
+**When** 注入 Memory 上下文
+**Then** affordance 注入为推荐路径提示，avoid 注入为避坑警告，observation 注入为环境备注
+
+**Given** avoid 类型的记忆被注入 planner prompt
+**When** Planner 规划
+**Then** 为软性建议（"不建议使用 X"），不是硬性禁止，Planner 可以在必要时忽略
+
+### Story 12.3: Memory 导入/导出
+
+As a 用户,
+I want 在多台机器间共享积累的 Memory,
+So that 我不需要在每台机器上重新积累经验.
+
+**OpenClick 参考：**
+- `src/memory.ts:40-44` — `MemoryBundle` 接口：schema_version、exported_at、memories 数组
+- `src/memory.ts:190-203` — `exportMemoryBundle()` / `writeMemoryBundle()` 函数：遍历所有 domain 的 memory.json，打包为 MemoryBundle
+- `src/memory.ts:204-250` — `importMemoryBundle()` 函数：解析导入文件，对每条记忆执行 normalizeFact()（`L318-338`）确保字段合法，合并时调用 mergeMemoryFacts()（`L362-375`）
+- `src/memory.ts:437-443` — 导入时 source 标记为 "imported"，confidence 降为 `Math.min(fact.confidence, 0.55)`
+- `src/cli.ts:239-258` — CLI 入口：`memory export <file>` / `memory import <file>` / `memory learn-takeover` 命令处理
+
+**Acceptance Criteria:**
+
+**Given** 运行 `axion memory export axion-memory.json`
+**When** 导出完成
+**Then** 生成包含所有 domain 的 Memory Bundle（JSON 文件），含 schema_version、exported_at 和 memories 数组
+
+**Given** 导出的 Memory 文件
+**When** 在另一台机器上运行 `axion memory import axion-memory.json`
+**Then** 导入的记忆以 candidate + 低 confidence（0.4）状态进入，不覆盖已有的 active 记忆
+
+**Given** 导入的记忆中某条与本地已有记忆重复
+**When** 按 bundle_id + description 匹配
+**Then** 合并为单条记忆，取更高的 evidence_count 和 confidence
+
+**Given** `axion memory export --app com.apple.finder`
+**When** 指定 App 导出
+**Then** 只导出该 App 的记忆，其他 App 不包含
+
+**Given** `axion memory list` 输出
+**When** 查看列表
+**Then** 每条记忆显示状态图标（✓ active / ○ candidate / ✗ retired）、类型（affordance/avoid/observation）和 evidence_count
+
+---
+
+## Epic 13: 执行安全与成本控制
+
+### Story 13.1: 桌面级运行锁
+
+As a 系统,
+I want 同一时刻只有一个 live run 控制桌面,
+So that 多任务并发不会产生操作冲突和安全问题.
+
+**OpenClick 参考：**
+- `src/paths.ts:47-48` — `resolveRunLockPath()` 函数：返回 `~/.openclick/run.lock`
+- `src/trace.ts:143-178` — `acquireRunLock(runId)` 函数：写 lock 文件（pid + run_id + started_at），检查已有 lock 的进程是否存活（`process.kill(pid, 0)`），stale lock 自动覆盖
+- `src/run.ts:286-293` — `acquireRunLock()` 调用点：live run 启动时获取锁，获取失败则记录 trace 并 exit(15)
+- `src/trace.ts:170-177` — `release()` 回调：run 结束后 unlink lock 文件（best effort）
+
+**Acceptance Criteria:**
+
+**Given** 无运行中的 live run
+**When** 提交新的 live run
+**Then** 创建 `~/.axion/run.lock` 文件，写入 run_id、pid 和启动时间，然后正常执行
+
+**Given** 已有一个 live run 正在执行
+**When** 提交新的 live run
+**Then** 检测到 run.lock 存在且 lock 持有进程存活，拒绝执行并返回错误："另一个 live run（run_id: xxx）正在执行，请等待其完成或使用 `axion cancel xxx` 取消"
+
+**Given** run.lock 文件存在但持有进程已退出（异常退出未清理）
+**When** 检测
+**Then** 识别为 stale lock，自动清理后允许新 run 启动
+
+**Given** live run 正常结束（done/failed/cancelled）
+**When** 清理
+**Then** 删除 run.lock 文件
+
+**Given** API server 接收到 POST /v1/runs 且已有 live run
+**When** 检查
+**Then** 返回 409 Conflict，body 包含当前运行中的 run_id 和建议操作
+
+**Given** 用户运行 `axion doctor`
+**When** 检查
+**Then** 报告是否有 stale lock 文件存在并建议清理
+
+### Story 13.2: 视觉增量检查
+
+As a 系统,
+I want 在调用 LLM verifier 前先做本地截图对比,
+So that 画面无变化时跳过昂贵的 verifier 调用，节省 API 成本.
+
+**OpenClick 参考：**
+- `src/run.ts:391` — `lastScreenshotHash` 变量：维护上一轮截图的 hash 值
+- `src/run.ts:460-479` — `addScreenshotIfChanged()` 调用模式：传入 hash 比较回调，`hash === lastScreenshotHash` 时返回 false 跳过截图
+- `src/run.ts:1070-1084` — 视觉增量检查核心逻辑：截图 hash 未变时记录 "visual delta check: no material screenshot change"，构造 `tool: "visual_delta"` 的伪失败步骤触发 replan（让 planner 换策略而非重复无效操作）
+- `src/run.ts:857-872` — 高风险视觉操作后的 delta 检查：canvas 拖拽等操作后对比截图，无变化则记录 critique（background_visual_delta_failed）
+
+**Acceptance Criteria:**
+
+**Given** 一个批次步骤执行完成，准备调用 verifier
+**When** 获取当前截图
+**Then** 与上一轮 verifier 调用时的截图做像素级差异比较（downscaled 到 256x256 后比较）
+
+**Given** 截图差异率 < 1%（画面几乎无变化）
+**When** 视觉增量检查
+**Then** 跳过 verifier 调用，判定任务状态未改变，直接进入下一轮规划或保持当前状态
+
+**Given** 截图差异率 >= 1%
+**When** 视觉增量检查
+**Then** 正常调用 LLM verifier 进行验证
+
+**Given** 第一轮执行（无历史截图）
+**When** 视觉增量检查
+**Then** 跳过比较，直接调用 verifier
+
+**Given** `--no-visual-delta` 标志启用
+**When** 执行
+**Then** 禁用视觉增量检查，每次都调用 verifier（兼容旧行为）
+
+**Given** trace 记录
+**When** verifier 调用被跳过
+**Then** 记录 `verifier_skipped` 事件，包含 delta_percentage 和 reason
+
+### Story 13.3: 精细预算控制与成本遥测
+
+As a 用户,
+I want 通过 --max-model-calls 和 --max-screenshots 精确控制 LLM 调用和截图次数,
+So that 我可以精确预算每次任务的 API 成本.
+
+**OpenClick 参考：**
+- `src/run.ts:74-76` — RunOptions 接口：`maxModelCalls?: number` 和 `maxScreenshots?: number` 字段
+- `src/run.ts:344-347` — 从 opts 和环境变量 `OPENCLICK_MAX_MODEL_CALLS`（默认 12）、`OPENCLICK_MAX_SCREENSHOTS`（默认 8）读取预算值
+- `src/run.ts:506-507,564-565,...` — 每次执行/验证/截图操作前将 maxModelCalls/maxScreenshots 传入 budgeted* 函数做检查（共约 15 处调用点）
+- `src/trace.ts:130-134` — `TraceRecorder.finish()` 方法：接受 `costs?: Record<string, number>` 参数，记录 trace.costs
+- `src/trace.ts:100` — TraceRecorder 的 trace 对象包含 costs 字段（model calls、screenshot count 等）
+
+**Acceptance Criteria:**
+
+**Given** 运行 `axion run "任务" --max-model-calls 10`
+**When** LLM 调用次数达到 10
+**Then** 停止执行，进入 failed 状态，输出 "已达到模型调用上限（10次）"
+
+**Given** 运行 `axion run "任务" --max-screenshots 5`
+**When** 截图次数达到 5
+**Then** 后续步骤使用最后一次截图或跳过验证，不截新图
+
+**Given** 所有预算维度（max-steps、max-batches、max-model-calls、max-screenshots）
+**When** 任意一个达到上限
+**Then** 停止执行，trace 中记录哪个预算被触发
+
+**Given** 任务运行中
+**When** TraceRecorder 记录
+**Then** 每次 LLM 调用记录 `model_call` 事件，包含 model 名称、input_tokens、output_tokens、estimated_cost
+
+**Given** 任务完成
+**When** 输出汇总
+**Then** 显示成本摘要：总 LLM 调用次数、总 tokens、预估成本（如 "LLM 调用: 8次, Tokens: 45,230, 预估成本: $0.12"）
+
+**Given** API server 返回 RunStatusResponse
+**When** 检查响应
+**Then** 包含 cost_telemetry 字段：model_calls、total_tokens、screenshot_count
+
+### Story 13.4: 桌面活动检测与学习保护
+
+As a 系统,
+I want 在 shared-seat 模式下检测用户的桌面操作,
+So that 被用户操作"污染"的运行不会产生错误的 Memory.
+
+**OpenClick 参考：**
+- `src/run.ts:398-415` — `SeatActivityMonitor` 创建和 `noteSeatActivity()` 回调：检测到外部活动后设 `learningDisabled = true`，记录 `external_seat_activity` trace 事件
+- `src/run.ts:2849-2907` — `SeatActivityMonitor` 类实现：基线记录 cursor 位置和 frontmost app；`check()` 方法比较当前 cursor 移动距离（>= 8px 触发）和 frontmost app 变化
+- `src/run.ts:2857-2863` — `SeatActivityMonitor.create()` 静态方法：采样初始 cursor 位置（`sampleCursorPosition()`）和前台 app（`sampleFrontmostApp()`）作为基线
+- `src/run.ts:2877-2907` — `check()` 方法：比较当前与基线，cursor 移动 >= 8px 或 frontmost app 变化时返回变化描述，每个变化类型只报告一次（`this.reported` Set）
+
+**Acceptance Criteria:**
+
+**Given** shared-seat 模式运行中（未设置 --allow-foreground）
+**When** 检测到用户手动操作了目标窗口（通过 CGEvent Tap 监听鼠标/键盘事件，仅限目标窗口区域）
+**Then** 标记该次运行为 "externally modified"，TraceRecorder 记录 `external_activity_detected` 事件
+
+**Given** 运行被标记为 externally modified
+**When** 任务完成
+**Then** 禁用 Memory 提取（不调用 AppMemoryExtractor），输出提示 "检测到外部桌面操作，本次运行的经验不会被记忆"
+
+**Given** 运行被标记为 externally modified
+**When** verifier 评估
+**Then** 正常验证，不跳过验证逻辑（仅影响 Memory 学习）
+
+**Given** --allow-foreground 模式运行
+**When** 检测
+**Then** 不检测外部活动（foreground 模式本身就是用户协作模式）
+
+**Given** 用户在运行期间手动操作了非目标窗口
+**When** 检测
+**Then** 不标记为 externally modified（只关注任务目标窗口）
+
+---
+
+## Epic 14: API 规范化与集成友好度
+
+### Story 14.1: StandardTaskOutput 契约升级
+
+As a 外部集成方,
+I want Axion API 返回规范化的 StandardTaskOutput,
+So that 我可以用统一的契约处理所有任务状态和结果.
+
+**OpenClick 参考：**
+- `src/api-runs.ts:21-48` — `StandardTaskOutput` 接口：schema_version、run_id、task、status（ApiRunStatus）、ok、live、allow_foreground、criteria、result（ApiTaskResult）、intervention、exit_code、error、stdout、stderr、started_at、ended_at
+- `src/api-runs.ts:13-20` — `ApiRunStatus` 类型：queued / running / intervention_needed / user_takeover / resuming / completed / failed / cancelled
+- `src/api-runs.ts:23-28` — `ApiTaskResult` 接口：kind（"answer" | "confirmation"）、title、body、created_at
+- `src/api-runs.ts:50-62` — `ApiRunEvent` 接口：SSE 事件结构（id、ts、type、data）
+- `src/api-runs.ts:80-100` — `startApiRun()` 函数：创建初始 StandardTaskOutput（status=queued）
+
+**Acceptance Criteria:**
+
+**Given** API 运行结果
+**When** 检查 StandardTaskOutput 结构
+**Then** 包含字段：schema_version（Int）、run_id、task、status、ok（Bool）、live（Bool）、allow_foreground（Bool）、criteria（可选）、result（可选）、intervention（可选）、exit_code（可选）、error（可选）、started_at、ended_at（可选）
+
+**Given** 任务成功完成且用户要求返回信息（如 "读取最新邮件"）
+**When** 生成 result
+**Then** result.kind = "answer"，result.body 包含用户期望的答案内容
+
+**Given** 任务成功完成且用户要求执行操作（如 "打开计算器"）
+**When** 生成 result
+**Then** result.kind = "confirmation"，result.body 包含操作确认摘要
+
+**Given** 任务进入 takeover 状态
+**When** 返回 StandardTaskOutput
+**Then** status = "intervention_needed"，intervention 包含 reason、available_actions（resume/abort）和 blocking_issue
+
+**Given** GET /v1/runs/{runId} 请求
+**When** 查询已完成的任务
+**Then** 返回完整的 StandardTaskOutput（包含 result 和 cost_telemetry）
+
+**Given** POST /v1/runs 请求
+**When** 创建新任务
+**Then** 返回 202 Accepted + StandardTaskOutput（status = "running"）
+
+### Story 14.2: Capabilities 端点
+
+As a 外部集成方,
+I want 通过 API 发现 Axion 的桌面操作能力,
+So that 我可以动态适配不同配置的 Axion 实例.
+
+**OpenClick 参考：**
+- `src/api-runs.ts:218-252` — `capabilitiesResponse()` 函数：返回 schema_version、name、version、capabilities 数组（desktop.run/desktop.cancel/desktop.status/desktop.events/desktop.memory/desktop.settings.api_key/desktop.takeover）、run_statuses 枚举、result_kinds（answer/confirmation）、endpoints 路由表
+- `src/server.ts:70-71` — 路由注册：`GET /v1/capabilities` → `capabilitiesResponse()`
+
+**Acceptance Criteria:**
+
+**Given** GET /v1/capabilities 请求
+**When** 响应
+**Then** 返回 JSON 包含：version（Axion 版本）、supported_run_statuses（所有可能的状态值）、supported_result_kinds（answer/confirmation）、available_tools（Helper 暴露的工具列表）、max_concurrent_runs（并发限制）、features（支持的功能列表，如 memory、takeover、fast_mode、skills）
+
+**Given** Helper 未连接
+**When** GET /v1/capabilities
+**Then** available_tools 为空数组，version 和 features 正常返回
+
+**Given** capabilities 响应
+**When** 检查格式
+**Then** 为稳定的 JSON schema，可被集成方缓存（建议缓存时间 5 分钟）
+
+### Story 14.3: Settings API
+
+As a 运维人员,
+I want 通过 HTTP API 管理配置,
+So that 我不需要登录服务器运行 CLI 命令.
+
+**OpenClick 参考：**
+- `src/server.ts:74-247` — Settings API 实现整体（`handleApiKeyRequest` 函数）
+- `src/server.ts:228-238` — GET：调用 `apiKeyStatus(provider)` 返回 provider、available、source、masked key
+- `src/server.ts:232-240` — POST：调用 `saveProviderApiKey(provider, apiKey)` 保存 key 并返回 masked 确认
+- `src/server.ts:243-247` — DELETE：调用 `clearProviderApiKey(provider)` 清除 key 并返回 available=false
+- `src/settings.ts` — `apiKeyStatus()`、`saveProviderApiKey()`、`clearProviderApiKey()` 函数：底层 config 读写
+
+**Acceptance Criteria:**
+
+**Given** GET /v1/settings/api-key 请求
+**When** 响应
+**Then** 返回 provider（anthropic/openai）、available（Bool）、source（config/env）和 masked_key（如 "sk-ant-****xxxx"），不暴露完整 API Key
+
+**Given** POST /v1/settings/api-key body `{"api_key": "sk-ant-xxx"}`
+**When** 处理
+**Then** 保存 API Key 到 config.json，返回 masked_key 状态确认
+
+**Given** DELETE /v1/settings/api-key 请求
+**When** 处理
+**Then** 清除 config.json 中的 API Key，返回 available=false 状态
+
+**Given** Settings API 请求需要认证
+**When** server 启用了 --auth-key
+**Then** Settings API 同样受 AuthMiddleware 保护
+
+**Given** 运行 `axion doctor`
+**When** 检查
+**Then** 新增检查：API server 的 Settings API 是否可访问（如果 server 在运行）
+
+---
+
+## Epic 15: Takeover 学习与桌面活动感知
+
+### Story 15.1: Takeover 经验自动学习
+
+As a 系统,
+I want 用户手动接管后自动将接管经验转化为 Memory,
+So that 人工干预成为可复用的自动化知识，减少未来同类任务被阻塞的概率.
+
+**OpenClick 参考：**
+- `src/memory.ts:48-83` — `recordTakeoverLearning()` 函数：接收 bundleId、appName、issue、summary、outcome 等参数；成功→affordance（confidence 0.72），失败→avoid（confidence 0.66），status 均为 candidate
+- `src/memory.ts:69-81` — 证据构造：拼接 task、issue、reason_type、outcome、takeover summary、feedback 为 evidence 数组
+- `src/cli.ts:239-258` — CLI `memory learn-takeover` 命令处理：解析 --bundle-id / --app-name / --issue / --summary 参数，调用 `recordTakeoverLearning()` + `saveAppMemory()`
+- `src/run.ts:417-440` — `handleTakeoverResume()` 函数：takeover 恢复后调用 `recordTakeoverResumeLearning()` 将接管经验写入 Memory
+- `src/trace.ts:53-70` — `TakeoverResumeMarker` 接口：schema_version、run_id、outcome、issue、summary、reason_type、feedback、trajectory_path
+
+**Acceptance Criteria:**
+
+**Given** 任务进入 takeover 状态
+**When** 用户手动完成操作后按 Enter 恢复
+**Then** 自动调用 Memory 系统，记录一条 takeover 学习（outcome: success）
+
+**Given** Takeover 成功恢复
+**When** 生成 Memory 条目
+**Then** 类型为 affordance，description 格式为 "当被 {issue} 阻塞时，用户手动 {summary} 成功"，confidence = 0.72，status = candidate
+
+**Given** Takeover 后任务仍然失败
+**When** 生成 Memory 条目
+**Then** 类型为 avoid，description 格式为 "当被 {issue} 阻塞时，{summary} 未解决问题"，confidence = 0.66，status = candidate
+
+**Given** Takeover 学习记录
+**When** 后续运行遇到同类阻塞
+**Then** Planner prompt 中注入对应的 affordance/avoid 记忆，帮助 Planner 选择更优路径
+
+**Given** `axion memory learn-takeover --bundle-id com.apple.finder --issue "文件选择对话框无法通过 AX 定位" --summary "使用 Cmd+Shift+G 直接输入路径"`
+**When** 手动记录 takeover 经验
+**Then** 直接创建 Memory 条目，无需等待运行触发
+
+### Story 15.2: Takeover 结构化标记
+
+As a 用户,
+I want takeover 有结构化的标记和反馈机制,
+So that 接管经验可以被系统精确理解和复用.
+
+**OpenClick 参考：**
+- `src/trace.ts:34-51` — `InterventionPayload` 接口：run_id、issue、reason（InterventionReason 枚举）、step、user_action、learning、before（RunInterventionSnapshot）
+- `src/trace.ts:18-32` — `InterventionReason` 类型：planner_blocked / needs_clarification / foreground_required / repeated_action_failure / verification_failed / permission_prompt / confirmation_dialog / login_or_2fa / captcha / native_modal / low_confidence / unexpected_screen_change / destructive_action_risk / user_requested_takeover
+- `src/trace.ts:53-70` — `TakeoverResumeMarker` 接口：outcome（success/failed/cancelled）、issue、summary、reason_type、feedback（用户自由文本）、trajectory_path
+- `src/cli.ts:389-426` — CLI `takeover finish` 命令：--run-id / --issue / --summary / --outcome / --reason-type / --feedback 参数，写入 TakeoverResumeMarker 文件
+- `src/run.ts:417-440` — `handleTakeoverResume()` 函数：处理 takeover marker，调用 `recordTakeoverResumeLearning()` 记录学习
+
+**Acceptance Criteria:**
+
+**Given** takeover 恢复时
+**When** 系统提示用户
+**Then** 显示 "手动完成后按 Enter 继续。可选：输入反馈描述你的操作（如 '使用了 Cmd+Shift+G 输入路径'），或直接 Enter 跳过"
+
+**Given** 用户输入了反馈文本
+**When** 记录 takeover 学习
+**Then** feedback 字段包含用户描述，作为 Memory 的 evidence 之一
+
+**Given** 用户直接按 Enter（无反馈）
+**When** 记录 takeover 学习
+**Then** feedback 字段为空，Memory 仅包含 issue（阻塞原因）和 outcome
+
+**Given** trace 记录
+**When** takeover 事件发生
+**Then** 记录 `takeover` 事件，包含 issue、summary、outcome、feedback、duration（用户花费的时间）
+
+**Given** AxionBar 任务面板
+**When** 显示 takeover 状态
+**Then** 显示阻塞原因、手动操作提示和恢复按钮
+
+---
+
+## Epic 16: Daemon 模式与运维便利性
+
+### Story 16.1: launchd Daemon 支持
+
+As a 运维人员,
+I want Axion server 作为 macOS launchd 守护进程运行,
+So that 开机自启、崩溃自动重启，不需要手动管理.
+
+**OpenClick 参考：**
+- `src/daemon.ts:29-33` — `resolveLaunchAgentPath()` 函数：返回 `~/Library/LaunchAgents/${DAEMON_LABEL}.plist`
+- `src/daemon.ts:42-79` — `buildLaunchAgentPlist()` 函数：生成完整 plist XML，包含 Label、ProgramArguments（node + server 脚本）、EnvironmentVariables（PATH、API key）、RunAtLoad=true、KeepAlive（CrashInterval=10，FailureInterval=300，MaxCrashes=5）、StandardOutPath/StandardErrorPath 日志路径
+- `src/daemon.ts:83-96` — `installDaemon()` 函数：写 plist 文件（mode 0o644），执行 `launchctl load` 启动服务
+- `src/daemon.ts:98-105` — `uninstallDaemon()` 函数：执行 `launchctl unload`，删除 plist 文件
+- `src/daemon.ts:106-130` — `daemonStatus()` 函数：检查 plist 是否存在、launchctl list 查询 PID 和运行状态
+- `src/cli.ts` — CLI 入口：`daemon install / status / uninstall` 子命令
+
+**Acceptance Criteria:**
+
+**Given** 运行 `axion daemon install --host 127.0.0.1 --port 4242`
+**When** 安装完成
+**Then** 创建 ~/Library/LaunchAgents/dev.axion.server.plist，注册 launchd 服务，立即启动
+
+**Given** daemon 已安装
+**When** macOS 重新启动并用户登录
+**Then** Axion server 自动启动，监听配置的端口
+
+**Given** Axion server 进程崩溃
+**When** launchd 检测到退出
+**Then** 10 秒后自动重启，连续崩溃 5 次后停止重启并记录日志
+
+**Given** 运行 `axion daemon status`
+**When** 检查
+**Then** 显示 daemon 状态（running/stopped/not_installed）、PID、运行时长、端口
+
+**Given** 运行 `axion daemon uninstall`
+**When** 卸载
+**Then** 停止服务、删除 plist 文件，清理日志（可选 --keep-logs）
+
+**Given** daemon 安装时指定 --auth-key
+**When** plist 配置
+**Then** auth-key 作为环境变量传递给 server 进程
+
+**Given** daemon 日志
+**When** 查看
+**Then** 写入 ~/.axion/server.log 和 ~/.axion/server.err.log
+
+### Story 16.2: API Server 持久化运行恢复
+
+As a 系统,
+I want API server 重启后能恢复之前运行中的任务状态,
+So that daemon 模式下的重启不会留下僵尸任务.
+
+**OpenClick 参考：**
+- `src/api-runs.ts:460-464` — `persistRecord()` 函数：将 StandardTaskOutput 写入 `~/.openclick/runs/{runId}/api-output.json`
+- `src/api-runs.ts:466-469` — `persistEvent()` 函数：将 ApiRunEvent 追加写入 `~/.openclick/runs/{runId}/api-events.jsonl`
+- `src/api-runs.ts:472-490` — `loadPersistedRecord()` 函数：从 api-output.json 加载 output，从 api-events.jsonl 加载 events，重建 ApiRunRecord
+- `src/api-runs.ts:262-271` — `getOrLoadRecord()` 函数：先查内存 Map，miss 时从磁盘 load + recover
+- `src/api-runs.ts:273-292` — `recoverLoadedRecord()` 函数：对 queued/running/intervention_needed/user_takeover/resuming 状态的记录标记为 failed + error="server interrupted"
+
+**Acceptance Criteria:**
+
+**Given** API server 有正在运行的异步任务
+**When** server 进程重启
+**Then** 从 `~/.axion/runs/{runId}/api-output.json` 加载持久化的任务状态
+
+**Given** 持久化状态中 status = "running" 但子进程已退出
+**When** 恢复检查
+**Then** 标记为 failed，error = "server interrupted"，不再保持 running 状态
+
+**Given** 持久化状态中 status = "intervention_needed"
+**When** 恢复
+**Then** 保持 intervention_needed 状态，等待用户通过 AxionBar 或 CLI 处理
+
+**Given** 新的 SSE 连接订阅已恢复的任务
+**When** 发送历史事件
+**Then** 从 `api-events.jsonl` 重放所有历史事件，然后继续推送新事件
+
+---
+
+## Phase 4 FR 追溯
+
+| FR | 来源 | Epic | 依赖 | 说明 |
+|----|------|------|------|------|
+| FR63 (Memory 生命周期) | Phase 4 新增 | Epic 12 | Epic 4 | candidate/active/retired + confidence |
+| FR64 (三类记忆分类) | Phase 4 新增 | Epic 12 | Epic 4 | affordance/avoid/observation |
+| FR65 (Memory 导入导出) | Phase 4 新增 | Epic 12 | Epic 4 | 多机器经验共享 |
+| FR66 (桌面级运行锁) | Phase 4 新增 | Epic 13 | Epic 3/5 | 防止多任务桌面冲突 |
+| FR67 (视觉增量检查) | Phase 4 新增 | Epic 13 | Epic 3 | 跳过无变化的 verifier 调用 |
+| FR68 (精细预算控制) | Phase 4 新增 | Epic 13 | Epic 3 | max-model-calls/max-screenshots |
+| FR69 (成本遥测) | Phase 4 新增 | Epic 13 | Epic 3 | trace 中的 LLM 成本记录 |
+| FR70 (桌面活动检测) | Phase 4 新增 | Epic 13 | Epic 3 | 保护学习不被污染 |
+| FR71 (StandardTaskOutput) | Phase 4 新增 | Epic 14 | Epic 5 | 规范化 API 输出契约 |
+| FR72 (Capabilities 端点) | Phase 4 新增 | Epic 14 | Epic 5 | API 能力发现 |
+| FR73 (Settings API) | Phase 4 新增 | Epic 14 | Epic 5 | HTTP 配置管理 |
+| FR74 (Takeover 学习) | Phase 4 新增 | Epic 15 | Epic 7/12 | 接管经验转 Memory |
+| FR75 (Takeover 结构化标记) | Phase 4 新增 | Epic 15 | Epic 7 | 结构化反馈机制 |
+| FR76 (launchd Daemon) | Phase 4 新增 | Epic 16 | Epic 5 | 开机自启守护进程 |
+| FR77 (运行状态恢复) | Phase 4 新增 | Epic 16 | Epic 5 | 重启后任务状态恢复 |
+
+## Phase 4 新增 NFR
+
+- NFR37: 视觉增量检查的截图对比耗时 < 50ms（downscaled 后比较）
+- NFR38: 运行锁检测响应时间 < 10ms（文件锁检查）
+- NFR39: Memory 导出/导入 1000 条记录耗时 < 2 秒
+- NFR40: Daemon 模式下 server 崩溃到自动重启 < 15 秒
+- NFR41: StandardTaskOutput 序列化/反序列化 < 5ms
+- NFR42: 桌面活动检测的 CPU 开销 < 2%（仅监听目标窗口）
+
+## Phase 4 优先级与依赖
+
+| 优先级 | Epic | 依赖 | 理由 |
+|--------|------|------|------|
+| P0 | Epic 13 (执行安全与成本控制) | Epic 3, 5 | 安全第一，成本控制直接影响使用意愿 |
+| P1 | Epic 12 (Memory 生命周期) | Epic 4 | 记忆质量是 AI 自动化的核心竞争力 |
+| P1 | Epic 15 (Takeover 学习) | Epic 7, 12 | 与 Memory 生命周期协同，人工经验转自动化 |
+| P2 | Epic 14 (API 规范化) | Epic 5 | 外部集成的基础，但不阻塞核心功能 |
+| P3 | Epic 16 (Daemon 模式) | Epic 5 | 运维便利性，可最后推进 |
+
+**实施建议顺序：Epic 13（Story 13.1 运行锁）→ Epic 12 → Epic 15 → Epic 13（Story 13.2-13.4）→ Epic 14 → Epic 16**
+
+**理由：**
+- Epic 13 Story 13.1（运行锁）最简单且价值最高，可快速交付
+- Epic 12 是 Epic 15 的前置（Takeover 学习需要 Memory 生命周期）
+- Epic 13 其余 Stories 可与 Epic 12 并行
+- Epic 14 和 16 为 API 和运维改进，优先级靠后

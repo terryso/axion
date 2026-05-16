@@ -616,4 +616,129 @@ struct AppMemoryExtractorTests {
         #expect(!content.contains("失败标记"),
             "Success entries should not include any failure marker line, got: \(content)")
     }
+
+    // MARK: - Story 12.1 AC2: extractFacts returns AppMemoryFact
+
+    @Test("extractFacts returns AppMemoryFact array for successful task")
+    func extractFactsReturnsFactsForSuccess() {
+        let extractor = AppMemoryExtractor()
+
+        let toolPairs: [(toolUse: SDKMessage.ToolUseData, toolResult: SDKMessage.ToolResultData)] = [
+            (
+                makeToolUse(toolName: "mcp__axion-helper__launch_app", toolUseId: "tu-1", input: "{\"app_name\": \"Calculator\"}"),
+                makeToolResult(toolUseId: "tu-1", content: "{\"success\": true, \"bundle_id\": \"com.apple.calculator\"}")
+            ),
+            (
+                makeToolUse(toolName: "mcp__axion-helper__click", toolUseId: "tu-2", input: "{\"x\": 100, \"y\": 200}"),
+                makeToolResult(toolUseId: "tu-2", content: "clicked")
+            ),
+        ]
+
+        let facts = extractor.extractFacts(
+            from: toolPairs,
+            task: "Open Calculator and click",
+            runId: "20260516-test-facts"
+        )
+
+        #expect(!facts.isEmpty, "Should extract at least one fact")
+        let fact = facts.first!
+        #expect(fact.kind == .observation, "Successful task should produce observation kind")
+        #expect(fact.confidence == 0.7, "Successful task should have confidence 0.7")
+        #expect(fact.status == .candidate, "New fact should be candidate")
+        #expect(fact.domain == "com.apple.calculator")
+        #expect(fact.source == .local)
+        #expect(fact.evidence.contains("20260516-test-facts"), "Evidence should contain runId")
+    }
+
+    @Test("extractFacts returns avoid kind for failed task")
+    func extractFactsReturnsAvoidForFailure() {
+        let extractor = AppMemoryExtractor()
+
+        let toolPairs: [(toolUse: SDKMessage.ToolUseData, toolResult: SDKMessage.ToolResultData)] = [
+            (
+                makeToolUse(toolName: "mcp__axion-helper__launch_app", toolUseId: "tu-1", input: "{\"app_name\": \"Calculator\"}"),
+                makeToolResult(toolUseId: "tu-1", content: "{\"success\": true, \"bundle_id\": \"com.apple.calculator\"}")
+            ),
+            (
+                makeToolUse(toolName: "mcp__axion-helper__click", toolUseId: "tu-2", input: "{\"x\": 300, \"y\": 400}"),
+                makeToolResult(toolUseId: "tu-2", content: "{\"error\": \"not found\"}", isError: true)
+            ),
+        ]
+
+        let facts = extractor.extractFacts(
+            from: toolPairs,
+            task: "Click in Calculator",
+            runId: "20260516-test-fail"
+        )
+
+        #expect(!facts.isEmpty)
+        let fact = facts.first!
+        #expect(fact.kind == .avoid, "Failed task should produce avoid kind")
+        #expect(fact.confidence == 0.5, "Failed task should have confidence 0.5")
+    }
+
+    @Test("extractFacts returns observation with workaround cause for recovered task")
+    func extractFactsReturnsWorkaroundForRecoveredTask() {
+        let extractor = AppMemoryExtractor()
+
+        let toolPairs: [(toolUse: SDKMessage.ToolUseData, toolResult: SDKMessage.ToolResultData)] = [
+            (
+                makeToolUse(toolName: "mcp__axion-helper__launch_app", toolUseId: "tu-1", input: "{\"app_name\": \"Calculator\"}"),
+                makeToolResult(toolUseId: "tu-1", content: "{\"success\": true, \"bundle_id\": \"com.apple.calculator\"}")
+            ),
+            (
+                makeToolUse(toolName: "mcp__axion-helper__click", toolUseId: "tu-2", input: "{\"x\": 300, \"y\": 400}"),
+                makeToolResult(toolUseId: "tu-2", content: "{\"error\": \"click failed\"}", isError: true)
+            ),
+            (
+                makeToolUse(toolName: "mcp__axion-helper__click", toolUseId: "tu-3", input: "{\"ax_selector\": \"AXButton[title=\\\"=\\\"]\"}"),
+                makeToolResult(toolUseId: "tu-3", content: "clicked")
+            ),
+        ]
+
+        let facts = extractor.extractFacts(
+            from: toolPairs,
+            task: "Click equals in Calculator",
+            runId: "20260516-test-workaround"
+        )
+
+        #expect(!facts.isEmpty)
+        let fact = facts.first!
+        // Has error + workaround → kind=observation, confidence=0.6, cause=workaround
+        #expect(fact.kind == .observation, "Recovered task should produce observation kind")
+        #expect(fact.confidence == 0.6, "Workaround task should have confidence 0.6")
+        #expect(fact.cause == "workaround", "Workaround task should have cause 'workaround'")
+    }
+
+    @Test("extractFacts returns empty for empty pairs")
+    func extractFactsReturnsEmptyForEmpty() {
+        let extractor = AppMemoryExtractor()
+
+        let facts = extractor.extractFacts(
+            from: [],
+            task: "Nothing",
+            runId: "empty"
+        )
+
+        #expect(facts.isEmpty)
+    }
+
+    @Test("extractFacts uses deterministic factId")
+    func extractFactsDeterministicId() {
+        let extractor = AppMemoryExtractor()
+
+        let toolPairs: [(toolUse: SDKMessage.ToolUseData, toolResult: SDKMessage.ToolResultData)] = [
+            (
+                makeToolUse(toolName: "mcp__axion-helper__launch_app", toolUseId: "tu-1", input: "{\"app_name\": \"Calculator\"}"),
+                makeToolResult(toolUseId: "tu-1", content: "{\"success\": true}")
+            ),
+        ]
+
+        let facts1 = extractor.extractFacts(from: toolPairs, task: "Open Calculator", runId: "r1")
+        let facts2 = extractor.extractFacts(from: toolPairs, task: "Open Calculator", runId: "r2")
+
+        #expect(!facts1.isEmpty && !facts2.isEmpty)
+        // Same description content should produce same ID
+        #expect(facts1.first!.id == facts2.first!.id)
+    }
 }
