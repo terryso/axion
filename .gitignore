@@ -26,3 +26,14 @@ Distribution/homebrew/axion.rb
 # Story automator runtime state
 _bmad-output/story-automator/
 .playwright-mcp/
+
+# Code coverage artifacts
+default.profraw
+default.profdata
+*.profraw
+*.profdata
+coverage/
+
+# Python bytecode
+__pycache__/
+*.pyc
