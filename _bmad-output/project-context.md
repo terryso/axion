@@ -475,6 +475,7 @@ Sources/AxionBar/
 - D10：独立 SPM executable target，SwiftUI App + AppKit NSStatusItem 混合方案
 - AxionBar 不 import AxionCLI（通过 HTTP API 通信，localhost:4242）
 - AxionBar 定义自己的 API 模型（Bar 前缀），与 AxionCLI 的 APITypes 完全解耦
+- 后端 API 统一返回 `StandardTaskOutput`（Epic 14），AxionBar 通过 `decodeIfPresent` 兼容新字段
 - NSApp.setActivationPolicy(.accessory) 实现无 Dock 图标（AppDelegate）
 - 所有 AxionBar 服务使用 @MainActor 隔离
 - 窗口使用 NSPanel/NSWindow + SwiftUI hosting（非 WindowGroup）
@@ -485,6 +486,7 @@ Sources/AxionBar/
 
 **API 模型命名约定：**
 - Bar 前缀：`BarCreateRunRequest`、`BarRunStatusResponse`、`BarSkillSummary` 等
+- `decodeIfPresent` 用于向后兼容新增字段（如 StandardTaskOutput 的 intervention、result）
 - CodingKeys 使用 snake_case（与后端 API 一致）
 - Swift 属性名使用 camelCase
 
@@ -498,6 +500,8 @@ Sources/AxionBar/
 | `/v1/runs/{runId}` | GET | 任务详情 |
 | `/v1/runs/{runId}/events` | GET (SSE) | 实时事件流 |
 | `/v1/skills` | GET | 技能列表 |
+| `/v1/capabilities` | GET | 能力发现（version、tools、features） |
+| `/v1/settings/api-key` | GET/POST/DELETE | API Key 配置管理 |
 | `/v1/skills/{name}` | GET | 技能详情 |
 | `/v1/skills/{name}/run` | POST | 执行技能 |
 

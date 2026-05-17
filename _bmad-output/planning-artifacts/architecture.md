@@ -820,14 +820,14 @@ axion/
 │   │   │   ├── AppProfileAnalyzer.swift        # 模式识别 + 高频路径 + 失败经验
 │   │   │   ├── FamiliarityTracker.swift        # 熟悉度追踪（>= 3 次成功标记 familiar）
 │   │   │   └── MemoryContextProvider.swift      # 构建 Planner Memory 上下文（+ 三类分类注入）
-│   │   ├── API/                                # Epic 5: HTTP API Server
+│   │   ├── API/                                # Epic 5: HTTP API Server + Epic 14: API 规范化
 │   │   │   ├── AgentRunner.swift              # Agent 执行封装
 │   │   │   ├── RunTracker.swift               # 任务状态追踪
 │   │   │   ├── AxionAPI.swift                 # Hummingbird 路由注册
 │   │   │   ├── EventBroadcaster.swift         # SSE 事件广播
 │   │   │   ├── AuthMiddleware.swift           # Bearer token 认证
 │   │   │   ├── ConcurrencyLimiter.swift       # 并发槽位管理
-│   │   │   └── Models/APITypes.swift          # API 请求/响应模型
+│   │   │   └── Models/APITypes.swift          # API 请求/响应模型（Epic 14: StandardTaskOutput, CapabilitiesResponse, Settings API models）
 │   │   ├── MCP/                                # Epic 6: MCP Server Mode
 │   │   │   ├── MCPServerRunner.swift          # MCP 编排器
 │   │   │   ├── RunTaskTool.swift              # run_task 工具实现
@@ -1028,6 +1028,9 @@ AxionBar ← SwiftUI + AppKit（独立 macOS App）
 | FR68 | CostTracker.swift + RunCommand.swift | --max-model-calls/--max-screenshots 精细预算控制（Epic 13） |
 | FR69 | CostTracker.swift + TraceRecorder.swift + AgentRunner.swift | 成本遥测：model_call trace + API cost_telemetry（Epic 13） |
 | FR70 | SeatActivityMonitor.swift + RunCommand.swift + AgentRunner.swift | 桌面活动检测与学习保护（Epic 13） |
+| FR71 | APITypes.swift + AxionAPI.swift + RunTracker.swift + AgentRunner.swift | StandardTaskOutput 统一 API 输出契约（Epic 14） |
+| FR72 | APITypes.swift + AxionAPI.swift | Capabilities 端点：能力发现（Epic 14） |
+| FR73 | APITypes.swift + AxionAPI.swift + DoctorCommand.swift | Settings API：HTTP 配置管理（Epic 14） |
 
 **跨切关注点到位置的映射：**
 
@@ -1038,6 +1041,7 @@ AxionBar ← SwiftUI + AppKit（独立 macOS App）
 | 进程生命周期 | AxionCLI/Helper/HelperProcessManager.swift | Helper 启停 + 信号传播 |
 | 安全策略 | AxionCLI/Executor/SafetyChecker.swift | 共享座椅模式 |
 | 运行时安全 | AxionCLI/Services/ (RunLockService, CostTracker, SeatActivityMonitor) | 桌面锁、预算控制、学习保护（Epic 13） |
+| API 规范化 | AxionCLI/API/Models/APITypes.swift (StandardTaskOutput, CapabilitiesResponse, Settings API) | 统一输出契约、能力发现、配置管理（Epic 14） |
 | 可观测性 | AxionCLI/Trace/TraceRecorder.swift | JSONL trace |
 | 输出格式 | AxionCLI/Output/ | 终端 + JSON 双输出 |
 | Memory 系统 | AxionCLI/Memory/ | App 操作经验积累 + Planner 上下文注入 |
@@ -1115,6 +1119,7 @@ RunEngine.run()                             # 状态机开始
     ▼
 RunLockService.release()                    # [Epic 13] 释放运行锁
 CostTracker.getSummary() → 成本摘要         # [Epic 13] 输出成本统计
+TrackedRun.toStandardOutput() → StandardTaskOutput  # [Epic 14] 统一 API 输出契约
 ```
 
 ## 架构验证结果
@@ -1146,7 +1151,7 @@ CostTracker.getSummary() → 成本摘要         # [Epic 13] 输出成本统计
 
 ### 需求覆盖验证
 
-**功能需求覆盖（41/41 FR — 100%）：**
+**功能需求覆盖（44/44 FR — 100%）：**
 
 | FR 范围 | 数量 | 覆盖状态 | 关键文件 |
 |---------|------|----------|----------|
@@ -1157,6 +1162,7 @@ CostTracker.getSummary() → 成本摘要         # [Epic 13] 输出成本统计
 | FR21–FR23 任务验证 | 3 | ✅ 全覆盖 | TaskVerifier, StopConditionEvaluator |
 | FR24–FR32 AxionHelper | 9 | ✅ 全覆盖 | AppLauncher, AccessibilityEngine, ScreenshotService, KeyboardService, MouseService, URLOpener, HelperMCPServer |
 | FR33–FR41 进度与 SDK | 9 | ✅ 全覆盖 | TerminalOutput, JSONOutput, RunEngine (SDK 集成) |
+| FR71–FR73 API 规范化 | 3 | ✅ 全覆盖 | APITypes.swift (StandardTaskOutput, CapabilitiesResponse, Settings API), AxionAPI.swift, DoctorCommand |
 
 **非功能需求覆盖（23/23 NFR — 100%）：**
 
@@ -1173,7 +1179,7 @@ CostTracker.getSummary() → 成本摘要         # [Epic 13] 输出成本统计
 
 **决策完整性：** 所有 8 项核心决策均已记录，含代码示例和理由。
 
-**结构完整性：** 完整目录树已定义到文件级别，41 项 FR 均映射到具体文件。
+**结构完整性：** 完整目录树已定义到文件级别，44 项 FR 均映射到具体文件。
 
 **模式完整性：** 命名、结构、格式、通信、异步、测试 6 大模式均已定义，含正例和反例。
 
@@ -1224,13 +1230,13 @@ CostTracker.getSummary() → 成本摘要         # [Epic 13] 输出成本统计
 - [x] 完整目录结构已定义（40+ 文件，3 个 SPM 目标）
 - [x] 组件边界已建立（进程边界 + 模块依赖规则）
 - [x] 集成点已映射（5 条内部通信 + 4 个外部集成）
-- [x] 需求到结构映射已完成（41 FR → 文件级别映射）
+- [x] 需求到结构映射已完成（44 FR → 文件级别映射）
 
 ### 架构就绪评估
 
 **整体状态：** 实施已就绪
 
-**信心等级：** 高 — 所有 16 项检查通过，无关键差距，41 FR 和 23 NFR 全覆盖。
+**信心等级：** 高 — 所有 16 项检查通过，无关键差距，44 FR 和 23 NFR 全覆盖。
 
 **核心优势：**
 

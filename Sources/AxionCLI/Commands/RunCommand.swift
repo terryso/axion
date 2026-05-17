@@ -282,6 +282,11 @@ struct RunCommand: AsyncParsableCommand {
         var externallyModified = false
         var seatActivityReported = false
 
+        // Story 15.1: Takeover event context for auto-learning
+        var takeoverEvent: (issue: String, summary: String)? = nil
+        var runSucceeded = false
+        var runCompleted = false
+
         await withTaskCancellationHandler {
             let messageStream = agent.stream(task)
             for await message in messageStream {
@@ -363,6 +368,8 @@ struct RunCommand: AsyncParsableCommand {
                             let userAction = result.userInput?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty == false
                                 ? result.userInput! : "用户已完成手动操作"
                             takeoverIO.write("[axion] 正在恢复执行...")
+                            // Story 15.1: Capture takeover context for auto-learning
+                            takeoverEvent = (issue: pausedData.reason, summary: userAction)
                             agent.resume(context: userAction)
                             await tracer?.record(event: "takeover_resumed", payload: [
                                 "context": userAction,
@@ -386,6 +393,16 @@ struct RunCommand: AsyncParsableCommand {
                         break
                     }
                 case .result(let data):
+                    // Story 15.1: Track run outcome for takeover learning
+                    switch data.subtype {
+                    case .success:
+                        runSucceeded = true
+                        runCompleted = true
+                    case .errorMaxTurns, .errorMaxBudgetUsd, .errorDuringExecution, .errorMaxStructuredOutputRetries:
+                        runCompleted = true
+                    default:
+                        break
+                    }
                     // Budget: finalize cost data from SDK
                     await costTracker.finalizeWithSDKData(
                         usage: data.usage,
@@ -496,8 +513,29 @@ struct RunCommand: AsyncParsableCommand {
                         fputs("[axion] warning: profile analysis failed for \(domain): \(error.localizedDescription)\n", stderr)
                     }
                 }
+
             } catch {
                 fputs("[axion] warning: memory extraction failed: \(error.localizedDescription)\n", stderr)
+            }
+
+            // Story 15.1: Record takeover learning independently (AC1, AC2, AC3, AC7, AC8, AC9)
+            // Placed outside the memory extraction do/catch so extraction failures
+            // don't prevent takeover learning from being recorded.
+            if let event = takeoverEvent, !noMemory, !externallyModified, runCompleted {
+                let takeoverFactStore = MemoryFactStore(memoryDir: memoryDir)
+                let takeoverService = TakeoverLearningService(
+                    factStore: takeoverFactStore,
+                    lifecycleService: MemoryLifecycleService()
+                )
+                let domain = Self.inferDomain(from: collectedPairs)
+                let outcome: TakeoverOutcome = runSucceeded ? .success : .failed
+                await takeoverService.recordTakeoverLearning(
+                    bundleId: domain,
+                    task: task,
+                    issue: event.issue,
+                    summary: event.summary,
+                    outcome: outcome
+                )
             }
         }
 
@@ -515,6 +553,24 @@ struct RunCommand: AsyncParsableCommand {
     }
 
     // MARK: - Private Helpers
+
+    /// Infer the active app domain from collected tool-use pairs.
+    /// Looks for the last `launch_app` result containing a bundle identifier.
+    internal static func inferDomain(
+        from pairs: [(toolUse: SDKMessage.ToolUseData, toolResult: SDKMessage.ToolResultData)]
+    ) -> String {
+        for (toolUse, result) in pairs.reversed() {
+            if toolUse.toolName.contains("launch") {
+                if let data = result.content.data(using: .utf8),
+                   let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any] {
+                    if let bundleId = json["bundle_id"] as? String ?? json["bundleId"] as? String {
+                        return bundleId
+                    }
+                }
+            }
+        }
+        return "unknown"
+    }
 
     /// Generates a unique run ID in the format `YYYYMMDD-{6random}`.
     private static func generateRunId() -> String {

@@ -1,5 +1,8 @@
 # generated: 2026-05-08
 # last_updated: 2026-05-17
+# story-15.1-review: 2026-05-17
+# retro-epic-14: 2026-05-17
+# story-15.1-created: 2026-05-17
 # story-14.1-created: 2026-05-17
 # story-14.2-created: 2026-05-17
 # story-14.3-created: 2026-05-17
@@ -188,11 +191,11 @@ development_status:
   14-1-standard-task-output-contract: done
   14-2-capabilities-endpoint: done
   14-3-settings-api: done
-  epic-14-retrospective: optional
+  epic-14-retrospective: done
 
   # Epic 15: Takeover 学习与桌面活动感知
-  epic-15: backlog
-  15-1-takeover-experience-auto-learning: backlog
+  epic-15: in-progress
+  15-1-takeover-experience-auto-learning: done
   15-2-takeover-structured-markers: backlog
   epic-15-retrospective: optional
 
