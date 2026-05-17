@@ -514,12 +514,17 @@ struct AxionAPIRoutesTests {
         eventBroadcaster: EventBroadcaster? = nil,
         authKey: String? = nil,
         concurrencyLimiter: ConcurrencyLimiter? = nil,
-        maxConcurrent: Int = 10
+        maxConcurrent: Int = 10,
+        config: AxionConfig = .default,
+        configDirectory: String? = nil
     ) async throws -> Application<RouterResponder<BasicRequestContext>> {
         // Use a temp directory for the run lock to avoid test interference
         let tempLockDir = NSTemporaryDirectory() + "axion-test-lock-\(UUID().uuidString)"
         try? FileManager.default.createDirectory(atPath: tempLockDir, withIntermediateDirectories: true)
         let testRunLockService = RunLockService(lockDirectory: tempLockDir, processAliveChecker: { _ in false })
+
+        // Use temp directory for config if specified
+        let tempConfigDir = configDirectory ?? (NSTemporaryDirectory() + "axion-test-config-\(UUID().uuidString)")
 
         let broadcaster = eventBroadcaster ?? EventBroadcaster()
         let tracker = runTracker ?? RunTracker(eventBroadcaster: broadcaster)
@@ -528,11 +533,12 @@ struct AxionAPIRoutesTests {
             on: router,
             runTracker: tracker,
             eventBroadcaster: broadcaster,
-            config: .default,
+            config: config,
             authKey: authKey,
             concurrencyLimiter: concurrencyLimiter,
             runLockService: testRunLockService,
-            maxConcurrent: maxConcurrent
+            maxConcurrent: maxConcurrent,
+            configDirectory: tempConfigDir
         )
 
         let app = Application(
@@ -540,5 +546,211 @@ struct AxionAPIRoutesTests {
             configuration: .init(address: .hostname("127.0.0.1", port: 0))
         )
         return app
+    }
+
+    // MARK: - Settings API Tests (Story 14.3)
+
+    @Test("GET /v1/settings/api-key returns 200 with missing status when no key")
+    func settingsApiKeyGetReturnsMissingWhenNoKey() async throws {
+        let app = try await buildTestApplication()
+
+        try await app.test(.router) { client in
+            try await client.execute(uri: "/v1/settings/api-key", method: .get) { response in
+                #expect(response.status == .ok)
+
+                let body = try JSONDecoder().decode(ApiKeyStatusResponse.self, from: response.body)
+                #expect(body.available == false)
+                #expect(body.source == "missing")
+                #expect(body.maskedKey == "")
+                #expect(body.provider == "anthropic")
+            }
+        }
+    }
+
+    @Test("GET /v1/settings/api-key returns 200 with config status when key in config")
+    func settingsApiKeyGetReturnsConfigWhenKeyPresent() async throws {
+        let config = AxionConfig(apiKey: "sk-ant-api03-abcdefghijklmnop", provider: .anthropic)
+        let app = try await buildTestApplication(config: config)
+
+        try await app.test(.router) { client in
+            try await client.execute(uri: "/v1/settings/api-key", method: .get) { response in
+                #expect(response.status == .ok)
+
+                let body = try JSONDecoder().decode(ApiKeyStatusResponse.self, from: response.body)
+                #expect(body.available == true)
+                #expect(body.source == "config")
+                #expect(body.maskedKey == "sk-ant-****mnop")
+                #expect(body.provider == "anthropic")
+            }
+        }
+    }
+
+    @Test("GET /v1/settings/api-key returns Cache-Control header")
+    func settingsApiKeyGetReturnsCacheControlHeader() async throws {
+        let app = try await buildTestApplication()
+
+        try await app.test(.router) { client in
+            try await client.execute(uri: "/v1/settings/api-key", method: .get) { response in
+                let cacheControl = response.headers[.cacheControl]
+                #expect(cacheControl != nil)
+                #expect(cacheControl?.contains("private") ?? false)
+                #expect(cacheControl?.contains("max-age=300") ?? false)
+            }
+        }
+    }
+
+    @Test("POST /v1/settings/api-key saves key and returns status")
+    func settingsApiKeyPostSavesAndReturnsStatus() async throws {
+        let tempDir = NSTemporaryDirectory() + "axion-settings-test-\(UUID().uuidString)"
+        defer { try? FileManager.default.removeItem(atPath: tempDir) }
+
+        let app = try await buildTestApplication(configDirectory: tempDir)
+
+        try await app.test(.router) { client in
+            let body = ByteBuffer(string: #"{"api_key":"sk-ant-test1234567890abcdefghijklmnop"}"#)
+            try await client.execute(uri: "/v1/settings/api-key", method: .post, body: body) { response in
+                #expect(response.status == .ok)
+
+                let resp = try JSONDecoder().decode(ApiKeyStatusResponse.self, from: response.body)
+                #expect(resp.available == true)
+                #expect(resp.maskedKey.contains("****"))
+            }
+
+            // Verify the config file was written
+            let configPath = (tempDir as NSString).appendingPathComponent("config.json")
+            let savedData = try #require(FileManager.default.contents(atPath: configPath))
+            let savedConfig = try JSONDecoder().decode(AxionConfig.self, from: savedData)
+            #expect(savedConfig.apiKey == "sk-ant-test1234567890abcdefghijklmnop")
+        }
+    }
+
+    @Test("POST /v1/settings/api-key with empty key returns 400")
+    func settingsApiKeyPostEmptyKeyReturns400() async throws {
+        let app = try await buildTestApplication()
+
+        try await app.test(.router) { client in
+            let body = ByteBuffer(string: #"{"api_key":""}"#)
+            try await client.execute(uri: "/v1/settings/api-key", method: .post, body: body) { response in
+                #expect(response.status == .badRequest)
+
+                let error = try JSONDecoder().decode(APIErrorResponse.self, from: response.body)
+                #expect(error.error == "missing_api_key")
+            }
+        }
+    }
+
+    @Test("POST /v1/settings/api-key with invalid JSON returns 400")
+    func settingsApiKeyPostInvalidJsonReturns400() async throws {
+        let app = try await buildTestApplication()
+
+        try await app.test(.router) { client in
+            let body = ByteBuffer(string: "not json")
+            try await client.execute(uri: "/v1/settings/api-key", method: .post, body: body) { response in
+                #expect(response.status == .badRequest)
+
+                let error = try JSONDecoder().decode(APIErrorResponse.self, from: response.body)
+                #expect(error.error == "invalid_request")
+            }
+        }
+    }
+
+    @Test("DELETE /v1/settings/api-key clears key and returns missing status")
+    func settingsApiKeyDeleteClearsKey() async throws {
+        let tempDir = NSTemporaryDirectory() + "axion-settings-delete-test-\(UUID().uuidString)"
+        defer { try? FileManager.default.removeItem(atPath: tempDir) }
+
+        // Pre-populate config with a key
+        var config = AxionConfig.default
+        config.apiKey = "sk-ant-original-key-12345"
+        let encoder = JSONEncoder()
+        encoder.outputFormatting = [.sortedKeys, .prettyPrinted]
+        let initialData = try encoder.encode(config)
+        try FileManager.default.createDirectory(atPath: tempDir, withIntermediateDirectories: true)
+        FileManager.default.createFile(atPath: (tempDir as NSString).appendingPathComponent("config.json"), contents: initialData)
+
+        let app = try await buildTestApplication(config: config, configDirectory: tempDir)
+
+        try await app.test(.router) { client in
+            try await client.execute(uri: "/v1/settings/api-key", method: .delete) { response in
+                #expect(response.status == .ok)
+
+                let body = try JSONDecoder().decode(DeleteApiKeyResponse.self, from: response.body)
+                #expect(body.available == false)
+                #expect(body.source == "missing")
+                #expect(body.provider == "anthropic")
+            }
+
+            // Verify config.json was updated
+            let savedData = try #require(FileManager.default.contents(atPath: (tempDir as NSString).appendingPathComponent("config.json")))
+            let savedConfig = try JSONDecoder().decode(AxionConfig.self, from: savedData)
+            #expect(savedConfig.apiKey == nil)
+        }
+    }
+
+    @Test("Settings API endpoints require auth when auth is enabled")
+    func settingsApiRequiresAuth() async throws {
+        let app = try await buildTestApplication(authKey: "testsecret")
+
+        try await app.test(.router) { client in
+            try await client.execute(uri: "/v1/settings/api-key", method: .get) { response in
+                #expect(response.status == .unauthorized)
+            }
+
+            let body = ByteBuffer(string: #"{"api_key":"sk-test"}"#)
+            try await client.execute(uri: "/v1/settings/api-key", method: .post, body: body) { response in
+                #expect(response.status == .unauthorized)
+            }
+
+            try await client.execute(uri: "/v1/settings/api-key", method: .delete) { response in
+                #expect(response.status == .unauthorized)
+            }
+        }
+    }
+
+    @Test("Settings API endpoints pass auth with correct token")
+    func settingsApiPassesWithCorrectAuth() async throws {
+        let app = try await buildTestApplication(authKey: "testsecret")
+
+        try await app.test(.router) { client in
+            var headers = HTTPFields()
+            headers[.authorization] = "Bearer testsecret"
+            try await client.execute(uri: "/v1/settings/api-key", method: .get, headers: headers) { response in
+                #expect(response.status == .ok)
+            }
+        }
+    }
+
+    @Test("POST writes config file that survives restart")
+    func settingsApiKeyPostPersistsToConfigFile() async throws {
+        let tempDir = NSTemporaryDirectory() + "axion-settings-roundtrip-\(UUID().uuidString)"
+        defer { try? FileManager.default.removeItem(atPath: tempDir) }
+
+        let savedKey = "sk-ant-saved-key-abcdefghijklmnop"
+        let app = try await buildTestApplication(configDirectory: tempDir)
+
+        try await app.test(.router) { client in
+            let postBody = ByteBuffer(string: #"{"api_key":"\#(savedKey)"}"#)
+            try await client.execute(uri: "/v1/settings/api-key", method: .post, body: postBody) { response in
+                #expect(response.status == .ok)
+            }
+        }
+
+        // Verify the key was persisted to disk (survives server restart)
+        let configPath = (tempDir as NSString).appendingPathComponent("config.json")
+        let savedData = try #require(FileManager.default.contents(atPath: configPath))
+        let savedConfig = try JSONDecoder().decode(AxionConfig.self, from: savedData)
+        #expect(savedConfig.apiKey == savedKey)
+
+        // Simulate a restart: create a new app instance with the persisted config
+        let restartedApp = try await buildTestApplication(config: savedConfig, configDirectory: tempDir)
+        try await restartedApp.test(.router) { client in
+            try await client.execute(uri: "/v1/settings/api-key", method: .get) { response in
+                #expect(response.status == .ok)
+                let body = try JSONDecoder().decode(ApiKeyStatusResponse.self, from: response.body)
+                #expect(body.available == true)
+                #expect(body.source == "config")
+                #expect(body.maskedKey == "sk-ant-****mnop")
+            }
+        }
     }
 }

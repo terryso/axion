@@ -392,6 +392,55 @@ struct RunCompletedData: Codable, Equatable, Sendable {
     }
 }
 
+// MARK: - Settings API Types (Story 14.3)
+
+/// Response body for `GET /v1/settings/api-key`.
+struct ApiKeyStatusResponse: Codable, Equatable, Sendable, ResponseEncodable {
+    let provider: String
+    let available: Bool
+    let source: String
+    let maskedKey: String
+
+    enum CodingKeys: String, CodingKey {
+        case provider
+        case available
+        case source
+        case maskedKey = "masked_key"
+    }
+
+    /// Mask an API key for safe display.
+    /// Format: first 7 + "****" + last 4 (e.g. "sk-ant-****xxxx").
+    /// Keys shorter than 11 chars: "****" + last 4. Empty keys: "".
+    static func maskKey(_ key: String) -> String {
+        if key.isEmpty { return "" }
+        if key.count < 11 {
+            let suffix = String(key.suffix(4))
+            return "****\(suffix)"
+        }
+        let prefix = String(key.prefix(7))
+        let suffix = String(key.suffix(4))
+        return "\(prefix)****\(suffix)"
+    }
+}
+
+/// Request body for `POST /v1/settings/api-key`.
+struct SaveApiKeyRequest: Codable, Equatable, Sendable {
+    let apiKey: String
+    let provider: String?
+
+    enum CodingKeys: String, CodingKey {
+        case apiKey = "api_key"
+        case provider
+    }
+}
+
+/// Response body for `DELETE /v1/settings/api-key`.
+struct DeleteApiKeyResponse: Codable, Equatable, Sendable, ResponseEncodable {
+    let provider: String
+    let available: Bool
+    let source: String
+}
+
 // MARK: - Skill API Types (Story 10.3)
 
 /// Summary of a skill returned by `GET /v1/skills`.

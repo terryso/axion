@@ -719,4 +719,119 @@ struct APITypesTests {
         #expect(allCases.contains(.answer))
         #expect(allCases.contains(.confirmation))
     }
+
+    // MARK: - Settings API Types Tests (Story 14.3)
+
+    @Test("ApiKeyStatusResponse codable round trip preserves all fields")
+    func apiKeyStatusResponseCodableRoundTrip() throws {
+        let response = ApiKeyStatusResponse(
+            provider: "anthropic",
+            available: true,
+            source: "config",
+            maskedKey: "sk-ant-****abcd"
+        )
+
+        let encoder = JSONEncoder()
+        encoder.outputFormatting = [.sortedKeys]
+        let data = try encoder.encode(response)
+        let decoded = try JSONDecoder().decode(ApiKeyStatusResponse.self, from: data)
+
+        #expect(decoded.provider == "anthropic")
+        #expect(decoded.available == true)
+        #expect(decoded.source == "config")
+        #expect(decoded.maskedKey == "sk-ant-****abcd")
+    }
+
+    @Test("ApiKeyStatusResponse JSON keys are snake case")
+    func apiKeyStatusResponseJsonKeysAreSnakeCase() throws {
+        let response = ApiKeyStatusResponse(
+            provider: "anthropic",
+            available: false,
+            source: "missing",
+            maskedKey: ""
+        )
+
+        let encoder = JSONEncoder()
+        encoder.outputFormatting = [.sortedKeys]
+        let data = try encoder.encode(response)
+        let json = try #require(String(data: data, encoding: .utf8))
+
+        #expect(json.contains("\"masked_key\""))
+        #expect(json.contains("\"provider\""))
+        #expect(json.contains("\"available\""))
+        #expect(json.contains("\"source\""))
+    }
+
+    @Test("SaveApiKeyRequest codable round trip preserves all fields")
+    func saveApiKeyRequestCodableRoundTrip() throws {
+        let request = SaveApiKeyRequest(apiKey: "sk-ant-xxx", provider: "anthropic")
+
+        let data = try JSONEncoder().encode(request)
+        let decoded = try JSONDecoder().decode(SaveApiKeyRequest.self, from: data)
+
+        #expect(decoded.apiKey == "sk-ant-xxx")
+        #expect(decoded.provider == "anthropic")
+    }
+
+    @Test("SaveApiKeyRequest optional provider defaults to nil")
+    func saveApiKeyRequestOptionalProviderDefaultsToNil() throws {
+        let request = SaveApiKeyRequest(apiKey: "sk-ant-xxx", provider: nil)
+
+        let data = try JSONEncoder().encode(request)
+        let decoded = try JSONDecoder().decode(SaveApiKeyRequest.self, from: data)
+
+        #expect(decoded.apiKey == "sk-ant-xxx")
+        #expect(decoded.provider == nil)
+    }
+
+    @Test("SaveApiKeyRequest decodes snake case api_key")
+    func saveApiKeyRequestDecodesSnakeCase() throws {
+        let json = #"{"api_key":"sk-test","provider":"openai"}"#
+        let data = json.data(using: .utf8)!
+        let decoded = try JSONDecoder().decode(SaveApiKeyRequest.self, from: data)
+
+        #expect(decoded.apiKey == "sk-test")
+        #expect(decoded.provider == "openai")
+    }
+
+    @Test("DeleteApiKeyResponse codable round trip preserves all fields")
+    func deleteApiKeyResponseCodableRoundTrip() throws {
+        let response = DeleteApiKeyResponse(
+            provider: "anthropic",
+            available: false,
+            source: "missing"
+        )
+
+        let data = try JSONEncoder().encode(response)
+        let decoded = try JSONDecoder().decode(DeleteApiKeyResponse.self, from: data)
+
+        #expect(decoded.provider == "anthropic")
+        #expect(decoded.available == false)
+        #expect(decoded.source == "missing")
+    }
+
+    @Test("maskKey returns correct format for long keys")
+    func maskKeyLongKeys() {
+        let key = "sk-ant-api03-abcdefghijklmnop"
+        let masked = ApiKeyStatusResponse.maskKey(key)
+        #expect(masked == "sk-ant-****mnop")
+    }
+
+    @Test("maskKey returns correct format for short keys")
+    func maskKeyShortKeys() {
+        #expect(ApiKeyStatusResponse.maskKey("short") == "****hort")
+        #expect(ApiKeyStatusResponse.maskKey("1234567890") == "****7890")
+    }
+
+    @Test("maskKey returns empty for empty string")
+    func maskKeyEmptyString() {
+        #expect(ApiKeyStatusResponse.maskKey("") == "")
+    }
+
+    @Test("maskKey handles exactly 11 characters")
+    func maskKeyExactly11() {
+        let key = "12345678901"
+        let masked = ApiKeyStatusResponse.maskKey(key)
+        #expect(masked == "1234567****8901")
+    }
 }
