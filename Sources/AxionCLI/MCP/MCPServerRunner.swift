@@ -112,7 +112,7 @@ struct MCPServerRunner {
         // 8. Create RunTracker and custom tools
         let runTracker = RunTracker()
         let taskQueue = TaskQueue()
-        let runTaskTool = RunTaskTool(agent: agent, runTracker: runTracker, taskQueue: taskQueue)
+        let runTaskTool = RunTaskTool(agent: agent, runTracker: runTracker, taskQueue: taskQueue, runLockService: nil)
         let queryTool = QueryTaskStatusTool(runTracker: runTracker)
 
         // 9. Merge all tools

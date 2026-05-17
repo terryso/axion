@@ -1,0 +1,168 @@
+import Foundation
+
+// MARK: - PersistedSSEEvent
+
+/// Codable wrapper for persisting SSEEvent to JSONL.
+/// Encodes eventType + associated data payload into a single JSON object.
+struct PersistedSSEEvent: Codable, Equatable, Sendable {
+    let eventType: String
+    let stepStarted: StepStartedData?
+    let stepCompleted: StepCompletedData?
+    let runCompleted: RunCompletedData?
+
+    init(from event: SSEEvent) {
+        self.eventType = event.eventType
+        switch event {
+        case .stepStarted(let data):
+            self.stepStarted = data
+            self.stepCompleted = nil
+            self.runCompleted = nil
+        case .stepCompleted(let data):
+            self.stepStarted = nil
+            self.stepCompleted = data
+            self.runCompleted = nil
+        case .runCompleted(let data):
+            self.stepStarted = nil
+            self.stepCompleted = nil
+            self.runCompleted = data
+        }
+    }
+
+    func toSSEEvent() -> SSEEvent? {
+        switch eventType {
+        case "step_started":
+            guard let data = stepStarted else { return nil }
+            return .stepStarted(data)
+        case "step_completed":
+            guard let data = stepCompleted else { return nil }
+            return .stepCompleted(data)
+        case "run_completed":
+            guard let data = runCompleted else { return nil }
+            return .runCompleted(data)
+        default:
+            return nil
+        }
+    }
+}
+
+// MARK: - RunPersistenceService
+
+/// Disk persistence for API run state and SSE events.
+/// Uses ~/.axion/api-runs/ directory, separate from CLI trace's ~/.axion/runs/.
+struct RunPersistenceService: Sendable {
+
+    /// Custom base directory for testing. When nil, uses ~/.axion/api-runs/.
+    private let customBaseDirectory: String?
+
+    init(baseDirectory: String? = nil) {
+        self.customBaseDirectory = baseDirectory
+    }
+
+    // MARK: - Path Helpers
+
+    /// Returns base directory for persisted runs.
+    func runsDirectory() -> String {
+        if let custom = customBaseDirectory {
+            return custom
+        }
+        let home = FileManager.default.homeDirectoryForCurrentUser.path
+        return (home as NSString).appendingPathComponent(".axion/api-runs")
+    }
+
+    /// Returns ~/.axion/api-runs/{runId}/, creating the directory if needed.
+    func runDirectory(runId: String) -> String {
+        let dir = (runsDirectory() as NSString).appendingPathComponent(runId)
+        try? FileManager.default.createDirectory(
+            atPath: dir, withIntermediateDirectories: true
+        )
+        return dir
+    }
+
+    // MARK: - Record Persistence (AC1)
+
+    /// Atomically write TrackedRun to api-output.json.
+    func persistRecord(_ run: TrackedRun) throws {
+        let dir = runDirectory(runId: run.runId)
+        let finalPath = (dir as NSString).appendingPathComponent("api-output.json")
+        let data = try JSONEncoder().encode(run)
+        try data.write(to: URL(fileURLWithPath: finalPath), options: .atomic)
+    }
+
+    /// Append an SSEEvent to api-events.jsonl (AC2).
+    func persistEvent(runId: String, event: SSEEvent) throws {
+        let dir = runDirectory(runId: runId)
+        let eventsPath = (dir as NSString).appendingPathComponent("api-events.jsonl")
+        let wrapper = PersistedSSEEvent(from: event)
+        var data = try JSONEncoder().encode(wrapper)
+        data.append(0x0A) // newline
+
+        if FileManager.default.fileExists(atPath: eventsPath) {
+            let handle = try FileHandle(forWritingTo: URL(fileURLWithPath: eventsPath))
+            handle.seekToEndOfFile()
+            handle.write(data)
+            handle.closeFile()
+        } else {
+            try data.write(to: URL(fileURLWithPath: eventsPath))
+        }
+    }
+
+    // MARK: - Loading (AC3)
+
+    /// Load a single TrackedRun from api-output.json.
+    func loadRecord(runId: String) -> TrackedRun? {
+        let dir = (runsDirectory() as NSString).appendingPathComponent(runId)
+        let path = (dir as NSString).appendingPathComponent("api-output.json")
+        guard FileManager.default.fileExists(atPath: path),
+              let data = try? Data(contentsOf: URL(fileURLWithPath: path))
+        else { return nil }
+        return try? JSONDecoder().decode(TrackedRun.self, from: data)
+    }
+
+    /// Load all SSEEvents from api-events.jsonl.
+    func loadEvents(runId: String) -> [SSEEvent] {
+        let dir = (runsDirectory() as NSString).appendingPathComponent(runId)
+        let path = (dir as NSString).appendingPathComponent("api-events.jsonl")
+        guard FileManager.default.fileExists(atPath: path),
+              let content = try? String(contentsOfFile: path, encoding: .utf8)
+        else { return [] }
+
+        return content.split(separator: "\n").compactMap { line in
+            guard let data = line.data(using: .utf8),
+                  let wrapper = try? JSONDecoder().decode(PersistedSSEEvent.self, from: data)
+            else { return nil }
+            return wrapper.toSSEEvent()
+        }
+    }
+
+    /// Scan ~/.axion/api-runs/ and load all persisted TrackedRuns.
+    func loadAllPersistedRuns() -> [TrackedRun] {
+        let baseDir = runsDirectory()
+        guard let contents = try? FileManager.default.contentsOfDirectory(
+            atPath: baseDir
+        ) else { return [] }
+
+        return contents.compactMap { subdir -> TrackedRun? in
+            loadRecord(runId: subdir)
+        }
+    }
+
+    // MARK: - Safe Wrappers (AC7)
+
+    /// Persist record without throwing — logs warning on failure.
+    func persistRecordSafely(_ run: TrackedRun) {
+        do {
+            try persistRecord(run)
+        } catch {
+            print("[RunPersistence] Warning: failed to persist record for run \(run.runId): \(error)")
+        }
+    }
+
+    /// Persist event without throwing — logs warning on failure.
+    func persistEventSafely(runId: String, event: SSEEvent) {
+        do {
+            try persistEvent(runId: runId, event: event)
+        } catch {
+            print("[RunPersistence] Warning: failed to persist event for run \(runId): \(error)")
+        }
+    }
+}

@@ -80,11 +80,11 @@ struct SSEEventClientParsingTests {
         let client = SSEEventClient()
         let result = client.parseSSEEvent(
             eventType: "run_completed",
-            dataString: #"{"run_id":"20260515-abc","final_status":"done","total_steps":3,"duration_ms":5000,"replan_count":0}"#
+            dataString: #"{"run_id":"20260515-abc","final_status":"completed","total_steps":3,"duration_ms":5000,"replan_count":0}"#
         )
         #expect(result != nil)
         if case .runCompleted(let data) = result {
-            #expect(data.finalStatus == "done")
+            #expect(data.finalStatus == "completed")
             #expect(data.totalSteps == 3)
         } else {
             #expect(Bool(false), "Expected runCompleted event")

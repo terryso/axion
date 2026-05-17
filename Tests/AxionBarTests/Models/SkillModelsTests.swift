@@ -145,7 +145,7 @@ struct BarSkillRunResponseTests {
 
     @Test("round-trip")
     func roundTrip() throws {
-        let original = BarSkillRunResponse(runId: "id", status: "done")
+        let original = BarSkillRunResponse(runId: "id", status: "completed")
         let data = try JSONEncoder().encode(original)
         let decoded = try JSONDecoder().decode(BarSkillRunResponse.self, from: data)
         #expect(decoded == original)

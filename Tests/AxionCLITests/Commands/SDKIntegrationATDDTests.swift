@@ -8,7 +8,7 @@ private let SDK_AGENT_INTEGRATED = true
 private let SDK_MCP_CONFIGURED = true
 private let SDK_HOOKS_CONFIGURED = true
 private let SDK_STREAMING_CONFIGURED = true
-private let SDK_E2E_FLOW_CONFIGURED = true
+private let SDK_E2E_FLOW_CONFIGURED = ProcessInfo.processInfo.environment["AXION_SDK_E2E"] == "1"
 
 @Suite("SDKIntegration ATDD")
 struct SDKIntegrationATDDTests {

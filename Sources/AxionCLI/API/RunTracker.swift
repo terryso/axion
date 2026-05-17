@@ -15,13 +15,17 @@ actor RunTracker {
     /// Event broadcaster for SSE streaming (Story 5.2).
     private let eventBroadcaster: EventBroadcaster?
 
+    /// Disk persistence service (Story 16.2).
+    private let persistenceService: RunPersistenceService?
+
     /// SSE extension point (Story 5.2) — callback invoked when run status changes.
     private var onRunStatusChanged: ((String, APIRunStatus) -> Void)?
 
     // MARK: - Initialization
 
-    init(eventBroadcaster: EventBroadcaster? = nil) {
+    init(eventBroadcaster: EventBroadcaster? = nil, persistenceService: RunPersistenceService? = nil) {
         self.eventBroadcaster = eventBroadcaster
+        self.persistenceService = persistenceService
     }
 
     // MARK: - Public API
@@ -54,13 +58,11 @@ actor RunTracker {
             task: task,
             status: .running,
             submittedAt: submittedAt,
-            completedAt: nil,
-            totalSteps: 0,
-            durationMs: nil,
-            replanCount: 0,
-            steps: []
+            live: true,
+            allowForeground: options.allowForeground ?? false
         )
         runs[runId] = run
+        persistenceService?.persistRecordSafely(run)
 
         // Evict oldest completed runs if at capacity
         if runs.count > Self.maxTrackedRuns {
@@ -77,18 +79,14 @@ actor RunTracker {
     }
 
     /// Update an existing run's status and results.
-    /// - Parameters:
-    ///   - runId: The run to update.
-    ///   - status: New status (done, failed, cancelled).
-    ///   - steps: Array of step summaries from execution.
-    ///   - durationMs: Total execution duration in milliseconds.
-    ///   - replanCount: Number of replanning attempts.
     func updateRun(
         runId: String,
         status: APIRunStatus,
         steps: [StepSummary],
         durationMs: Int?,
-        replanCount: Int
+        replanCount: Int,
+        costTelemetry: CostTelemetry? = nil,
+        error: String? = nil
     ) async {
         guard runs[runId] != nil else {
             print("[RunTracker] Warning: updateRun called with unknown runId '\(runId)'")
@@ -105,6 +103,9 @@ actor RunTracker {
         runs[runId]?.durationMs = durationMs
         runs[runId]?.replanCount = replanCount
         runs[runId]?.steps = steps
+        runs[runId]?.costTelemetry = costTelemetry
+        runs[runId]?.error = error
+        runs[runId]?.exitCode = (status == .failed) ? 1 : (status == .completed ? 0 : nil)
 
         // Emit run_completed event via EventBroadcaster (Story 5.2)
         if let broadcaster = eventBroadcaster {
@@ -121,6 +122,39 @@ actor RunTracker {
 
         // Legacy callback: notify status change
         onRunStatusChanged?(runId, status)
+
+        if let run = runs[runId] {
+            persistenceService?.persistRecordSafely(run)
+        }
+    }
+
+    /// Write the ApiTaskResult for a completed run.
+    func updateRunResult(runId: String, result: ApiTaskResult) {
+        guard runs[runId] != nil else {
+            print("[RunTracker] Warning: updateRunResult called with unknown runId '\(runId)'")
+            return
+        }
+        runs[runId]?.result = result
+        if let run = runs[runId] {
+            persistenceService?.persistRecordSafely(run)
+        }
+    }
+
+    /// Write InterventionData for a run requiring user intervention.
+    func updateRunIntervention(runId: String, intervention: InterventionData) {
+        guard runs[runId] != nil else {
+            print("[RunTracker] Warning: updateRunIntervention called with unknown runId '\(runId)'")
+            return
+        }
+        runs[runId]?.intervention = intervention
+        if let run = runs[runId] {
+            persistenceService?.persistRecordSafely(run)
+        }
+    }
+
+    /// Restore a persisted run into memory. Called during server startup recovery.
+    func restoreRun(_ run: TrackedRun) {
+        runs[run.runId] = run
     }
 
     /// Retrieve a run by its ID.

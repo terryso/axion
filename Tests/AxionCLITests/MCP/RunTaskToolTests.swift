@@ -1,6 +1,8 @@
+import Foundation
 import Testing
 import OpenAgentSDK
 @testable import AxionCLI
+@testable import AxionCore
 
 @Suite("RunTaskTool")
 struct RunTaskToolTests {
@@ -96,6 +98,10 @@ struct RunTaskToolTests {
     }
 
     private func createTool() -> (RunTaskTool, RunTracker, TaskQueue) {
+        let tempLockDir = NSTemporaryDirectory() + "axion-test-lock-\(UUID().uuidString)"
+        try? FileManager.default.createDirectory(atPath: tempLockDir, withIntermediateDirectories: true)
+        let testRunLockService = RunLockService(lockDirectory: tempLockDir, processAliveChecker: { _ in false })
+
         let tracker = RunTracker()
         let queue = TaskQueue()
         let agent = createAgent(options: AgentOptions(
@@ -106,7 +112,7 @@ struct RunTaskToolTests {
             maxTokens: 100,
             permissionMode: .bypassPermissions
         ))
-        let tool = RunTaskTool(agent: agent, runTracker: tracker, taskQueue: queue)
+        let tool = RunTaskTool(agent: agent, runTracker: tracker, taskQueue: queue, runLockService: testRunLockService)
         return (tool, tracker, queue)
     }
 }

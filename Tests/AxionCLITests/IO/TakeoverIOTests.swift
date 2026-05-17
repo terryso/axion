@@ -79,6 +79,24 @@ struct TakeoverIOTests {
         #expect(combined.contains("无法找到目标按钮"))
     }
 
+    @Test("displayTakeoverPrompt includes feedback guidance text (AC1)")
+    func displayTakeoverPromptIncludesFeedbackGuidance() {
+        var output: [String] = []
+        let io = TakeoverIO(
+            write: { output.append($0) },
+            readLine: { "" }
+        )
+
+        let _ = io.displayTakeoverPrompt(
+            reason: "受阻",
+            allowForeground: false
+        )
+
+        let combined = output.joined(separator: "\n")
+        #expect(combined.contains("反馈描述你的操作"))
+        #expect(combined.contains("Cmd+Shift+G"))
+    }
+
     @Test("displayTakeoverPrompt with allowForeground shows hint")
     func displayTakeoverPromptAllowForegroundShowsHint() {
         var output: [String] = []
@@ -206,5 +224,98 @@ struct TakeoverIOTests {
         )
         #expect(result.action == .skip)
         #expect(result.userInput == "skip")
+    }
+
+    // MARK: - Feedback separation (AC2, AC3)
+
+    @Test("feedback is non-nil when user types descriptive text on resume (AC2)")
+    func feedbackNonNilOnDescriptiveInput() {
+        let io = TakeoverIO(
+            write: { _ in },
+            readLine: { "使用了 Cmd+Shift+G 输入路径" }
+        )
+
+        let result = io.displayTakeoverPrompt(
+            reason: "文件选择器受阻",
+            allowForeground: false
+        )
+        #expect(result.action == .resume)
+        #expect(result.feedback == "使用了 Cmd+Shift+G 输入路径")
+    }
+
+    @Test("feedback is nil on empty Enter (AC3)")
+    func feedbackNilOnEmptyEnter() {
+        let io = TakeoverIO(
+            write: { _ in },
+            readLine: { "" }
+        )
+
+        let result = io.displayTakeoverPrompt(
+            reason: "受阻",
+            allowForeground: false
+        )
+        #expect(result.action == .resume)
+        #expect(result.feedback == nil)
+    }
+
+    @Test("feedback is nil on skip")
+    func feedbackNilOnSkip() {
+        let io = TakeoverIO(
+            write: { _ in },
+            readLine: { "skip" }
+        )
+
+        let result = io.displayTakeoverPrompt(
+            reason: "受阻",
+            allowForeground: false
+        )
+        #expect(result.action == .skip)
+        #expect(result.feedback == nil)
+    }
+
+    @Test("feedback is nil on abort")
+    func feedbackNilOnAbort() {
+        let io = TakeoverIO(
+            write: { _ in },
+            readLine: { "abort" }
+        )
+
+        let result = io.displayTakeoverPrompt(
+            reason: "受阻",
+            allowForeground: false
+        )
+        #expect(result.action == .abort)
+        #expect(result.feedback == nil)
+    }
+
+    @Test("feedback is 'continue' when user types 'continue'")
+    func feedbackNilOnContinue() {
+        let io = TakeoverIO(
+            write: { _ in },
+            readLine: { "continue" }
+        )
+
+        let result = io.displayTakeoverPrompt(
+            reason: "受阻",
+            allowForeground: false
+        )
+        #expect(result.action == .resume)
+        #expect(result.feedback == "continue")
+    }
+
+    @Test("feedback shows recorded message when non-empty")
+    func feedbackShowsRecordedMessage() {
+        var output: [String] = []
+        let io = TakeoverIO(
+            write: { output.append($0) },
+            readLine: { "手动点击了确认按钮" }
+        )
+
+        let _ = io.displayTakeoverPrompt(
+            reason: "受阻",
+            allowForeground: false
+        )
+        let combined = output.joined(separator: "\n")
+        #expect(combined.contains("已记录反馈"))
     }
 }

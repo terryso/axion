@@ -44,7 +44,7 @@ struct BarCreateRunResponseTests {
 
     @Test("round-trip preserves all fields")
     func roundTrip() throws {
-        let original = BarCreateRunResponse(runId: "test-id", status: "done")
+        let original = BarCreateRunResponse(runId: "test-id", status: "completed")
         let data = try JSONEncoder().encode(original)
         let decoded = try JSONDecoder().decode(BarCreateRunResponse.self, from: data)
         #expect(decoded == original)
@@ -59,7 +59,7 @@ struct BarRunStatusResponseTests {
         let json = """
         {
             "run_id": "20260515-xyz789",
-            "status": "done",
+            "status": "completed",
             "task": "打开计算器",
             "total_steps": 3,
             "duration_ms": 5200,
@@ -74,13 +74,13 @@ struct BarRunStatusResponseTests {
         let data = Data(json.utf8)
         let response = try JSONDecoder().decode(BarRunStatusResponse.self, from: data)
         #expect(response.runId == "20260515-xyz789")
-        #expect(response.status == "done")
+        #expect(response.status == "completed")
         #expect(response.task == "打开计算器")
         #expect(response.totalSteps == 3)
         #expect(response.durationMs == 5200)
         #expect(response.replanCount == 0)
-        #expect(response.steps.count == 1)
-        #expect(response.steps[0].tool == "launch_app")
+        #expect(response.steps?.count == 1)
+        #expect(response.steps?[0].tool == "launch_app")
     }
 
     @Test("decodes with nil optional fields")
@@ -102,6 +102,43 @@ struct BarRunStatusResponseTests {
         let response = try JSONDecoder().decode(BarRunStatusResponse.self, from: data)
         #expect(response.durationMs == nil)
         #expect(response.completedAt == nil)
+    }
+
+    @Test("decodes StandardTaskOutput with new schema fields")
+    func decodesStandardTaskOutputWithNewFields() throws {
+        let json = """
+        {
+            "schema_version": 1,
+            "run_id": "20260517-abc",
+            "task": "读取邮件",
+            "status": "completed",
+            "ok": true,
+            "live": true,
+            "allow_foreground": false,
+            "criteria": null,
+            "result": {"kind": "answer", "title": "读取邮件", "body": "最新邮件来自Alice", "created_at": "2026-05-17T10:00:05+08:00"},
+            "intervention": null,
+            "exit_code": 0,
+            "error": null,
+            "started_at": "2026-05-17T10:00:00+08:00",
+            "ended_at": "2026-05-17T10:00:05+08:00",
+            "steps": [],
+            "cost_telemetry": null
+        }
+        """
+        let data = Data(json.utf8)
+        let response = try JSONDecoder().decode(BarRunStatusResponse.self, from: data)
+        #expect(response.runId == "20260517-abc")
+        #expect(response.status == "completed")
+        #expect(response.task == "读取邮件")
+        #expect(response.schemaVersion == 1)
+        #expect(response.ok == true)
+        #expect(response.live == true)
+        #expect(response.result?.kind == "answer")
+        #expect(response.result?.body == "最新邮件来自Alice")
+        #expect(response.exitCode == 0)
+        #expect(response.startedAt == "2026-05-17T10:00:00+08:00")
+        #expect(response.endedAt == "2026-05-17T10:00:05+08:00")
     }
 }
 
@@ -176,11 +213,11 @@ struct BarRunCompletedDataTests {
 
     @Test("decodes full event")
     func decodesFullEvent() throws {
-        let json = #"{"run_id":"20260515-abc","final_status":"done","total_steps":3,"duration_ms":8200,"replan_count":0}"#
+        let json = #"{"run_id":"20260515-abc","final_status":"completed","total_steps":3,"duration_ms":8200,"replan_count":0}"#
         let data = Data(json.utf8)
         let decoded = try JSONDecoder().decode(BarRunCompletedData.self, from: data)
         #expect(decoded.runId == "20260515-abc")
-        #expect(decoded.finalStatus == "done")
+        #expect(decoded.finalStatus == "completed")
         #expect(decoded.totalSteps == 3)
         #expect(decoded.durationMs == 8200)
         #expect(decoded.replanCount == 0)
@@ -206,7 +243,7 @@ struct BarSSEEventTests {
         let completed = BarSSEEvent.stepCompleted(BarStepCompletedData(stepIndex: 0, tool: "click", purpose: "test", success: true, durationMs: nil))
         #expect(completed.eventType == "step_completed")
 
-        let runCompleted = BarSSEEvent.runCompleted(BarRunCompletedData(runId: "id", finalStatus: "done", totalSteps: 1, durationMs: nil, replanCount: 0))
+        let runCompleted = BarSSEEvent.runCompleted(BarRunCompletedData(runId: "id", finalStatus: "completed", totalSteps: 1, durationMs: nil, replanCount: 0))
         #expect(runCompleted.eventType == "run_completed")
     }
 

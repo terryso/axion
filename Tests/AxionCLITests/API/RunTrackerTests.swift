@@ -46,15 +46,15 @@ struct RunTrackerTests {
         #expect(run == nil)
     }
 
-    @Test("updateRun updates status to done")
-    func updateRunUpdatesStatusToDone() async throws {
+    @Test("updateRun updates status to completed")
+    func updateRunUpdatesStatusToCompleted() async throws {
         let tracker = RunTracker()
         let runId = await tracker.submitRun(task: "open calculator", options: RunOptions(task: "open calculator"))
 
         let step = StepSummary(index: 0, tool: "launch_app", purpose: "Launch Calculator", success: true)
         await tracker.updateRun(
             runId: runId,
-            status: .done,
+            status: .completed,
             steps: [step],
             durationMs: 5000,
             replanCount: 0
@@ -62,7 +62,7 @@ struct RunTrackerTests {
 
         let run = await tracker.getRun(runId: runId)
         let unwrapped = try #require(run)
-        #expect(unwrapped.status == .done)
+        #expect(unwrapped.status == .completed)
         #expect(unwrapped.totalSteps == 1)
         #expect(unwrapped.durationMs == 5000)
         #expect(unwrapped.replanCount == 0)
@@ -99,7 +99,7 @@ struct RunTrackerTests {
         ]
         await tracker.updateRun(
             runId: runId,
-            status: .done,
+            status: .completed,
             steps: steps,
             durationMs: 8200,
             replanCount: 0
@@ -164,7 +164,7 @@ struct RunTrackerTests {
 
         await tracker.updateRun(
             runId: runId,
-            status: .done,
+            status: .completed,
             steps: [],
             durationMs: 1000,
             replanCount: 0
@@ -172,7 +172,7 @@ struct RunTrackerTests {
 
         #expect(callbackState.invoked)
         #expect(callbackState.runId == runId)
-        #expect(callbackState.status == .done)
+        #expect(callbackState.status == .completed)
     }
 
     @Test("updateRun with EventBroadcaster emits runCompleted event")
@@ -186,7 +186,7 @@ struct RunTrackerTests {
         let step = StepSummary(index: 0, tool: "launch_app", purpose: "Launch Calculator", success: true)
         await tracker.updateRun(
             runId: runId,
-            status: .done,
+            status: .completed,
             steps: [step],
             durationMs: 5000,
             replanCount: 0
@@ -199,7 +199,7 @@ struct RunTrackerTests {
 
         if case let .runCompleted(data) = received! {
             #expect(data.runId == runId)
-            #expect(data.finalStatus == "done")
+            #expect(data.finalStatus == "completed")
             #expect(data.totalSteps == 1)
             #expect(data.durationMs == 5000)
             #expect(data.replanCount == 0)
@@ -229,6 +229,76 @@ struct RunTrackerTests {
         let run = await tracker.getRun(runId: runId)
         #expect(run != nil)
         #expect(run?.task == "open calculator")
+    }
+
+    @Test("updateRunResult writes ApiTaskResult to tracked run")
+    func updateRunResultWritesApiTaskResultToTrackedRun() async throws {
+        let tracker = RunTracker()
+        let runId = await tracker.submitRun(task: "read email", options: RunOptions(task: "read email"))
+
+        let result = ApiTaskResult(kind: .answer, title: "read email", body: "Latest email from Alice", createdAt: "2026-05-17T10:00:05+08:00")
+        await tracker.updateRunResult(runId: runId, result: result)
+
+        let run = await tracker.getRun(runId: runId)
+        let unwrapped = try #require(run)
+        #expect(unwrapped.result?.kind == .answer)
+        #expect(unwrapped.result?.body == "Latest email from Alice")
+    }
+
+    @Test("updateRunIntervention writes InterventionData to tracked run")
+    func updateRunInterventionWritesInterventionDataToTrackedRun() async throws {
+        let tracker = RunTracker()
+        let runId = await tracker.submitRun(task: "delete file", options: RunOptions(task: "delete file"))
+
+        let intervention = InterventionData(reason: "需要确认", availableActions: ["resume", "abort"], blockingIssue: "弹窗阻塞")
+        await tracker.updateRunIntervention(runId: runId, intervention: intervention)
+
+        let run = await tracker.getRun(runId: runId)
+        let unwrapped = try #require(run)
+        #expect(unwrapped.intervention?.reason == "需要确认")
+        #expect(unwrapped.intervention?.availableActions == ["resume", "abort"])
+    }
+
+    @Test("submitRun with allowForeground option stores correctly")
+    func submitRunWithAllowForegroundOptionStoresCorrectly() async throws {
+        let tracker = RunTracker()
+        let runId = await tracker.submitRun(task: "test", options: RunOptions(task: "test", allowForeground: true))
+
+        let run = await tracker.getRun(runId: runId)
+        let unwrapped = try #require(run)
+        #expect(unwrapped.allowForeground == true)
+        #expect(unwrapped.live == true)
+        #expect(unwrapped.schemaVersion == 1)
+    }
+
+    @Test("toStandardOutput on running run returns correct status")
+    func toStandardOutputOnRunningRunReturnsCorrectStatus() async throws {
+        let tracker = RunTracker()
+        let runId = await tracker.submitRun(task: "test", options: RunOptions(task: "test"))
+
+        let run = await tracker.getRun(runId: runId)
+        let unwrapped = try #require(run)
+        let output = unwrapped.toStandardOutput()
+
+        #expect(output.status == .running)
+        #expect(output.ok == true)
+        #expect(output.live == true)
+        #expect(output.endedAt == nil)
+    }
+
+    @Test("updateRun sets exitCode for completed and failed")
+    func updateRunSetsExitCodeForCompletedAndFailed() async throws {
+        let tracker = RunTracker()
+        let runId = await tracker.submitRun(task: "test", options: RunOptions(task: "test"))
+
+        await tracker.updateRun(runId: runId, status: .completed, steps: [], durationMs: 100, replanCount: 0)
+        var run = await tracker.getRun(runId: runId)
+        #expect(run?.exitCode == 0)
+
+        await tracker.updateRun(runId: runId, status: .failed, steps: [], durationMs: 50, replanCount: 0, error: "boom")
+        run = await tracker.getRun(runId: runId)
+        #expect(run?.exitCode == 1)
+        #expect(run?.error == "boom")
     }
 }
 

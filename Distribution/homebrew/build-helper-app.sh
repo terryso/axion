@@ -62,7 +62,11 @@ if [ -n "$ARCH" ] && [ "$ARCH" != "$(uname -m)" ]; then
     echo "Note: Cross-compilation for $ARCH requested. Ensure Swift toolchain supports it."
 fi
 
-swift build "${BUILD_FLAGS[@]}" --package-path "$PROJECT_ROOT"
+if [ ${#BUILD_FLAGS[@]} -gt 0 ]; then
+    swift build "${BUILD_FLAGS[@]}" --package-path "$PROJECT_ROOT"
+else
+    swift build --package-path "$PROJECT_ROOT"
+fi
 
 if [ "$BUILD_CONFIG" = "release" ]; then
     BUILD_DIR="$PROJECT_ROOT/.build/$ARCH-apple-macosx/release"

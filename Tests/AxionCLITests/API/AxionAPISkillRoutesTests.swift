@@ -7,13 +7,23 @@ import Testing
 @testable import AxionCLI
 @testable import AxionCore
 
-@Suite("AxionAPI Skill Routes")
+@Suite("AxionAPI Skill Routes", .serialized)
 struct AxionAPISkillRoutesTests {
+
+    private static let testSkillFiles = ["test_skill.json", "detail_test.json"]
+
+    private static func cleanupTestSkills() {
+        let dir = SkillCompileCommand.skillsDirectory()
+        for file in testSkillFiles {
+            try? FileManager.default.removeItem(atPath: dir + "/" + file)
+        }
+    }
 
     // MARK: - GET /v1/skills (empty)
 
     @Test("GET /v1/skills returns empty array when no skills exist")
     func getSkillsEmpty() async throws {
+        Self.cleanupTestSkills()
         let app = try await buildTestApplication()
 
         try await app.test(.router) { client in
@@ -63,6 +73,7 @@ struct AxionAPISkillRoutesTests {
 
     @Test("GET /v1/skills returns skills list when skills exist")
     func getSkillsReturnsList() async throws {
+        Self.cleanupTestSkills()
         // Create a temp skill file
         let skillsDir = SkillCompileCommand.skillsDirectory()
         try FileManager.default.createDirectory(atPath: skillsDir, withIntermediateDirectories: true)
@@ -102,6 +113,7 @@ struct AxionAPISkillRoutesTests {
 
     @Test("GET /v1/skills/:name returns detail for existing skill")
     func getSkillDetailExisting() async throws {
+        Self.cleanupTestSkills()
         let skillsDir = SkillCompileCommand.skillsDirectory()
         try FileManager.default.createDirectory(atPath: skillsDir, withIntermediateDirectories: true)
         defer { try? FileManager.default.removeItem(atPath: skillsDir + "/detail_test.json") }
@@ -147,7 +159,7 @@ struct AxionAPISkillRoutesTests {
             try await client.execute(uri: "/v1/runs", method: .get) { response in
                 #expect(response.status == .ok)
 
-                let runs = try JSONDecoder().decode([RunStatusResponse].self, from: response.body)
+                let runs = try JSONDecoder().decode([StandardTaskOutput].self, from: response.body)
                 #expect(runs.isEmpty)
             }
         }
@@ -165,7 +177,7 @@ struct AxionAPISkillRoutesTests {
             try await client.execute(uri: "/v1/runs", method: .get) { response in
                 #expect(response.status == .ok)
 
-                let runs = try JSONDecoder().decode([RunStatusResponse].self, from: response.body)
+                let runs = try JSONDecoder().decode([StandardTaskOutput].self, from: response.body)
                 #expect(runs.count == 2)
                 // Both tasks exist (order may vary)
                 let tasks = runs.map(\.task)
@@ -187,7 +199,7 @@ struct AxionAPISkillRoutesTests {
             try await client.execute(uri: "/v1/runs?limit=1", method: .get) { response in
                 #expect(response.status == .ok)
 
-                let runs = try JSONDecoder().decode([RunStatusResponse].self, from: response.body)
+                let runs = try JSONDecoder().decode([StandardTaskOutput].self, from: response.body)
                 #expect(runs.count == 1)
             }
         }
@@ -260,6 +272,10 @@ struct AxionAPISkillRoutesTests {
         authKey: String? = nil,
         concurrencyLimiter: ConcurrencyLimiter? = nil
     ) async throws -> Application<RouterResponder<BasicRequestContext>> {
+        let tempLockDir = NSTemporaryDirectory() + "axion-test-lock-\(UUID().uuidString)"
+        try? FileManager.default.createDirectory(atPath: tempLockDir, withIntermediateDirectories: true)
+        let testRunLockService = RunLockService(lockDirectory: tempLockDir, processAliveChecker: { _ in false })
+
         let broadcaster = eventBroadcaster ?? EventBroadcaster()
         let tracker = runTracker ?? RunTracker(eventBroadcaster: broadcaster)
         let router = Router()
@@ -269,7 +285,8 @@ struct AxionAPISkillRoutesTests {
             eventBroadcaster: broadcaster,
             config: .default,
             authKey: authKey,
-            concurrencyLimiter: concurrencyLimiter
+            concurrencyLimiter: concurrencyLimiter,
+            runLockService: testRunLockService
         )
 
         let app = Application(

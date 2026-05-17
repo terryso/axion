@@ -95,6 +95,14 @@ struct DoctorCommand: ParsableCommand {
         let memoryCheck = checkMemory(at: memoryDir)
         results.append(memoryCheck)
 
+        // Check 7: Run lock status
+        let lockCheck = checkRunLock(at: dir)
+        results.append(lockCheck)
+
+        // Check 8: Settings API accessibility (optional, only when server is running)
+        let settingsApiCheck = checkSettingsAPI()
+        results.append(settingsApiCheck)
+
         // 输出所有检查结果
         for result in results {
             let mark = result.status == .ok ? "[OK]  " : "[FAIL] "
@@ -166,7 +174,7 @@ struct DoctorCommand: ParsableCommand {
         return CheckResult(
             name: "API Key",
             status: .ok,
-            detail: maskApiKey(key),
+            detail: ApiKeyStatusResponse.maskKey(key),
             fixHint: nil
         )
     }
@@ -236,6 +244,48 @@ struct DoctorCommand: ParsableCommand {
         }
     }
 
+    private static func checkRunLock(at axionDir: String) -> CheckResult {
+        let lockPath = (axionDir as NSString).appendingPathComponent("run.lock")
+        let fm = FileManager.default
+
+        guard fm.fileExists(atPath: lockPath) else {
+            return CheckResult(
+                name: "Run Lock",
+                status: .ok,
+                detail: "No run lock",
+                fixHint: nil
+            )
+        }
+
+        guard let data = fm.contents(atPath: lockPath),
+              let lock = try? JSONDecoder().decode(RunLockData.self, from: data) else {
+            return CheckResult(
+                name: "Run Lock",
+                status: .fail,
+                detail: "Stale run.lock（文件格式损坏）",
+                fixHint: "删除 ~/.axion/run.lock: rm ~/.axion/run.lock"
+            )
+        }
+
+        // Check if the process holding the lock is still alive
+        let isAlive = Darwin.kill(lock.pid, 0) == 0
+        if isAlive {
+            return CheckResult(
+                name: "Run Lock",
+                status: .ok,
+                detail: "Active run.lock (run_id: \(lock.runId), pid: \(lock.pid))",
+                fixHint: nil
+            )
+        } else {
+            return CheckResult(
+                name: "Run Lock",
+                status: .fail,
+                detail: "Stale run.lock (进程已退出, run_id: \(lock.runId), pid: \(lock.pid))",
+                fixHint: "删除 stale lock: rm ~/.axion/run.lock"
+            )
+        }
+    }
+
     // Intentionally reads raw files instead of using MemoryStoreProtocol —
     // doctor is a diagnostic tool that should work without initializing the SDK store.
     private static func checkMemory(at memoryDir: String) -> CheckResult {
@@ -285,6 +335,83 @@ struct DoctorCommand: ParsableCommand {
             name: "Memory",
             status: .ok,
             detail: "\(domainCount) domains, \(totalEntries) entries",
+            fixHint: nil
+        )
+    }
+
+    private static func checkSettingsAPI() -> CheckResult {
+        // Only check if axion server process is running
+        let pipe = Pipe()
+        let pgrep = Process()
+        pgrep.executableURL = URL(fileURLWithPath: "/usr/bin/pgrep")
+        pgrep.arguments = ["-f", "axion server"]
+        pgrep.standardOutput = pipe
+        let isServerRunning: Bool
+        do {
+            try pgrep.run()
+            pgrep.waitUntilExit()
+            isServerRunning = pgrep.terminationStatus == 0
+        } catch {
+            isServerRunning = false
+        }
+
+        guard isServerRunning else {
+            return CheckResult(
+                name: "Settings API",
+                status: .ok,
+                detail: "跳过（server 未运行）",
+                fixHint: nil
+            )
+        }
+
+        // Try to connect to the Settings API
+        let defaultPort = 4242
+        guard let url = URL(string: "http://localhost:\(defaultPort)/v1/settings/api-key") else {
+            return CheckResult(
+                name: "Settings API",
+                status: .ok,
+                detail: "跳过（URL 构造失败）",
+                fixHint: nil
+            )
+        }
+        var request = URLRequest(url: url)
+        request.httpMethod = "GET"
+        request.timeoutInterval = 3
+
+        let sem = DispatchSemaphore(value: 0)
+        var checkResult: CheckResult?
+
+        URLSession.shared.dataTask(with: request) { _, response, error in
+            if error != nil {
+                checkResult = CheckResult(
+                    name: "Settings API",
+                    status: .ok,
+                    detail: "跳过（连接失败）",
+                    fixHint: nil
+                )
+            } else if let httpResponse = response as? HTTPURLResponse, httpResponse.statusCode == 200 {
+                checkResult = CheckResult(
+                    name: "Settings API",
+                    status: .ok,
+                    detail: "可达 (port \(defaultPort))",
+                    fixHint: nil
+                )
+            } else {
+                checkResult = CheckResult(
+                    name: "Settings API",
+                    status: .ok,
+                    detail: "跳过（非预期响应）",
+                    fixHint: nil
+                )
+            }
+            sem.signal()
+        }.resume()
+
+        _ = sem.wait(timeout: .now() + 5)
+        return checkResult ?? CheckResult(
+            name: "Settings API",
+            status: .ok,
+            detail: "跳过（超时）",
             fixHint: nil
         )
     }

@@ -15,6 +15,8 @@ public struct AxionConfig: Equatable, Sendable {
     public var maxReplanRetries: Int
     public var traceEnabled: Bool
     public var sharedSeatMode: Bool
+    public var maxModelCalls: Int?
+    public var maxScreenshots: Int?
 
     public static let `default` = AxionConfig(
         apiKey: nil,
@@ -25,7 +27,9 @@ public struct AxionConfig: Equatable, Sendable {
         maxBatches: 6,
         maxReplanRetries: 3,
         traceEnabled: true,
-        sharedSeatMode: false
+        sharedSeatMode: false,
+        maxModelCalls: nil,
+        maxScreenshots: nil
     )
 
     public init(
@@ -37,7 +41,9 @@ public struct AxionConfig: Equatable, Sendable {
         maxBatches: Int = 6,
         maxReplanRetries: Int = 3,
         traceEnabled: Bool = true,
-        sharedSeatMode: Bool = false
+        sharedSeatMode: Bool = false,
+        maxModelCalls: Int? = nil,
+        maxScreenshots: Int? = nil
     ) {
         self.apiKey = apiKey
         self.provider = provider
@@ -48,12 +54,14 @@ public struct AxionConfig: Equatable, Sendable {
         self.maxReplanRetries = maxReplanRetries
         self.traceEnabled = traceEnabled
         self.sharedSeatMode = sharedSeatMode
+        self.maxModelCalls = maxModelCalls
+        self.maxScreenshots = maxScreenshots
     }
 }
 
 extension AxionConfig: Codable {
     public enum CodingKeys: String, CodingKey {
-        case apiKey, provider, baseURL, model, maxSteps, maxBatches, maxReplanRetries, traceEnabled, sharedSeatMode
+        case apiKey, provider, baseURL, model, maxSteps, maxBatches, maxReplanRetries, traceEnabled, sharedSeatMode, maxModelCalls, maxScreenshots
     }
 
     public init(from decoder: Decoder) throws {
@@ -67,5 +75,7 @@ extension AxionConfig: Codable {
         maxReplanRetries = try c.decodeIfPresent(Int.self, forKey: .maxReplanRetries) ?? Self.default.maxReplanRetries
         traceEnabled = try c.decodeIfPresent(Bool.self, forKey: .traceEnabled) ?? Self.default.traceEnabled
         sharedSeatMode = try c.decodeIfPresent(Bool.self, forKey: .sharedSeatMode) ?? Self.default.sharedSeatMode
+        maxModelCalls = try c.decodeIfPresent(Int.self, forKey: .maxModelCalls) ?? Self.default.maxModelCalls
+        maxScreenshots = try c.decodeIfPresent(Int.self, forKey: .maxScreenshots) ?? Self.default.maxScreenshots
     }
 }

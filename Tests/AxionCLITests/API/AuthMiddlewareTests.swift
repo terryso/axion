@@ -158,6 +158,10 @@ struct AuthMiddlewareTests {
         runTracker: RunTracker? = nil,
         eventBroadcaster: EventBroadcaster? = nil
     ) async throws -> Application<RouterResponder<BasicRequestContext>> {
+        let tempLockDir = NSTemporaryDirectory() + "axion-test-lock-\(UUID().uuidString)"
+        try? FileManager.default.createDirectory(atPath: tempLockDir, withIntermediateDirectories: true)
+        let testRunLockService = RunLockService(lockDirectory: tempLockDir, processAliveChecker: { _ in false })
+
         let broadcaster = eventBroadcaster ?? EventBroadcaster()
         let tracker = runTracker ?? RunTracker(eventBroadcaster: broadcaster)
         let router = Router()
@@ -166,7 +170,8 @@ struct AuthMiddlewareTests {
             runTracker: tracker,
             eventBroadcaster: broadcaster,
             config: .default,
-            authKey: authKey
+            authKey: authKey,
+            runLockService: testRunLockService
         )
         return Application(
             router: router,

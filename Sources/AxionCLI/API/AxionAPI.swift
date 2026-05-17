@@ -25,7 +25,10 @@ enum AxionAPI {
         eventBroadcaster: EventBroadcaster,
         config: AxionConfig,
         authKey: String? = nil,
-        concurrencyLimiter: ConcurrencyLimiter? = nil
+        concurrencyLimiter: ConcurrencyLimiter? = nil,
+        runLockService: RunLockService? = nil,
+        maxConcurrent: Int = 10,
+        configDirectory: String = ConfigManager.defaultConfigDirectory
     ) {
         let v1 = router.group("v1")
 
@@ -50,6 +53,145 @@ enum AxionAPI {
             v1Authed = v1.group()
         }
 
+        // GET /v1/capabilities — discover Axion capabilities (Story 14.2)
+        v1Authed.get("capabilities") { _, _ in
+            EditedResponse(
+                headers: [
+                    .contentType: "application/json",
+                    .cacheControl: "private, max-age=300",
+                ],
+                response: CapabilitiesResponse(
+                    version: AxionVersion.current,
+                    supportedRunStatuses: APIRunStatus.allCases.map(\.rawValue),
+                    supportedResultKinds: TaskResultKind.allCases.map(\.rawValue),
+                    availableTools: ToolNames.allToolNames,
+                    maxConcurrentRuns: maxConcurrent,
+                    features: ["memory", "takeover", "fast_mode", "skills"]
+                )
+            )
+        }
+
+        // MARK: - Settings API Routes (Story 14.3)
+
+        // GET /v1/settings/api-key — get API key status
+        v1Authed.get("settings/api-key") { _, _ in
+            let (source, effectiveKey, available) = Self.resolveApiKeySource(config: config)
+
+            return EditedResponse(
+                headers: [
+                    .contentType: "application/json",
+                    .cacheControl: "private, max-age=300",
+                ],
+                response: ApiKeyStatusResponse(
+                    provider: config.provider.rawValue,
+                    available: available,
+                    source: source,
+                    maskedKey: ApiKeyStatusResponse.maskKey(effectiveKey)
+                )
+            )
+        }
+
+        // POST /v1/settings/api-key — save API key
+        v1Authed.post("settings/api-key") { request, context in
+            let buffer: ByteBuffer
+            do {
+                buffer = try await request.body.collect(upTo: context.maxUploadSize)
+            } catch {
+                throw AxionAPIError(
+                    status: .badRequest,
+                    error: APIErrorResponse(
+                        error: "invalid_request",
+                        message: "Failed to read request body."
+                    )
+                )
+            }
+
+            let data = Data(buffer: buffer)
+            let saveRequest: SaveApiKeyRequest
+            do {
+                saveRequest = try JSONDecoder().decode(SaveApiKeyRequest.self, from: data)
+            } catch {
+                throw AxionAPIError(
+                    status: .badRequest,
+                    error: APIErrorResponse(
+                        error: "invalid_request",
+                        message: "Failed to parse request body. Expected {\"api_key\": \"...\"}."
+                    )
+                )
+            }
+
+            guard !saveRequest.apiKey.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+                throw AxionAPIError(
+                    status: .badRequest,
+                    error: APIErrorResponse(
+                        error: "missing_api_key",
+                        message: "Request body must include a non-empty 'api_key' field."
+                    )
+                )
+            }
+
+            // Load current config from file, update apiKey, save back
+            var fileConfig: AxionConfig
+            let configPath = (configDirectory as NSString).appendingPathComponent("config.json")
+            if let fileData = FileManager.default.contents(atPath: configPath),
+               let decoded = try? JSONDecoder().decode(AxionConfig.self, from: fileData) {
+                fileConfig = decoded
+            } else {
+                fileConfig = config
+            }
+            fileConfig.apiKey = saveRequest.apiKey
+            try ConfigManager.saveConfigFile(fileConfig, toDirectory: configDirectory)
+
+            // Return status based on effective key (env may override)
+            let env = ProcessInfo.processInfo.environment
+            let source: String
+            let maskedKey: String
+            let available = true
+            if let envKey = env["AXION_API_KEY"], !envKey.isEmpty {
+                source = "env"
+                maskedKey = ApiKeyStatusResponse.maskKey(envKey)
+            } else {
+                source = "config"
+                maskedKey = ApiKeyStatusResponse.maskKey(saveRequest.apiKey)
+            }
+
+            return EditedResponse(
+                headers: [.contentType: "application/json"],
+                response: ApiKeyStatusResponse(
+                    provider: config.provider.rawValue,
+                    available: available,
+                    source: source,
+                    maskedKey: maskedKey
+                )
+            )
+        }
+
+        // DELETE /v1/settings/api-key — clear API key
+        v1Authed.delete("settings/api-key") { _, _ in
+            // Load current config from file, clear apiKey, save back
+            var fileConfig: AxionConfig
+            let configPath = (configDirectory as NSString).appendingPathComponent("config.json")
+            if let fileData = FileManager.default.contents(atPath: configPath),
+               let decoded = try? JSONDecoder().decode(AxionConfig.self, from: fileData) {
+                fileConfig = decoded
+            } else {
+                fileConfig = config
+            }
+            fileConfig.apiKey = nil
+            try ConfigManager.saveConfigFile(fileConfig, toDirectory: configDirectory)
+
+            let (source, _, available) = Self.resolveApiKeySource(config: fileConfig)
+
+            return EditedResponse(
+                headers: [.contentType: "application/json"],
+                response: DeleteApiKeyResponse(
+                    provider: config.provider.rawValue,
+                    available: available,
+                    source: source
+                )
+            )
+        }
+
         // GET /v1/runs — list runs (Story 10.2)
         v1Authed.get("runs") { request, context in
             let limitParam = request.uri.queryParameters["limit"].map { String($0) } ?? "20"
@@ -61,17 +203,7 @@ enum AxionAPI {
                 .prefix(limit)
 
             let responses = sortedRuns.map { run in
-                RunStatusResponse(
-                    runId: run.runId,
-                    status: run.status.rawValue,
-                    task: run.task,
-                    totalSteps: run.totalSteps,
-                    durationMs: run.durationMs,
-                    replanCount: run.replanCount,
-                    submittedAt: run.submittedAt,
-                    completedAt: run.completedAt,
-                    steps: run.steps
-                )
+                run.toStandardOutput()
             }
 
             let encoder = JSONEncoder()
@@ -152,6 +284,20 @@ enum AxionAPI {
                 )
             )
 
+            // Check run lock (desktop-level exclusive access)
+            let runLockService = runLockService ?? RunLockService()
+            let lockAcquired = await runLockService.acquire(runId: runId)
+            if !lockAcquired {
+                let existingLock = await runLockService.readExistingLock()
+                throw AxionAPIError(
+                    status: .conflict,
+                    error: APIErrorResponse(
+                        error: "run_locked",
+                        message: "另一个 live run（run_id: \(existingLock?.runId ?? "unknown")）正在执行，请等待其完成或使用 `axion cancel \(existingLock?.runId ?? "")` 取消"
+                    )
+                )
+            }
+
             // Check concurrency limiter
             if let limiter = concurrencyLimiter {
                 let acquired = await limiter.tryAcquire()
@@ -170,20 +316,28 @@ enum AxionAPI {
                             ),
                             runId: runId,
                             eventBroadcaster: eventBroadcaster,
-                            completion: { _, _, _, _, _ in }
+                            runTracker: runTracker,
+                            completion: { _, _, _, _, _, _, _ in }
                         )
                         await runTracker.updateRun(
                             runId: runId,
                             status: result.finalStatus,
                             steps: result.stepSummaries,
                             durationMs: result.durationMs,
-                            replanCount: result.replanCount
+                            replanCount: result.replanCount,
+                            costTelemetry: result.costTelemetry
                         )
                         await limiter.release()
+                        await runLockService.release()
                     }
 
                     var resp = try context.responseEncoder.encode(
-                        CreateRunResponse(runId: runId, status: "running"),
+                        StandardTaskOutput(
+                            runId: runId,
+                            task: createRequest.task,
+                            status: .running,
+                            startedAt: ISO8601DateFormatter().string(from: Date())
+                        ),
                         from: request,
                         context: context
                     )
@@ -196,7 +350,10 @@ enum AxionAPI {
                 let capturedConfig = config
                 _ = Task.detached {
                     let slotResult = await limiter.acquire()
-                    guard slotResult >= 0 else { return }
+                    guard slotResult >= 0 else {
+                        await runLockService.release()
+                        return
+                    }
                     let result = await AgentRunner.runAgent(
                         config: capturedConfig,
                         task: createRequest.task,
@@ -208,16 +365,19 @@ enum AxionAPI {
                         ),
                         runId: runId,
                         eventBroadcaster: eventBroadcaster,
-                        completion: { _, _, _, _, _ in }
+                        runTracker: runTracker,
+                        completion: { _, _, _, _, _, _, _ in }
                     )
                     await runTracker.updateRun(
                         runId: runId,
                         status: result.finalStatus,
                         steps: result.stepSummaries,
                         durationMs: result.durationMs,
-                        replanCount: result.replanCount
+                        replanCount: result.replanCount,
+                        costTelemetry: result.costTelemetry
                     )
                     await limiter.release()
+                    await runLockService.release()
                 }
 
                 let queuedResp = QueuedRunResponse(runId: runId, status: "queued", position: position)
@@ -240,19 +400,27 @@ enum AxionAPI {
                     ),
                     runId: runId,
                     eventBroadcaster: eventBroadcaster,
-                    completion: { _, _, _, _, _ in }
+                    runTracker: runTracker,
+                    completion: { _, _, _, _, _, _, _ in }
                 )
                 await runTracker.updateRun(
                     runId: runId,
                     status: result.finalStatus,
                     steps: result.stepSummaries,
                     durationMs: result.durationMs,
-                    replanCount: result.replanCount
+                    replanCount: result.replanCount,
+                    costTelemetry: result.costTelemetry
                 )
+                await runLockService.release()
             }
 
             var resp = try context.responseEncoder.encode(
-                CreateRunResponse(runId: runId, status: "running"),
+                StandardTaskOutput(
+                    runId: runId,
+                    task: createRequest.task,
+                    status: .running,
+                    startedAt: ISO8601DateFormatter().string(from: Date())
+                ),
                 from: request,
                 context: context
             )
@@ -282,17 +450,7 @@ enum AxionAPI {
                 )
             }
 
-            let response = RunStatusResponse(
-                runId: run.runId,
-                status: run.status.rawValue,
-                task: run.task,
-                totalSteps: run.totalSteps,
-                durationMs: run.durationMs,
-                replanCount: run.replanCount,
-                submittedAt: run.submittedAt,
-                completedAt: run.completedAt,
-                steps: run.steps
-            )
+            let response = run.toStandardOutput()
 
             return EditedResponse(
                 headers: [.contentType: "application/json"],
@@ -517,7 +675,7 @@ enum AxionAPI {
                 )
 
                 // Update skill metadata on success
-                if result.finalStatus == .done {
+                if result.finalStatus == .completed {
                     Self.updateSkillMetadata(skillPath: skillPath, skill: capturedSkill)
                 }
             }
@@ -527,6 +685,21 @@ enum AxionAPI {
             resp.status = .accepted
             return resp
         }
+    }
+
+    // MARK: - Settings Helpers
+
+    /// Determine the effective API key source.
+    /// Returns (source, effectiveKey, available).
+    private static func resolveApiKeySource(config: AxionConfig) -> (String, String, Bool) {
+        let env = ProcessInfo.processInfo.environment
+        if let envKey = env["AXION_API_KEY"], !envKey.isEmpty {
+            return ("env", envKey, true)
+        }
+        if let configKey = config.apiKey, !configKey.isEmpty {
+            return ("config", configKey, true)
+        }
+        return ("missing", "", false)
     }
 
     // MARK: - Skill Helpers

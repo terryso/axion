@@ -28,13 +28,15 @@ struct RunTaskTool: ToolProtocol {
     private let agent: Agent
     private let runTracker: RunTracker
     private let taskQueue: TaskQueue
+    private let runLockService: RunLockService?
 
     // MARK: - Init
 
-    init(agent: Agent, runTracker: RunTracker, taskQueue: TaskQueue) {
+    init(agent: Agent, runTracker: RunTracker, taskQueue: TaskQueue, runLockService: RunLockService? = nil) {
         self.agent = agent
         self.runTracker = runTracker
         self.taskQueue = taskQueue
+        self.runLockService = runLockService
     }
 
     // MARK: - ToolProtocol.call
@@ -54,15 +56,29 @@ struct RunTaskTool: ToolProtocol {
 
         let runId = await runTracker.submitRun(task: task, options: RunOptions(task: task))
 
+        // Check run lock (desktop-level exclusive access)
+        let runLockService = self.runLockService ?? RunLockService()
+        let lockAcquired = await runLockService.acquire(runId: runId)
+        if !lockAcquired {
+            let existingLock = await runLockService.readExistingLock()
+            return errorResult(
+                toolUseId: context.toolUseId,
+                error: "run_locked",
+                message: "另一个 live run（run_id: \(existingLock?.runId ?? "unknown")）正在执行",
+                suggestion: "等待当前 run 完成后再试"
+            )
+        }
+
         let capturedAgent = agent
         let capturedTracker = runTracker
 
         await taskQueue.enqueue {
             let result = await capturedAgent.prompt(task)
-            let status: APIRunStatus = result.status == .success ? .done : .failed
+            let status: APIRunStatus = result.status == .success ? .completed : .failed
             await capturedTracker.updateRun(
                 runId: runId, status: status, steps: [], durationMs: nil, replanCount: 0
             )
+            await runLockService.release()
         }
 
         return encodeResult(toolUseId: context.toolUseId, isError: false) { encoder in

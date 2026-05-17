@@ -33,8 +33,8 @@ Axion 是一个基于 Swift 的 macOS 桌面自动化平台，能够通过自然
 ┌───────────────────────────────────────────────────────┐
 │                       AxionCLI                         │
 │  run / setup / doctor / server / mcp / record / skill  │
-│  Plan → Execute → Verify → Replan Loop                 │
-│  Memory · Fast Mode · Takeover                         │
+│  daemon / Plan → Execute → Verify → Replan Loop        │
+│  Memory · Fast Mode · Takeover · Daemon · Persistence  │
 ├──────────────────┬──────────────────┬─────────────────┤
 │    AxionCore     │   AxionHelper    │    AxionBar      │
 │  Models, Proto-  │  MCP Server      │  Menu Bar App    │
@@ -43,7 +43,7 @@ Axion 是一个基于 Swift 的 macOS 桌面自动化平台，能够通过自然
 └──────────────────┴──────────────────┴─────────────────┘
 ```
 
-- **AxionCLI** — 命令行入口，包含 LLM 交互、任务规划、执行引擎、记忆系统和服务器模式
+- **AxionCLI** — 命令行入口，包含 LLM 交互、任务规划、执行引擎、记忆系统、Daemon 管理和服务器模式
 - **AxionCore** — 共享模型层（Plan, Step, RunState）和协议定义
 - **AxionHelper** — MCP 服务端进程，通过 stdio 协议提供 21 个原生 macOS 自动化工具
 - **AxionBar** — 原生 macOS 菜单栏应用，提供任务面板、技能触发和全局热键
@@ -286,6 +286,42 @@ Axion 是 [OpenAgentSDK](https://github.com/terryso/open-agent-sdk-swift) 的旗
 - 通过 `axion mcp` 集成 Axion 的桌面操作能力
 - 基于相同的 MCP + Agent Loop 架构构建自己的应用
 
+### Daemon 模式与崩溃恢复（Phase 4）
+
+将 Axion 注册为 launchd 守护进程，开机自动启动、崩溃自动重启。所有运行中的任务状态实时持久化到磁盘，服务端异常终止后可自动恢复。
+
+**Daemon 管理：**
+
+```bash
+# 安装为 launchd 守护进程（登录时自动启动）
+axion daemon install --port 4242
+
+# 启用认证
+axion daemon install --port 4242 --auth-key mysecret
+
+# 查看守护进程状态
+axion daemon status
+
+# 卸载（停止服务并删除 plist）
+axion daemon uninstall
+
+# 卸载但保留日志文件
+axion daemon uninstall --keep-logs
+```
+
+**Daemon 特性：**
+- **开机自启** — `RunAtLoad: true` 登录时自动启动
+- **崩溃重启** — `KeepAlive: true` 任何退出都会自动重启
+- **日志文件** — stdout → `~/.axion/server.log`，stderr → `~/.axion/server.err.log`
+- **重启节流** — ThrottleInterval 10 秒，防止频繁崩溃时无限重启
+
+**任务状态持久化：**
+- 所有任务状态（`api-output.json`）和 SSE 事件（`api-events.jsonl`）实时写入 `~/.axion/api-runs/`
+- 服务端重启时，`RunRecoveryService` 加载所有持久化记录并：
+  - 将 `running`/`queued`/`resuming`/`userTakeover` 状态的任务标记为 `failed`，错误信息为 `"server interrupted"`
+  - `intervention_needed`、`completed`、`failed`、`cancelled` 状态保持不变
+  - 恢复 SSE 事件历史，支持迟连接的客户端重放历史事件
+
 ## 作为独立 MCP Server 使用
 
 AxionHelper 可作为独立的 MCP 服务端运行，供任意 MCP 客户端调用：
@@ -343,7 +379,7 @@ swift test --filter AxionHelperIntegrationTests
 ```
 Sources/
 ├── AxionCLI/              # CLI 入口和命令
-│   ├── Commands/          # run, setup, doctor, server, mcp, record, skill 子命令
+│   ├── Commands/          # run, setup, doctor, server, mcp, record, skill, daemon 子命令
 │   ├── Config/            # 配置管理
 │   ├── Permissions/       # 权限检查
 │   ├── Engine/            # RunEngine 状态机

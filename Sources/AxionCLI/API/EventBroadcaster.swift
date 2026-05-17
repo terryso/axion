@@ -19,6 +19,15 @@ actor EventBroadcaster {
     /// Cleanup tasks scheduled for completed runs.
     private var cleanupTasks: [String: Task<Void, Never>] = [:]
 
+    /// Disk persistence service (Story 16.2).
+    private let persistenceService: RunPersistenceService?
+
+    // MARK: - Initialization
+
+    init(persistenceService: RunPersistenceService? = nil) {
+        self.persistenceService = persistenceService
+    }
+
     // MARK: - Subscription
 
     /// Subscribe to events for a given runId.
@@ -44,9 +53,16 @@ actor EventBroadcaster {
             let id = UUID()
             subscribers[runId, default: [:]][id] = continuation
 
-            // Replay buffered events first
+            // Replay buffered events; fall back to disk if memory buffer is empty
             if let buffered = replayBuffer[runId] {
                 for event in buffered {
+                    continuation.yield(event)
+                }
+            } else if let diskEvents = persistenceService?.loadEvents(runId: runId),
+                      !diskEvents.isEmpty
+            {
+                replayBuffer[runId] = diskEvents
+                for event in diskEvents {
                     continuation.yield(event)
                 }
             }
@@ -66,6 +82,7 @@ actor EventBroadcaster {
     ///   - event: The SSEEvent to broadcast.
     func emit(runId: String, event: SSEEvent) {
         replayBuffer[runId, default: []].append(event)
+        persistenceService?.persistEventSafely(runId: runId, event: event)
         for (_, continuation) in subscribers[runId, default: [:]] {
             continuation.yield(event)
         }
@@ -106,6 +123,12 @@ actor EventBroadcaster {
     /// - Returns: Array of cached SSEEvents.
     func getReplayBuffer(runId: String) -> [SSEEvent] {
         replayBuffer[runId] ?? []
+    }
+
+    /// Restore persisted events to the replay buffer.
+    /// Called during server startup recovery to enable SSE history replay.
+    func restoreReplayBuffer(runId: String, events: [SSEEvent]) {
+        replayBuffer[runId] = events
     }
 
     // MARK: - Private Helpers

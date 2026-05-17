@@ -32,13 +32,24 @@ struct ServerCommand: AsyncParsableCommand {
     }
 
     func run() async throws {
+        // Resolve authKey: CLI flag > environment variable > nil
+        let resolvedAuthKey = authKey ?? ProcessInfo.processInfo.environment["AXION_AUTH_KEY"]
+
         // 1. Load configuration
         let config = try await ConfigManager.loadConfig()
 
-        // 2. Create EventBroadcaster, RunTracker, and ConcurrencyLimiter
-        let eventBroadcaster = EventBroadcaster()
-        let runTracker = RunTracker(eventBroadcaster: eventBroadcaster)
+        // 2. Create persistence service, EventBroadcaster, RunTracker, and ConcurrencyLimiter
+        let persistenceService = RunPersistenceService()
+        let eventBroadcaster = EventBroadcaster(persistenceService: persistenceService)
+        let runTracker = RunTracker(eventBroadcaster: eventBroadcaster, persistenceService: persistenceService)
         let concurrencyLimiter = ConcurrencyLimiter(maxConcurrent: maxConcurrent)
+
+        // 2a. Recover persisted runs from previous server instance
+        await RunRecoveryService.recover(
+            from: runTracker,
+            persistenceService: persistenceService,
+            eventBroadcaster: eventBroadcaster
+        )
 
         // 3. Create router and register API routes
         let router = Router()
@@ -47,8 +58,9 @@ struct ServerCommand: AsyncParsableCommand {
             runTracker: runTracker,
             eventBroadcaster: eventBroadcaster,
             config: config,
-            authKey: authKey,
-            concurrencyLimiter: concurrencyLimiter
+            authKey: resolvedAuthKey,
+            concurrencyLimiter: concurrencyLimiter,
+            maxConcurrent: maxConcurrent
         )
 
         // 4. Create Hummingbird Application
@@ -62,9 +74,10 @@ struct ServerCommand: AsyncParsableCommand {
         // 5. Display startup message
         print("Axion API server running on port \(port)")
         print("  Listening on \(host):\(port)")
-        print("  Auth: \(authKey != nil ? "enabled" : "disabled")")
+        print("  Auth: \(resolvedAuthKey != nil ? "enabled" : "disabled")")
         print("  Max concurrent tasks: \(maxConcurrent)")
         print("  Press Ctrl+C to stop")
+        fflush(stdout)
 
         // 6. Start server — Hummingbird handles SIGINT/SIGTERM graceful shutdown
         try await app.runService()

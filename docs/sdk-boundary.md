@@ -151,8 +151,9 @@ RunCommand 的核心流程：
 | `ToolContext.memoryStore` | 工具执行上下文 | 工具内访问 Memory |
 | `memoryStore.save(domain:knowledge:)` | `AppMemoryExtractor.swift` | 保存 App 操作模式 |
 | `memoryStore.query(domain:)` | `MemoryContextProvider.swift` | 读取历史操作经验 |
+| `MemoryFactStore` / `MemoryLifecycleService` | `TakeoverLearningService.swift` (Epic 15) | Takeover 经验→Memory 转换（应用层决策） |
 
-**边界决策：** Memory 存储属于 SDK，但"提取什么经验"和"如何利用经验"属于应用层。
+**边界决策：** Memory 存储属于 SDK，但"提取什么经验"和"如何利用经验"属于应用层。Takeover 学习（将用户接管经验转化为 affordance/avoid Memory）完全是应用层逻辑。
 
 ### AgentMCPServer — Agent 作为 MCP Server（Epic 6）
 

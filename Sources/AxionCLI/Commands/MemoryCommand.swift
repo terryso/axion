@@ -9,6 +9,6 @@ struct MemoryCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
         commandName: "memory",
         abstract: "管理 App Memory（历史操作经验）",
-        subcommands: [MemoryListCommand.self, MemoryClearCommand.self]
+        subcommands: [MemoryListCommand.self, MemoryClearCommand.self, MemoryExportCommand.self, MemoryImportCommand.self, MemoryLearnTakeoverCommand.self]
     )
 }

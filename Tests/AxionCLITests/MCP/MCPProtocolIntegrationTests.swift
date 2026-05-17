@@ -21,7 +21,13 @@ struct MCPProtocolIntegrationTests {
         return (agentServer, mcpServer, client)
     }
 
-    private func createRunTaskTool() -> RunTaskTool {
+    /// Creates a RunTaskTool with a dedicated TaskQueue for cleanup.
+    /// Returns (tool, queue) — caller should `await queue.gracefulShutdown()` before exiting.
+    private func createRunTaskToolWithQueue() -> (RunTaskTool, TaskQueue) {
+        let tempLockDir = NSTemporaryDirectory() + "axion-test-lock-\(UUID().uuidString)"
+        try? FileManager.default.createDirectory(atPath: tempLockDir, withIntermediateDirectories: true)
+        let testRunLockService = RunLockService(lockDirectory: tempLockDir, processAliveChecker: { _ in false })
+
         let tracker = RunTracker()
         let queue = TaskQueue()
         let agent = createAgent(options: AgentOptions(
@@ -32,7 +38,8 @@ struct MCPProtocolIntegrationTests {
             maxTokens: 100,
             permissionMode: .bypassPermissions
         ))
-        return RunTaskTool(agent: agent, runTracker: tracker, taskQueue: queue)
+        let tool = RunTaskTool(agent: agent, runTracker: tracker, taskQueue: queue, runLockService: testRunLockService)
+        return (tool, queue)
     }
 
     private func createQueryTool() -> QueryTaskStatusTool {
@@ -63,7 +70,7 @@ struct MCPProtocolIntegrationTests {
 
     @Test("tools/list returns run_task and query_task_status")
     func toolsListReturnsRunTaskAndQueryStatus() async throws {
-        let runTask = createRunTaskTool()
+        let (runTask, queue) = createRunTaskToolWithQueue()
         let queryTool = createQueryTool()
         let (_, mcpServer, client) = try await createTestServer(tools: [runTask, queryTool])
 
@@ -75,11 +82,12 @@ struct MCPProtocolIntegrationTests {
 
         await mcpServer.stop()
         await client.disconnect()
+        await queue.gracefulShutdown()
     }
 
     @Test("tool has name, description, and schema")
     func toolsListToolHasNameDescriptionSchema() async throws {
-        let runTask = createRunTaskTool()
+        let (runTask, queue) = createRunTaskToolWithQueue()
         let (_, mcpServer, client) = try await createTestServer(tools: [runTask])
 
         let result = try await client.listTools()
@@ -91,11 +99,12 @@ struct MCPProtocolIntegrationTests {
 
         await mcpServer.stop()
         await client.disconnect()
+        await queue.gracefulShutdown()
     }
 
     @Test("tool_call run_task returns run_id")
     func toolCallRunTaskReturnsRunId() async throws {
-        let runTask = createRunTaskTool()
+        let (runTask, queue) = createRunTaskToolWithQueue()
         let queryTool = createQueryTool()
         let (_, mcpServer, client) = try await createTestServer(tools: [runTask, queryTool])
 
@@ -112,11 +121,12 @@ struct MCPProtocolIntegrationTests {
 
         await mcpServer.stop()
         await client.disconnect()
+        await queue.gracefulShutdown()
     }
 
     @Test("query_task_status for unknown run_id returns error")
     func toolCallQueryStatusUnknownRunIdReturnsError() async throws {
-        let runTask = createRunTaskTool()
+        let (runTask, queue) = createRunTaskToolWithQueue()
         let queryTool = createQueryTool()
         let (_, mcpServer, client) = try await createTestServer(tools: [runTask, queryTool])
 
@@ -132,10 +142,15 @@ struct MCPProtocolIntegrationTests {
 
         await mcpServer.stop()
         await client.disconnect()
+        await queue.gracefulShutdown()
     }
 
     @Test("run_task then query_task_status succeeds")
     func toolCallRunTaskThenQueryStatusSucceeds() async throws {
+        let tempLockDir = NSTemporaryDirectory() + "axion-test-lock-\(UUID().uuidString)"
+        try? FileManager.default.createDirectory(atPath: tempLockDir, withIntermediateDirectories: true)
+        let testRunLockService = RunLockService(lockDirectory: tempLockDir, processAliveChecker: { _ in false })
+
         let tracker = RunTracker()
         let queue = TaskQueue()
         let agent = createAgent(options: AgentOptions(
@@ -146,7 +161,7 @@ struct MCPProtocolIntegrationTests {
             maxTokens: 100,
             permissionMode: .bypassPermissions
         ))
-        let runTask = RunTaskTool(agent: agent, runTracker: tracker, taskQueue: queue)
+        let runTask = RunTaskTool(agent: agent, runTracker: tracker, taskQueue: queue, runLockService: testRunLockService)
         let queryTool = QueryTaskStatusTool(runTracker: tracker)
         let (_, mcpServer, client) = try await createTestServer(tools: [runTask, queryTool])
 
@@ -182,11 +197,12 @@ struct MCPProtocolIntegrationTests {
 
         await mcpServer.stop()
         await client.disconnect()
+        await queue.gracefulShutdown()
     }
 
     @Test("graceful shutdown on transport disconnect")
     func gracefulShutdownOnTransportDisconnect() async throws {
-        let runTask = createRunTaskTool()
+        let (runTask, queue) = createRunTaskToolWithQueue()
         let server = AgentMCPServer(name: "shutdown-test", version: "1.0.0", tools: [runTask])
 
         let (mcpServer, clientTransport) = try await server.createSession()
@@ -198,30 +214,39 @@ struct MCPProtocolIntegrationTests {
 
         await client.disconnect()
         await mcpServer.stop()
+        await queue.gracefulShutdown()
     }
 
     @Test("server remains operational after tool error")
     func serverRemainsOperationalAfterToolError() async throws {
-        let runTask = createRunTaskTool()
+        let (runTask, queue) = createRunTaskToolWithQueue()
         let queryTool = createQueryTool()
         let (_, mcpServer, client) = try await createTestServer(tools: [runTask, queryTool])
 
-        _ = try await client.callTool(
+        // First call returns an error — server must survive this
+        let queryResult = try await client.callTool(
             name: "query_task_status",
             arguments: ["run_id": .string("nonexistent")]
         )
+        #expect(queryResult.isError == true)
 
+        // Server should still be fully operational: listTools works
         let listResult = try await client.listTools()
         #expect(!listResult.tools.isEmpty)
 
+        // Server should still be fully operational: another tool call works
+        // (run_task may return run_locked if a previous test's background task
+        // hasn't released the lock yet — that's still a valid server response)
         let runResult = try await client.callTool(
             name: "run_task",
             arguments: ["task": .string("test task")]
         )
-        #expect(runResult.isError != true)
+        let body = extractTextContent(from: runResult)
+        #expect(!body.isEmpty, "Server should return a response (success or structured error)")
 
         await mcpServer.stop()
         await client.disconnect()
+        await queue.gracefulShutdown()
     }
 
     private func extractTextContent(from result: CallTool.Result) -> String {

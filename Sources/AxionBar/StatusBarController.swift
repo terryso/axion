@@ -172,7 +172,7 @@ final class StatusBarController: ObservableObject {
     func handleRunCompleted(finalStatus: String) {
         let taskName = currentTask ?? "任务"
 
-        let title = finalStatus == "done" ? "任务完成" : "任务失败"
+        let title = (finalStatus == "done" || finalStatus == "completed") ? "任务完成" : "任务失败"
         let body = taskName
 
         sendNotification(title: title, body: body)

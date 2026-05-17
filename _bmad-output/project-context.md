@@ -259,8 +259,8 @@ func test_xxx_roundTrip() throws {
 | `HelperProcessManager` | Helper 进程启停、MCP 连接 | 进程状态串行化 |
 | `MCPConnection` | JSON-RPC 收发 | stdio 管道不能并发读写 |
 | `TraceRecorder` | Trace 事件写入 | 文件写入串行化 |
-| `RunTracker` | HTTP API 任务状态管理 | 任务状态串行化（Epic 5） |
-| `EventBroadcaster` | SSE 事件多客户端广播 | 订阅者和重放缓存串行化（Epic 5） |
+| `RunTracker` | HTTP API 任务状态管理 + 持久化 | 任务状态串行化（Epic 5），每次状态变更持久化到 api-output.json（Epic 16） |
+| `EventBroadcaster` | SSE 事件多客户端广播 + 事件持久化 | 订阅者和重放缓存串行化（Epic 5），每次 emit 追加到 api-events.jsonl（Epic 16） |
 | `ConcurrencyLimiter` | 并发任务槽位管理 | 并发计数和排队串行化（Epic 5） |
 | `TaskQueue` | MCP Server 模式任务串行化 | agent.prompt() 调用串行化（Epic 6） |
 
@@ -308,35 +308,70 @@ try await withTaskCancellationHandler {
 
 ---
 
-## Memory 系统（Epic 4）
+## Memory 系统（Epic 4 + Epic 12）
 
-Axion 的跨任务学习系统，基于 SDK FileBasedMemoryStore 实现。
+Axion 的跨任务学习系统，基于证据驱动的知识生命周期管理。
 
-**存储路径：** `~/.axion/memory/`（自定义路径，非 SDK 默认的 `~/.agent/memory/`）
+**存储路径：** `~/.axion/memory/`
+- 旧格式：`{domain}.json` — KnowledgeEntry 数组（SDK 兼容）
+- 新格式：`{domain}-facts.json` — AppMemoryFact 数组（Epic 12+）
 
 **目录结构：**
 ```
 Sources/AxionCLI/Memory/
-├── AppMemoryExtractor.swift       # 从 SDK 消息流提取 App 操作摘要
-├── MemoryCleanupService.swift     # 30 天过期清理
-├── AppProfileAnalyzer.swift       # 模式识别 + 高频路径 + 失败经验
-├── FamiliarityTracker.swift       # 熟悉度追踪（>= 3 次成功标记 familiar）
-└── MemoryContextProvider.swift    # 构建 Planner prompt 中的 Memory 上下文
+├── AppMemoryFact.swift              # Epic 12: 模型（MemoryFactStatus/Source/Kind 枚举）+ normalizeFact + factId (djb2)
+├── MemoryLifecycleService.swift     # Epic 12: candidate→active→retired 生命周期管理
+├── MemoryFactStore.swift            # Epic 12: actor 隔离持久化层 + 惰性迁移
+├── MemoryBundle.swift               # Epic 12: 导入/导出 bundle 模型
+├── MemoryBundleExportService.swift  # Epic 12: 全量/按 domain 导出
+├── MemoryBundleImportService.swift  # Epic 12: 降级导入 + 合并逻辑
+├── AppMemoryExtractor.swift         # Epic 4: 从 SDK 消息流提取 App 操作摘要（Epic 12: 新增 extractFacts() + classifyKind()）
+├── MemoryCleanupService.swift       # Epic 4: 30 天过期清理（保留，不再主动调用）
+├── AppProfileAnalyzer.swift         # Epic 4: 模式识别 + 高频路径 + 失败经验
+├── FamiliarityTracker.swift         # Epic 4: 熟悉度追踪（>= 3 次成功标记 familiar）
+└── MemoryContextProvider.swift      # Epic 4: Memory 上下文（Epic 12: 新增 buildFactMemoryContext 三类分类注入）
 ```
 
+**AppMemoryFact 生命周期状态机（Epic 12）：**
+```
+candidate ──(evidenceCount >= 2 && confidence >= 0.65)──► active
+    ▲                                                       │
+    │                                              (30 天未验证)
+    │                                                       ▼
+    └──────────────(再次观察到)────────────────────── retired
+```
+
+**三类记忆分类（Epic 12）：**
+- **affordance** — 成功发现的操作能力（confidence=0.72，直接操作占比高）
+- **avoid** — 失败经验的软性避坑规则（confidence=0.5）
+- **observation** — 环境信息记录（confidence=0.7）
+
+**Prompt 注入格式：**
+- affordance → "推荐路径" section
+- avoid → "注意事项" section（软性建议，非硬性禁止）
+- observation → "环境备注" section
+- 每类最多 5 条（按 confidence 降序），附带 "soft hints, not hard rules" 声明
+
 **CLI 命令：**
-- `axion memory list` — 显示已积累 Memory 的 App 列表
+- `axion memory list` — 显示已积累 Memory（含状态图标 ✓/○/✗、分类标签、evidence_count）
 - `axion memory clear --app <domain>` — 清除指定 App 的 Memory
+- `axion memory export <file>` — 全量或按 App 导出 Memory Bundle（JSON）
+- `axion memory export --app <domain> <file>` — 按 App 过滤导出
+- `axion memory import <file>` — 导入 Memory（降级为 candidate + confidence 封顶 0.55）
 - `axion run "任务" --no-memory` — 禁用 Memory 上下文注入
 
 **关键设计决策：**
 - Memory 操作失败不阻塞任务执行（do/catch 防护 + warning 日志）
 - Memory 上下文注入到 system prompt 末尾（`buildFullSystemPrompt`），不在 user prompt
 - Domain 使用 App bundle identifier（如 `com.apple.calculator`）
-- KnowledgeEntry content 使用中文标签，状态标签用英文（success/failure）
+- **不修改 SDK KnowledgeEntry** — AppMemoryFact 是独立的 AxionCLI 层模型
+- **factId 使用 djb2 确定性 hash** — 跨进程稳定（不使用 Swift hashValue）
+- **导入降级**：source=imported, status=candidate, confidence=min(original, 0.55)
+- **合并策略**：max confidence, stronger status, local source 优先, evidenceCount +1
+- **惰性迁移**：读旧 KnowledgeEntry 时自动转为 AppMemoryFact，无需强制迁移脚本
 - 熟悉 App 使用紧凑规划策略（减少 list_windows/get_window_state 验证步骤）
 
-**SDK 依赖：**
+**SDK 依赖（Epic 4 兼容层）：**
 - `FileBasedMemoryStore(memoryDir:)` — 自定义存储路径
 - `KnowledgeEntry` — 存储单元（id, content, tags, createdAt, sourceRunId）
 - `MemoryStoreProtocol` — save/query/delete/listDomains
@@ -440,6 +475,7 @@ Sources/AxionBar/
 - D10：独立 SPM executable target，SwiftUI App + AppKit NSStatusItem 混合方案
 - AxionBar 不 import AxionCLI（通过 HTTP API 通信，localhost:4242）
 - AxionBar 定义自己的 API 模型（Bar 前缀），与 AxionCLI 的 APITypes 完全解耦
+- 后端 API 统一返回 `StandardTaskOutput`（Epic 14），AxionBar 通过 `decodeIfPresent` 兼容新字段
 - NSApp.setActivationPolicy(.accessory) 实现无 Dock 图标（AppDelegate）
 - 所有 AxionBar 服务使用 @MainActor 隔离
 - 窗口使用 NSPanel/NSWindow + SwiftUI hosting（非 WindowGroup）
@@ -450,6 +486,7 @@ Sources/AxionBar/
 
 **API 模型命名约定：**
 - Bar 前缀：`BarCreateRunRequest`、`BarRunStatusResponse`、`BarSkillSummary` 等
+- `decodeIfPresent` 用于向后兼容新增字段（如 StandardTaskOutput 的 intervention、result）
 - CodingKeys 使用 snake_case（与后端 API 一致）
 - Swift 属性名使用 camelCase
 
@@ -463,6 +500,8 @@ Sources/AxionBar/
 | `/v1/runs/{runId}` | GET | 任务详情 |
 | `/v1/runs/{runId}/events` | GET (SSE) | 实时事件流 |
 | `/v1/skills` | GET | 技能列表 |
+| `/v1/capabilities` | GET | 能力发现（version、tools、features） |
+| `/v1/settings/api-key` | GET/POST/DELETE | API Key 配置管理 |
 | `/v1/skills/{name}` | GET | 技能详情 |
 | `/v1/skills/{name}/run` | POST | 执行技能 |
 
@@ -538,6 +577,8 @@ planning → executing → verifying → done/blocked/needsClarification
 
 - API Key 存储在 macOS Keychain（Security.framework），service: `"com.axion.cli"`，**不**在 config.json 中
 - 环境变量 `AXION_API_KEY` 作为覆盖机制（CI/脚本场景）
+- 环境变量 `AXION_AUTH_KEY` 作为 daemon 模式下 server 的 auth-key 来源（Epic 16）
+- 环境变量 `AXION_BIN` 可覆盖 daemon plist 中的二进制路径（Epic 16）
 - `axion setup` 写入配置，`axion doctor` 验证所有层级
 
 **AxionConfig 默认值：**
@@ -560,6 +601,75 @@ planning → executing → verifying → done/blocked/needsClarification
 - 每个事件必须包含 `ts`（ISO8601）和 `event`（snake_case）
 - Run ID 格式：`YYYYMMDD-{6位随机}`
 - API Key **永远**不出现在 trace 中
+
+---
+
+## Daemon 模式与持久化（Epic 16）
+
+### launchd Daemon
+
+Axion server 可注册为 macOS 用户级 launchd 守护进程，实现开机自启和崩溃自动重启。
+
+**CLI 命令：**
+- `axion daemon install --host 127.0.0.1 --port 4242 [--auth-key KEY]` — 安装并启动守护进程
+- `axion daemon status` — 查看 daemon 状态（running/stopped/not_installed）、PID、端口
+- `axion daemon uninstall [--keep-logs]` — 停止并卸载守护进程
+
+**核心文件：**
+```
+Sources/AxionCLI/Services/DaemonService.swift    # plist 生成、launchctl 调用、状态查询
+Sources/AxionCLI/Commands/DaemonCommand.swift     # CLI 子命令入口
+```
+
+**plist 配置：**
+- Label: `dev.axion.server`
+- 路径: `~/Library/LaunchAgents/dev.axion.server.plist`
+- RunAtLoad: true（开机自启）
+- KeepAlive: Crashed=true（仅非零退出时重启）
+- ThrottleInterval: 10（崩溃后 10 秒重启）
+- auth-key 通过 EnvironmentVariables 的 `AXION_AUTH_KEY` 传递（不写入 ProgramArguments）
+- 日志: `~/.axion/server.log` + `~/.axion/server.err.log`
+
+**二进制路径解析优先级：** `AXION_BIN` 环境变量 > 当前进程路径 > `which axion`
+
+**关键设计决策：**
+- 使用 launchctl bootstrap/bootout（不使用已废弃的 load/unload）
+- DaemonService 通过注入 `@Sendable` 闭包实现 launchctl 调用的可测试性
+- ServerCommand authKey 优先级：CLI `--auth-key` > `AXION_AUTH_KEY` 环境变量 > nil
+
+### API 运行状态持久化
+
+daemon 模式下 server 崩溃/重启后，从磁盘恢复任务状态。
+
+**存储路径：**
+```
+~/.axion/api-runs/                    # API 持久化目录（与 CLI trace 的 runs/ 分开）
+├── {runId}/
+│   ├── api-output.json               # TrackedRun JSON（每次状态更新原子覆写）
+│   └── api-events.jsonl              # SSE 事件追加写入
+```
+
+**核心文件：**
+```
+Sources/AxionCLI/API/RunPersistenceService.swift   # 磁盘读写：TrackedRun + SSEEvent
+Sources/AxionCLI/API/RunRecoveryService.swift      # 启动恢复：状态映射 + replay buffer 恢复
+```
+
+**恢复状态映射：**
+
+| 恢复前状态 | 恢复后状态 | 说明 |
+|-----------|-----------|------|
+| queued/running/resuming/userTakeover | failed | 标记中断，error="server interrupted" |
+| intervention_needed | intervention_needed | 保持不变，等待用户处理 |
+| completed/failed/cancelled | 不变 | 已终态，无需干预 |
+
+**关键设计决策：**
+- RunPersistenceService 是 Sendable struct（非 actor），FileManager 本身线程安全
+- api-output.json 使用原子写入（write-to-tmp + rename）
+- api-events.jsonl 使用追加写入（每行一个 JSON）
+- 持久化失败不阻塞主流程（catch + warning 日志）
+- SSE 订阅时内存 replay buffer miss → 自动从磁盘加载并缓存
+- PersistedSSEEvent Codable wrapper 桥接 SSEEvent enum 到 JSONL
 
 ---
 
@@ -660,6 +770,11 @@ RunEngine.run()                             # 状态机开始
     ▼
 ServerCommand (axion server --port 4242)      # Hummingbird Application
     │
+    ├── RunPersistenceService()                # 创建持久化服务（Epic 16）
+    ├── RunTracker(persistenceService:)        # 注入持久化
+    ├── EventBroadcaster(persistenceService:)  # 注入持久化
+    ├── RunRecoveryService.recover()           # 启动时恢复持久化任务（Epic 16）
+    │
     ▼
 AxionAPI.registerRoutes()                     # 路由分发
     │
@@ -668,20 +783,23 @@ AxionAPI.registerRoutes()                     # 路由分发
     ├──► ConcurrencyLimiter.tryAcquire()       # 并发槽位检查
     │
     ├──► RunTracker.submitRun() → runId        # 生成任务 ID
+    │        └──► RunPersistenceService.persistRecordSafely()  # 持久化（Epic 16）
     │
     ├──► 返回 HTTP 202 {"run_id": "...", "status": "running"}
     │
     └──► Task.detached {                        # 后台异步执行
             AgentRunner.runAgent(...)           # 复用 Agent 执行逻辑
-            RunTracker.updateRun(runId, result) # 更新任务状态
-            EventBroadcaster.emit(runId, event) # SSE 事件推送
+            RunTracker.updateRun(runId, result) # 更新任务状态 + 持久化
+            EventBroadcaster.emit(runId, event) # SSE 事件推送 + 事件持久化（Epic 16）
             ConcurrencyLimiter.release()        # 释放并发槽位
         }
 
 GET /v1/runs/{runId}/events (SSE)
     │
     ▼
-EventBroadcaster.subscribe(runId)             # 订阅实时事件流
+EventBroadcaster.subscribeWithReplay(runId)   # 订阅实时事件流
+    ├── 内存 replay buffer 命中 → 直接重放
+    └── 未命中 → 从 api-events.jsonl 磁盘加载（Epic 16）
     │
     ▼
 ResponseBody(asyncSequence:)                   # Hummingbird 流式响应

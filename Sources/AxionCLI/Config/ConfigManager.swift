@@ -6,6 +6,8 @@ import AxionCore
 struct CLIOverrides: Sendable {
     var maxSteps: Int?
     var maxBatches: Int?
+    var maxModelCalls: Int?
+    var maxScreenshots: Int?
 }
 
 /// ConfigManager — 分层配置加载器
@@ -111,11 +113,19 @@ enum ConfigManager {
         if let v = env["AXION_SHARED_SEAT_MODE"] {
             config.sharedSeatMode = (v.lowercased() == "true")
         }
+        if let v = env["AXION_MAX_MODEL_CALLS"], let i = Int(v) {
+            config.maxModelCalls = i
+        }
+        if let v = env["AXION_MAX_SCREENSHOTS"], let i = Int(v) {
+            config.maxScreenshots = i
+        }
     }
 
     /// 应用 CLI 参数覆盖。
     private static func applyCLIOverrides(_ config: inout AxionConfig, from cli: CLIOverrides) {
         if let v = cli.maxSteps { config.maxSteps = v }
         if let v = cli.maxBatches { config.maxBatches = v }
+        if let v = cli.maxModelCalls { config.maxModelCalls = v }
+        if let v = cli.maxScreenshots { config.maxScreenshots = v }
     }
 }

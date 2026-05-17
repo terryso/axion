@@ -29,6 +29,15 @@ actor TraceRecorder {
         static let replan = "replan"
         static let runDone = "run_done"
         static let error = "error"
+        static let lockAcquired = "lock_acquired"
+        static let lockReleased = "lock_released"
+        static let staleLockCleaned = "stale_lock_cleaned"
+        static let verifierSkipped = "verifier_skipped"
+        static let modelCall = "model_call"
+        static let budgetExceeded = "budget_exceeded"
+        static let externalActivityDetected = "external_activity_detected"
+        static let seatBaseline = "seat_baseline"
+        static let takeover = "takeover"
     }
 
     // MARK: - Properties
@@ -247,6 +256,46 @@ actor TraceRecorder {
         record(event: TraceEventType.error, payload: [
             "error": error,
             "message": message
+        ])
+    }
+
+    /// Records a verifier_skipped event when visual delta check determines the screen is unchanged.
+    func recordVerifierSkipped(deltaPercentage: Double, reason: String) {
+        record(event: TraceEventType.verifierSkipped, payload: [
+            "deltaPercentage": deltaPercentage,
+            "reason": reason
+        ])
+    }
+
+    /// Records a model_call event for each LLM API call.
+    func recordModelCall(model: String, callIndex: Int) {
+        record(event: TraceEventType.modelCall, payload: [
+            "model": model,
+            "callIndex": callIndex
+        ])
+    }
+
+    /// Records a budget_exceeded event when a budget limit is hit.
+    func recordBudgetExceeded(budgetType: String, current: Int, limit: Int) {
+        record(event: TraceEventType.budgetExceeded, payload: [
+            "budgetType": budgetType,
+            "current": current,
+            "limit": limit
+        ])
+    }
+
+    /// Records an external_activity_detected event when desktop activity is detected during a shared-seat run.
+    func recordExternalActivityDetected(description: String, phase: String) {
+        record(event: TraceEventType.externalActivityDetected, payload: [
+            "description": description,
+            "phase": phase
+        ])
+    }
+
+    /// Records a seat_baseline event with initial cursor and frontmost app info.
+    func recordSeatBaseline(baseline: String) {
+        record(event: TraceEventType.seatBaseline, payload: [
+            "baseline": baseline
         ])
     }
 

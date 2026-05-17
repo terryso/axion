@@ -58,11 +58,11 @@ struct QueryTaskStatusToolTests {
         #expect(result.content.contains("open calculator"))
     }
 
-    @Test("completed run returns done")
-    func completedRunReturnsDone() async throws {
+    @Test("completed run returns completed")
+    func completedRunReturnsCompleted() async throws {
         let tracker = RunTracker()
         let runId = await tracker.submitRun(task: "open calculator", options: RunOptions(task: "open calculator"))
-        await tracker.updateRun(runId: runId, status: .done, steps: [], durationMs: 500, replanCount: 0)
+        await tracker.updateRun(runId: runId, status: .completed, steps: [], durationMs: 500, replanCount: 0)
 
         let tool = createTool(tracker: tracker)
         let context = ToolContext(cwd: "/tmp", toolUseId: "test-id")
@@ -70,7 +70,7 @@ struct QueryTaskStatusToolTests {
         let result = await tool.call(input: ["run_id": runId], context: context)
 
         #expect(!result.isError)
-        #expect(result.content.contains("done"))
+        #expect(result.content.contains("completed"))
         #expect(result.content.contains("500"))
     }
 

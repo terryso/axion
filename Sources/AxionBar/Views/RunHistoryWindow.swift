@@ -104,7 +104,7 @@ struct RunHistoryRow: View {
                     .font(.body)
 
                 HStack(spacing: 8) {
-                    Text(run.submittedAt)
+                    Text(run.submittedAt ?? run.startedAt ?? "")
                         .font(.caption)
                         .foregroundColor(.secondary)
 
@@ -125,18 +125,21 @@ struct RunHistoryRow: View {
 
     private func statusBadge(_ status: String) -> some View {
         let color: Color = switch status {
-        case "done": .green
+        case "done", "completed": .green
         case "failed": .red
         case "cancelled": .orange
         case "running": .blue
+        case "queued": .cyan
         default: .gray
         }
 
         let label: String = switch status {
-        case "done": "完成"
+        case "done", "completed": "完成"
         case "failed": "失败"
         case "cancelled": "已取消"
         case "running": "运行中"
+        case "queued": "排队中"
+        case "intervention_needed": "需介入"
         default: status
         }
 
