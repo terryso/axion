@@ -132,7 +132,7 @@ enum SkillAPIRunner {
 
         let runCompletedEvent = SSEEvent.runCompleted(RunCompletedData(
             runId: runId,
-            finalStatus: "done",
+            finalStatus: "completed",
             totalSteps: skill.steps.count,
             durationMs: durationMs,
             replanCount: 0
@@ -141,7 +141,7 @@ enum SkillAPIRunner {
         await eventBroadcaster.complete(runId: runId)
 
         return RunResult(
-            finalStatus: .done,
+            finalStatus: .completed,
             stepSummaries: stepSummaries,
             durationMs: durationMs,
             replanCount: 0

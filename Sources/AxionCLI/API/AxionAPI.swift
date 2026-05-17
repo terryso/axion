@@ -62,18 +62,7 @@ enum AxionAPI {
                 .prefix(limit)
 
             let responses = sortedRuns.map { run in
-                RunStatusResponse(
-                    runId: run.runId,
-                    status: run.status.rawValue,
-                    task: run.task,
-                    totalSteps: run.totalSteps,
-                    durationMs: run.durationMs,
-                    replanCount: run.replanCount,
-                    submittedAt: run.submittedAt,
-                    completedAt: run.completedAt,
-                    steps: run.steps,
-                    costTelemetry: run.costTelemetry
-                )
+                run.toStandardOutput()
             }
 
             let encoder = JSONEncoder()
@@ -186,6 +175,7 @@ enum AxionAPI {
                             ),
                             runId: runId,
                             eventBroadcaster: eventBroadcaster,
+                            runTracker: runTracker,
                             completion: { _, _, _, _, _, _, _ in }
                         )
                         await runTracker.updateRun(
@@ -201,7 +191,12 @@ enum AxionAPI {
                     }
 
                     var resp = try context.responseEncoder.encode(
-                        CreateRunResponse(runId: runId, status: "running"),
+                        StandardTaskOutput(
+                            runId: runId,
+                            task: createRequest.task,
+                            status: .running,
+                            startedAt: ISO8601DateFormatter().string(from: Date())
+                        ),
                         from: request,
                         context: context
                     )
@@ -229,6 +224,7 @@ enum AxionAPI {
                         ),
                         runId: runId,
                         eventBroadcaster: eventBroadcaster,
+                        runTracker: runTracker,
                         completion: { _, _, _, _, _, _, _ in }
                     )
                     await runTracker.updateRun(
@@ -263,6 +259,7 @@ enum AxionAPI {
                     ),
                     runId: runId,
                     eventBroadcaster: eventBroadcaster,
+                    runTracker: runTracker,
                     completion: { _, _, _, _, _, _, _ in }
                 )
                 await runTracker.updateRun(
@@ -277,7 +274,12 @@ enum AxionAPI {
             }
 
             var resp = try context.responseEncoder.encode(
-                CreateRunResponse(runId: runId, status: "running"),
+                StandardTaskOutput(
+                    runId: runId,
+                    task: createRequest.task,
+                    status: .running,
+                    startedAt: ISO8601DateFormatter().string(from: Date())
+                ),
                 from: request,
                 context: context
             )
@@ -307,18 +309,7 @@ enum AxionAPI {
                 )
             }
 
-            let response = RunStatusResponse(
-                runId: run.runId,
-                status: run.status.rawValue,
-                task: run.task,
-                totalSteps: run.totalSteps,
-                durationMs: run.durationMs,
-                replanCount: run.replanCount,
-                submittedAt: run.submittedAt,
-                completedAt: run.completedAt,
-                steps: run.steps,
-                costTelemetry: run.costTelemetry
-            )
+            let response = run.toStandardOutput()
 
             return EditedResponse(
                 headers: [.contentType: "application/json"],
@@ -543,7 +534,7 @@ enum AxionAPI {
                 )
 
                 // Update skill metadata on success
-                if result.finalStatus == .done {
+                if result.finalStatus == .completed {
                     Self.updateSkillMetadata(skillPath: skillPath, skill: capturedSkill)
                 }
             }

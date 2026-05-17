@@ -1640,7 +1640,7 @@ So that 我可以快速上手并避免踩坑.
 
 # Phase 4 — 执行质量与 API 成熟度 Epics
 
-> Phase 1-3（Epic 1-11）均已完成。以下为基于竞品 OpenClick 对比分析提炼的 Phase 4 Epics，聚焦 Axion 在 Memory 质量、执行安全、API 规范和运维便利性方面的差距补齐。
+> Phase 1-3（Epic 1-11）均已完成。Phase 4 Epic 12（Memory 生命周期）和 Epic 13（执行安全与成本控制）已完成。以下为基于竞品 OpenClick 对比分析提炼的 Phase 4 Epics，聚焦 Axion 在 Memory 质量、执行安全、API 规范和运维便利性方面的差距补齐。
 >
 > **核心理念：** Phase 1-3 构建了完整的功能版图（从 CLI 到 MCP Server 到菜单栏 UI），Phase 4 专注于让这些功能更可靠、更省钱、更易集成。
 >

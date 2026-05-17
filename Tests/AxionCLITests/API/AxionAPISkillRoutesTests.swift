@@ -147,7 +147,7 @@ struct AxionAPISkillRoutesTests {
             try await client.execute(uri: "/v1/runs", method: .get) { response in
                 #expect(response.status == .ok)
 
-                let runs = try JSONDecoder().decode([RunStatusResponse].self, from: response.body)
+                let runs = try JSONDecoder().decode([StandardTaskOutput].self, from: response.body)
                 #expect(runs.isEmpty)
             }
         }
@@ -165,7 +165,7 @@ struct AxionAPISkillRoutesTests {
             try await client.execute(uri: "/v1/runs", method: .get) { response in
                 #expect(response.status == .ok)
 
-                let runs = try JSONDecoder().decode([RunStatusResponse].self, from: response.body)
+                let runs = try JSONDecoder().decode([StandardTaskOutput].self, from: response.body)
                 #expect(runs.count == 2)
                 // Both tasks exist (order may vary)
                 let tasks = runs.map(\.task)
@@ -187,7 +187,7 @@ struct AxionAPISkillRoutesTests {
             try await client.execute(uri: "/v1/runs?limit=1", method: .get) { response in
                 #expect(response.status == .ok)
 
-                let runs = try JSONDecoder().decode([RunStatusResponse].self, from: response.body)
+                let runs = try JSONDecoder().decode([StandardTaskOutput].self, from: response.body)
                 #expect(runs.count == 1)
             }
         }

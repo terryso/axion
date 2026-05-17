@@ -66,9 +66,9 @@ struct AxionAPIRoutesTests {
             try await client.execute(uri: "/v1/runs", method: .post, body: requestBody) { response in
                 #expect(response.status == .accepted)
 
-                let body = try JSONDecoder().decode(CreateRunResponse.self, from: response.body)
+                let body = try JSONDecoder().decode(StandardTaskOutput.self, from: response.body)
                 #expect(!body.runId.isEmpty)
-                #expect(body.status == "running")
+                #expect(body.status == .running)
             }
         }
     }
@@ -85,9 +85,9 @@ struct AxionAPIRoutesTests {
             try await client.execute(uri: "/v1/runs", method: .post, body: requestBody) { response in
                 #expect(response.status == .accepted)
 
-                let body = try JSONDecoder().decode(CreateRunResponse.self, from: response.body)
+                let body = try JSONDecoder().decode(StandardTaskOutput.self, from: response.body)
                 #expect(!body.runId.isEmpty)
-                #expect(body.status == "running")
+                #expect(body.status == .running)
             }
         }
     }
@@ -103,9 +103,9 @@ struct AxionAPIRoutesTests {
             try await client.execute(uri: "/v1/runs/\(runId)", method: .get) { response in
                 #expect(response.status == .ok)
 
-                let body = try JSONDecoder().decode(RunStatusResponse.self, from: response.body)
+                let body = try JSONDecoder().decode(StandardTaskOutput.self, from: response.body)
                 #expect(body.runId == runId)
-                #expect(body.status == "running")
+                #expect(body.status == .running)
                 #expect(body.task == "open calculator")
             }
         }
@@ -120,7 +120,7 @@ struct AxionAPIRoutesTests {
             StepSummary(index: 1, tool: "click", purpose: "Input expression", success: true),
             StepSummary(index: 2, tool: "click", purpose: "Verify result", success: true),
         ]
-        await tracker.updateRun(runId: runId, status: .done, steps: steps, durationMs: 8200, replanCount: 0)
+        await tracker.updateRun(runId: runId, status: .completed, steps: steps, durationMs: 8200, replanCount: 0)
 
         let app = try await buildTestApplication(runTracker: tracker)
 
@@ -128,12 +128,10 @@ struct AxionAPIRoutesTests {
             try await client.execute(uri: "/v1/runs/\(runId)", method: .get) { response in
                 #expect(response.status == .ok)
 
-                let body = try JSONDecoder().decode(RunStatusResponse.self, from: response.body)
-                #expect(body.status == "done")
-                #expect(body.totalSteps == 3)
-                #expect(body.durationMs == 8200)
-                #expect(body.replanCount == 0)
+                let body = try JSONDecoder().decode(StandardTaskOutput.self, from: response.body)
+                #expect(body.status == .completed)
                 #expect(body.steps.count == 3)
+                #expect(body.endedAt != nil)
             }
         }
     }
@@ -186,7 +184,7 @@ struct AxionAPIRoutesTests {
         let runId = await tracker.submitRun(task: "open calculator", options: RunOptions(task: "open calculator"))
 
         let step = StepSummary(index: 0, tool: "launch_app", purpose: "Launch Calculator", success: true)
-        await tracker.updateRun(runId: runId, status: .done, steps: [step], durationMs: 5000, replanCount: 0)
+        await tracker.updateRun(runId: runId, status: .completed, steps: [step], durationMs: 5000, replanCount: 0)
 
         let app = try await buildTestApplication(runTracker: tracker, eventBroadcaster: broadcaster)
 
@@ -208,7 +206,7 @@ struct AxionAPIRoutesTests {
         let runId = await tracker.submitRun(task: "open calculator", options: RunOptions(task: "open calculator"))
 
         let step = StepSummary(index: 0, tool: "launch_app", purpose: "Launch Calculator", success: true)
-        await tracker.updateRun(runId: runId, status: .done, steps: [step], durationMs: 5000, replanCount: 0)
+        await tracker.updateRun(runId: runId, status: .completed, steps: [step], durationMs: 5000, replanCount: 0)
 
         let app = try await buildTestApplication(runTracker: tracker, eventBroadcaster: broadcaster)
 
@@ -228,7 +226,7 @@ struct AxionAPIRoutesTests {
         let runId = await tracker.submitRun(task: "open calculator", options: RunOptions(task: "open calculator"))
 
         let step = StepSummary(index: 0, tool: "launch_app", purpose: "Launch Calculator", success: true)
-        await tracker.updateRun(runId: runId, status: .done, steps: [step], durationMs: 5000, replanCount: 0)
+        await tracker.updateRun(runId: runId, status: .completed, steps: [step], durationMs: 5000, replanCount: 0)
 
         let app = try await buildTestApplication(runTracker: tracker, eventBroadcaster: broadcaster)
 
@@ -238,7 +236,7 @@ struct AxionAPIRoutesTests {
 
                 let bodyString = String(buffer: response.body)
                 #expect(bodyString.contains("event: run_completed"))
-                #expect(bodyString.contains("\"final_status\":\"done\""))
+                #expect(bodyString.contains("\"final_status\":\"completed\""))
                 #expect(bodyString.contains("data: "))
             }
         }
@@ -301,9 +299,9 @@ struct AxionAPIRoutesTests {
             headers[.authorization] = "Bearer testsecret"
             try await client.execute(uri: "/v1/runs/\(runId)", method: .get, headers: headers) { response in
                 #expect(response.status == .ok)
-                let body = try JSONDecoder().decode(RunStatusResponse.self, from: response.body)
+                let body = try JSONDecoder().decode(StandardTaskOutput.self, from: response.body)
                 #expect(body.runId == runId)
-                #expect(body.status == "running")
+                #expect(body.status == .running)
             }
         }
     }
@@ -326,7 +324,7 @@ struct AxionAPIRoutesTests {
         let runId = await tracker.submitRun(task: "open calculator", options: RunOptions(task: "open calculator"))
 
         let step = StepSummary(index: 0, tool: "launch_app", purpose: "Launch Calculator", success: true)
-        await tracker.updateRun(runId: runId, status: .done, steps: [step], durationMs: 5000, replanCount: 0)
+        await tracker.updateRun(runId: runId, status: .completed, steps: [step], durationMs: 5000, replanCount: 0)
 
         let app = try await buildTestApplication(runTracker: tracker, eventBroadcaster: broadcaster, authKey: "testsecret")
 
@@ -378,8 +376,8 @@ struct AxionAPIRoutesTests {
             let body = ByteBuffer(string: "{\"task\": \"open calculator\"}")
             try await client.execute(uri: "/v1/runs", method: .post, body: body) { response in
                 #expect(response.status == .accepted)
-                let decoded = try JSONDecoder().decode(CreateRunResponse.self, from: response.body)
-                #expect(decoded.status == "running")
+                let decoded = try JSONDecoder().decode(StandardTaskOutput.self, from: response.body)
+                #expect(decoded.status == .running)
                 #expect(!decoded.runId.isEmpty)
             }
         }

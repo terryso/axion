@@ -110,7 +110,8 @@ axion/
 │   │   ├── Commands/                # 子命令：RunCommand, SetupCommand, DoctorCommand, ServerCommand, McpCommand, MemoryCommand
 │   │   ├── Planner/                 # 规划引擎：LLM 调用、plan 解析、prompt 管理
 │   │   ├── Executor/                # 执行引擎：步骤执行、MCP 调用、占位符解析
-│   │   ├── Verifier/                # 验证引擎：截图/AX 验证、stopWhen 评估
+│   │   ├── Verifier/                # 验证引擎：截图/AX 验证、stopWhen 评估 + 视觉增量检查（Epic 13）
+│   │   ├── Services/                # 运行时服务：RunLockService, CostTracker, SeatActivityMonitor（Epic 13）
 │   │   ├── Config/                  # 配置管理：读写 ~/.axion/config.json
 │   │   ├── Trace/                   # Trace 记录器：运行轨迹持久化
 │   │   ├── Output/                  # 输出格式化：终端进度、JSON 输出
@@ -789,7 +790,12 @@ axion/
 │   │   │   └── SafetyChecker.swift            # FR20: 共享座椅安全策略
 │   │   ├── Verifier/
 │   │   │   ├── TaskVerifier.swift             # FR21: 验证任务完成状态
-│   │   │   └── StopConditionEvaluator.swift   # FR22: 评估 stopWhen 条件
+│   │   │   ├── StopConditionEvaluator.swift   # FR22: 评估 stopWhen 条件
+│   │   │   └── VisualDeltaChecker.swift       # Epic 13: 截图像素级差异比较 + VisualDeltaTracker actor
+│   │   ├── Services/                            # Epic 13: 运行时安全与成本控制
+│   │   │   ├── RunLockService.swift            # Epic 13: 桌面级运行锁 actor（~/.axion/run.lock）
+│   │   │   ├── CostTracker.swift               # Epic 13: 预算控制 + 成本遥测 actor
+│   │   │   └── SeatActivityMonitor.swift       # Epic 13: 桌面活动检测 actor（学习保护）
 │   │   ├── Engine/
 │   │   │   └── RunEngine.swift                # D3: 状态机编排 plan→exec→verify 循环
 │   │   ├── Config/
@@ -893,9 +899,14 @@ axion/
 │   │   │   └── PlaceholderResolverTests.swift
 │   │   ├── Verifier/
 │   │   │   ├── TaskVerifierTests.swift
-│   │   │   └── StopConditionEvaluatorTests.swift
+│   │   │   ├── StopConditionEvaluatorTests.swift
+│   │   │   └── VisualDeltaCheckerTests.swift   # Epic 13: 视觉增量检查测试
 │   │   └── Engine/
 │   │       └── RunEngineTests.swift
+│   │   ├── Services/                            # Epic 13: 运行时服务测试
+│   │   │   ├── RunLockServiceTests.swift       # Epic 13: 运行锁测试
+│   │   │   ├── CostTrackerTests.swift          # Epic 13: 预算控制测试
+│   │   │   └── SeatActivityMonitorTests.swift  # Epic 13: 活动检测测试
 │   │   ├── Memory/                                # Epic 4 + Epic 12: Memory 测试
 │   │   │   ├── AppMemoryFactTests.swift             # Epic 12: 模型 Codable + normalizeFact + factId
 │   │   │   ├── MemoryLifecycleServiceTests.swift    # Epic 12: promote/demote/reactivate 生命周期
@@ -1012,6 +1023,11 @@ AxionBar ← SwiftUI + AppKit（独立 macOS App）
 | FR42 | AppMemoryExtractor.swift + MemoryCleanupService.swift | Memory 提取（Epic 4） |
 | FR43 | AppProfileAnalyzer.swift + MemoryContextProvider.swift | Memory 增强规划（Epic 4） |
 | FR44 | MemoryCommand.swift + MemoryListCommand.swift + MemoryClearCommand.swift | Memory 管理 CLI（Epic 4） |
+| FR66 | RunLockService.swift + RunCommand.swift + AxionAPI.swift | 桌面级运行锁，防止多任务桌面冲突（Epic 13） |
+| FR67 | VisualDeltaChecker.swift + RunCommand.swift | 视觉增量检查，跳过无变化的 verifier 调用（Epic 13） |
+| FR68 | CostTracker.swift + RunCommand.swift | --max-model-calls/--max-screenshots 精细预算控制（Epic 13） |
+| FR69 | CostTracker.swift + TraceRecorder.swift + AgentRunner.swift | 成本遥测：model_call trace + API cost_telemetry（Epic 13） |
+| FR70 | SeatActivityMonitor.swift + RunCommand.swift + AgentRunner.swift | 桌面活动检测与学习保护（Epic 13） |
 
 **跨切关注点到位置的映射：**
 
@@ -1021,6 +1037,7 @@ AxionBar ← SwiftUI + AppKit（独立 macOS App）
 | 配置管理 | AxionCLI/Config/ | 分层配置 + Keychain |
 | 进程生命周期 | AxionCLI/Helper/HelperProcessManager.swift | Helper 启停 + 信号传播 |
 | 安全策略 | AxionCLI/Executor/SafetyChecker.swift | 共享座椅模式 |
+| 运行时安全 | AxionCLI/Services/ (RunLockService, CostTracker, SeatActivityMonitor) | 桌面锁、预算控制、学习保护（Epic 13） |
 | 可观测性 | AxionCLI/Trace/TraceRecorder.swift | JSONL trace |
 | 输出格式 | AxionCLI/Output/ | 终端 + JSON 双输出 |
 | Memory 系统 | AxionCLI/Memory/ | App 操作经验积累 + Planner 上下文注入 |
@@ -1058,7 +1075,14 @@ RunCommand.parse()                          # ArgumentParser 解析
 ConfigManager.load()                        # 分层加载配置
     │
     ▼
+RunLockService.acquire()                    # [Epic 13] 获取桌面级运行锁
+    │
+    ▼
 HelperProcessManager.start()                # 启动 Helper
+    │
+    ▼
+CostTracker.init(maxModelCalls, maxScreenshots)  # [Epic 13] 初始化预算追踪
+SeatActivityMonitor.create()                # [Epic 13] 采样活动基线（shared-seat 模式）
     │
     ▼
 RunEngine.run()                             # 状态机开始
@@ -1081,8 +1105,16 @@ RunEngine.run()                             # 状态机开始
     │        ▼ (如果未完成)
     │    LLMPlanner.replan()                # 携带失败上下文重规划
     │
+    ├──► VisualDeltaTracker.check()         # [Epic 13] 视觉增量检查（跳过无变化验证）
+    ├──► CostTracker.recordModelCall()      # [Epic 13] 记录 LLM 调用 + 预算检查
+    ├──► SeatActivityMonitor.check()        # [Epic 13] 检测外部桌面活动
+    │
     └──► TerminalOutput.display()           # 实时输出到终端
          TraceRecorder.record()             # 记录到 trace 文件
+    │
+    ▼
+RunLockService.release()                    # [Epic 13] 释放运行锁
+CostTracker.getSummary() → 成本摘要         # [Epic 13] 输出成本统计
 ```
 
 ## 架构验证结果

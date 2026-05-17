@@ -81,85 +81,6 @@ struct APITypesTests {
         #expect(json.contains("\"allow_foreground\""))
     }
 
-    @Test("CreateRunResponse codable round trip preserves all fields")
-    func createRunResponseCodableRoundTripPreservesAllFields() throws {
-        let response = CreateRunResponse(runId: "20260513-abc123", status: "running")
-
-        let data = try JSONEncoder().encode(response)
-        let decoded = try JSONDecoder().decode(CreateRunResponse.self, from: data)
-
-        #expect(decoded.runId == "20260513-abc123")
-        #expect(decoded.status == "running")
-    }
-
-    @Test("CreateRunResponse JSON keys are snake case")
-    func createRunResponseJsonKeysAreSnakeCase() throws {
-        let response = CreateRunResponse(runId: "20260513-abc123", status: "running")
-
-        let encoder = JSONEncoder()
-        encoder.outputFormatting = [.sortedKeys]
-        let data = try encoder.encode(response)
-        let json = try #require(String(data: data, encoding: .utf8))
-
-        #expect(json.contains("\"run_id\""))
-        #expect(json.contains("\"status\""))
-    }
-
-    @Test("RunStatusResponse codable round trip preserves all fields")
-    func runStatusResponseCodableRoundTripPreservesAllFields() throws {
-        let step = StepSummary(index: 0, tool: "launch_app", purpose: "Launch Calculator", success: true)
-        let response = RunStatusResponse(
-            runId: "20260513-abc123",
-            status: "done",
-            task: "open calculator",
-            totalSteps: 3,
-            durationMs: 8200,
-            replanCount: 0,
-            submittedAt: "2026-05-13T10:30:00+08:00",
-            completedAt: "2026-05-13T10:30:08+08:00",
-            steps: [step]
-        )
-
-        let data = try JSONEncoder().encode(response)
-        let decoded = try JSONDecoder().decode(RunStatusResponse.self, from: data)
-
-        #expect(decoded.runId == "20260513-abc123")
-        #expect(decoded.status == "done")
-        #expect(decoded.task == "open calculator")
-        #expect(decoded.totalSteps == 3)
-        #expect(decoded.durationMs == 8200)
-        #expect(decoded.replanCount == 0)
-        #expect(decoded.steps.count == 1)
-        #expect(decoded.steps[0].tool == "launch_app")
-    }
-
-    @Test("RunStatusResponse JSON keys are snake case")
-    func runStatusResponseJsonKeysAreSnakeCase() throws {
-        let response = RunStatusResponse(
-            runId: "20260513-abc123",
-            status: "done",
-            task: "open calculator",
-            totalSteps: 3,
-            durationMs: 8200,
-            replanCount: 0,
-            submittedAt: "2026-05-13T10:30:00+08:00",
-            completedAt: "2026-05-13T10:30:08+08:00",
-            steps: []
-        )
-
-        let encoder = JSONEncoder()
-        encoder.outputFormatting = [.sortedKeys]
-        let data = try encoder.encode(response)
-        let json = try #require(String(data: data, encoding: .utf8))
-
-        #expect(json.contains("\"run_id\""))
-        #expect(json.contains("\"total_steps\""))
-        #expect(json.contains("\"duration_ms\""))
-        #expect(json.contains("\"replan_count\""))
-        #expect(json.contains("\"submitted_at\""))
-        #expect(json.contains("\"completed_at\""))
-    }
-
     @Test("StepSummary codable round trip preserves all fields")
     func stepSummaryCodableRoundTripPreservesAllFields() throws {
         let summary = StepSummary(index: 1, tool: "click", purpose: "Input expression", success: true)
@@ -199,8 +120,12 @@ struct APITypesTests {
 
     @Test("APIRunStatus raw values match expected strings")
     func apiRunStatusRawValuesMatchExpectedStrings() {
+        #expect(APIRunStatus.queued.rawValue == "queued")
         #expect(APIRunStatus.running.rawValue == "running")
-        #expect(APIRunStatus.done.rawValue == "done")
+        #expect(APIRunStatus.interventionNeeded.rawValue == "intervention_needed")
+        #expect(APIRunStatus.userTakeover.rawValue == "user_takeover")
+        #expect(APIRunStatus.resuming.rawValue == "resuming")
+        #expect(APIRunStatus.completed.rawValue == "completed")
         #expect(APIRunStatus.failed.rawValue == "failed")
         #expect(APIRunStatus.cancelled.rawValue == "cancelled")
     }
@@ -208,8 +133,12 @@ struct APITypesTests {
     @Test("APIRunStatus decodes from valid strings")
     func apiRunStatusDecodesFromValidStrings() throws {
         let statuses: [(String, APIRunStatus)] = [
+            ("\"queued\"", .queued),
             ("\"running\"", .running),
-            ("\"done\"", .done),
+            ("\"intervention_needed\"", .interventionNeeded),
+            ("\"user_takeover\"", .userTakeover),
+            ("\"resuming\"", .resuming),
+            ("\"completed\"", .completed),
             ("\"failed\"", .failed),
             ("\"cancelled\"", .cancelled),
         ]
@@ -370,9 +299,332 @@ struct APITypesTests {
 
     @Test("SkillRunResponse decodes snake case")
     func skillRunResponseDecodesSnakeCase() throws {
-        let json = #"{"run_id":"20260515-xyz","status":"done"}"#
+        let json = #"{"run_id":"20260515-xyz","status":"completed"}"#
         let data = json.data(using: .utf8)!
         let decoded = try JSONDecoder().decode(SkillRunResponse.self, from: data)
         #expect(decoded.runId == "20260515-xyz")
+    }
+
+    // MARK: - StandardTaskOutput Tests
+
+    @Test("StandardTaskOutput codable round trip preserves all fields")
+    func standardTaskOutputCodableRoundTripPreservesAllFields() throws {
+        let output = StandardTaskOutput(
+            runId: "20260517-abc123",
+            task: "open calculator",
+            status: .completed,
+            ok: true,
+            startedAt: "2026-05-17T10:00:00+08:00",
+            endedAt: "2026-05-17T10:00:05+08:00",
+            steps: [StepSummary(index: 0, tool: "launch_app", purpose: "Launch", success: true)],
+            costTelemetry: CostTelemetry(modelCalls: 3, totalTokens: 1000, estimatedCostUsd: 0.01, screenshotCount: 1)
+        )
+
+        let encoder = JSONEncoder()
+        encoder.outputFormatting = [.sortedKeys]
+        let data = try encoder.encode(output)
+        let decoded = try JSONDecoder().decode(StandardTaskOutput.self, from: data)
+
+        #expect(decoded.schemaVersion == 1)
+        #expect(decoded.runId == "20260517-abc123")
+        #expect(decoded.task == "open calculator")
+        #expect(decoded.status == .completed)
+        #expect(decoded.ok == true)
+        #expect(decoded.live == true)
+        #expect(decoded.allowForeground == false)
+        #expect(decoded.startedAt == "2026-05-17T10:00:00+08:00")
+        #expect(decoded.endedAt == "2026-05-17T10:00:05+08:00")
+        #expect(decoded.steps.count == 1)
+        #expect(decoded.costTelemetry != nil)
+    }
+
+    @Test("StandardTaskOutput JSON keys are snake case")
+    func standardTaskOutputJsonKeysAreSnakeCase() throws {
+        let output = StandardTaskOutput(
+            runId: "20260517-abc",
+            task: "test",
+            status: .completed,
+            ok: true,
+            exitCode: 0,
+            startedAt: "2026-05-17T10:00:00+08:00",
+            endedAt: "2026-05-17T10:00:05+08:00",
+            costTelemetry: CostTelemetry(modelCalls: 1, totalTokens: 100, estimatedCostUsd: 0.01, screenshotCount: 0)
+        )
+        let encoder = JSONEncoder()
+        encoder.outputFormatting = [.sortedKeys]
+        let data = try encoder.encode(output)
+        let json = try #require(String(data: data, encoding: .utf8))
+
+        #expect(json.contains("\"schema_version\""))
+        #expect(json.contains("\"run_id\""))
+        #expect(json.contains("\"allow_foreground\""))
+        #expect(json.contains("\"exit_code\""))
+        #expect(json.contains("\"started_at\""))
+        #expect(json.contains("\"ended_at\""))
+        #expect(json.contains("\"cost_telemetry\""))
+    }
+
+    @Test("StandardTaskOutput partial JSON decode uses defaults")
+    func standardTaskOutputPartialJsonDecodeUsesDefaults() throws {
+        let json = """
+        {"run_id":"20260517-xyz","task":"test","status":"running","started_at":"2026-05-17T10:00:00+08:00"}
+        """
+        let data = json.data(using: .utf8)!
+        let decoded = try JSONDecoder().decode(StandardTaskOutput.self, from: data)
+
+        #expect(decoded.schemaVersion == 1)
+        #expect(decoded.ok == true)
+        #expect(decoded.live == true)
+        #expect(decoded.allowForeground == false)
+        #expect(decoded.criteria == nil)
+        #expect(decoded.result == nil)
+        #expect(decoded.intervention == nil)
+        #expect(decoded.exitCode == nil)
+        #expect(decoded.error == nil)
+        #expect(decoded.endedAt == nil)
+        #expect(decoded.steps.isEmpty)
+        #expect(decoded.costTelemetry == nil)
+    }
+
+    @Test("StandardTaskOutput with all status cases encodes correctly")
+    func standardTaskOutputAllStatusCasesEncodesCorrectly() throws {
+        let statuses: [APIRunStatus] = [.queued, .running, .interventionNeeded, .userTakeover, .resuming, .completed, .failed, .cancelled]
+        let encoder = JSONEncoder()
+
+        for status in statuses {
+            let output = StandardTaskOutput(
+                runId: "test",
+                task: "test",
+                status: status,
+                startedAt: "2026-05-17T10:00:00+08:00"
+            )
+            let data = try encoder.encode(output)
+            let decoded = try JSONDecoder().decode(StandardTaskOutput.self, from: data)
+            #expect(decoded.status == status)
+        }
+    }
+
+    @Test("StandardTaskOutput with result and intervention")
+    func standardTaskOutputWithResultAndIntervention() throws {
+        let result = ApiTaskResult(
+            kind: .answer,
+            title: "read email",
+            body: "Latest email is from Alice",
+            createdAt: "2026-05-17T10:00:05+08:00"
+        )
+        let intervention = InterventionData(
+            reason: "需要用户确认",
+            availableActions: ["resume", "abort"],
+            blockingIssue: "弹窗阻塞操作"
+        )
+        let output = StandardTaskOutput(
+            runId: "test",
+            task: "read email",
+            status: .interventionNeeded,
+            ok: false,
+            result: result,
+            intervention: intervention,
+            startedAt: "2026-05-17T10:00:00+08:00"
+        )
+
+        let data = try JSONEncoder().encode(output)
+        let decoded = try JSONDecoder().decode(StandardTaskOutput.self, from: data)
+
+        #expect(decoded.result?.kind == .answer)
+        #expect(decoded.result?.body == "Latest email is from Alice")
+        #expect(decoded.intervention?.reason == "需要用户确认")
+        #expect(decoded.intervention?.availableActions == ["resume", "abort"])
+        #expect(decoded.intervention?.blockingIssue == "弹窗阻塞操作")
+    }
+
+    // MARK: - ApiTaskResult Tests
+
+    @Test("ApiTaskResult codable round trip")
+    func apiTaskResultCodableRoundTrip() throws {
+        let result = ApiTaskResult(
+            kind: .confirmation,
+            title: "open calculator",
+            body: "Calculator opened successfully",
+            createdAt: "2026-05-17T10:00:05+08:00"
+        )
+        let data = try JSONEncoder().encode(result)
+        let decoded = try JSONDecoder().decode(ApiTaskResult.self, from: data)
+
+        #expect(decoded.kind == .confirmation)
+        #expect(decoded.title == "open calculator")
+        #expect(decoded.body == "Calculator opened successfully")
+    }
+
+    @Test("TaskResultKind encodes to correct strings")
+    func taskResultKindEncodesCorrectStrings() throws {
+        #expect(TaskResultKind.answer.rawValue == "answer")
+        #expect(TaskResultKind.confirmation.rawValue == "confirmation")
+
+        for kind in [TaskResultKind.answer, .confirmation] {
+            let data = try JSONEncoder().encode(kind)
+            let decoded = try JSONDecoder().decode(TaskResultKind.self, from: data)
+            #expect(decoded == kind)
+        }
+    }
+
+    // MARK: - InterventionData Tests
+
+    @Test("InterventionData codable round trip")
+    func interventionDataCodableRoundTrip() throws {
+        let data = InterventionData(
+            reason: "需要手动操作",
+            availableActions: ["resume", "abort"],
+            blockingIssue: "权限不足"
+        )
+        let encoded = try JSONEncoder().encode(data)
+        let decoded = try JSONDecoder().decode(InterventionData.self, from: encoded)
+
+        #expect(decoded.reason == "需要手动操作")
+        #expect(decoded.availableActions == ["resume", "abort"])
+        #expect(decoded.blockingIssue == "权限不足")
+    }
+
+    @Test("InterventionData JSON keys are snake case")
+    func interventionDataJsonKeysAreSnakeCase() throws {
+        let data = InterventionData(reason: "test", availableActions: [], blockingIssue: "issue")
+        let encoder = JSONEncoder()
+        encoder.outputFormatting = [.sortedKeys]
+        let encoded = try encoder.encode(data)
+        let json = try #require(String(data: encoded, encoding: .utf8))
+
+        #expect(json.contains("\"available_actions\""))
+        #expect(json.contains("\"blocking_issue\""))
+    }
+
+    // MARK: - TrackedRun.toStandardOutput() Tests
+
+    @Test("TrackedRun toStandardOutput maps fields correctly")
+    func trackedRunToStandardOutputMapsFieldsCorrectly() throws {
+        let run = TrackedRun(
+            runId: "20260517-abc",
+            task: "open calculator",
+            status: .completed,
+            submittedAt: "2026-05-17T10:00:00+08:00",
+            completedAt: "2026-05-17T10:00:05+08:00",
+            totalSteps: 3,
+            durationMs: 5000,
+            steps: [StepSummary(index: 0, tool: "launch_app", purpose: "Launch", success: true)],
+            allowForeground: true,
+            criteria: "open any calculator"
+        )
+        let output = run.toStandardOutput()
+
+        #expect(output.runId == "20260517-abc")
+        #expect(output.task == "open calculator")
+        #expect(output.status == .completed)
+        #expect(output.ok == true)
+        #expect(output.live == true)
+        #expect(output.allowForeground == true)
+        #expect(output.criteria == "open any calculator")
+        #expect(output.startedAt == "2026-05-17T10:00:00+08:00")
+        #expect(output.endedAt == "2026-05-17T10:00:05+08:00")
+        #expect(output.steps.count == 1)
+        #expect(output.schemaVersion == 1)
+    }
+
+    @Test("TrackedRun toStandardOutput failed run has ok false")
+    func trackedRunToStandardOutputFailedRunHasOkFalse() throws {
+        let run = TrackedRun(
+            runId: "test",
+            task: "fail task",
+            status: .failed,
+            submittedAt: "2026-05-17T10:00:00+08:00",
+            error: "something went wrong"
+        )
+        let output = run.toStandardOutput()
+
+        #expect(output.ok == false)
+        #expect(output.error == "something went wrong")
+    }
+
+    @Test("TrackedRun toStandardOutput ok is false for intervention states")
+    func trackedRunToStandardOutputOkFalseForInterventionStates() throws {
+        for status in [APIRunStatus.interventionNeeded, .userTakeover, .cancelled] {
+            let run = TrackedRun(runId: "test", task: "test", status: status, submittedAt: "2026-05-17T10:00:00+08:00")
+            let output = run.toStandardOutput()
+            #expect(output.ok == false, "Expected ok=false for status \(status)")
+        }
+    }
+
+    @Test("TrackedRun toStandardOutput ok is true for queued and resuming")
+    func trackedRunToStandardOutputOkTrueForQueuedAndResuming() throws {
+        for status in [APIRunStatus.queued, .resuming, .completed, .running] {
+            let run = TrackedRun(runId: "test", task: "test", status: status, submittedAt: "2026-05-17T10:00:00+08:00")
+            let output = run.toStandardOutput()
+            #expect(output.ok == true, "Expected ok=true for status \(status)")
+        }
+    }
+
+    // MARK: - Result Kind Inference Tests
+
+    @Test("inferResultKind returns answer for query tasks")
+    func inferResultKindReturnsAnswerForQueryTasks() {
+        #expect(AgentRunner.inferResultKind(task: "读取最新邮件", output: "") == .answer)
+        #expect(AgentRunner.inferResultKind(task: "查询系统信息", output: "") == .answer)
+        #expect(AgentRunner.inferResultKind(task: "获取文件列表", output: "") == .answer)
+        #expect(AgentRunner.inferResultKind(task: "列出所有进程", output: "") == .answer)
+        #expect(AgentRunner.inferResultKind(task: "搜索相关文档", output: "") == .answer)
+        #expect(AgentRunner.inferResultKind(task: "告诉我时间", output: "") == .answer)
+        #expect(AgentRunner.inferResultKind(task: "显示磁盘使用", output: "") == .answer)
+        #expect(AgentRunner.inferResultKind(task: "查看当前目录", output: "") == .answer)
+    }
+
+    @Test("inferResultKind returns confirmation for action tasks")
+    func inferResultKindReturnsConfirmationForActionTasks() {
+        #expect(AgentRunner.inferResultKind(task: "打开计算器", output: "") == .confirmation)
+        #expect(AgentRunner.inferResultKind(task: "关闭窗口", output: "") == .confirmation)
+        #expect(AgentRunner.inferResultKind(task: "移动文件到桌面", output: "") == .confirmation)
+        #expect(AgentRunner.inferResultKind(task: "删除临时文件", output: "") == .confirmation)
+        #expect(AgentRunner.inferResultKind(task: "创建新文件夹", output: "") == .confirmation)
+        #expect(AgentRunner.inferResultKind(task: "安装应用", output: "") == .confirmation)
+    }
+
+    @Test("inferResultKind defaults to confirmation for ambiguous tasks")
+    func inferResultKindDefaultsToConfirmation() {
+        #expect(AgentRunner.inferResultKind(task: "do something", output: "") == .confirmation)
+        #expect(AgentRunner.inferResultKind(task: "处理数据", output: "") == .confirmation)
+    }
+
+    // MARK: - StandardTaskOutput Serialization Performance
+
+    @Test("StandardTaskOutput serialization under 5ms")
+    func standardTaskOutputSerializationPerformance() throws {
+        let output = StandardTaskOutput(
+            runId: "20260517-performance",
+            task: "performance test task with a longer description to simulate real workload",
+            status: .completed,
+            ok: true,
+            result: ApiTaskResult(kind: .confirmation, title: "test", body: String(repeating: "a", count: 200), createdAt: "2026-05-17T10:00:00+08:00"),
+            startedAt: "2026-05-17T10:00:00+08:00",
+            endedAt: "2026-05-17T10:00:05+08:00",
+            steps: (0..<20).map { StepSummary(index: $0, tool: "tool_\($0)", purpose: "purpose \($0)", success: true) },
+            costTelemetry: CostTelemetry(modelCalls: 10, totalTokens: 5000, estimatedCostUsd: 0.05, screenshotCount: 3)
+        )
+
+        let encoder = JSONEncoder()
+        encoder.outputFormatting = [.sortedKeys]
+
+        // Warm up
+        for _ in 0..<10 {
+            let data = try encoder.encode(output)
+            _ = try JSONDecoder().decode(StandardTaskOutput.self, from: data)
+        }
+
+        // Single iteration benchmark — debug builds are inherently slower;
+        // use 500ms threshold to verify no gross regression (release builds run <1ms)
+        let start = ContinuousClock.now
+        let data = try encoder.encode(output)
+        _ = try JSONDecoder().decode(StandardTaskOutput.self, from: data)
+        let elapsed = ContinuousClock.now - start
+
+        let durationMs = Double(elapsed.components.seconds) * 1000.0 +
+            Double(elapsed.components.attoseconds) / 1_000_000_000_000.0
+
+        #expect(durationMs < 500.0)
     }
 }

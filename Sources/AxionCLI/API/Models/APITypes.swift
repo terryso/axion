@@ -3,11 +3,15 @@ import Hummingbird
 
 // MARK: - APIRunStatus
 
-/// External-facing run status subset exposed via HTTP API.
-/// Maps to a subset of the internal RunState values.
+/// External-facing run status exposed via HTTP API.
+/// Eight statuses aligned with the StandardTaskOutput contract.
 enum APIRunStatus: String, Codable, Equatable, Sendable {
+    case queued
     case running
-    case done
+    case interventionNeeded = "intervention_needed"
+    case userTakeover = "user_takeover"
+    case resuming
+    case completed
     case failed
     case cancelled
 }
@@ -36,58 +40,143 @@ struct CreateRunRequest: Codable, Equatable, Sendable {
     }
 }
 
-// MARK: - CreateRunResponse
+// MARK: - StandardTaskOutput
 
-/// Response body for `POST /v1/runs` (202 Accepted).
-struct CreateRunResponse: Codable, Equatable, Sendable, ResponseEncodable {
+/// Unified output contract for all run-related API responses.
+/// Replaces the previous CreateRunResponse and RunStatusResponse.
+struct StandardTaskOutput: Codable, Equatable, Sendable, ResponseEncodable {
+    let schemaVersion: Int
     let runId: String
-    let status: String
-
-    enum CodingKeys: String, CodingKey {
-        case runId = "run_id"
-        case status
-    }
-}
-
-// MARK: - RunStatusResponse
-
-/// Response body for `GET /v1/runs/{runId}`.
-struct RunStatusResponse: Codable, Equatable, Sendable, ResponseEncodable {
-    let runId: String
-    let status: String
     let task: String
-    let totalSteps: Int
-    let durationMs: Int?
-    let replanCount: Int
-    let submittedAt: String
-    let completedAt: String?
+    let status: APIRunStatus
+    let ok: Bool
+    let live: Bool
+    let allowForeground: Bool
+    let criteria: String?
+    let result: ApiTaskResult?
+    let intervention: InterventionData?
+    let exitCode: Int?
+    let error: String?
+    let startedAt: String
+    let endedAt: String?
     let steps: [StepSummary]
     let costTelemetry: CostTelemetry?
 
-    init(runId: String, status: String, task: String, totalSteps: Int, durationMs: Int?, replanCount: Int, submittedAt: String, completedAt: String?, steps: [StepSummary], costTelemetry: CostTelemetry? = nil) {
+    init(
+        schemaVersion: Int = 1,
+        runId: String,
+        task: String,
+        status: APIRunStatus,
+        ok: Bool = true,
+        live: Bool = true,
+        allowForeground: Bool = false,
+        criteria: String? = nil,
+        result: ApiTaskResult? = nil,
+        intervention: InterventionData? = nil,
+        exitCode: Int? = nil,
+        error: String? = nil,
+        startedAt: String,
+        endedAt: String? = nil,
+        steps: [StepSummary] = [],
+        costTelemetry: CostTelemetry? = nil
+    ) {
+        self.schemaVersion = schemaVersion
         self.runId = runId
-        self.status = status
         self.task = task
-        self.totalSteps = totalSteps
-        self.durationMs = durationMs
-        self.replanCount = replanCount
-        self.submittedAt = submittedAt
-        self.completedAt = completedAt
+        self.status = status
+        self.ok = ok
+        self.live = live
+        self.allowForeground = allowForeground
+        self.criteria = criteria
+        self.result = result
+        self.intervention = intervention
+        self.exitCode = exitCode
+        self.error = error
+        self.startedAt = startedAt
+        self.endedAt = endedAt
         self.steps = steps
         self.costTelemetry = costTelemetry
     }
 
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        schemaVersion = try container.decodeIfPresent(Int.self, forKey: .schemaVersion) ?? 1
+        runId = try container.decode(String.self, forKey: .runId)
+        task = try container.decode(String.self, forKey: .task)
+        status = try container.decode(APIRunStatus.self, forKey: .status)
+        ok = try container.decodeIfPresent(Bool.self, forKey: .ok) ?? true
+        live = try container.decodeIfPresent(Bool.self, forKey: .live) ?? true
+        allowForeground = try container.decodeIfPresent(Bool.self, forKey: .allowForeground) ?? false
+        criteria = try container.decodeIfPresent(String.self, forKey: .criteria)
+        result = try container.decodeIfPresent(ApiTaskResult.self, forKey: .result)
+        intervention = try container.decodeIfPresent(InterventionData.self, forKey: .intervention)
+        exitCode = try container.decodeIfPresent(Int.self, forKey: .exitCode)
+        error = try container.decodeIfPresent(String.self, forKey: .error)
+        startedAt = try container.decode(String.self, forKey: .startedAt)
+        endedAt = try container.decodeIfPresent(String.self, forKey: .endedAt)
+        steps = try container.decodeIfPresent([StepSummary].self, forKey: .steps) ?? []
+        costTelemetry = try container.decodeIfPresent(CostTelemetry.self, forKey: .costTelemetry)
+    }
+
     enum CodingKeys: String, CodingKey {
+        case schemaVersion = "schema_version"
         case runId = "run_id"
-        case status
         case task
-        case totalSteps = "total_steps"
-        case durationMs = "duration_ms"
-        case replanCount = "replan_count"
-        case submittedAt = "submitted_at"
-        case completedAt = "completed_at"
+        case status
+        case ok
+        case live
+        case allowForeground = "allow_foreground"
+        case criteria
+        case result
+        case intervention
+        case exitCode = "exit_code"
+        case error
+        case startedAt = "started_at"
+        case endedAt = "ended_at"
         case steps
         case costTelemetry = "cost_telemetry"
+    }
+}
+
+// MARK: - TaskResultKind
+
+/// Kind of result returned by a completed task.
+/// `answer` = informational (user asked to read/query),
+/// `confirmation` = action performed (user asked to open/move/delete).
+enum TaskResultKind: String, Codable, Equatable, Sendable {
+    case answer
+    case confirmation
+}
+
+// MARK: - ApiTaskResult
+
+/// Result payload within StandardTaskOutput when a task completes successfully.
+struct ApiTaskResult: Codable, Equatable, Sendable {
+    let kind: TaskResultKind
+    let title: String
+    let body: String
+    let createdAt: String
+
+    enum CodingKeys: String, CodingKey {
+        case kind
+        case title
+        case body
+        case createdAt = "created_at"
+    }
+}
+
+// MARK: - InterventionData
+
+/// Intervention payload when a task enters takeover state.
+struct InterventionData: Codable, Equatable, Sendable {
+    let reason: String
+    let availableActions: [String]
+    let blockingIssue: String
+
+    enum CodingKeys: String, CodingKey {
+        case reason
+        case availableActions = "available_actions"
+        case blockingIssue = "blocking_issue"
     }
 }
 
@@ -146,8 +235,35 @@ struct TrackedRun: Codable, Equatable, Sendable {
     var replanCount: Int
     var steps: [StepSummary]
     var costTelemetry: CostTelemetry?
+    var live: Bool
+    var allowForeground: Bool
+    var criteria: String?
+    var result: ApiTaskResult?
+    var intervention: InterventionData?
+    var exitCode: Int?
+    var error: String?
+    var schemaVersion: Int
 
-    init(runId: String, task: String, status: APIRunStatus, submittedAt: String, completedAt: String? = nil, totalSteps: Int = 0, durationMs: Int? = nil, replanCount: Int = 0, steps: [StepSummary] = [], costTelemetry: CostTelemetry? = nil) {
+    init(
+        runId: String,
+        task: String,
+        status: APIRunStatus,
+        submittedAt: String,
+        completedAt: String? = nil,
+        totalSteps: Int = 0,
+        durationMs: Int? = nil,
+        replanCount: Int = 0,
+        steps: [StepSummary] = [],
+        costTelemetry: CostTelemetry? = nil,
+        live: Bool = true,
+        allowForeground: Bool = false,
+        criteria: String? = nil,
+        result: ApiTaskResult? = nil,
+        intervention: InterventionData? = nil,
+        exitCode: Int? = nil,
+        error: String? = nil,
+        schemaVersion: Int = 1
+    ) {
         self.runId = runId
         self.task = task
         self.status = status
@@ -158,6 +274,36 @@ struct TrackedRun: Codable, Equatable, Sendable {
         self.replanCount = replanCount
         self.steps = steps
         self.costTelemetry = costTelemetry
+        self.live = live
+        self.allowForeground = allowForeground
+        self.criteria = criteria
+        self.result = result
+        self.intervention = intervention
+        self.exitCode = exitCode
+        self.error = error
+        self.schemaVersion = schemaVersion
+    }
+
+    /// Convert to the external StandardTaskOutput contract.
+    func toStandardOutput() -> StandardTaskOutput {
+        StandardTaskOutput(
+            schemaVersion: schemaVersion,
+            runId: runId,
+            task: task,
+            status: status,
+            ok: ![.failed, .cancelled, .interventionNeeded, .userTakeover].contains(status),
+            live: live,
+            allowForeground: allowForeground,
+            criteria: criteria,
+            result: result,
+            intervention: intervention,
+            exitCode: exitCode,
+            error: error,
+            startedAt: submittedAt,
+            endedAt: completedAt,
+            steps: steps,
+            costTelemetry: costTelemetry
+        )
     }
 }
 

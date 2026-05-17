@@ -74,7 +74,7 @@ struct RunTaskTool: ToolProtocol {
 
         await taskQueue.enqueue {
             let result = await capturedAgent.prompt(task)
-            let status: APIRunStatus = result.status == .success ? .done : .failed
+            let status: APIRunStatus = result.status == .success ? .completed : .failed
             await capturedTracker.updateRun(
                 runId: runId, status: status, steps: [], durationMs: nil, replanCount: 0
             )

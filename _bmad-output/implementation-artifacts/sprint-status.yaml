@@ -1,5 +1,7 @@
 # generated: 2026-05-08
 # last_updated: 2026-05-17
+# story-14.1-created: 2026-05-17
+# retro-epic-13: 2026-05-17
 # story-13.4-review: 2026-05-17
 # story-13.3-created: 2026-05-17
 # story-13.2-created: 2026-05-17
@@ -172,16 +174,16 @@ development_status:
   epic-12-retrospective: done
 
   # Epic 13: 执行安全与成本控制
-  epic-13: in-progress
+  epic-13: done
   13-1-desktop-level-run-lock: done
   13-2-visual-delta-check: done
   13-3-fine-grained-budget-cost-telemetry: done
   13-4-desktop-activity-detection-learning-protection: done
-  epic-13-retrospective: optional
+  epic-13-retrospective: done
 
   # Epic 14: API 规范化与集成友好度
-  epic-14: backlog
-  14-1-standard-task-output-contract: backlog
+  epic-14: in-progress
+  14-1-standard-task-output-contract: done
   14-2-capabilities-endpoint: backlog
   14-3-settings-api: backlog
   epic-14-retrospective: optional

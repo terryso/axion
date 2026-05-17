@@ -44,6 +44,7 @@ enum AgentRunner {
         options: RunOptions,
         runId: String = "",
         eventBroadcaster: EventBroadcaster? = nil,
+        runTracker: RunTracker? = nil,
         verbose: Bool = false,
         completion: @escaping (String, APIRunStatus, [StepSummary], Int?, Int, CostTelemetry?, Bool) -> Void
     ) async -> (totalSteps: Int, durationMs: Int, replanCount: Int, finalStatus: APIRunStatus, stepSummaries: [StepSummary], costTelemetry: CostTelemetry?, externallyModified: Bool) {
@@ -225,6 +226,20 @@ enum AgentRunner {
                 )
                 resultCostTelemetry = await costTracker.getTelemetry()
 
+                // Infer result kind and write ApiTaskResult (Story 14.1)
+                if let tracker = runTracker, !runId.isEmpty {
+                    let kind = inferResultKind(task: task, output: data.text)
+                    let formatter = ISO8601DateFormatter()
+                    formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+                    let taskResult = ApiTaskResult(
+                        kind: kind,
+                        title: task,
+                        body: String(data.text.prefix(500)),
+                        createdAt: formatter.string(from: Date())
+                    )
+                    await tracker.updateRunResult(runId: runId, result: taskResult)
+                }
+
             default:
                 break
             }
@@ -243,9 +258,9 @@ enum AgentRunner {
         let finalStatus: APIRunStatus
         switch resultSubtype {
         case .success:
-            finalStatus = .done
+            finalStatus = .completed
         case .none:
-            finalStatus = .done
+            finalStatus = .completed
         default:
             finalStatus = .failed
         }
@@ -292,5 +307,20 @@ enum AgentRunner {
         // Use tool name as a basic purpose; in the future,
         // this could be enriched with LLM-provided purpose metadata
         return data.toolName
+    }
+
+    /// Heuristic to classify task result as answer (informational) or confirmation (action performed).
+    static func inferResultKind(task: String, output: String) -> TaskResultKind {
+        let answerKeywords = ["读取", "查询", "获取", "列出", "搜索", "告诉我", "显示", "查看", "是什么", "有哪些", "read", "query", "get", "list", "search", "show", "tell", "what", "find"]
+        let confirmationKeywords = ["打开", "关闭", "移动", "删除", "创建", "复制", "粘贴", "输入", "填写", "安装", "卸载", "open", "close", "move", "delete", "create", "copy", "paste", "type", "install", "uninstall"]
+
+        let lowerTask = task.lowercased()
+        for keyword in answerKeywords {
+            if lowerTask.contains(keyword) { return .answer }
+        }
+        for keyword in confirmationKeywords {
+            if lowerTask.contains(keyword) { return .confirmation }
+        }
+        return .confirmation
     }
 }

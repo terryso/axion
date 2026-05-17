@@ -54,12 +54,8 @@ actor RunTracker {
             task: task,
             status: .running,
             submittedAt: submittedAt,
-            completedAt: nil,
-            totalSteps: 0,
-            durationMs: nil,
-            replanCount: 0,
-            steps: [],
-            costTelemetry: nil
+            live: true,
+            allowForeground: options.allowForeground ?? false
         )
         runs[runId] = run
 
@@ -78,20 +74,14 @@ actor RunTracker {
     }
 
     /// Update an existing run's status and results.
-    /// - Parameters:
-    ///   - runId: The run to update.
-    ///   - status: New status (done, failed, cancelled).
-    ///   - steps: Array of step summaries from execution.
-    ///   - durationMs: Total execution duration in milliseconds.
-    ///   - replanCount: Number of replanning attempts.
-    ///   - costTelemetry: Optional cost telemetry data from execution.
     func updateRun(
         runId: String,
         status: APIRunStatus,
         steps: [StepSummary],
         durationMs: Int?,
         replanCount: Int,
-        costTelemetry: CostTelemetry? = nil
+        costTelemetry: CostTelemetry? = nil,
+        error: String? = nil
     ) async {
         guard runs[runId] != nil else {
             print("[RunTracker] Warning: updateRun called with unknown runId '\(runId)'")
@@ -109,6 +99,8 @@ actor RunTracker {
         runs[runId]?.replanCount = replanCount
         runs[runId]?.steps = steps
         runs[runId]?.costTelemetry = costTelemetry
+        runs[runId]?.error = error
+        runs[runId]?.exitCode = (status == .failed) ? 1 : (status == .completed ? 0 : nil)
 
         // Emit run_completed event via EventBroadcaster (Story 5.2)
         if let broadcaster = eventBroadcaster {
@@ -125,6 +117,24 @@ actor RunTracker {
 
         // Legacy callback: notify status change
         onRunStatusChanged?(runId, status)
+    }
+
+    /// Write the ApiTaskResult for a completed run.
+    func updateRunResult(runId: String, result: ApiTaskResult) {
+        guard runs[runId] != nil else {
+            print("[RunTracker] Warning: updateRunResult called with unknown runId '\(runId)'")
+            return
+        }
+        runs[runId]?.result = result
+    }
+
+    /// Write InterventionData for a run requiring user intervention.
+    func updateRunIntervention(runId: String, intervention: InterventionData) {
+        guard runs[runId] != nil else {
+            print("[RunTracker] Warning: updateRunIntervention called with unknown runId '\(runId)'")
+            return
+        }
+        runs[runId]?.intervention = intervention
     }
 
     /// Retrieve a run by its ID.

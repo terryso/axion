@@ -152,7 +152,7 @@ struct StatusBarControllerTests {
         controller.currentStep = 3
         controller.totalSteps = 5
 
-        controller.handleRunCompleted(finalStatus: "done")
+        controller.handleRunCompleted(finalStatus: "completed")
 
         #expect(controller.connectionState == .connected)
         #expect(controller.currentStep == 0)
