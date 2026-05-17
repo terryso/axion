@@ -273,6 +273,15 @@ struct RunCommand: AsyncParsableCommand {
         let costTracker = CostTracker(maxModelCalls: config.maxModelCalls, maxScreenshots: config.maxScreenshots)
         var budgetExceeded = false
 
+        // Seat activity monitoring (Story 13.4) — detect external desktop operations
+        let seatMonitor = (config.sharedSeatMode && !allowForeground && !dryrun)
+            ? await SeatActivityMonitor.create() : nil
+        if let monitor = seatMonitor {
+            await tracer?.recordSeatBaseline(baseline: await monitor.describeBaseline())
+        }
+        var externallyModified = false
+        var seatActivityReported = false
+
         await withTaskCancellationHandler {
             let messageStream = agent.stream(task)
             for await message in messageStream {
@@ -284,6 +293,16 @@ struct RunCommand: AsyncParsableCommand {
                 // Collect tool pairs for memory extraction (match by toolUseId)
                 switch message {
                 case .assistant(let data):
+                    // Seat activity check (Story 13.4)
+                    if let activity = await seatMonitor?.check() {
+                        externallyModified = true
+                        await tracer?.recordExternalActivityDetected(
+                            description: activity, phase: "before_llm")
+                        if !seatActivityReported {
+                            fputs("[axion] 检测到外部桌面操作，本次运行的经验不会被记忆\n", stderr)
+                            seatActivityReported = true
+                        }
+                    }
                     // Budget: record LLM call and check model call limit
                     let callIndex = await costTracker.currentModelCallCount + 1
                     let budgetResult = await costTracker.recordModelCall(model: data.model)
@@ -409,72 +428,77 @@ struct RunCommand: AsyncParsableCommand {
         await tracer?.close()
 
         // Extract and save memory (non-blocking — failures are logged but don't fail the run)
-        do {
-            let extractor = AppMemoryExtractor()
-            let entries = try await extractor.extract(
-                from: collectedPairs,
-                task: task,
-                runId: runId
-            )
-            var processedDomains: Set<String> = []
-            for entry in entries {
-                // Determine domain from tags (app:xxx)
-                let domain = entry.tags.first(where: { $0.hasPrefix("app:") })?
-                    .dropFirst("app:".count).description ?? "unknown"
-                try await memoryStore.save(domain: domain, knowledge: entry)
-                processedDomains.insert(domain)
-            }
-
-            // Story 12.1: Also extract AppMemoryFact entries (AC2, AC8)
-            let factStore = MemoryFactStore(memoryDir: memoryDir)
-            let lifecycleService = MemoryLifecycleService()
-            let facts = extractor.extractFacts(
-                from: collectedPairs,
-                task: task,
-                runId: runId
-            )
-            for fact in facts {
-                do {
-                    let existing = try await factStore.query(domain: fact.domain)
-                    let result = lifecycleService.addFact(fact, mergingWith: existing)
-                    try await factStore.save(domain: fact.domain, fact: result)
-                } catch {
-                    fputs("[axion] warning: memory fact save failed for \(fact.domain): \(error.localizedDescription)\n", stderr)
+        // Story 13.4: Skip memory extraction if external desktop activity was detected
+        if externallyModified {
+            fputs("[axion] 检测到外部桌面操作，本次运行的经验不会被记忆\n", stderr)
+        } else {
+            do {
+                let extractor = AppMemoryExtractor()
+                let entries = try await extractor.extract(
+                    from: collectedPairs,
+                    task: task,
+                    runId: runId
+                )
+                var processedDomains: Set<String> = []
+                for entry in entries {
+                    // Determine domain from tags (app:xxx)
+                    let domain = entry.tags.first(where: { $0.hasPrefix("app:") })?
+                        .dropFirst("app:".count).description ?? "unknown"
+                    try await memoryStore.save(domain: domain, knowledge: entry)
+                    processedDomains.insert(domain)
                 }
-            }
 
-            // Story 4.2: Profile analysis and familiarity tracking
-            for domain in processedDomains {
-                do {
-                    // Query history for this domain
-                    let history = try await memoryStore.query(domain: domain, filter: nil)
-
-                    // Analyze and generate AppProfile
-                    let analyzer = AppProfileAnalyzer()
-                    let profile = analyzer.analyze(domain: domain, history: history)
-
-                    // Save profile as a KnowledgeEntry (only if there's meaningful data)
-                    if profile.totalRuns > 0 {
-                        let profileContent = Self.buildProfileContent(profile: profile)
-                        let profileEntry = KnowledgeEntry(
-                            id: UUID().uuidString,
-                            content: profileContent,
-                            tags: ["app:\(domain)", "profile"],
-                            createdAt: Date(),
-                            sourceRunId: nil
-                        )
-                        try await memoryStore.save(domain: domain, knowledge: profileEntry)
+                // Story 12.1: Also extract AppMemoryFact entries (AC2, AC8)
+                let factStore = MemoryFactStore(memoryDir: memoryDir)
+                let lifecycleService = MemoryLifecycleService()
+                let facts = extractor.extractFacts(
+                    from: collectedPairs,
+                    task: task,
+                    runId: runId
+                )
+                for fact in facts {
+                    do {
+                        let existing = try await factStore.query(domain: fact.domain)
+                        let result = lifecycleService.addFact(fact, mergingWith: existing)
+                        try await factStore.save(domain: fact.domain, fact: result)
+                    } catch {
+                        fputs("[axion] warning: memory fact save failed for \(fact.domain): \(error.localizedDescription)\n", stderr)
                     }
-
-                    // Check and update familiarity
-                    let tracker = FamiliarityTracker()
-                    try await tracker.checkAndUpdateFamiliarity(domain: domain, store: memoryStore)
-                } catch {
-                    fputs("[axion] warning: profile analysis failed for \(domain): \(error.localizedDescription)\n", stderr)
                 }
+
+                // Story 4.2: Profile analysis and familiarity tracking
+                for domain in processedDomains {
+                    do {
+                        // Query history for this domain
+                        let history = try await memoryStore.query(domain: domain, filter: nil)
+
+                        // Analyze and generate AppProfile
+                        let analyzer = AppProfileAnalyzer()
+                        let profile = analyzer.analyze(domain: domain, history: history)
+
+                        // Save profile as a KnowledgeEntry (only if there's meaningful data)
+                        if profile.totalRuns > 0 {
+                            let profileContent = Self.buildProfileContent(profile: profile)
+                            let profileEntry = KnowledgeEntry(
+                                id: UUID().uuidString,
+                                content: profileContent,
+                                tags: ["app:\(domain)", "profile"],
+                                createdAt: Date(),
+                                sourceRunId: nil
+                            )
+                            try await memoryStore.save(domain: domain, knowledge: profileEntry)
+                        }
+
+                        // Check and update familiarity
+                        let tracker = FamiliarityTracker()
+                        try await tracker.checkAndUpdateFamiliarity(domain: domain, store: memoryStore)
+                    } catch {
+                        fputs("[axion] warning: profile analysis failed for \(domain): \(error.localizedDescription)\n", stderr)
+                    }
+                }
+            } catch {
+                fputs("[axion] warning: memory extraction failed: \(error.localizedDescription)\n", stderr)
             }
-        } catch {
-            fputs("[axion] warning: memory extraction failed: \(error.localizedDescription)\n", stderr)
         }
 
         // Record lock release trace event

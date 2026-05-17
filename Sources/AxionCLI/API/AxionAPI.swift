@@ -186,7 +186,7 @@ enum AxionAPI {
                             ),
                             runId: runId,
                             eventBroadcaster: eventBroadcaster,
-                            completion: { _, _, _, _, _, _ in }
+                            completion: { _, _, _, _, _, _, _ in }
                         )
                         await runTracker.updateRun(
                             runId: runId,
@@ -229,7 +229,7 @@ enum AxionAPI {
                         ),
                         runId: runId,
                         eventBroadcaster: eventBroadcaster,
-                        completion: { _, _, _, _, _, _ in }
+                        completion: { _, _, _, _, _, _, _ in }
                     )
                     await runTracker.updateRun(
                         runId: runId,
@@ -263,7 +263,7 @@ enum AxionAPI {
                     ),
                     runId: runId,
                     eventBroadcaster: eventBroadcaster,
-                    completion: { _, _, _, _, _, _ in }
+                    completion: { _, _, _, _, _, _, _ in }
                 )
                 await runTracker.updateRun(
                     runId: runId,

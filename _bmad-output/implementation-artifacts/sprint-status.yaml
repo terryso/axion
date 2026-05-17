@@ -1,5 +1,6 @@
 # generated: 2026-05-08
 # last_updated: 2026-05-17
+# story-13.4-review: 2026-05-17
 # story-13.3-created: 2026-05-17
 # story-13.2-created: 2026-05-17
 # story-13.1-created: 2026-05-17
@@ -175,7 +176,7 @@ development_status:
   13-1-desktop-level-run-lock: done
   13-2-visual-delta-check: done
   13-3-fine-grained-budget-cost-telemetry: done
-  13-4-desktop-activity-detection-learning-protection: backlog
+  13-4-desktop-activity-detection-learning-protection: done
   epic-13-retrospective: optional
 
   # Epic 14: API 规范化与集成友好度

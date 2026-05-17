@@ -35,6 +35,8 @@ actor TraceRecorder {
         static let verifierSkipped = "verifier_skipped"
         static let modelCall = "model_call"
         static let budgetExceeded = "budget_exceeded"
+        static let externalActivityDetected = "external_activity_detected"
+        static let seatBaseline = "seat_baseline"
     }
 
     // MARK: - Properties
@@ -278,6 +280,21 @@ actor TraceRecorder {
             "budgetType": budgetType,
             "current": current,
             "limit": limit
+        ])
+    }
+
+    /// Records an external_activity_detected event when desktop activity is detected during a shared-seat run.
+    func recordExternalActivityDetected(description: String, phase: String) {
+        record(event: TraceEventType.externalActivityDetected, payload: [
+            "description": description,
+            "phase": phase
+        ])
+    }
+
+    /// Records a seat_baseline event with initial cursor and frontmost app info.
+    func recordSeatBaseline(baseline: String) {
+        record(event: TraceEventType.seatBaseline, payload: [
+            "baseline": baseline
         ])
     }
 

@@ -45,21 +45,21 @@ enum AgentRunner {
         runId: String = "",
         eventBroadcaster: EventBroadcaster? = nil,
         verbose: Bool = false,
-        completion: @escaping (String, APIRunStatus, [StepSummary], Int?, Int, CostTelemetry?) -> Void
-    ) async -> (totalSteps: Int, durationMs: Int, replanCount: Int, finalStatus: APIRunStatus, stepSummaries: [StepSummary], costTelemetry: CostTelemetry?) {
+        completion: @escaping (String, APIRunStatus, [StepSummary], Int?, Int, CostTelemetry?, Bool) -> Void
+    ) async -> (totalSteps: Int, durationMs: Int, replanCount: Int, finalStatus: APIRunStatus, stepSummaries: [StepSummary], costTelemetry: CostTelemetry?, externallyModified: Bool) {
         // 1. Resolve API key
         let apiKey = config.apiKey
             ?? ProcessInfo.processInfo.environment["AXION_API_KEY"]
 
         guard let apiKey, !apiKey.isEmpty else {
-            completion("", .failed, [], nil, 0, nil)
-            return (0, 0, 0, .failed, [], nil)
+            completion("", .failed, [], nil, 0, nil, false)
+            return (0, 0, 0, .failed, [], nil, false)
         }
 
         // 2. Resolve Helper path
         guard let helperPath = HelperPathResolver.resolveHelperPath() else {
-            completion("", .failed, [], nil, 0, nil)
-            return (0, 0, 0, .failed, [], nil)
+            completion("", .failed, [], nil, 0, nil, false)
+            return (0, 0, 0, .failed, [], nil, false)
         }
 
         // 3. Create MemoryStore
@@ -81,8 +81,8 @@ enum AgentRunner {
                 fromDirectory: promptDir
             )
         } catch {
-            completion("", .failed, [], nil, 0, nil)
-            return (0, 0, 0, .failed, [], nil)
+            completion("", .failed, [], nil, 0, nil, false)
+            return (0, 0, 0, .failed, [], nil, false)
         }
 
         // Build full system prompt with memory context
@@ -143,12 +143,34 @@ enum AgentRunner {
         // Cost tracking (Story 13.3)
         let costTracker = CostTracker(maxModelCalls: config.maxModelCalls, maxScreenshots: config.maxScreenshots)
 
+        // Trace recording
+        let tracer = try? TraceRecorder(runId: runId, config: config)
+
+        // Seat activity monitoring (Story 13.4) — detect external desktop operations
+        let seatMonitor = (config.sharedSeatMode && !(options.allowForeground ?? false))
+            ? await SeatActivityMonitor.create() : nil
+        if let monitor = seatMonitor {
+            await tracer?.recordSeatBaseline(baseline: await monitor.describeBaseline())
+        }
+        var externallyModified = false
+        var seatActivityReported = false
+
         let messageStream = agent.stream(task)
         for await message in messageStream {
             if _Concurrency.Task.isCancelled { break }
 
             switch message {
             case .assistant:
+                // Seat activity check (Story 13.4)
+                if let activity = await seatMonitor?.check() {
+                    externallyModified = true
+                    await tracer?.recordExternalActivityDetected(
+                        description: activity, phase: "before_llm")
+                    if !seatActivityReported {
+                        fputs("[axion] 检测到外部桌面操作，本次运行的经验不会被记忆\n", stderr)
+                        seatActivityReported = true
+                    }
+                }
                 _ = await costTracker.recordModelCall(model: config.model)
 
             case .toolUse(let data):
@@ -216,6 +238,7 @@ enum AgentRunner {
 
         // Cleanup
         try? await agent.close()
+        await tracer?.close()
 
         let finalStatus: APIRunStatus
         switch resultSubtype {
@@ -227,7 +250,7 @@ enum AgentRunner {
             finalStatus = .failed
         }
 
-        return (totalSteps: totalSteps, durationMs: durationMs, replanCount: 0, finalStatus: finalStatus, stepSummaries: stepSummaries, costTelemetry: resultCostTelemetry)
+        return (totalSteps: totalSteps, durationMs: durationMs, replanCount: 0, finalStatus: finalStatus, stepSummaries: stepSummaries, costTelemetry: resultCostTelemetry, externallyModified: externallyModified)
     }
 
     // MARK: - Private Helpers
