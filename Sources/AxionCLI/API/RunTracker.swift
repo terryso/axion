@@ -58,7 +58,8 @@ actor RunTracker {
             totalSteps: 0,
             durationMs: nil,
             replanCount: 0,
-            steps: []
+            steps: [],
+            costTelemetry: nil
         )
         runs[runId] = run
 
@@ -83,12 +84,14 @@ actor RunTracker {
     ///   - steps: Array of step summaries from execution.
     ///   - durationMs: Total execution duration in milliseconds.
     ///   - replanCount: Number of replanning attempts.
+    ///   - costTelemetry: Optional cost telemetry data from execution.
     func updateRun(
         runId: String,
         status: APIRunStatus,
         steps: [StepSummary],
         durationMs: Int?,
-        replanCount: Int
+        replanCount: Int,
+        costTelemetry: CostTelemetry? = nil
     ) async {
         guard runs[runId] != nil else {
             print("[RunTracker] Warning: updateRun called with unknown runId '\(runId)'")
@@ -105,6 +108,7 @@ actor RunTracker {
         runs[runId]?.durationMs = durationMs
         runs[runId]?.replanCount = replanCount
         runs[runId]?.steps = steps
+        runs[runId]?.costTelemetry = costTelemetry
 
         // Emit run_completed event via EventBroadcaster (Story 5.2)
         if let broadcaster = eventBroadcaster {

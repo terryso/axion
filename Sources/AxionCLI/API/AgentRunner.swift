@@ -45,21 +45,21 @@ enum AgentRunner {
         runId: String = "",
         eventBroadcaster: EventBroadcaster? = nil,
         verbose: Bool = false,
-        completion: @escaping (String, APIRunStatus, [StepSummary], Int?, Int) -> Void
-    ) async -> (totalSteps: Int, durationMs: Int, replanCount: Int, finalStatus: APIRunStatus, stepSummaries: [StepSummary]) {
+        completion: @escaping (String, APIRunStatus, [StepSummary], Int?, Int, CostTelemetry?) -> Void
+    ) async -> (totalSteps: Int, durationMs: Int, replanCount: Int, finalStatus: APIRunStatus, stepSummaries: [StepSummary], costTelemetry: CostTelemetry?) {
         // 1. Resolve API key
         let apiKey = config.apiKey
             ?? ProcessInfo.processInfo.environment["AXION_API_KEY"]
 
         guard let apiKey, !apiKey.isEmpty else {
-            completion("", .failed, [], nil, 0)
-            return (0, 0, 0, .failed, [])
+            completion("", .failed, [], nil, 0, nil)
+            return (0, 0, 0, .failed, [], nil)
         }
 
         // 2. Resolve Helper path
         guard let helperPath = HelperPathResolver.resolveHelperPath() else {
-            completion("", .failed, [], nil, 0)
-            return (0, 0, 0, .failed, [])
+            completion("", .failed, [], nil, 0, nil)
+            return (0, 0, 0, .failed, [], nil)
         }
 
         // 3. Create MemoryStore
@@ -81,8 +81,8 @@ enum AgentRunner {
                 fromDirectory: promptDir
             )
         } catch {
-            completion("", .failed, [], nil, 0)
-            return (0, 0, 0, .failed, [])
+            completion("", .failed, [], nil, 0, nil)
+            return (0, 0, 0, .failed, [], nil)
         }
 
         // Build full system prompt with memory context
@@ -137,16 +137,28 @@ enum AgentRunner {
         var stepSummaries: [StepSummary] = []
         var pendingToolUses: [String: SDKMessage.ToolUseData] = [:]
         var resultSubtype: SDKMessage.ResultData.Subtype? = nil
+        var resultCostTelemetry: CostTelemetry? = nil
         let startTime = ContinuousClock.now
+
+        // Cost tracking (Story 13.3)
+        let costTracker = CostTracker(maxModelCalls: config.maxModelCalls, maxScreenshots: config.maxScreenshots)
 
         let messageStream = agent.stream(task)
         for await message in messageStream {
             if _Concurrency.Task.isCancelled { break }
 
             switch message {
+            case .assistant:
+                _ = await costTracker.recordModelCall(model: config.model)
+
             case .toolUse(let data):
                 totalSteps += 1
                 pendingToolUses[data.toolUseId] = data
+
+                // Track screenshot calls for cost telemetry
+                if data.toolName.contains("screenshot") {
+                    _ = await costTracker.recordScreenshot()
+                }
 
                 // Emit step_started SSE event (Story 5.2)
                 if let broadcaster = eventBroadcaster, !runId.isEmpty {
@@ -183,6 +195,13 @@ enum AgentRunner {
 
             case .result(let data):
                 resultSubtype = data.subtype
+                // Finalize cost data from SDK (Story 13.3)
+                await costTracker.finalizeWithSDKData(
+                    usage: data.usage,
+                    totalCostUsd: data.totalCostUsd,
+                    costBreakdown: data.costBreakdown
+                )
+                resultCostTelemetry = await costTracker.getTelemetry()
 
             default:
                 break
@@ -208,7 +227,7 @@ enum AgentRunner {
             finalStatus = .failed
         }
 
-        return (totalSteps: totalSteps, durationMs: durationMs, replanCount: 0, finalStatus: finalStatus, stepSummaries: stepSummaries)
+        return (totalSteps: totalSteps, durationMs: durationMs, replanCount: 0, finalStatus: finalStatus, stepSummaries: stepSummaries, costTelemetry: resultCostTelemetry)
     }
 
     // MARK: - Private Helpers

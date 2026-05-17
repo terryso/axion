@@ -18,6 +18,8 @@ public enum AxionError: Error, Equatable {
     case missingApiKey(suggestion: String)
     case helperNotFound(suggestion: String)
     case runLocked(runId: String, pid: Int32)
+    case modelCallBudgetExceeded(calls: Int, limit: Int)
+    case screenshotBudgetExceeded(count: Int, limit: Int)
 
     public struct MCPErrorPayload: Codable, Equatable {
         public let error: String
@@ -128,6 +130,18 @@ public enum AxionError: Error, Equatable {
                 error: "run_locked",
                 message: "另一个 live run（run_id: \(runId), pid: \(pid)）正在执行，请等待其完成或使用 `axion cancel \(runId)` 取消",
                 suggestion: "等待当前 run 完成或取消它后再试"
+            )
+        case .modelCallBudgetExceeded(let calls, let limit):
+            return MCPErrorPayload(
+                error: "model_call_budget_exceeded",
+                message: "已达到模型调用上限（\(calls)/\(limit)次）",
+                suggestion: "增加 --max-model-calls 或简化任务。"
+            )
+        case .screenshotBudgetExceeded(let count, let limit):
+            return MCPErrorPayload(
+                error: "screenshot_budget_exceeded",
+                message: "已达到截图上限（\(count)/\(limit)次）",
+                suggestion: "增加 --max-screenshots 或简化任务。"
             )
         }
     }

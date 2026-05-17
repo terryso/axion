@@ -62,6 +62,20 @@ struct RunStatusResponse: Codable, Equatable, Sendable, ResponseEncodable {
     let submittedAt: String
     let completedAt: String?
     let steps: [StepSummary]
+    let costTelemetry: CostTelemetry?
+
+    init(runId: String, status: String, task: String, totalSteps: Int, durationMs: Int?, replanCount: Int, submittedAt: String, completedAt: String?, steps: [StepSummary], costTelemetry: CostTelemetry? = nil) {
+        self.runId = runId
+        self.status = status
+        self.task = task
+        self.totalSteps = totalSteps
+        self.durationMs = durationMs
+        self.replanCount = replanCount
+        self.submittedAt = submittedAt
+        self.completedAt = completedAt
+        self.steps = steps
+        self.costTelemetry = costTelemetry
+    }
 
     enum CodingKeys: String, CodingKey {
         case runId = "run_id"
@@ -73,6 +87,7 @@ struct RunStatusResponse: Codable, Equatable, Sendable, ResponseEncodable {
         case submittedAt = "submitted_at"
         case completedAt = "completed_at"
         case steps
+        case costTelemetry = "cost_telemetry"
     }
 }
 
@@ -130,6 +145,20 @@ struct TrackedRun: Codable, Equatable, Sendable {
     var durationMs: Int?
     var replanCount: Int
     var steps: [StepSummary]
+    var costTelemetry: CostTelemetry?
+
+    init(runId: String, task: String, status: APIRunStatus, submittedAt: String, completedAt: String? = nil, totalSteps: Int = 0, durationMs: Int? = nil, replanCount: Int = 0, steps: [StepSummary] = [], costTelemetry: CostTelemetry? = nil) {
+        self.runId = runId
+        self.task = task
+        self.status = status
+        self.submittedAt = submittedAt
+        self.completedAt = completedAt
+        self.totalSteps = totalSteps
+        self.durationMs = durationMs
+        self.replanCount = replanCount
+        self.steps = steps
+        self.costTelemetry = costTelemetry
+    }
 }
 
 // MARK: - RunOptions

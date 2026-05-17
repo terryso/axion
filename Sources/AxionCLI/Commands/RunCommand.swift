@@ -57,11 +57,19 @@ struct RunCommand: AsyncParsableCommand {
     @Flag(name: .long, help: "禁用视觉增量检查")
     var noVisualDelta: Bool = false
 
+    @Option(name: .long, help: "最大 LLM 调用次数")
+    var maxModelCalls: Int?
+
+    @Option(name: .long, help: "最大截图次数")
+    var maxScreenshots: Int?
+
     mutating func run() async throws {
         // 1. Load configuration (layered: defaults -> config.json -> env -> CLI args)
         let cliOverrides = CLIOverrides(
             maxSteps: maxSteps,
-            maxBatches: maxBatches
+            maxBatches: maxBatches,
+            maxModelCalls: maxModelCalls,
+            maxScreenshots: maxScreenshots
         )
         let config = try await ConfigManager.loadConfig(cliOverrides: cliOverrides)
 
@@ -261,6 +269,10 @@ struct RunCommand: AsyncParsableCommand {
         var visualDeltaSkipped = 0
         var visualDeltaChecked = 0
 
+        // Budget/cost tracking (Story 13.3)
+        let costTracker = CostTracker(maxModelCalls: config.maxModelCalls, maxScreenshots: config.maxScreenshots)
+        var budgetExceeded = false
+
         await withTaskCancellationHandler {
             let messageStream = agent.stream(task)
             for await message in messageStream {
@@ -271,11 +283,27 @@ struct RunCommand: AsyncParsableCommand {
 
                 // Collect tool pairs for memory extraction (match by toolUseId)
                 switch message {
+                case .assistant(let data):
+                    // Budget: record LLM call and check model call limit
+                    let callIndex = await costTracker.currentModelCallCount + 1
+                    let budgetResult = await costTracker.recordModelCall(model: data.model)
+                    await tracer?.recordModelCall(model: data.model, callIndex: callIndex)
+                    if case .modelCallsExceeded(let limit) = budgetResult {
+                        budgetExceeded = true
+                        await tracer?.recordBudgetExceeded(budgetType: "model_calls", current: callIndex, limit: limit)
+                        agent.interrupt()
+                    }
                 case .toolUse(let data):
                     pendingToolUses[data.toolUseId] = data
                     // Track screenshot tool uses for visual delta
                     if data.toolName.contains("screenshot") {
                         pendingScreenshotToolUseIds.insert(data.toolUseId)
+                        // Budget: record screenshot call
+                        let budgetResult = await costTracker.recordScreenshot()
+                        if case .screenshotsExceeded(let limit) = budgetResult {
+                            let current = await costTracker.currentScreenshotCount
+                            await tracer?.recordBudgetExceeded(budgetType: "screenshots", current: current, limit: limit)
+                        }
                     }
                 case .toolResult(let data):
                     if let toolUse = pendingToolUses.removeValue(forKey: data.toolUseId) {
@@ -338,6 +366,13 @@ struct RunCommand: AsyncParsableCommand {
                     default:
                         break
                     }
+                case .result(let data):
+                    // Budget: finalize cost data from SDK
+                    await costTracker.finalizeWithSDKData(
+                        usage: data.usage,
+                        totalCostUsd: data.totalCostUsd,
+                        costBreakdown: data.costBreakdown
+                    )
                 default:
                     break
                 }
@@ -360,14 +395,16 @@ struct RunCommand: AsyncParsableCommand {
             fputs("[axion] 视觉增量: 跳过 \(visualDeltaSkipped)/\(visualDeltaChecked) 次验证\n", stderr)
         }
 
-        await tracer?.recordRunDone(totalSteps: totalSteps, durationMs: durationMs, replanCount: 0)
-
-        // Record lock release trace event (lock actually released by defer)
-        if !dryrun {
-            await tracer?.record(event: TraceRecorder.TraceEventType.lockReleased, payload: [
-                "runId": runId
-            ])
+        // Cost summary (Story 13.3)
+        let costSummary = await costTracker.getSummary()
+        if budgetExceeded {
+            if let limit = config.maxModelCalls {
+                fputs("[axion] ❌ 已达到模型调用上限（\(limit)次）\n", stderr)
+            }
         }
+        fputs("[axion] LLM 调用: \(costSummary.modelCalls)次, Tokens: \(costSummary.totalTokens), 预估成本: $\(String(format: "%.2f", costSummary.estimatedCostUsd)), 截图: \(costSummary.screenshotCount)次\n", stderr)
+
+        await tracer?.recordRunDone(totalSteps: totalSteps, durationMs: durationMs, replanCount: 0)
 
         await tracer?.close()
 

@@ -71,7 +71,8 @@ enum AxionAPI {
                     replanCount: run.replanCount,
                     submittedAt: run.submittedAt,
                     completedAt: run.completedAt,
-                    steps: run.steps
+                    steps: run.steps,
+                    costTelemetry: run.costTelemetry
                 )
             }
 
@@ -185,14 +186,15 @@ enum AxionAPI {
                             ),
                             runId: runId,
                             eventBroadcaster: eventBroadcaster,
-                            completion: { _, _, _, _, _ in }
+                            completion: { _, _, _, _, _, _ in }
                         )
                         await runTracker.updateRun(
                             runId: runId,
                             status: result.finalStatus,
                             steps: result.stepSummaries,
                             durationMs: result.durationMs,
-                            replanCount: result.replanCount
+                            replanCount: result.replanCount,
+                            costTelemetry: result.costTelemetry
                         )
                         await limiter.release()
                         await runLockService.release()
@@ -227,14 +229,15 @@ enum AxionAPI {
                         ),
                         runId: runId,
                         eventBroadcaster: eventBroadcaster,
-                        completion: { _, _, _, _, _ in }
+                        completion: { _, _, _, _, _, _ in }
                     )
                     await runTracker.updateRun(
                         runId: runId,
                         status: result.finalStatus,
                         steps: result.stepSummaries,
                         durationMs: result.durationMs,
-                        replanCount: result.replanCount
+                        replanCount: result.replanCount,
+                        costTelemetry: result.costTelemetry
                     )
                     await limiter.release()
                     await runLockService.release()
@@ -260,14 +263,15 @@ enum AxionAPI {
                     ),
                     runId: runId,
                     eventBroadcaster: eventBroadcaster,
-                    completion: { _, _, _, _, _ in }
+                    completion: { _, _, _, _, _, _ in }
                 )
                 await runTracker.updateRun(
                     runId: runId,
                     status: result.finalStatus,
                     steps: result.stepSummaries,
                     durationMs: result.durationMs,
-                    replanCount: result.replanCount
+                    replanCount: result.replanCount,
+                    costTelemetry: result.costTelemetry
                 )
                 await runLockService.release()
             }
@@ -312,7 +316,8 @@ enum AxionAPI {
                 replanCount: run.replanCount,
                 submittedAt: run.submittedAt,
                 completedAt: run.completedAt,
-                steps: run.steps
+                steps: run.steps,
+                costTelemetry: run.costTelemetry
             )
 
             return EditedResponse(
