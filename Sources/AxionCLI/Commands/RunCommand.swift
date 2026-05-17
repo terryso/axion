@@ -54,6 +54,9 @@ struct RunCommand: AsyncParsableCommand {
     @Flag(name: .long, help: "快速模式：简化规划，减少 LLM 调用")
     var fast: Bool = false
 
+    @Flag(name: .long, help: "禁用视觉增量检查")
+    var noVisualDelta: Bool = false
+
     mutating func run() async throws {
         // 1. Load configuration (layered: defaults -> config.json -> env -> CLI args)
         let cliOverrides = CLIOverrides(
@@ -252,6 +255,12 @@ struct RunCommand: AsyncParsableCommand {
         var pendingToolUses: [String: SDKMessage.ToolUseData] = [:]
         var collectedPairs: [(toolUse: SDKMessage.ToolUseData, toolResult: SDKMessage.ToolResultData)] = []
 
+        // Visual delta tracking (AC5: --no-visual-delta disables)
+        let visualDeltaTracker = noVisualDelta ? nil : VisualDeltaTracker()
+        var pendingScreenshotToolUseIds: Set<String> = []
+        var visualDeltaSkipped = 0
+        var visualDeltaChecked = 0
+
         await withTaskCancellationHandler {
             let messageStream = agent.stream(task)
             for await message in messageStream {
@@ -264,9 +273,31 @@ struct RunCommand: AsyncParsableCommand {
                 switch message {
                 case .toolUse(let data):
                     pendingToolUses[data.toolUseId] = data
+                    // Track screenshot tool uses for visual delta
+                    if data.toolName.contains("screenshot") {
+                        pendingScreenshotToolUseIds.insert(data.toolUseId)
+                    }
                 case .toolResult(let data):
                     if let toolUse = pendingToolUses.removeValue(forKey: data.toolUseId) {
                         collectedPairs.append((toolUse: toolUse, toolResult: data))
+                    }
+                    // Visual delta: check screenshot results
+                    if pendingScreenshotToolUseIds.remove(data.toolUseId) != nil,
+                       let tracker = visualDeltaTracker {
+                        let base64 = extractBase64FromToolResult(data.content)
+                        if let base64 {
+                            let result = await tracker.processScreenshot(base64: base64)
+                            visualDeltaChecked += 1
+                            if result.shouldSkipVerifier {
+                                visualDeltaSkipped += 1
+                                if case .unchanged(let pct) = result {
+                                    await tracer?.recordVerifierSkipped(
+                                        deltaPercentage: pct,
+                                        reason: "visual_delta_low"
+                                    )
+                                }
+                            }
+                        }
                     }
                 case .system(let data):
                     switch data.subtype {
@@ -323,6 +354,12 @@ struct RunCommand: AsyncParsableCommand {
         sigintSource.cancel()
         signal(SIGINT, SIG_DFL)
         outputHandler.displayCompletion()
+
+        // Visual delta statistics
+        if visualDeltaChecked > 0 {
+            fputs("[axion] 视觉增量: 跳过 \(visualDeltaSkipped)/\(visualDeltaChecked) 次验证\n", stderr)
+        }
+
         await tracer?.recordRunDone(totalSteps: totalSteps, durationMs: durationMs, replanCount: 0)
 
         // Record lock release trace event (lock actually released by defer)
@@ -534,6 +571,39 @@ struct RunCommand: AsyncParsableCommand {
         }
 
         return lines.joined(separator: "\n")
+    }
+
+    /// Extracts base64 image data from a screenshot tool result's content string.
+    /// Handles both plain base64 and JSON-wrapped formats defensively.
+    private func extractBase64FromToolResult(_ content: String) -> String? {
+        return Self.extractBase64FromToolResult(content)
+    }
+
+    /// Static implementation of base64 extraction for testability.
+    static func extractBase64FromToolResultForTest(_ content: String) -> String? {
+        return extractBase64FromToolResult(content)
+    }
+
+    private static func extractBase64FromToolResult(_ content: String) -> String? {
+        // Try JSON format: {"image_data": "base64...", ...}
+        if let data = content.data(using: .utf8),
+           let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any] {
+            if let imageData = json["image_data"] as? String {
+                return imageData
+            }
+            if let base64 = json["base64"] as? String {
+                return base64
+            }
+            if let imageData = json["image"] as? String {
+                return imageData
+            }
+        }
+        // Try plain base64 (heuristic: long string with valid base64 characters)
+        let stripped = content.trimmingCharacters(in: .whitespacesAndNewlines)
+        if stripped.count > 100 && Data(base64Encoded: stripped) != nil {
+            return stripped
+        }
+        return nil
     }
 
     /// Records an SDKMessage to the trace file.

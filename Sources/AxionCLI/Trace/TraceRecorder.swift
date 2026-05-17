@@ -32,6 +32,7 @@ actor TraceRecorder {
         static let lockAcquired = "lock_acquired"
         static let lockReleased = "lock_released"
         static let staleLockCleaned = "stale_lock_cleaned"
+        static let verifierSkipped = "verifier_skipped"
     }
 
     // MARK: - Properties
@@ -250,6 +251,14 @@ actor TraceRecorder {
         record(event: TraceEventType.error, payload: [
             "error": error,
             "message": message
+        ])
+    }
+
+    /// Records a verifier_skipped event when visual delta check determines the screen is unchanged.
+    func recordVerifierSkipped(deltaPercentage: Double, reason: String) {
+        record(event: TraceEventType.verifierSkipped, payload: [
+            "deltaPercentage": deltaPercentage,
+            "reason": reason
         ])
     }
 
