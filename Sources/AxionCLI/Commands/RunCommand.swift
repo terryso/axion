@@ -67,6 +67,43 @@ struct RunCommand: AsyncParsableCommand {
     var maxScreenshots: Int?
 
     mutating func run() async throws {
+        // 0a. Discover skills once — reuse for both lookup and Agent flow
+        let skillRegistry = SkillRegistry()
+        var skillRegisteredCount = 0
+        if !noSkills {
+            skillRegisteredCount = skillRegistry.registerDiscoveredSkills()
+        }
+
+        // 0b. Dual-track skill lookup: parse /skill-name prefix
+        if let invocation = SkillLookupService.parseSkillInvocation(task), !noSkills {
+            let lookupService = SkillLookupService(registry: skillRegistry)
+
+            switch lookupService.lookup(name: invocation.name) {
+            case .promptSkill:
+                // Prompt skill found — continue normal Agent flow.
+                // SkillTool is already registered, LLM will use promptTemplate.
+                break
+            case .recordedSkill(let skill, let skillPath):
+                // Recorded skill found — execute via SkillExecutor and return early.
+                let paramValues: [String: String]
+                if let args = invocation.args {
+                    let parts = args.split(separator: " ").map(String.init)
+                    paramValues = (try? SkillRunCommand.parseParamStrings(parts)) ?? [:]
+                } else {
+                    paramValues = [:]
+                }
+                try await RecordedSkillRunner.run(
+                    skill: skill,
+                    skillPath: skillPath,
+                    paramValues: paramValues
+                )
+                return
+            case .notFound:
+                // Neither track found — continue normal Agent flow with original task.
+                break
+            }
+        }
+
         // 1. Load configuration (layered: defaults -> config.json -> env -> CLI args)
         let cliOverrides = CLIOverrides(
             maxSteps: maxSteps,
@@ -135,12 +172,8 @@ struct RunCommand: AsyncParsableCommand {
         }
 
         // 5b. Discover and register skills (Story 17.1)
-        let skillRegistry = SkillRegistry()
-        if !noSkills {
-            let registeredCount = skillRegistry.registerDiscoveredSkills()
-            if registeredCount > 0 {
-                fputs("[axion] 已加载 \(registeredCount) 个技能\n", stderr)
-            }
+        if skillRegisteredCount > 0 {
+            fputs("[axion] 已加载 \(skillRegisteredCount) 个技能\n", stderr)
         }
 
         let skillsPrompt = noSkills ? "" : skillRegistry.formatSkillsForPrompt()

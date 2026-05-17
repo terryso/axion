@@ -66,6 +66,7 @@
 
 generated: 2026-05-08
 last_updated: 2026-05-18
+# story-17-2-created: 2026-05-18
 # story-17-1-created: 2026-05-18
 # story-16-1-started: 2026-05-17
 # retro-epic-15: 2026-05-17
@@ -218,7 +219,7 @@ development_status:
   # Epic 17: SDK Skill 系统集成
   epic-17: in-progress
   17-1-runcommand-integrate-skillregistry: done
-  17-2-dual-track-skill-lookup: backlog
+  17-2-dual-track-skill-lookup: done
   17-3-explicit-skill-name-trigger: backlog
   17-4-implicit-skill-trigger: backlog
   epic-17-retrospective: optional
