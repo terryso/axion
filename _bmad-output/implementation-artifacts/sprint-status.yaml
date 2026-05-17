@@ -65,7 +65,8 @@
 # - Dev moves story to 'review', then runs code-review (fresh context, different LLM recommended)
 
 generated: 2026-05-08
-last_updated: 2026-05-17
+last_updated: 2026-05-18
+# story-17-1-created: 2026-05-18
 # story-16-1-started: 2026-05-17
 # retro-epic-15: 2026-05-17
 # retro-epic-16: 2026-05-17
@@ -209,3 +210,22 @@ development_status:
   16-1-launchd-daemon-support: done
   16-2-api-server-persistence-recovery: done
   epic-16-retrospective: done
+
+  # ============================================================
+  # Phase 5 — SDK Skill 系统集成
+  # ============================================================
+
+  # Epic 17: SDK Skill 系统集成
+  epic-17: in-progress
+  17-1-runcommand-integrate-skillregistry: done
+  17-2-dual-track-skill-lookup: backlog
+  17-3-explicit-skill-name-trigger: backlog
+  17-4-implicit-skill-trigger: backlog
+  epic-17-retrospective: optional
+
+  # Epic 18: Axion 桌面技能增强
+  epic-18: backlog
+  18-1-built-in-desktop-skills: backlog
+  18-2-skill-memory-integration: backlog
+  18-3-http-api-skill-trigger: backlog
+  epic-18-retrospective: optional

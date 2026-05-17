@@ -6,6 +6,7 @@ stepsCompleted:
   - step-04-final-validation
   - step-05-phase2-epics
   - step-06-phase3-epics
+  - step-07-phase5-epics
 inputDocuments:
   - _bmad-output/planning-artifacts/prd.md
   - _bmad-output/planning-artifacts/architecture.md
@@ -21,6 +22,7 @@ requirementsExtracted:
 phase1Status: complete
 phase2EpicsAdded: 2026-05-12
 phase3EpicsAdded: 2026-05-14
+phase5EpicsAdded: 2026-05-18
 ---
 
 # Axion - Epic Breakdown
@@ -2257,3 +2259,278 @@ So that daemon 模式下的重启不会留下僵尸任务.
 - Epic 12 是 Epic 15 的前置（Takeover 学习需要 Memory 生命周期）
 - Epic 13 其余 Stories 可与 Epic 12 并行
 - Epic 14 和 16 为 API 和运维改进，优先级靠后
+
+---
+
+# Phase 5 — SDK Skill 系统集成 Epics
+
+> Phase 1-4（Epic 1-16）均已完成或接近完成。Phase 5 将 OpenAgentSDK 的 Skill 系统接入 Axion，让用户通过 `/skill-name` 语法或自然语言描述触发技能执行，同时预置桌面自动化领域的内置技能。
+>
+> **核心理念：** Axion 不只是"每次都思考"的 LLM Agent——通过 SDK Skill 系统，常用操作变成一键技能调用，LLM 只在需要判断力时参与。
+>
+> **核心依赖：** OpenAgentSDK 的 Skill 系统（SkillLoader、SkillRegistry、SkillTool、BuiltInSkills），已在 SDK Epic 11 中实现。
+
+## Phase 5 Epic List
+
+### Epic 17: SDK Skill 系统集成
+
+将 OpenAgentSDK 的 SkillLoader、SkillRegistry、SkillTool 接入 Axion 的 Agent 创建和执行流程。用户可以通过 `/skill-name` 显式触发技能，也可以通过自然语言描述让 LLM 自动匹配技能。同时实现双轨查找——prompt 技能（SKILL.md）和录制技能（JSON）统一入口。
+
+**核心价值：** Axion 获得与 Claude Code 一致的 `/command` 技能触发能力，同时复用 `~/.claude/skills/` 和 `~/.agents/skills/` 下已有的技能生态。
+**依赖：** SDK Epic 11（Skill 系统）、Axion Epic 9（录制技能，双轨查找的基础）
+
+### Epic 18: Axion 桌面技能增强
+
+在 Epic 17 的基础设施上，为 Axion 预置桌面自动化领域的内置技能（SKILL.md prompt 模板），实现技能与 Memory 的联动，以及 HTTP API 对 prompt 技能的统一支持。
+
+**核心价值：** 开箱即用的桌面技能 + 技能越用越聪明的 Memory 联动 + API 统一触发入口。
+**依赖：** Epic 17（Skill 基础设施）、Epic 4/12（Memory 系统）、Epic 5（HTTP API）
+
+---
+
+## Epic 17: SDK Skill 系统集成
+
+### Story 17.1: RunCommand 集成 SkillRegistry
+
+As a 用户,
+I want Axion 启动时自动发现并加载 `~/.claude/skills/` 和 `~/.agents/skills/` 下的技能,
+So that 我不需要手动配置就能使用已有的技能生态.
+
+**Acceptance Criteria:**
+
+**Given** `~/.claude/skills/polyv-live-cli/SKILL.md` 存在
+**When** 用户运行 `axion run "任意任务"`
+**Then** RunCommand 创建 Agent 前，调用 `SkillLoader.discoverSkills()` 扫描默认目录，将发现的技能注册到 `SkillRegistry`
+
+**Given** `SkillRegistry` 中有已注册技能
+**When** Agent 创建完成
+**Then** `createSkillTool(registry:)` 作为工具注册到 Agent 的工具池，LLM 可通过 Skill 工具发现和调用技能
+
+**Given** 多个目录下有同名技能（如 `~/.claude/skills/foo/` 和 `~/.agents/skills/foo/`）
+**When** 加载完成
+**Then** 按目录优先级 last-wins 去重（SDK SkillLoader 已实现此逻辑）
+
+**Given** 扫描目录中没有 SKILL.md 文件
+**When** 启动 Agent
+**Then** SkillRegistry 为空，SkillTool 仍注册但不可用，不影响正常任务执行
+
+### Story 17.2: 双轨技能查找
+
+As a 用户,
+I want `/xxx` 触发时 Axion 先查 prompt 技能（SKILL.md），再查录制技能（JSON）,
+So that 两种技能类型共享统一的 `/xxx` 触发入口，我不需要关心技能的实现方式.
+
+**Acceptance Criteria:**
+
+**Given** `polyv-live-cli` 是 prompt 技能（SKILL.md），`open_calculator` 是录制技能（JSON）
+**When** 用户输入 `/polyv-live-cli 获取频道列表`
+**Then** 先查 SkillRegistry 命中 prompt 技能，走 Agent + promptTemplate 执行路径
+
+**Given** 只有 `open_calculator` 存在于 `~/.axion/skills/`（JSON 录制技能），SkillRegistry 中无同名技能
+**When** 用户输入 `/open_calculator`
+**Then** 查 SkillRegistry 未命中，再查 `~/.axion/skills/*.json` 命中录制技能，走 SkillExecutor 回放路径
+
+**Given** 同名技能同时存在于 SkillRegistry 和 `~/.axion/skills/`
+**When** 用户输入 `/xxx`
+**Then** SkillRegistry 优先命中（prompt 技能优先）
+
+**Given** 用户输入 `/nonexistent-skill`
+**When** 两轨均未命中
+**Then** 整句作为普通 prompt 发送给 LLM 执行，不报错
+
+### Story 17.3: 显式 `/skill-name` 触发
+
+As a 用户,
+I want 在 prompt 中用 `/skill-name` 语法显式触发技能,
+So that 我可以精确控制使用哪个技能完成任务.
+
+**Acceptance Criteria:**
+
+**Given** `polyv-live-cli` 技能已注册
+**When** 用户运行 `axion run "/polyv-live-cli 获取最新10个频道信息"`
+**Then** RunCommand 解析出技能名 `polyv-live-cli` 和参数 `获取最新10个频道信息`
+**And** 将技能的 promptTemplate 作为 Agent 的主要指令，参数作为任务描述注入
+**And** 如果技能有 `allowed-tools` 限制，Agent 的可用工具集被限定为指定范围
+
+**Given** `open_calculator` 是录制技能（JSON），有参数 `{{url}}`
+**When** 用户运行 `axion run "/open_calculator"`
+**Then** 走 SkillExecutor 回放路径，不调用 LLM
+**And** 如有必需参数缺失，提示用户
+
+**Given** 用户输入 `axion run "请帮我/polyv-live-cli获取频道"`（`/` 不在句首）
+**When** 解析 prompt
+**Then** `/` 不被识别为技能触发，整句作为普通 prompt 发送给 LLM（LLM 可能通过隐式触发匹配到该技能）
+
+**Given** 技能有 `model` 覆盖（如 `claude-opus-4-6`）
+**When** 显式触发该技能
+**Then** Agent 使用指定模型执行，执行完毕后恢复默认模型
+
+### Story 17.4: 隐式技能触发
+
+As a 用户,
+I want 用自然语言描述意图时，LLM 自动匹配并执行对应技能,
+So that 我不需要知道技能名称，只要描述我想做什么.
+
+**Acceptance Criteria:**
+
+**Given** SkillRegistry 中有 `polyv-live-cli` 技能，`whenToUse` 为 "用户需要管理直播频道、配置推流设置、管理商品、处理优惠券、查看直播数据或管理回放录像时使用"
+**When** 用户运行 `axion run "帮我获取保利威最新的10个频道信息"`
+**Then** SkillRegistry.formatSkillsForPrompt() 将技能描述注入 system prompt
+**And** LLM 通过 SkillTool 自动匹配到 `polyv-live-cli` 技能并执行
+
+**Given** 技能列表有 10 个技能，formatSkillsForPrompt() token 预算为 500
+**When** 注入 system prompt
+**Then** 按注册顺序列出技能，超出预算时截断尾部技能描述（SDK SkillRegistry 已实现）
+
+**Given** 某技能 `isAvailable()` 返回 false
+**When** formatSkillsForPrompt() 生成技能列表
+**Then** 该技能不出现在列表中，LLM 无法发现和调用
+
+**Given** 用户运行 `axion run --no-skills "帮我获取频道信息"`
+**When** 启动 Agent
+**Then** 不注入技能列表到 system prompt，SkillTool 不注册，LLM 无法调用技能
+
+---
+
+## Epic 18: Axion 桌面技能增强
+
+### Story 18.1: 内置桌面技能
+
+As a 用户,
+I want Axion 预置桌面自动化领域的技能（screenshot-analyze、data-extract、form-fill）,
+So that 常见桌面操作有开箱即用的高质量 prompt 模板.
+
+**Acceptance Criteria:**
+
+**Given** Axion 启动
+**When** 内置技能注册完成
+**Then** SkillRegistry 中包含 `screenshot-analyze`、`data-extract`、`form-fill` 三个技能
+**And** 每个技能的 `toolRestrictions` 限定为 Helper MCP 工具（screenshot、get_window_state、list_windows、click、type_text、press_key 等）
+**And** 每个技能的 `isAvailable` 检查 Helper 是否已连接
+
+**Given** 用户运行 `axion run "/screenshot-analyze 分析当前屏幕"`
+**When** 技能执行
+**Then** Agent 按技能 promptTemplate 指示，调用 screenshot + get_window_state，综合分析并输出结构化描述
+
+**Given** 用户运行 `axion run "帮我提取 Finder 当前目录的文件列表"`
+**When** Finder 窗口打开
+**Then** LLM 通过隐式触发匹配到 `data-extract` 技能，Agent 通过 AX tree 提取文件名列表
+
+**Given** 三个内置技能已注册
+**When** 用户运行 `axion skill list`（如果扩展该命令显示 SDK 技能）
+**Then** 显示内置技能，标记为 `type: prompt`，来源为 `built-in`
+
+**技术要点：**
+- 内置技能作为 SDK `Skill` struct 的代码定义（类似 SDK 的 `BuiltInSkills`），不从文件系统加载
+- toolRestrictions 需要支持 Helper MCP 工具名——当前 SDK `ToolRestriction` 枚举只包含 SDK 内置工具，需要评估是否需要扩展或使用字符串形式的 allowed-tools
+
+### Story 18.2: 技能 + Memory 联动
+
+As a 系统,
+I want 技能执行过程中的经验自动沉淀为 Memory，且 Memory 能指导后续技能执行,
+So that 技能越用越精准——记住哪些操作路径有效，哪些窗口结构需要特殊处理.
+
+**Acceptance Criteria:**
+
+**Given** 用户执行 `axion run "/screenshot-analyze 分析 Chrome"`
+**When** 技能执行成功
+**Then** 自动生成一条 affordance 类型 Memory：scope=`skill:screenshot-analyze`，domain 为 App bundle identifier，content 包含技能名和执行摘要
+
+**Given** 上次 screenshot-analyze 在某 App 中失败（因窗口最小化）
+**When** 用户再次在同一 App 中调用该技能
+**Then** 技能执行前注入相关的 avoid 类型 Memory 到 promptTemplate 末尾
+
+**Given** 用户运行 `axion run --no-memory "/screenshot-analyze 分析当前屏幕"`
+**When** 技能执行
+**Then** 不注入 Memory 上下文，也不记录技能执行经验（尊重 `--no-memory` 标志）
+
+**Given** 同一技能同一 App 积累了 5 条以上 Memory
+**When** 技能执行前注入 Memory
+**Then** 只注入 confidence 最高的前 3 条，按 affordance → avoid → observation 优先级排序
+
+**Given** 录制技能（JSON）执行成功
+**When** SkillExecutor 回放完成
+**Then** 也记录 Memory（技能名、App、成功/失败），与 prompt 技能共享同一套 Memory 逻辑
+
+**技术要点：**
+- Memory scope 格式：`skill:{skillName}`，方便按技能过滤
+- 复用 `MemoryContextProvider.buildFactMemoryContext()`，增加 skillName 过滤参数
+- prompt 技能的 Memory 注入：在 promptTemplate 末尾追加 Memory section
+- 录制技能的 Memory 注入不适用（无 LLM prompt），但 Memory 记录仍可产生
+
+### Story 18.3: HTTP API 支持 Skill 触发
+
+As a 外部集成方（AxionBar、第三方 Agent）,
+I want 通过 HTTP API 触发 prompt 技能执行，并获取实时 SSE 事件流,
+So that 菜单栏 UI 和外部系统也能使用 SDK Skill 系统的所有技能.
+
+**Acceptance Criteria:**
+
+**Given** `polyv-live-cli` 技能已通过 SkillLoader 加载
+**When** 发送 `POST /v1/skills/polyv-live-cli/run` body: `{"task": "获取最新10个频道信息"}`
+**Then** 服务端创建 Agent，注入 polyv-live-cli 的 promptTemplate + 用户 task 作为任务描述
+**And** SSE 推送执行进度（step_started, step_completed 等事件）
+**And** 返回 run_id 供后续查询
+
+**Given** `open_calculator` 是录制技能（JSON）
+**When** 发送 `POST /v1/skills/open_calculator/run`
+**Then** 走现有 SkillAPIRunner 逻辑（无 LLM 调用），行为不变
+
+**Given** 发送 `GET /v1/skills`
+**When** 查询技能列表
+**Then** 返回两种技能：录制技能（来自 `~/.axion/skills/*.json`）和 prompt 技能（来自 SkillRegistry）
+**And** 每项带 `type` 字段：`"recorded"` 或 `"prompt"`
+
+**Given** AxionBar QuickRun 中用户输入 `/polyv-live-cli 获取频道`
+**When** AxionBar 提交任务
+**Then** 路由到 `POST /v1/skills/polyv-live-cli/run`，而非 `POST /v1/runs`
+
+**Given** 指定技能名在两个来源中都不存在
+**When** 发送 `POST /v1/skills/nonexistent/run`
+**Then** 返回 HTTP 404，body: `{"error": "Skill not found"}`
+
+**技术要点：**
+- prompt 技能的 API 执行复用 `AgentRunner.runAgent()`，systemPrompt 改为技能的 promptTemplate
+- SSE 事件流复用现有 `EventBroadcaster` 管线
+- `GET /v1/skills` 端点合并两个来源：遍历 `~/.axion/skills/*.json` + 查询 SkillRegistry
+- AxionBar `SkillService` 适配新的 `type` 字段和 `/xxx` 路由逻辑
+
+---
+
+## Phase 5 FR 追溯
+
+| FR | 来源 | Epic | SDK 依赖 | 说明 |
+|----|------|------|----------|------|
+| FR63 (Skill 加载) | Phase 5 新增 | Epic 17 | SkillLoader, SkillRegistry | 多目录技能发现 |
+| FR64 (显式技能触发) | Phase 5 新增 | Epic 17 | SkillTool | `/skill-name` 语法 |
+| FR65 (隐式技能触发) | Phase 5 新增 | Epic 17 | SkillTool, formatSkillsForPrompt | LLM 自动匹配 |
+| FR66 (双轨技能查找) | Phase 5 新增 | Epic 17 | 无 | prompt 技能 + 录制技能统一入口 |
+| FR67 (内置桌面技能) | Phase 5 新增 | Epic 18 | Skill struct | 预置 SKILL.md prompt 模板 |
+| FR68 (技能 Memory 联动) | Phase 5 新增 | Epic 18 | 无 | 技能经验沉淀和注入 |
+| FR69 (API Skill 触发) | Phase 5 新增 | Epic 18 | 无 | HTTP API 统一支持 prompt 技能 |
+
+## Phase 5 新增 NFR
+
+- NFR43: SkillLoader 扫描并加载 20 个技能耗时 < 500ms
+- NFR44: 显式 `/skill-name` 触发到技能执行开始延迟 < 100ms（不含 LLM 响应时间）
+- NFR45: formatSkillsForPrompt() 生成的技能描述占用 system prompt < 500 token
+- NFR46: 隐式触发场景下，SkillTool 调用增加的延迟 < 1 轮 LLM 交互
+
+## Phase 5 优先级与依赖
+
+| 优先级 | Epic | 依赖 | 理由 |
+|--------|------|------|------|
+| P0 | Epic 17 (Skill 系统集成) | SDK Epic 11 | 基础设施，解锁所有技能能力 |
+| P1 | Epic 18 Story 18.1 (内置技能) | Epic 17 | 开箱即用体验，只需编写 SKILL.md |
+| P2 | Epic 18 Story 18.3 (API Skill 触发) | Epic 17, Epic 5 | 外部集成增强，依赖 HTTP API |
+| P3 | Epic 18 Story 18.2 (Memory 联动) | Epic 17, Epic 12 | 锦上添花，需要 Memory 生命周期 |
+
+**实施建议顺序：17.1 → 17.3（显式触发）→ 17.2（双轨查找）→ 17.4（隐式触发）→ 18.1（内置技能）→ 18.3（API）→ 18.2（Memory 联动）**
+
+**理由：**
+- 17.1 是所有后续 Story 的前置——没有 SkillRegistry 注册就没有技能可用
+- 17.3 先于 17.2——显式触发是核心体验，双轨查找是增强
+- 17.4 可与 17.2/17.3 并行——隐式触发是独立的 LLM 侧逻辑
+- 18.1 极轻量——只需编写几个 SKILL.md prompt 模板
+- 18.3 依赖 HTTP API 基础设施（Epic 5），但可复用 SkillAPIRunner 的 SSE 管线
+- 18.2 优先级最低——Memory 联动是长期价值，不影响核心功能

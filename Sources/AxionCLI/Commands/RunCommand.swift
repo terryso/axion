@@ -57,6 +57,9 @@ struct RunCommand: AsyncParsableCommand {
     @Flag(name: .long, help: "禁用视觉增量检查")
     var noVisualDelta: Bool = false
 
+    @Flag(name: .long, help: "禁用技能系统")
+    var noSkills: Bool = false
+
     @Option(name: .long, help: "最大 LLM 调用次数")
     var maxModelCalls: Int?
 
@@ -131,12 +134,24 @@ struct RunCommand: AsyncParsableCommand {
             }
         }
 
+        // 5b. Discover and register skills (Story 17.1)
+        let skillRegistry = SkillRegistry()
+        if !noSkills {
+            let registeredCount = skillRegistry.registerDiscoveredSkills()
+            if registeredCount > 0 {
+                fputs("[axion] 已加载 \(registeredCount) 个技能\n", stderr)
+            }
+        }
+
+        let skillsPrompt = noSkills ? "" : skillRegistry.formatSkillsForPrompt()
+
         let systemPrompt = buildFullSystemPrompt(
             basePrompt: baseSystemPrompt,
             fast: fast,
             dryrun: dryrun,
             verbose: verbose,
-            memoryContext: memoryContext
+            memoryContext: memoryContext,
+            skillsPrompt: skillsPrompt
         )
 
         // 6. Configure MCP servers: Helper for desktop, Playwright for web
@@ -154,6 +169,11 @@ struct RunCommand: AsyncParsableCommand {
         let effectiveMaxSteps = Self.computeEffectiveMaxSteps(fast: fast, maxSteps: maxSteps, configMaxSteps: config.maxSteps)
         let effectiveMaxTokens = Self.computeEffectiveMaxTokens(fast: fast)
 
+        var agentTools: [ToolProtocol] = [createPauseForHumanTool()]
+        if !noSkills {
+            agentTools.append(createSkillTool(registry: skillRegistry))
+        }
+
         let options = AgentOptions(
             apiKey: apiKey,
             model: config.model,
@@ -162,7 +182,7 @@ struct RunCommand: AsyncParsableCommand {
             maxTurns: effectiveMaxSteps,
             maxTokens: effectiveMaxTokens,
             permissionMode: .bypassPermissions,
-            tools: [createPauseForHumanTool()],
+            tools: agentTools,
             mcpServers: mcpServers,
             memoryStore: memoryStore,
             hookRegistry: hookRegistry,
@@ -639,7 +659,7 @@ struct RunCommand: AsyncParsableCommand {
     }
 
     /// Builds the full system prompt with mode-specific instructions appended.
-    internal func buildFullSystemPrompt(basePrompt: String, fast: Bool, dryrun: Bool, verbose: Bool, memoryContext: String? = nil) -> String {
+    internal func buildFullSystemPrompt(basePrompt: String, fast: Bool, dryrun: Bool, verbose: Bool, memoryContext: String? = nil, skillsPrompt: String = "") -> String {
         var prompt = basePrompt
 
         if fast {
@@ -660,6 +680,11 @@ struct RunCommand: AsyncParsableCommand {
         // Append Memory context if available
         if let memoryContext, !memoryContext.isEmpty {
             prompt += "\n\n\(memoryContext)"
+        }
+
+        // Append skills prompt if available (Story 17.1 AC5)
+        if !skillsPrompt.isEmpty {
+            prompt += "\n\n## Available Skills\n\n\(skillsPrompt)"
         }
 
         return prompt
