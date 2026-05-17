@@ -1,6 +1,7 @@
 import Testing
 import Foundation
 @testable import AxionCLI
+@testable import AxionCore
 
 @Suite("APITypes")
 struct APITypesTests {
@@ -626,5 +627,96 @@ struct APITypesTests {
             Double(elapsed.components.attoseconds) / 1_000_000_000_000.0
 
         #expect(durationMs < 500.0)
+    }
+
+    // MARK: - CapabilitiesResponse Tests
+
+    @Test("CapabilitiesResponse codable round trip preserves all fields")
+    func capabilitiesResponseCodableRoundTripPreservesAllFields() throws {
+        let response = CapabilitiesResponse(
+            version: "0.1.0",
+            supportedRunStatuses: ["queued", "running", "completed", "failed"],
+            supportedResultKinds: ["answer", "confirmation"],
+            availableTools: ["launch_app", "click"],
+            maxConcurrentRuns: 5,
+            features: ["memory", "takeover", "fast_mode", "skills"]
+        )
+
+        let encoder = JSONEncoder()
+        let data = try encoder.encode(response)
+        let decoded = try JSONDecoder().decode(CapabilitiesResponse.self, from: data)
+
+        #expect(decoded.version == "0.1.0")
+        #expect(decoded.supportedRunStatuses == ["queued", "running", "completed", "failed"])
+        #expect(decoded.supportedResultKinds == ["answer", "confirmation"])
+        #expect(decoded.availableTools == ["launch_app", "click"])
+        #expect(decoded.maxConcurrentRuns == 5)
+        #expect(decoded.features == ["memory", "takeover", "fast_mode", "skills"])
+    }
+
+    @Test("CapabilitiesResponse JSON keys are snake case")
+    func capabilitiesResponseJsonKeysAreSnakeCase() throws {
+        let response = CapabilitiesResponse(
+            version: "0.1.0",
+            supportedRunStatuses: [],
+            supportedResultKinds: [],
+            availableTools: [],
+            maxConcurrentRuns: 10,
+            features: []
+        )
+
+        let encoder = JSONEncoder()
+        encoder.outputFormatting = [.sortedKeys]
+        let data = try encoder.encode(response)
+        let json = try #require(String(data: data, encoding: .utf8))
+
+        #expect(json.contains("\"supported_run_statuses\""))
+        #expect(json.contains("\"supported_result_kinds\""))
+        #expect(json.contains("\"available_tools\""))
+        #expect(json.contains("\"max_concurrent_runs\""))
+        #expect(json.contains("\"features\""))
+        #expect(json.contains("\"version\""))
+    }
+
+    @Test("CapabilitiesResponse features contains all expected values")
+    func capabilitiesResponseFeaturesContainsAllExpectedValues() throws {
+        let expectedFeatures = ["memory", "takeover", "fast_mode", "skills"]
+
+        let response = CapabilitiesResponse(
+            version: "0.1.0",
+            supportedRunStatuses: APIRunStatus.allCases.map(\.rawValue),
+            supportedResultKinds: TaskResultKind.allCases.map(\.rawValue),
+            availableTools: ToolNames.allToolNames,
+            maxConcurrentRuns: 10,
+            features: expectedFeatures
+        )
+
+        let data = try JSONEncoder().encode(response)
+        let decoded = try JSONDecoder().decode(CapabilitiesResponse.self, from: data)
+
+        #expect(decoded.features == expectedFeatures)
+        #expect(decoded.features.count == 4)
+    }
+
+    @Test("APIRunStatus allCases contains all 8 statuses")
+    func apiRunStatusAllCasesContainsAll8Statuses() {
+        let allCases = APIRunStatus.allCases
+        #expect(allCases.count == 8)
+        #expect(allCases.contains(.queued))
+        #expect(allCases.contains(.running))
+        #expect(allCases.contains(.interventionNeeded))
+        #expect(allCases.contains(.userTakeover))
+        #expect(allCases.contains(.resuming))
+        #expect(allCases.contains(.completed))
+        #expect(allCases.contains(.failed))
+        #expect(allCases.contains(.cancelled))
+    }
+
+    @Test("TaskResultKind allCases contains answer and confirmation")
+    func taskResultKindAllCasesContainsAnswerAndConfirmation() {
+        let allCases = TaskResultKind.allCases
+        #expect(allCases.count == 2)
+        #expect(allCases.contains(.answer))
+        #expect(allCases.contains(.confirmation))
     }
 }

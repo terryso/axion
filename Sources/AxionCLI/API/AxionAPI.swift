@@ -26,7 +26,8 @@ enum AxionAPI {
         config: AxionConfig,
         authKey: String? = nil,
         concurrencyLimiter: ConcurrencyLimiter? = nil,
-        runLockService: RunLockService? = nil
+        runLockService: RunLockService? = nil,
+        maxConcurrent: Int = 10
     ) {
         let v1 = router.group("v1")
 
@@ -49,6 +50,24 @@ enum AxionAPI {
             }
         } else {
             v1Authed = v1.group()
+        }
+
+        // GET /v1/capabilities — discover Axion capabilities (Story 14.2)
+        v1Authed.get("capabilities") { _, _ in
+            EditedResponse(
+                headers: [
+                    .contentType: "application/json",
+                    .cacheControl: "private, max-age=300",
+                ],
+                response: CapabilitiesResponse(
+                    version: AxionVersion.current,
+                    supportedRunStatuses: APIRunStatus.allCases.map(\.rawValue),
+                    supportedResultKinds: TaskResultKind.allCases.map(\.rawValue),
+                    availableTools: ToolNames.allToolNames,
+                    maxConcurrentRuns: maxConcurrent,
+                    features: ["memory", "takeover", "fast_mode", "skills"]
+                )
+            )
         }
 
         // GET /v1/runs — list runs (Story 10.2)

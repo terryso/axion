@@ -4,6 +4,7 @@ import Hummingbird
 import HummingbirdTesting
 import HTTPTypes
 @testable import AxionCLI
+@testable import AxionCore
 
 @Suite("AxionAPIRoutes")
 struct AxionAPIRoutesTests {
@@ -420,11 +421,100 @@ struct AxionAPIRoutesTests {
         }
     }
 
+    // MARK: - Capabilities Endpoint Tests (Story 14.2)
+
+    @Test("GET /v1/capabilities returns 200 with complete structure")
+    func capabilitiesEndpointReturnsCompleteStructure() async throws {
+        let app = try await buildTestApplication()
+
+        try await app.test(.router) { client in
+            try await client.execute(uri: "/v1/capabilities", method: .get) { response in
+                #expect(response.status == .ok)
+
+                let body = try JSONDecoder().decode(CapabilitiesResponse.self, from: response.body)
+                #expect(!body.version.isEmpty)
+                #expect(body.supportedRunStatuses == APIRunStatus.allCases.map(\.rawValue))
+                #expect(body.supportedResultKinds == TaskResultKind.allCases.map(\.rawValue))
+                #expect(body.availableTools == ToolNames.allToolNames)
+                #expect(body.maxConcurrentRuns > 0)
+                #expect(body.features.contains("memory"))
+                #expect(body.features.contains("takeover"))
+                #expect(body.features.contains("fast_mode"))
+                #expect(body.features.contains("skills"))
+            }
+        }
+    }
+
+    @Test("GET /v1/capabilities returns Cache-Control max-age=300")
+    func capabilitiesEndpointReturnsCacheControlHeader() async throws {
+        let app = try await buildTestApplication()
+
+        try await app.test(.router) { client in
+            try await client.execute(uri: "/v1/capabilities", method: .get) { response in
+                let cacheControl = response.headers[.cacheControl]
+                #expect(cacheControl != nil)
+                #expect(cacheControl?.contains("private") ?? false)
+                #expect(cacheControl?.contains("max-age=300") ?? false)
+            }
+        }
+    }
+
+    @Test("GET /v1/capabilities requires auth when auth is enabled")
+    func capabilitiesEndpointRequiresAuth() async throws {
+        let app = try await buildTestApplication(authKey: "testsecret")
+
+        try await app.test(.router) { client in
+            try await client.execute(uri: "/v1/capabilities", method: .get) { response in
+                #expect(response.status == .unauthorized)
+            }
+        }
+    }
+
+    @Test("GET /v1/capabilities with correct auth returns 200")
+    func capabilitiesEndpointWithAuthReturns200() async throws {
+        let app = try await buildTestApplication(authKey: "testsecret")
+
+        try await app.test(.router) { client in
+            var headers = HTTPFields()
+            headers[.authorization] = "Bearer testsecret"
+            try await client.execute(uri: "/v1/capabilities", method: .get, headers: headers) { response in
+                #expect(response.status == .ok)
+                let body = try JSONDecoder().decode(CapabilitiesResponse.self, from: response.body)
+                #expect(!body.version.isEmpty)
+            }
+        }
+    }
+
+    @Test("GET /v1/capabilities reflects custom maxConcurrent value")
+    func capabilitiesEndpointReflectsCustomMaxConcurrent() async throws {
+        let app = try await buildTestApplication(maxConcurrent: 3)
+
+        try await app.test(.router) { client in
+            try await client.execute(uri: "/v1/capabilities", method: .get) { response in
+                let body = try JSONDecoder().decode(CapabilitiesResponse.self, from: response.body)
+                #expect(body.maxConcurrentRuns == 3)
+            }
+        }
+    }
+
+    @Test("GET /v1/capabilities availableTools matches ToolNames.allToolNames")
+    func capabilitiesEndpointAvailableToolsMatchesStaticList() async throws {
+        let app = try await buildTestApplication()
+
+        try await app.test(.router) { client in
+            try await client.execute(uri: "/v1/capabilities", method: .get) { response in
+                let body = try JSONDecoder().decode(CapabilitiesResponse.self, from: response.body)
+                #expect(body.availableTools == ToolNames.allToolNames)
+            }
+        }
+    }
+
     private func buildTestApplication(
         runTracker: RunTracker? = nil,
         eventBroadcaster: EventBroadcaster? = nil,
         authKey: String? = nil,
-        concurrencyLimiter: ConcurrencyLimiter? = nil
+        concurrencyLimiter: ConcurrencyLimiter? = nil,
+        maxConcurrent: Int = 10
     ) async throws -> Application<RouterResponder<BasicRequestContext>> {
         // Use a temp directory for the run lock to avoid test interference
         let tempLockDir = NSTemporaryDirectory() + "axion-test-lock-\(UUID().uuidString)"
@@ -441,7 +531,8 @@ struct AxionAPIRoutesTests {
             config: .default,
             authKey: authKey,
             concurrencyLimiter: concurrencyLimiter,
-            runLockService: testRunLockService
+            runLockService: testRunLockService,
+            maxConcurrent: maxConcurrent
         )
 
         let app = Application(

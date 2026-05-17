@@ -48,7 +48,8 @@ struct ServerCommand: AsyncParsableCommand {
             eventBroadcaster: eventBroadcaster,
             config: config,
             authKey: authKey,
-            concurrencyLimiter: concurrencyLimiter
+            concurrencyLimiter: concurrencyLimiter,
+            maxConcurrent: maxConcurrent
         )
 
         // 4. Create Hummingbird Application

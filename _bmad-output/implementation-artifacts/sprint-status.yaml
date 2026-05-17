@@ -1,6 +1,7 @@
 # generated: 2026-05-08
 # last_updated: 2026-05-17
 # story-14.1-created: 2026-05-17
+# story-14.2-created: 2026-05-17
 # retro-epic-13: 2026-05-17
 # story-13.4-review: 2026-05-17
 # story-13.3-created: 2026-05-17
@@ -184,7 +185,7 @@ development_status:
   # Epic 14: API 规范化与集成友好度
   epic-14: in-progress
   14-1-standard-task-output-contract: done
-  14-2-capabilities-endpoint: backlog
+  14-2-capabilities-endpoint: done
   14-3-settings-api: backlog
   epic-14-retrospective: optional
 

@@ -5,7 +5,7 @@ import Hummingbird
 
 /// External-facing run status exposed via HTTP API.
 /// Eight statuses aligned with the StandardTaskOutput contract.
-enum APIRunStatus: String, Codable, Equatable, Sendable {
+enum APIRunStatus: String, Codable, Equatable, Sendable, CaseIterable {
     case queued
     case running
     case interventionNeeded = "intervention_needed"
@@ -143,7 +143,7 @@ struct StandardTaskOutput: Codable, Equatable, Sendable, ResponseEncodable {
 /// Kind of result returned by a completed task.
 /// `answer` = informational (user asked to read/query),
 /// `confirmation` = action performed (user asked to open/move/delete).
-enum TaskResultKind: String, Codable, Equatable, Sendable {
+enum TaskResultKind: String, Codable, Equatable, Sendable, CaseIterable {
     case answer
     case confirmation
 }
@@ -196,6 +196,27 @@ struct StepSummary: Codable, Equatable, Sendable {
 struct HealthResponse: Codable, Equatable, Sendable, ResponseEncodable {
     let status: String
     let version: String
+}
+
+// MARK: - CapabilitiesResponse
+
+/// Response body for `GET /v1/capabilities`.
+struct CapabilitiesResponse: Codable, Equatable, Sendable, ResponseEncodable {
+    let version: String
+    let supportedRunStatuses: [String]
+    let supportedResultKinds: [String]
+    let availableTools: [String]
+    let maxConcurrentRuns: Int
+    let features: [String]
+
+    enum CodingKeys: String, CodingKey {
+        case version
+        case supportedRunStatuses = "supported_run_statuses"
+        case supportedResultKinds = "supported_result_kinds"
+        case availableTools = "available_tools"
+        case maxConcurrentRuns = "max_concurrent_runs"
+        case features
+    }
 }
 
 // MARK: - QueuedRunResponse
