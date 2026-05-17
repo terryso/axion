@@ -9,13 +9,19 @@ import Darwin
 // This is 方案 B from the story's test strategy: process-level integration tests.
 // Priority: P0 (smoke test for the complete MCP stdio communication)
 
+/// Manages SIGPIPE ignore/restore around each test instance lifetime.
+/// Must be a class (not struct) so deinit can restore the original handler.
+private final class SigpipeGuard {
+    private let saved: (@convention(c) (Int32) -> Void)?
+    init() { saved = signal(SIGPIPE, SIG_IGN) }
+    deinit { if let s = saved { signal(SIGPIPE, s) } }
+}
+
 @Suite("Helper Process Smoke")
 struct HelperProcessSmokeTests {
 
-    init() {
-        // Ignore SIGPIPE to prevent test runner crash when child process pipe breaks
-        signal(SIGPIPE, SIG_IGN)
-    }
+    /// Per-test guard: SIG_IGN while the test runs, restored on deallocation.
+    private let _sigpipe = SigpipeGuard()
 
     // MARK: - Helpers
 

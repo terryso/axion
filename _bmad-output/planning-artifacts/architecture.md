@@ -781,6 +781,7 @@ axion/
 │   │   │   ├── MemoryExportCommand.swift      # Epic 12: axion memory export [--app] <file>
 │   │   │   ├── MemoryImportCommand.swift      # Epic 12: axion memory import <file>
 │   │   │   └── MemoryLearnTakeoverCommand.swift # Epic 15: axion memory learn-takeover（手动记录接管经验）
+│   │   │   └── DaemonCommand.swift             # Epic 16: axion daemon install/status/uninstall
 │   │   ├── Planner/
 │   │   │   ├── LLMPlanner.swift               # FR11–FR14: 调用 LLM 生成 Plan
 │   │   │   ├── PlanParser.swift               # FR14–FR15: 解析 LLM 输出为 Plan
@@ -793,10 +794,11 @@ axion/
 │   │   │   ├── TaskVerifier.swift             # FR21: 验证任务完成状态
 │   │   │   ├── StopConditionEvaluator.swift   # FR22: 评估 stopWhen 条件
 │   │   │   └── VisualDeltaChecker.swift       # Epic 13: 截图像素级差异比较 + VisualDeltaTracker actor
-│   │   ├── Services/                            # Epic 13: 运行时安全与成本控制
+│   │   ├── Services/                            # Epic 13: 运行时安全与成本控制 + Epic 16: Daemon
 │   │   │   ├── RunLockService.swift            # Epic 13: 桌面级运行锁 actor（~/.axion/run.lock）
 │   │   │   ├── CostTracker.swift               # Epic 13: 预算控制 + 成本遥测 actor
-│   │   │   └── SeatActivityMonitor.swift       # Epic 13: 桌面活动检测 actor（学习保护）
+│   │   │   ├── SeatActivityMonitor.swift       # Epic 13: 桌面活动检测 actor（学习保护）
+│   │   │   └── DaemonService.swift             # Epic 16: launchd plist 生成、install/uninstall/status
 │   │   ├── Engine/
 │   │   │   └── RunEngine.swift                # D3: 状态机编排 plan→exec→verify 循环
 │   │   ├── Config/
@@ -823,13 +825,15 @@ axion/
 │   │   │   ├── MemoryContextProvider.swift      # 构建 Planner Memory 上下文（+ 三类分类注入）
 │   │   │   ├── TakeoverLearningService.swift    # Epic 15: Takeover 经验→Memory 转换（affordance/avoid）
 │   │   │   └── TakeoverMarker.swift             # Epic 15: InterventionReason 枚举 + TakeoverMarker struct
-│   │   ├── API/                                # Epic 5: HTTP API Server + Epic 14: API 规范化
+│   │   ├── API/                                # Epic 5: HTTP API Server + Epic 14: API 规范化 + Epic 16: 持久化
 │   │   │   ├── AgentRunner.swift              # Agent 执行封装
-│   │   │   ├── RunTracker.swift               # 任务状态追踪
+│   │   │   ├── RunTracker.swift               # 任务状态追踪（Epic 16: 持久化注入）
 │   │   │   ├── AxionAPI.swift                 # Hummingbird 路由注册
-│   │   │   ├── EventBroadcaster.swift         # SSE 事件广播
+│   │   │   ├── EventBroadcaster.swift         # SSE 事件广播（Epic 16: 事件持久化 + replay buffer 磁盘回退）
 │   │   │   ├── AuthMiddleware.swift           # Bearer token 认证
 │   │   │   ├── ConcurrencyLimiter.swift       # 并发槽位管理
+│   │   │   ├── RunPersistenceService.swift    # Epic 16: 磁盘持久化（TrackedRun + SSEEvent 读写）
+│   │   │   ├── RunRecoveryService.swift       # Epic 16: 启动恢复（状态映射 + replay buffer 恢复）
 │   │   │   └── Models/APITypes.swift          # API 请求/响应模型（Epic 14: StandardTaskOutput, CapabilitiesResponse, Settings API models）
 │   │   ├── MCP/                                # Epic 6: MCP Server Mode
 │   │   │   ├── MCPServerRunner.swift          # MCP 编排器
@@ -1039,6 +1043,8 @@ AxionBar ← SwiftUI + AppKit（独立 macOS App）
 | FR73 | APITypes.swift + AxionAPI.swift + DoctorCommand.swift | Settings API：HTTP 配置管理（Epic 14） |
 | FR74 | TakeoverLearningService.swift + RunCommand.swift + MemoryLearnTakeoverCommand.swift | Takeover 经验自动学习：接管经验→Memory（affordance/avoid）（Epic 15） |
 | FR75 | TakeoverMarker.swift + TakeoverIO.swift + RunCommand.swift + TraceRecorder.swift | Takeover 结构化标记：InterventionReason 分类 + 用户反馈 + duration 计时（Epic 15） |
+| FR76 | DaemonService.swift + DaemonCommand.swift + ServerCommand.swift | launchd Daemon：开机自启守护进程 + 崩溃自动重启（Epic 16） |
+| FR77 | RunPersistenceService.swift + RunRecoveryService.swift + RunTracker.swift + EventBroadcaster.swift + ServerCommand.swift | 运行状态恢复：磁盘持久化 + 启动恢复 + SSE 历史重放（Epic 16） |
 
 **跨切关注点到位置的映射：**
 
@@ -1053,6 +1059,7 @@ AxionBar ← SwiftUI + AppKit（独立 macOS App）
 | 可观测性 | AxionCLI/Trace/TraceRecorder.swift | JSONL trace |
 | 输出格式 | AxionCLI/Output/ | 终端 + JSON 双输出 |
 | Memory 系统 | AxionCLI/Memory/ | App 操作经验积累 + Planner 上下文注入 + Takeover 学习（Epic 15） |
+| Daemon 与持久化 | AxionCLI/Services/DaemonService.swift + AxionCLI/API/RunPersistenceService.swift + RunRecoveryService.swift | launchd 守护进程 + 任务状态持久化 + 启动恢复（Epic 16） |
 
 ### 集成点
 
@@ -1173,7 +1180,7 @@ TrackedRun.toStandardOutput() → StandardTaskOutput  # [Epic 14] 统一 API 输
 | FR71–FR73 API 规范化 | 3 | ✅ 全覆盖 | APITypes.swift (StandardTaskOutput, CapabilitiesResponse, Settings API), AxionAPI.swift, DoctorCommand |
 | FR74–FR75 Takeover 学习与标记 | 2 | ✅ 全覆盖 | TakeoverLearningService.swift, TakeoverMarker.swift, MemoryLearnTakeoverCommand.swift, TakeoverIO.swift |
 
-**非功能需求覆盖（23/23 NFR — 100%）：**
+**非功能需求覆盖（29/29 NFR — 100%）：**
 
 | NFR 范围 | 数量 | 覆盖状态 |
 |---------|------|----------|
@@ -1183,6 +1190,7 @@ TrackedRun.toStandardOutput() → StandardTaskOutput  # [Epic 14] 统一 API 输
 | NFR13–NFR16 可用性 | 4 | ✅ SetupCommand + DoctorCommand + TerminalOutput + AxionError |
 | NFR17–NFR20 可维护性 | 4 | ✅ SPM 解耦 + ToolRegistrar + 外部 Prompt + JSONL Trace |
 | NFR21–NFR23 兼容性 | 3 | ✅ macOS 14 platform + 静态编译 + SPM multi-arch |
+| NFR37–NFR42 Phase 4 | 6 | ✅ 视觉增量 <50ms + 运行锁 <10ms + Memory 导入/导出 <2s + Daemon 重启 <15s + 序列化 <5ms + 活动检测 CPU <2% |
 
 ### 实现就绪性验证
 

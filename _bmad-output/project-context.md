@@ -259,8 +259,8 @@ func test_xxx_roundTrip() throws {
 | `HelperProcessManager` | Helper 进程启停、MCP 连接 | 进程状态串行化 |
 | `MCPConnection` | JSON-RPC 收发 | stdio 管道不能并发读写 |
 | `TraceRecorder` | Trace 事件写入 | 文件写入串行化 |
-| `RunTracker` | HTTP API 任务状态管理 | 任务状态串行化（Epic 5） |
-| `EventBroadcaster` | SSE 事件多客户端广播 | 订阅者和重放缓存串行化（Epic 5） |
+| `RunTracker` | HTTP API 任务状态管理 + 持久化 | 任务状态串行化（Epic 5），每次状态变更持久化到 api-output.json（Epic 16） |
+| `EventBroadcaster` | SSE 事件多客户端广播 + 事件持久化 | 订阅者和重放缓存串行化（Epic 5），每次 emit 追加到 api-events.jsonl（Epic 16） |
 | `ConcurrencyLimiter` | 并发任务槽位管理 | 并发计数和排队串行化（Epic 5） |
 | `TaskQueue` | MCP Server 模式任务串行化 | agent.prompt() 调用串行化（Epic 6） |
 
@@ -577,6 +577,8 @@ planning → executing → verifying → done/blocked/needsClarification
 
 - API Key 存储在 macOS Keychain（Security.framework），service: `"com.axion.cli"`，**不**在 config.json 中
 - 环境变量 `AXION_API_KEY` 作为覆盖机制（CI/脚本场景）
+- 环境变量 `AXION_AUTH_KEY` 作为 daemon 模式下 server 的 auth-key 来源（Epic 16）
+- 环境变量 `AXION_BIN` 可覆盖 daemon plist 中的二进制路径（Epic 16）
 - `axion setup` 写入配置，`axion doctor` 验证所有层级
 
 **AxionConfig 默认值：**
@@ -599,6 +601,75 @@ planning → executing → verifying → done/blocked/needsClarification
 - 每个事件必须包含 `ts`（ISO8601）和 `event`（snake_case）
 - Run ID 格式：`YYYYMMDD-{6位随机}`
 - API Key **永远**不出现在 trace 中
+
+---
+
+## Daemon 模式与持久化（Epic 16）
+
+### launchd Daemon
+
+Axion server 可注册为 macOS 用户级 launchd 守护进程，实现开机自启和崩溃自动重启。
+
+**CLI 命令：**
+- `axion daemon install --host 127.0.0.1 --port 4242 [--auth-key KEY]` — 安装并启动守护进程
+- `axion daemon status` — 查看 daemon 状态（running/stopped/not_installed）、PID、端口
+- `axion daemon uninstall [--keep-logs]` — 停止并卸载守护进程
+
+**核心文件：**
+```
+Sources/AxionCLI/Services/DaemonService.swift    # plist 生成、launchctl 调用、状态查询
+Sources/AxionCLI/Commands/DaemonCommand.swift     # CLI 子命令入口
+```
+
+**plist 配置：**
+- Label: `dev.axion.server`
+- 路径: `~/Library/LaunchAgents/dev.axion.server.plist`
+- RunAtLoad: true（开机自启）
+- KeepAlive: Crashed=true（仅非零退出时重启）
+- ThrottleInterval: 10（崩溃后 10 秒重启）
+- auth-key 通过 EnvironmentVariables 的 `AXION_AUTH_KEY` 传递（不写入 ProgramArguments）
+- 日志: `~/.axion/server.log` + `~/.axion/server.err.log`
+
+**二进制路径解析优先级：** `AXION_BIN` 环境变量 > 当前进程路径 > `which axion`
+
+**关键设计决策：**
+- 使用 launchctl bootstrap/bootout（不使用已废弃的 load/unload）
+- DaemonService 通过注入 `@Sendable` 闭包实现 launchctl 调用的可测试性
+- ServerCommand authKey 优先级：CLI `--auth-key` > `AXION_AUTH_KEY` 环境变量 > nil
+
+### API 运行状态持久化
+
+daemon 模式下 server 崩溃/重启后，从磁盘恢复任务状态。
+
+**存储路径：**
+```
+~/.axion/api-runs/                    # API 持久化目录（与 CLI trace 的 runs/ 分开）
+├── {runId}/
+│   ├── api-output.json               # TrackedRun JSON（每次状态更新原子覆写）
+│   └── api-events.jsonl              # SSE 事件追加写入
+```
+
+**核心文件：**
+```
+Sources/AxionCLI/API/RunPersistenceService.swift   # 磁盘读写：TrackedRun + SSEEvent
+Sources/AxionCLI/API/RunRecoveryService.swift      # 启动恢复：状态映射 + replay buffer 恢复
+```
+
+**恢复状态映射：**
+
+| 恢复前状态 | 恢复后状态 | 说明 |
+|-----------|-----------|------|
+| queued/running/resuming/userTakeover | failed | 标记中断，error="server interrupted" |
+| intervention_needed | intervention_needed | 保持不变，等待用户处理 |
+| completed/failed/cancelled | 不变 | 已终态，无需干预 |
+
+**关键设计决策：**
+- RunPersistenceService 是 Sendable struct（非 actor），FileManager 本身线程安全
+- api-output.json 使用原子写入（write-to-tmp + rename）
+- api-events.jsonl 使用追加写入（每行一个 JSON）
+- 持久化失败不阻塞主流程（catch + warning 日志）
+- SSE 订阅时内存 replay buffer miss → 自动从磁盘加载并缓存
+- PersistedSSEEvent Codable wrapper 桥接 SSEEvent enum 到 JSONL
 
 ---
 
@@ -699,6 +770,11 @@ RunEngine.run()                             # 状态机开始
     ▼
 ServerCommand (axion server --port 4242)      # Hummingbird Application
     │
+    ├── RunPersistenceService()                # 创建持久化服务（Epic 16）
+    ├── RunTracker(persistenceService:)        # 注入持久化
+    ├── EventBroadcaster(persistenceService:)  # 注入持久化
+    ├── RunRecoveryService.recover()           # 启动时恢复持久化任务（Epic 16）
+    │
     ▼
 AxionAPI.registerRoutes()                     # 路由分发
     │
@@ -707,20 +783,23 @@ AxionAPI.registerRoutes()                     # 路由分发
     ├──► ConcurrencyLimiter.tryAcquire()       # 并发槽位检查
     │
     ├──► RunTracker.submitRun() → runId        # 生成任务 ID
+    │        └──► RunPersistenceService.persistRecordSafely()  # 持久化（Epic 16）
     │
     ├──► 返回 HTTP 202 {"run_id": "...", "status": "running"}
     │
     └──► Task.detached {                        # 后台异步执行
             AgentRunner.runAgent(...)           # 复用 Agent 执行逻辑
-            RunTracker.updateRun(runId, result) # 更新任务状态
-            EventBroadcaster.emit(runId, event) # SSE 事件推送
+            RunTracker.updateRun(runId, result) # 更新任务状态 + 持久化
+            EventBroadcaster.emit(runId, event) # SSE 事件推送 + 事件持久化（Epic 16）
             ConcurrencyLimiter.release()        # 释放并发槽位
         }
 
 GET /v1/runs/{runId}/events (SSE)
     │
     ▼
-EventBroadcaster.subscribe(runId)             # 订阅实时事件流
+EventBroadcaster.subscribeWithReplay(runId)   # 订阅实时事件流
+    ├── 内存 replay buffer 命中 → 直接重放
+    └── 未命中 → 从 api-events.jsonl 磁盘加载（Epic 16）
     │
     ▼
 ResponseBody(asyncSequence:)                   # Hummingbird 流式响应

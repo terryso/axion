@@ -1,5 +1,5 @@
 import Foundation
-
+import os
 import AxionCore
 
 /// Lock file data stored at `~/.axion/run.lock`.
@@ -90,6 +90,8 @@ actor RunLockService {
             try data.write(to: URL(fileURLWithPath: lockPath), options: .atomic)
             return true
         } catch {
+            let log = Logger(subsystem: "com.axion.cli", category: "RunLockService")
+            log.warning("Lock acquire failed for run \(runId): \(error)")
             return false
         }
     }

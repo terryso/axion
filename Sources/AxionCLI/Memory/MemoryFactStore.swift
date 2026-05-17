@@ -62,17 +62,27 @@ actor MemoryFactStore {
     }
 
     /// List all domains that have fact files.
+    ///
+    /// Discovers both new-format `*-facts.json` and legacy `*.json` files.
+    /// Legacy files are lazily migrated on discovery.
     func listDomains() throws -> [String] {
         guard fileManager.fileExists(atPath: memoryDir.path) else { return [] }
         let files = try fileManager.contentsOfDirectory(at: memoryDir, includingPropertiesForKeys: nil)
-        return files
-            .filter { $0.pathExtension == "json" && $0.lastPathComponent.hasSuffix(Self.factsSuffix) }
-            .map { url -> String in
-                let name = url.deletingPathExtension().lastPathComponent
-                // name is "{domain}-facts", strip "-facts" (6 chars)
-                return String(name.dropLast(6))
+
+        var domains = Set<String>()
+
+        for file in files where file.pathExtension == "json" {
+            if file.lastPathComponent.hasSuffix(Self.factsSuffix) {
+                let name = file.deletingPathExtension().lastPathComponent
+                domains.insert(String(name.dropLast(6)))
+            } else {
+                let domain = file.deletingPathExtension().lastPathComponent
+                _ = try? loadFacts(domain: domain)
+                domains.insert(domain)
             }
-            .sorted()
+        }
+
+        return domains.sorted()
     }
 
     /// Delete all facts for a domain.
@@ -117,7 +127,19 @@ actor MemoryFactStore {
     private func migrateLegacy(domain: String, from url: URL) throws -> [AppMemoryFact] {
         let data = try Data(contentsOf: url)
         let decoder = JSONDecoder()
-        decoder.dateDecodingStrategy = .iso8601
+        let formatterWithMs = ISO8601DateFormatter()
+        formatterWithMs.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+        let formatterNoMs = ISO8601DateFormatter()
+        formatterNoMs.formatOptions = [.withInternetDateTime]
+        decoder.dateDecodingStrategy = .custom { decoder in
+            let container = try decoder.singleValueContainer()
+            let dateString = try container.decode(String.self)
+            if let date = formatterWithMs.date(from: dateString) ?? formatterNoMs.date(from: dateString) {
+                return date
+            }
+            throw DecodingError.dataCorruptedError(in: container,
+                debugDescription: "Cannot parse date: \(dateString)")
+        }
 
         // KnowledgeEntry array from SDK
         struct LegacyEntry: Decodable {

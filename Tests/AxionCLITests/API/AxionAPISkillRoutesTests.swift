@@ -7,13 +7,23 @@ import Testing
 @testable import AxionCLI
 @testable import AxionCore
 
-@Suite("AxionAPI Skill Routes")
+@Suite("AxionAPI Skill Routes", .serialized)
 struct AxionAPISkillRoutesTests {
+
+    private static let testSkillFiles = ["test_skill.json", "detail_test.json"]
+
+    private static func cleanupTestSkills() {
+        let dir = SkillCompileCommand.skillsDirectory()
+        for file in testSkillFiles {
+            try? FileManager.default.removeItem(atPath: dir + "/" + file)
+        }
+    }
 
     // MARK: - GET /v1/skills (empty)
 
     @Test("GET /v1/skills returns empty array when no skills exist")
     func getSkillsEmpty() async throws {
+        Self.cleanupTestSkills()
         let app = try await buildTestApplication()
 
         try await app.test(.router) { client in
@@ -63,6 +73,7 @@ struct AxionAPISkillRoutesTests {
 
     @Test("GET /v1/skills returns skills list when skills exist")
     func getSkillsReturnsList() async throws {
+        Self.cleanupTestSkills()
         // Create a temp skill file
         let skillsDir = SkillCompileCommand.skillsDirectory()
         try FileManager.default.createDirectory(atPath: skillsDir, withIntermediateDirectories: true)
@@ -102,6 +113,7 @@ struct AxionAPISkillRoutesTests {
 
     @Test("GET /v1/skills/:name returns detail for existing skill")
     func getSkillDetailExisting() async throws {
+        Self.cleanupTestSkills()
         let skillsDir = SkillCompileCommand.skillsDirectory()
         try FileManager.default.createDirectory(atPath: skillsDir, withIntermediateDirectories: true)
         defer { try? FileManager.default.removeItem(atPath: skillsDir + "/detail_test.json") }

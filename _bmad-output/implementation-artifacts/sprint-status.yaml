@@ -68,6 +68,7 @@ generated: 2026-05-08
 last_updated: 2026-05-17
 # story-16-1-started: 2026-05-17
 # retro-epic-15: 2026-05-17
+# retro-epic-16: 2026-05-17
 
 project_key: NOKEY
 tracking_system: file-system
@@ -191,20 +192,20 @@ development_status:
   epic-13-retrospective: done
 
   # Epic 14: API 规范化与集成友好度
-  epic-14: in-progress
+  epic-14: done
   14-1-standard-task-output-contract: done
   14-2-capabilities-endpoint: done
   14-3-settings-api: done
   epic-14-retrospective: done
 
   # Epic 15: Takeover 学习与桌面活动感知
-  epic-15: in-progress
+  epic-15: done
   15-1-takeover-experience-auto-learning: done
   15-2-takeover-structured-markers: done
   epic-15-retrospective: done
 
   # Epic 16: Daemon 模式与运维便利性
-  epic-16: in-progress
+  epic-16: done
   16-1-launchd-daemon-support: done
   16-2-api-server-persistence-recovery: done
-  epic-16-retrospective: optional
+  epic-16-retrospective: done

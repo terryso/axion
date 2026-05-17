@@ -136,7 +136,11 @@ struct StdoutPurityTests {
     }
 
     private func readAvailableData(_ pipe: Pipe) -> String {
-        let data = pipe.fileHandleForReading.availableData
-        return String(data: data, encoding: .utf8) ?? ""
+        do {
+            let data = try pipe.fileHandleForReading.read(upToCount: 1024 * 64)
+            return String(data: data ?? Data(), encoding: .utf8) ?? ""
+        } catch {
+            return ""
+        }
     }
 }

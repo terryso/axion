@@ -84,11 +84,13 @@ struct RunCommand: AsyncParsableCommand {
         }
 
         // 3. Resolve Helper path for MCP stdio server
-        guard let helperPath = HelperPathResolver.resolveHelperPath() else {
+        let resolvedHelperPath = HelperPathResolver.resolveHelperPath()
+        guard resolvedHelperPath != nil || dryrun else {
             throw AxionError.helperNotFound(
                 suggestion: "Ensure AxionHelper.app is installed. Run 'axion doctor' to diagnose."
             )
         }
+        let helperPath = resolvedHelperPath ?? "/usr/bin/true"
 
         // 4. Create MemoryStore for cross-run knowledge accumulation (needed before prompt building)
         let memoryDir = (ConfigManager.defaultConfigDirectory as NSString).appendingPathComponent("memory")

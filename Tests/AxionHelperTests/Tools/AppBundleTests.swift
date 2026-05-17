@@ -47,7 +47,7 @@ struct AppBundleTests {
 
         let plist = try loadInfoPlist()
         let bundleId = try #require(plist["CFBundleIdentifier"] as? String)
-        #expect(bundleId == "com.axion.AxionHelper")
+        #expect(bundleId == "com.axion.helper")
     }
 
     @Test("App Bundle directory structure is correct")
