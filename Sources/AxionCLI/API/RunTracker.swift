@@ -15,13 +15,17 @@ actor RunTracker {
     /// Event broadcaster for SSE streaming (Story 5.2).
     private let eventBroadcaster: EventBroadcaster?
 
+    /// Disk persistence service (Story 16.2).
+    private let persistenceService: RunPersistenceService?
+
     /// SSE extension point (Story 5.2) — callback invoked when run status changes.
     private var onRunStatusChanged: ((String, APIRunStatus) -> Void)?
 
     // MARK: - Initialization
 
-    init(eventBroadcaster: EventBroadcaster? = nil) {
+    init(eventBroadcaster: EventBroadcaster? = nil, persistenceService: RunPersistenceService? = nil) {
         self.eventBroadcaster = eventBroadcaster
+        self.persistenceService = persistenceService
     }
 
     // MARK: - Public API
@@ -58,6 +62,7 @@ actor RunTracker {
             allowForeground: options.allowForeground ?? false
         )
         runs[runId] = run
+        persistenceService?.persistRecordSafely(run)
 
         // Evict oldest completed runs if at capacity
         if runs.count > Self.maxTrackedRuns {
@@ -117,6 +122,10 @@ actor RunTracker {
 
         // Legacy callback: notify status change
         onRunStatusChanged?(runId, status)
+
+        if let run = runs[runId] {
+            persistenceService?.persistRecordSafely(run)
+        }
     }
 
     /// Write the ApiTaskResult for a completed run.
@@ -126,6 +135,9 @@ actor RunTracker {
             return
         }
         runs[runId]?.result = result
+        if let run = runs[runId] {
+            persistenceService?.persistRecordSafely(run)
+        }
     }
 
     /// Write InterventionData for a run requiring user intervention.
@@ -135,6 +147,14 @@ actor RunTracker {
             return
         }
         runs[runId]?.intervention = intervention
+        if let run = runs[runId] {
+            persistenceService?.persistRecordSafely(run)
+        }
+    }
+
+    /// Restore a persisted run into memory. Called during server startup recovery.
+    func restoreRun(_ run: TrackedRun) {
+        runs[run.runId] = run
     }
 
     /// Retrieve a run by its ID.

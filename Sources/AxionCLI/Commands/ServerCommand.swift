@@ -38,10 +38,18 @@ struct ServerCommand: AsyncParsableCommand {
         // 1. Load configuration
         let config = try await ConfigManager.loadConfig()
 
-        // 2. Create EventBroadcaster, RunTracker, and ConcurrencyLimiter
-        let eventBroadcaster = EventBroadcaster()
-        let runTracker = RunTracker(eventBroadcaster: eventBroadcaster)
+        // 2. Create persistence service, EventBroadcaster, RunTracker, and ConcurrencyLimiter
+        let persistenceService = RunPersistenceService()
+        let eventBroadcaster = EventBroadcaster(persistenceService: persistenceService)
+        let runTracker = RunTracker(eventBroadcaster: eventBroadcaster, persistenceService: persistenceService)
         let concurrencyLimiter = ConcurrencyLimiter(maxConcurrent: maxConcurrent)
+
+        // 2a. Recover persisted runs from previous server instance
+        await RunRecoveryService.recover(
+            from: runTracker,
+            persistenceService: persistenceService,
+            eventBroadcaster: eventBroadcaster
+        )
 
         // 3. Create router and register API routes
         let router = Router()
