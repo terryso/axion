@@ -87,10 +87,14 @@ final class DaemonService {
         if let envBin = ProcessInfo.processInfo.environment["AXION_BIN"] {
             return NSString(string: envBin).standardizingPath
         }
-        // 2. Current process path
+        // 2. Current process path (resolve relative paths against cwd)
         let execPath = CommandLine.arguments[0]
         let resolved = NSString(string: execPath).standardizingPath
         if resolved.hasPrefix("/") { return resolved }
+        let absolute = NSString(string: FileManager.default.currentDirectoryPath)
+            .appendingPathComponent(execPath)
+        let absResolved = NSString(string: absolute).standardizingPath
+        if absResolved.hasPrefix("/") { return absResolved }
         // 3. which axion
         let task = Process()
         task.executableURL = URL(fileURLWithPath: "/usr/bin/which")
@@ -149,10 +153,7 @@ final class DaemonService {
         \n\t<key>RunAtLoad</key>
         \t<true/>
         \t<key>KeepAlive</key>
-        \t<dict>
-        \t\t<key>Crashed</key>
-        \t\t<true/>
-        \t</dict>
+        \t<true/>
         \t<key>ThrottleInterval</key>
         \t<integer>10</integer>
         \t<key>StandardOutPath</key>

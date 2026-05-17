@@ -33,8 +33,8 @@ Axion is a Swift-based macOS desktop automation platform that takes natural lang
 ┌───────────────────────────────────────────────────────┐
 │                       AxionCLI                         │
 │  run / setup / doctor / server / mcp / record / skill  │
-│  Plan → Execute → Verify → Replan Loop                 │
-│  Memory · Fast Mode · Takeover                         │
+│  daemon / Plan → Execute → Verify → Replan Loop        │
+│  Memory · Fast Mode · Takeover · Daemon · Persistence  │
 ├──────────────────┬──────────────────┬─────────────────┤
 │    AxionCore     │   AxionHelper    │    AxionBar      │
 │  Models, Proto-  │  MCP Server      │  Menu Bar App    │
@@ -43,7 +43,7 @@ Axion is a Swift-based macOS desktop automation platform that takes natural lang
 └──────────────────┴──────────────────┴─────────────────┘
 ```
 
-- **AxionCLI** — CLI entry point with LLM interaction, task planning, execution engine, memory, and server modes
+- **AxionCLI** — CLI entry point with LLM interaction, task planning, execution engine, memory, daemon management, and server modes
 - **AxionCore** — Shared model layer (Plan, Step, RunState) and protocol definitions
 - **AxionHelper** — MCP server process providing 21 native macOS automation tools via stdio
 - **AxionBar** — Native macOS menu bar app with task panel, skill triggers, and global hotkeys
@@ -287,6 +287,42 @@ Axion serves as the flagship reference implementation of [OpenAgentSDK](https://
 - Integrate with Axion's desktop capabilities via `axion mcp`
 - Build on the same MCP + Agent Loop architecture
 
+### Daemon Mode & Crash Recovery (Phase 4)
+
+Run Axion as a persistent launchd daemon that survives reboots and auto-restarts on crashes. All running task state is persisted to disk, so in-flight tasks are automatically recovered after an unexpected server termination.
+
+**Daemon management:**
+
+```bash
+# Install as a launchd agent (auto-start on login)
+axion daemon install --port 4242
+
+# With authentication
+axion daemon install --port 4242 --auth-key mysecret
+
+# Check daemon status
+axion daemon status
+
+# Uninstall (stops service and removes plist)
+axion daemon uninstall
+
+# Uninstall but keep log files
+axion daemon uninstall --keep-logs
+```
+
+**Key daemon properties:**
+- **Auto-start** — `RunAtLoad: true` starts on login
+- **Crash recovery** — `KeepAlive: true` restarts on any exit
+- **Log files** — stdout → `~/.axion/server.log`, stderr → `~/.axion/server.err.log`
+- **ThrottleInterval** — 10s minimum between restart attempts
+
+**Task state persistence:**
+- All task state (`api-output.json`) and SSE events (`api-events.jsonl`) are written to `~/.axion/api-runs/` in real-time
+- On server restart, `RunRecoveryService` loads all persisted runs and:
+  - Marks `running`/`queued`/`resuming`/`userTakeover` tasks as `failed` with error `"server interrupted"`
+  - Preserves `intervention_needed`, `completed`, `failed`, and `cancelled` states unchanged
+  - Restores SSE event history so late subscribers can replay past events
+
 ## Use as an MCP Server (Standalone Helper)
 
 AxionHelper can run as a standalone MCP server for any MCP client:
@@ -344,7 +380,7 @@ swift test --filter AxionHelperIntegrationTests
 ```
 Sources/
 ├── AxionCLI/              # CLI entry point and commands
-│   ├── Commands/          # run, setup, doctor, server, mcp, record, skill subcommands
+│   ├── Commands/          # run, setup, doctor, server, mcp, record, skill, daemon subcommands
 │   ├── Config/            # Configuration management
 │   ├── Permissions/       # Permission checks
 │   ├── Engine/            # RunEngine state machine

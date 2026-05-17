@@ -77,6 +77,7 @@ struct ServerCommand: AsyncParsableCommand {
         print("  Auth: \(resolvedAuthKey != nil ? "enabled" : "disabled")")
         print("  Max concurrent tasks: \(maxConcurrent)")
         print("  Press Ctrl+C to stop")
+        fflush(stdout)
 
         // 6. Start server — Hummingbird handles SIGINT/SIGTERM graceful shutdown
         try await app.runService()

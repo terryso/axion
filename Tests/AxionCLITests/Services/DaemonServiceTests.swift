@@ -50,7 +50,6 @@ struct DaemonServiceTests {
         #expect(xml.contains("<key>RunAtLoad</key>"))
         #expect(xml.contains("<true/>"))
         #expect(xml.contains("<key>KeepAlive</key>"))
-        #expect(xml.contains("<key>Crashed</key>"))
         #expect(xml.contains("<key>ThrottleInterval</key>"))
         #expect(xml.contains("<integer>10</integer>"))
         #expect(xml.contains("<key>StandardOutPath</key>"))
