@@ -56,7 +56,47 @@ struct RecordedSkillRunner {
             } catch {
                 fputs("[axion] warning: skill metadata update failed: \(error.localizedDescription)\n", stderr)
             }
+
+            // Record skill execution Memory (Story 18.2 AC5)
+            do {
+                let memoryDir = (ConfigManager.defaultConfigDirectory as NSString).appendingPathComponent("memory")
+                let factStore = MemoryFactStore(memoryDir: memoryDir)
+                let lifecycleService = MemoryLifecycleService()
+
+                let fact = AppMemoryFact.create(
+                    domain: "unknown",
+                    kind: .affordance,
+                    description: "Recorded skill '\(skill.name)' executed successfully, \(result.stepsExecuted) steps",
+                    confidence: 0.7,
+                    scope: "skill:\(skill.name)"
+                )
+                let existing = try await factStore.query(domain: fact.domain)
+                let merged = lifecycleService.addFact(fact, mergingWith: existing)
+                try await factStore.save(domain: fact.domain, fact: merged)
+            } catch {
+                fputs("[axion] warning: skill memory record failed: \(error.localizedDescription)\n", stderr)
+            }
         } else if let error = result.errorMessage {
+            // Record failure Memory (Story 18.2 AC5 — avoid kind on error)
+            do {
+                let memoryDir = (ConfigManager.defaultConfigDirectory as NSString).appendingPathComponent("memory")
+                let factStore = MemoryFactStore(memoryDir: memoryDir)
+                let lifecycleService = MemoryLifecycleService()
+
+                let fact = AppMemoryFact.create(
+                    domain: "unknown",
+                    kind: .avoid,
+                    description: "Recorded skill '\(skill.name)' failed: \(error)",
+                    confidence: 0.6,
+                    scope: "skill:\(skill.name)"
+                )
+                let existing = try await factStore.query(domain: fact.domain)
+                let merged = lifecycleService.addFact(fact, mergingWith: existing)
+                try await factStore.save(domain: fact.domain, fact: merged)
+            } catch {
+                fputs("[axion] warning: skill memory record failed: \(error.localizedDescription)\n", stderr)
+            }
+
             print("技能 '\(skill.name)' \(error)。建议使用 axion run 代替。")
             throw ExitCode(1)
         }

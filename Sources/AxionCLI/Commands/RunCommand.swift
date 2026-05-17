@@ -157,11 +157,11 @@ struct RunCommand: AsyncParsableCommand {
 
         // Build full system prompt with mode-specific instructions
         // Memory context injection (AC1, AC2, AC3, AC4)
+        let contextProvider = MemoryContextProvider()
+        let factStore = MemoryFactStore(memoryDir: memoryDir)
         var memoryContext: String? = nil
         if !noMemory {
             do {
-                let contextProvider = MemoryContextProvider()
-                let factStore = MemoryFactStore(memoryDir: memoryDir)
                 if let factContext = await contextProvider.buildFactMemoryContext(
                     task: task,
                     factStore: factStore
@@ -200,6 +200,16 @@ struct RunCommand: AsyncParsableCommand {
             prompt += "\n\n## Available Tools\n\(toolList)"
             if let memCtx = memoryContext, !memCtx.isEmpty {
                 prompt += "\n\n\(memCtx)"
+            }
+            // Skill-scoped Memory injection (Story 18.2 AC2, AC3, AC4)
+            if !noMemory {
+                if let skillMemCtx = await contextProvider.buildSkillMemoryContext(
+                    skillName: skill.name,
+                    task: task,
+                    factStore: factStore
+                ) {
+                    prompt += "\n\n\(skillMemCtx)"
+                }
             }
             systemPrompt = prompt
         } else {
@@ -574,7 +584,12 @@ struct RunCommand: AsyncParsableCommand {
                     task: task,
                     runId: runId
                 )
-                for fact in facts {
+                for var fact in facts {
+                    // Skill-scoped Memory: tag facts with skill scope (Story 18.2 AC1)
+                    // AC3: Respect --no-memory — skip scope tagging when noMemory is true
+                    if let skill = explicitSkill, !noMemory {
+                        fact.scope = "skill:\(skill.name)"
+                    }
                     do {
                         let existing = try await factStore.query(domain: fact.domain)
                         let result = lifecycleService.addFact(fact, mergingWith: existing)

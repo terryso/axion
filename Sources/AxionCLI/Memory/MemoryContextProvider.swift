@@ -127,6 +127,55 @@ struct MemoryContextProvider {
         }
     }
 
+    // MARK: - Skill-scoped Memory Context (Story 18.2)
+
+    /// Maximum number of skill-scoped facts to inject.
+    static let maxSkillFacts = 3
+
+    /// Build a skill-scoped Memory context for injection into a skill's promptTemplate.
+    ///
+    /// Queries active facts matching `skill:{skillName}` scope for the inferred domain,
+    /// selects up to `maxSkillFacts` items prioritized by kind (affordance → avoid → observation),
+    /// and formats them with a soft-hints declaration.
+    func buildSkillMemoryContext(
+        skillName: String,
+        task: String,
+        factStore: MemoryFactStore
+    ) async -> String? {
+        guard let domain = inferDomain(from: task) else { return nil }
+        do {
+            let allFacts = try await factStore.query(domain: domain)
+            let lifecycleService = MemoryLifecycleService()
+            let activeFacts = lifecycleService.selectActiveFacts(domain: domain, from: allFacts)
+            let scopePrefix = "skill:\(skillName)"
+            let skillFacts = activeFacts.filter { $0.scope?.hasPrefix(scopePrefix) == true }
+            guard !skillFacts.isEmpty else { return nil }
+            return assembleSkillFactContext(skillName: skillName, facts: skillFacts)
+        } catch {
+            return nil
+        }
+    }
+
+    private func assembleSkillFactContext(skillName: String, facts: [AppMemoryFact]) -> String {
+        var sections: [String] = []
+        sections.append("Skill-specific memory for '\(skillName)'. These are soft hints from past executions:")
+        sections.append("")
+
+        let affordances = facts.filter { $0.kind == .affordance }.sorted { $0.confidence > $1.confidence }
+        let avoids = facts.filter { $0.kind == .avoid }.sorted { $0.confidence > $1.confidence }
+        let observations = facts.filter { $0.kind == .observation }.sorted { $0.confidence > $1.confidence }
+
+        var selected: [AppMemoryFact] = []
+        selected.append(contentsOf: affordances.prefix(1))
+        if selected.count < Self.maxSkillFacts { selected.append(contentsOf: avoids.prefix(1)) }
+        if selected.count < Self.maxSkillFacts { selected.append(contentsOf: observations.prefix(min(Self.maxSkillFacts - selected.count, 2))) }
+
+        for fact in selected {
+            sections.append(formatFactLine(fact: fact, label: fact.kind.rawValue))
+        }
+        return sections.joined(separator: "\n")
+    }
+
     /// Maximum number of facts to display per kind category.
     static let maxFactsPerKind = 5
 
