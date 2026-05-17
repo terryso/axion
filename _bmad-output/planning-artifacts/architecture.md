@@ -115,7 +115,7 @@ axion/
 │   │   ├── Config/                  # 配置管理：读写 ~/.axion/config.json
 │   │   ├── Trace/                   # Trace 记录器：运行轨迹持久化
 │   │   ├── Output/                  # 输出格式化：终端进度、JSON 输出
-│   │   ├── Memory/                  # App Memory 系统（Epic 4 + Epic 12）：跨任务学习 + 知识生命周期
+│   │   ├── Memory/                  # App Memory 系统（Epic 4 + Epic 12 + Epic 15）：跨任务学习 + 知识生命周期 + Takeover 学习
 │   ├── AxionHelper/                 # Helper App（可执行目标，独立 macOS App）
 │   │   ├── main.swift               # 入口，启动 MCP Server
 │   │   ├── MCP/                     # MCP Server 实现：工具注册、JSON-RPC 处理
@@ -779,7 +779,8 @@ axion/
 │   │   │   ├── MemoryListCommand.swift        # FR44: axion memory list（Epic 12: 状态图标 + 分类标签）
 │   │   │   ├── MemoryClearCommand.swift       # FR44: axion memory clear --app
 │   │   │   ├── MemoryExportCommand.swift      # Epic 12: axion memory export [--app] <file>
-│   │   │   └── MemoryImportCommand.swift      # Epic 12: axion memory import <file>
+│   │   │   ├── MemoryImportCommand.swift      # Epic 12: axion memory import <file>
+│   │   │   └── MemoryLearnTakeoverCommand.swift # Epic 15: axion memory learn-takeover（手动记录接管经验）
 │   │   ├── Planner/
 │   │   │   ├── LLMPlanner.swift               # FR11–FR14: 调用 LLM 生成 Plan
 │   │   │   ├── PlanParser.swift               # FR14–FR15: 解析 LLM 输出为 Plan
@@ -808,7 +809,7 @@ axion/
 │   │   └── Output/
 │   │       ├── TerminalOutput.swift            # FR33–FR34: 终端实时输出
 │   │       └── JSONOutput.swift               # FR35: JSON 结构化输出
-│   │   ├── Memory/                              # Epic 4 + Epic 12: App Memory 系统
+│   │   ├── Memory/                              # Epic 4 + Epic 12 + Epic 15: App Memory 系统
 │   │   │   ├── AppMemoryFact.swift              # Epic 12: 生命周期模型 + djb2 factId
 │   │   │   ├── MemoryLifecycleService.swift     # Epic 12: candidate→active→retired 管理
 │   │   │   ├── MemoryFactStore.swift            # Epic 12: actor 持久化层 + 惰性迁移
@@ -819,7 +820,9 @@ axion/
 │   │   │   ├── MemoryCleanupService.swift      # 30 天过期清理（保留，不再主动调用）
 │   │   │   ├── AppProfileAnalyzer.swift        # 模式识别 + 高频路径 + 失败经验
 │   │   │   ├── FamiliarityTracker.swift        # 熟悉度追踪（>= 3 次成功标记 familiar）
-│   │   │   └── MemoryContextProvider.swift      # 构建 Planner Memory 上下文（+ 三类分类注入）
+│   │   │   ├── MemoryContextProvider.swift      # 构建 Planner Memory 上下文（+ 三类分类注入）
+│   │   │   ├── TakeoverLearningService.swift    # Epic 15: Takeover 经验→Memory 转换（affordance/avoid）
+│   │   │   └── TakeoverMarker.swift             # Epic 15: InterventionReason 枚举 + TakeoverMarker struct
 │   │   ├── API/                                # Epic 5: HTTP API Server + Epic 14: API 规范化
 │   │   │   ├── AgentRunner.swift              # Agent 执行封装
 │   │   │   ├── RunTracker.swift               # 任务状态追踪
@@ -890,7 +893,8 @@ axion/
 │   │   ├── Commands/
 │   │   │   ├── RunCommandTests.swift
 │   │   │   ├── SetupCommandTests.swift
-│   │   │   └── DoctorCommandTests.swift
+│   │   │   ├── DoctorCommandTests.swift
+│   │   │   └── MemoryLearnTakeoverCommandTests.swift  # Epic 15: Takeover CLI 命令测试
 │   │   ├── Planner/
 │   │   │   ├── LLMPlannerTests.swift
 │   │   │   └── PlanParserTests.swift
@@ -907,7 +911,7 @@ axion/
 │   │   │   ├── RunLockServiceTests.swift       # Epic 13: 运行锁测试
 │   │   │   ├── CostTrackerTests.swift          # Epic 13: 预算控制测试
 │   │   │   └── SeatActivityMonitorTests.swift  # Epic 13: 活动检测测试
-│   │   ├── Memory/                                # Epic 4 + Epic 12: Memory 测试
+│   │   ├── Memory/                                # Epic 4 + Epic 12 + Epic 15: Memory 测试
 │   │   │   ├── AppMemoryFactTests.swift             # Epic 12: 模型 Codable + normalizeFact + factId
 │   │   │   ├── MemoryLifecycleServiceTests.swift    # Epic 12: promote/demote/reactivate 生命周期
 │   │   │   ├── MemoryFactStoreTests.swift           # Epic 12: actor CRUD + 惰性迁移
@@ -918,7 +922,9 @@ axion/
 │   │   │   ├── MemoryCleanupServiceTests.swift
 │   │   │   ├── AppProfileAnalyzerTests.swift
 │   │   │   ├── FamiliarityTrackerTests.swift
-│   │   │   └── MemoryContextProviderTests.swift
+│   │   │   ├── MemoryContextProviderTests.swift
+│   │   │   ├── TakeoverLearningServiceTests.swift   # Epic 15: Takeover 学习记录测试
+│   │   │   └── TakeoverMarkerTests.swift             # Epic 15: InterventionReason + TakeoverMarker 测试
 │   ├── AxionBarTests/                                # Epic 10: 菜单栏 App 测试
 │   │   ├── Models/
 │   │   │   ├── RunModelsTests.swift
@@ -1031,6 +1037,8 @@ AxionBar ← SwiftUI + AppKit（独立 macOS App）
 | FR71 | APITypes.swift + AxionAPI.swift + RunTracker.swift + AgentRunner.swift | StandardTaskOutput 统一 API 输出契约（Epic 14） |
 | FR72 | APITypes.swift + AxionAPI.swift | Capabilities 端点：能力发现（Epic 14） |
 | FR73 | APITypes.swift + AxionAPI.swift + DoctorCommand.swift | Settings API：HTTP 配置管理（Epic 14） |
+| FR74 | TakeoverLearningService.swift + RunCommand.swift + MemoryLearnTakeoverCommand.swift | Takeover 经验自动学习：接管经验→Memory（affordance/avoid）（Epic 15） |
+| FR75 | TakeoverMarker.swift + TakeoverIO.swift + RunCommand.swift + TraceRecorder.swift | Takeover 结构化标记：InterventionReason 分类 + 用户反馈 + duration 计时（Epic 15） |
 
 **跨切关注点到位置的映射：**
 
@@ -1044,7 +1052,7 @@ AxionBar ← SwiftUI + AppKit（独立 macOS App）
 | API 规范化 | AxionCLI/API/Models/APITypes.swift (StandardTaskOutput, CapabilitiesResponse, Settings API) | 统一输出契约、能力发现、配置管理（Epic 14） |
 | 可观测性 | AxionCLI/Trace/TraceRecorder.swift | JSONL trace |
 | 输出格式 | AxionCLI/Output/ | 终端 + JSON 双输出 |
-| Memory 系统 | AxionCLI/Memory/ | App 操作经验积累 + Planner 上下文注入 |
+| Memory 系统 | AxionCLI/Memory/ | App 操作经验积累 + Planner 上下文注入 + Takeover 学习（Epic 15） |
 
 ### 集成点
 
@@ -1151,7 +1159,7 @@ TrackedRun.toStandardOutput() → StandardTaskOutput  # [Epic 14] 统一 API 输
 
 ### 需求覆盖验证
 
-**功能需求覆盖（44/44 FR — 100%）：**
+**功能需求覆盖（46/46 FR — 100%）：**
 
 | FR 范围 | 数量 | 覆盖状态 | 关键文件 |
 |---------|------|----------|----------|
@@ -1163,6 +1171,7 @@ TrackedRun.toStandardOutput() → StandardTaskOutput  # [Epic 14] 统一 API 输
 | FR24–FR32 AxionHelper | 9 | ✅ 全覆盖 | AppLauncher, AccessibilityEngine, ScreenshotService, KeyboardService, MouseService, URLOpener, HelperMCPServer |
 | FR33–FR41 进度与 SDK | 9 | ✅ 全覆盖 | TerminalOutput, JSONOutput, RunEngine (SDK 集成) |
 | FR71–FR73 API 规范化 | 3 | ✅ 全覆盖 | APITypes.swift (StandardTaskOutput, CapabilitiesResponse, Settings API), AxionAPI.swift, DoctorCommand |
+| FR74–FR75 Takeover 学习与标记 | 2 | ✅ 全覆盖 | TakeoverLearningService.swift, TakeoverMarker.swift, MemoryLearnTakeoverCommand.swift, TakeoverIO.swift |
 
 **非功能需求覆盖（23/23 NFR — 100%）：**
 

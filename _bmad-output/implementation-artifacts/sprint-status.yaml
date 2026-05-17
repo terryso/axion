@@ -1,5 +1,6 @@
 # generated: 2026-05-08
 # last_updated: 2026-05-17
+# story-16.1-created: 2026-05-17
 # story-15.2-created: 2026-05-17
 # story-15.1-review: 2026-05-17
 # retro-epic-14: 2026-05-17
@@ -65,6 +66,8 @@
 
 generated: 2026-05-08
 last_updated: 2026-05-17
+# story-16-1-started: 2026-05-17
+# retro-epic-15: 2026-05-17
 
 project_key: NOKEY
 tracking_system: file-system
@@ -198,10 +201,10 @@ development_status:
   epic-15: in-progress
   15-1-takeover-experience-auto-learning: done
   15-2-takeover-structured-markers: done
-  epic-15-retrospective: optional
+  epic-15-retrospective: done
 
   # Epic 16: Daemon 模式与运维便利性
-  epic-16: backlog
-  16-1-launchd-daemon-support: backlog
+  epic-16: in-progress
+  16-1-launchd-daemon-support: done
   16-2-api-server-persistence-recovery: backlog
   epic-16-retrospective: optional

@@ -174,6 +174,15 @@ Available options when paused:
 - Press **Enter** — resume after manual fix
 - Type **skip** — skip the current step
 - Type **abort** — cancel the task
+- Type a description — describe what you did (e.g., "used Cmd+Shift+G to enter path")
+
+Takeover experiences are automatically recorded as Memory, helping the Planner avoid similar blocks in the future. You can also manually record experiences:
+
+```bash
+axion memory learn-takeover --bundle-id com.apple.finder \
+  --issue "file dialog not accessible via AX" \
+  --summary "used Cmd+Shift+G to enter path directly"
+```
 
 ### HTTP API Server (Phase 2)
 

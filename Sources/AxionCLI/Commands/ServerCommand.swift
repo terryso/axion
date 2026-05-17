@@ -32,6 +32,9 @@ struct ServerCommand: AsyncParsableCommand {
     }
 
     func run() async throws {
+        // Resolve authKey: CLI flag > environment variable > nil
+        let resolvedAuthKey = authKey ?? ProcessInfo.processInfo.environment["AXION_AUTH_KEY"]
+
         // 1. Load configuration
         let config = try await ConfigManager.loadConfig()
 
@@ -47,7 +50,7 @@ struct ServerCommand: AsyncParsableCommand {
             runTracker: runTracker,
             eventBroadcaster: eventBroadcaster,
             config: config,
-            authKey: authKey,
+            authKey: resolvedAuthKey,
             concurrencyLimiter: concurrencyLimiter,
             maxConcurrent: maxConcurrent
         )
@@ -63,7 +66,7 @@ struct ServerCommand: AsyncParsableCommand {
         // 5. Display startup message
         print("Axion API server running on port \(port)")
         print("  Listening on \(host):\(port)")
-        print("  Auth: \(authKey != nil ? "enabled" : "disabled")")
+        print("  Auth: \(resolvedAuthKey != nil ? "enabled" : "disabled")")
         print("  Max concurrent tasks: \(maxConcurrent)")
         print("  Press Ctrl+C to stop")
 
