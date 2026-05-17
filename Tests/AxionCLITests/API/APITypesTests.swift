@@ -8,19 +8,19 @@ struct APITypesTests {
 
     @Test("HealthResponse codable round trip preserves all fields")
     func healthResponseCodableRoundTripPreservesAllFields() throws {
-        let response = HealthResponse(status: "ok", version: "0.1.0")
+        let response = HealthResponse(status: "ok", version: AxionCore.AxionVersion.current)
 
         let encoder = JSONEncoder()
         let data = try encoder.encode(response)
         let decoded = try JSONDecoder().decode(HealthResponse.self, from: data)
 
         #expect(decoded.status == "ok")
-        #expect(decoded.version == "0.1.0")
+        #expect(decoded.version == AxionCore.AxionVersion.current)
     }
 
     @Test("HealthResponse JSON keys are snake case")
     func healthResponseJsonKeysAreSnakeCase() throws {
-        let response = HealthResponse(status: "ok", version: "0.1.0")
+        let response = HealthResponse(status: "ok", version: AxionCore.AxionVersion.current)
 
         let encoder = JSONEncoder()
         encoder.outputFormatting = [.sortedKeys]
@@ -634,7 +634,7 @@ struct APITypesTests {
     @Test("CapabilitiesResponse codable round trip preserves all fields")
     func capabilitiesResponseCodableRoundTripPreservesAllFields() throws {
         let response = CapabilitiesResponse(
-            version: "0.1.0",
+            version: AxionCore.AxionVersion.current,
             supportedRunStatuses: ["queued", "running", "completed", "failed"],
             supportedResultKinds: ["answer", "confirmation"],
             availableTools: ["launch_app", "click"],
@@ -646,7 +646,7 @@ struct APITypesTests {
         let data = try encoder.encode(response)
         let decoded = try JSONDecoder().decode(CapabilitiesResponse.self, from: data)
 
-        #expect(decoded.version == "0.1.0")
+        #expect(decoded.version == AxionCore.AxionVersion.current)
         #expect(decoded.supportedRunStatuses == ["queued", "running", "completed", "failed"])
         #expect(decoded.supportedResultKinds == ["answer", "confirmation"])
         #expect(decoded.availableTools == ["launch_app", "click"])
@@ -657,7 +657,7 @@ struct APITypesTests {
     @Test("CapabilitiesResponse JSON keys are snake case")
     func capabilitiesResponseJsonKeysAreSnakeCase() throws {
         let response = CapabilitiesResponse(
-            version: "0.1.0",
+            version: AxionCore.AxionVersion.current,
             supportedRunStatuses: [],
             supportedResultKinds: [],
             availableTools: [],
@@ -683,7 +683,7 @@ struct APITypesTests {
         let expectedFeatures = ["memory", "takeover", "fast_mode", "skills"]
 
         let response = CapabilitiesResponse(
-            version: "0.1.0",
+            version: AxionCore.AxionVersion.current,
             supportedRunStatuses: APIRunStatus.allCases.map(\.rawValue),
             supportedResultKinds: TaskResultKind.allCases.map(\.rawValue),
             availableTools: ToolNames.allToolNames,

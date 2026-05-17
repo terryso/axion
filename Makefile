@@ -1,9 +1,20 @@
 .PHONY: test test-integration test-e2e test-e2e-real test-all build
 
+VERSION := $(shell cat VERSION)
+
 build:
 	swift build
+	@PLIST=".build/AxionHelper.app/Contents/Info.plist"; \
+		if [ -f "$$PLIST" ]; then \
+			/usr/libexec/PlistBuddy -c "Set :CFBundleShortVersionString $(VERSION)" "$$PLIST" 2>/dev/null || true; \
+		fi
 
 test:
+	swift build --build-tests
+	@PLIST=".build/AxionHelper.app/Contents/Info.plist"; \
+		if [ -f "$$PLIST" ]; then \
+			/usr/libexec/PlistBuddy -c "Set :CFBundleShortVersionString $(VERSION)" "$$PLIST" 2>/dev/null || true; \
+		fi
 	swift test --no-parallel --skip AxionHelperIntegrationTests --skip AxionCLIIntegrationTests --skip AxionE2ETests
 
 test-integration:

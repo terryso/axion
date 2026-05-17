@@ -1,4 +1,5 @@
 import Foundation
+import AxionCore
 import MCP
 import MCPTool
 
@@ -23,7 +24,7 @@ enum HelperMCPServer {
     static func run() async throws {
         let server = MCPServer(
             name: "AxionHelper",
-            version: "0.1.0"
+            version: AxionVersion.current
         )
 
         try await ToolRegistrar.registerAll(to: server)

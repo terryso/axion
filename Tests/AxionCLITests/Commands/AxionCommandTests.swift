@@ -1,9 +1,20 @@
 import Testing
+import Foundation
 import ArgumentParser
 @testable import AxionCLI
 
 @Suite("AxionCommand")
 struct AxionCommandTests {
+
+    private static let versionFromFile: String = {
+        let url = URL(fileURLWithPath: #filePath)
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+            .appendingPathComponent("VERSION")
+        return (try? String(contentsOf: url).trimmingCharacters(in: .whitespacesAndNewlines)) ?? "unknown"
+    }()
 
     // MARK: - AC1: `axion --help` 显示根命令帮助
 
@@ -39,9 +50,10 @@ struct AxionCommandTests {
     @Test("configuration has version")
     func axionVersionConfigurationHasVersion() {
         let version = AxionCLI.configuration.version
+        let expectedVersion = Self.versionFromFile
         #expect(
-            version.contains("0.1.0"),
-            "Version should contain '0.1.0', got: \(version)"
+            version.contains(expectedVersion),
+            "Version should contain '\(expectedVersion)', got: \(version)"
         )
     }
 
@@ -172,7 +184,7 @@ struct AxionCommandTests {
     @Test("AxionVersion.current matches VERSION file")
     func axionVersionMatchesVersionFile() {
         #expect(
-            AxionVersion.current == "0.1.0",
+            AxionVersion.current == Self.versionFromFile,
             "AxionVersion.current should match VERSION file content"
         )
     }

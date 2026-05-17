@@ -23,7 +23,7 @@ struct HelperMCPServerTests {
     private func makeRegisteredServer() async throws -> MCPServer {
         let server = MCPServer(
             name: "AxionHelper",
-            version: "0.1.0"
+            version: AxionVersion.current
         )
         try await ToolRegistrar.registerAll(to: server)
         return server
@@ -54,7 +54,7 @@ struct HelperMCPServerTests {
         // Given: AxionHelper 启动
         let server = MCPServer(
             name: "AxionHelper",
-            version: "0.1.0"
+            version: AxionVersion.current
         )
 
         // When: 检查 server 属性
@@ -62,7 +62,7 @@ struct HelperMCPServerTests {
         let name = await server.name
         let version = await server.version
         #expect(name == "AxionHelper")
-        #expect(version == "0.1.0")
+        #expect(version == AxionVersion.current)
     }
 
     // [P0] MCPServer initialize 响应包含服务端能力声明（tools capability）
@@ -253,7 +253,7 @@ struct HelperMCPServerTests {
     @Test("MCP server run stdio exits on EOF")
     func mcpServerRunStdioExitsOnEOF() async throws {
         // Given: An MCPServer configured like AxionHelper
-        let server = MCPServer(name: "AxionHelper", version: "0.1.0")
+        let server = MCPServer(name: "AxionHelper", version: AxionVersion.current)
         try await ToolRegistrar.registerAll(to: server)
 
         // When: Creating a session and stdio transport (mirrors HelperMCPServer.run())
@@ -275,7 +275,7 @@ struct HelperMCPServerTests {
     @Test("ToolRegistrar registerAll is callable")
     func toolRegistrarRegisterAllIsCallable() async throws {
         // Given: 一个 MCPServer 实例
-        let server = MCPServer(name: "TestHelper", version: "0.1.0")
+        let server = MCPServer(name: "TestHelper", version: AxionVersion.current)
 
         // When: 调用 ToolRegistrar.registerAll
         try await ToolRegistrar.registerAll(to: server)

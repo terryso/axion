@@ -3,6 +3,7 @@ import MCP
 import MCPTool
 import Testing
 @testable import AxionHelper
+@testable import AxionCore
 
 @MainActor
 extension ToolsTests {
@@ -10,7 +11,7 @@ extension ToolsTests {
 struct InputToolsTests {
 
     private func makeRegisteredServer() async throws -> MCPServer {
-        let server = MCPServer(name: "AxionHelper", version: "0.1.0")
+        let server = MCPServer(name: "AxionHelper", version: AxionVersion.current)
         try await ToolRegistrar.registerAll(to: server)
         return server
     }

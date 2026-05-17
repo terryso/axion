@@ -4,6 +4,7 @@ set -euo pipefail
 
 PROJECT_DIR="$(cd "$(dirname "$0")/.." && pwd)"
 BUNDLE_DIR="$PROJECT_DIR/.build/AxionBar.app"
+VERSION="$(cat "$PROJECT_DIR/VERSION")"
 
 echo "Building AxionBar..."
 swift build --target AxionBar
@@ -15,7 +16,7 @@ mkdir -p "$BUNDLE_DIR/Contents/Resources"
 cp "$PROJECT_DIR/.build/debug/AxionBar" "$BUNDLE_DIR/Contents/MacOS/AxionBar"
 
 if [ ! -f "$BUNDLE_DIR/Contents/Info.plist" ]; then
-    cat > "$BUNDLE_DIR/Contents/Info.plist" << 'PLIST'
+    cat > "$BUNDLE_DIR/Contents/Info.plist" << PLIST
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
@@ -31,7 +32,7 @@ if [ ! -f "$BUNDLE_DIR/Contents/Info.plist" ]; then
     <key>CFBundlePackageType</key>
     <string>APPL</string>
     <key>CFBundleShortVersionString</key>
-    <string>0.4.1</string>
+    <string>$VERSION</string>
     <key>CFBundleVersion</key>
     <string>1</string>
     <key>LSMinimumSystemVersion</key>

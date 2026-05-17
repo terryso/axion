@@ -1,6 +1,6 @@
-import Foundation
+import AxionCore
 
-// 与 VERSION 文件同步
-enum AxionVersion {
-    static let current = "0.4.1"
+// Re-export from AxionCore
+public enum AxionVersion {
+    public static let current = AxionCore.AxionVersion.current
 }

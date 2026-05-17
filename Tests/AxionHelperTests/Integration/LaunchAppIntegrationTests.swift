@@ -11,7 +11,7 @@ struct LaunchAppIntegrationTests {
     // MARK: - Helpers
 
     private func makeRegisteredServer() async throws -> MCPServer {
-        let server = MCPServer(name: "AxionHelper", version: "0.1.0")
+        let server = MCPServer(name: "AxionHelper", version: AxionVersion.current)
         try await ToolRegistrar.registerAll(to: server)
         return server
     }
