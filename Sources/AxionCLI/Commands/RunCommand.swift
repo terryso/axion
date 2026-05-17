@@ -744,9 +744,16 @@ struct RunCommand: AsyncParsableCommand {
             prompt += "\n\n\(memoryContext)"
         }
 
-        // Append skills prompt if available (Story 17.1 AC5)
+        // Append skills prompt if available (Story 17.1 AC5, Story 17.4 AC1)
         if !skillsPrompt.isEmpty {
-            prompt += "\n\n## Available Skills\n\n\(skillsPrompt)"
+            prompt += """
+
+            ## Available Skills
+
+            When the user's task matches a skill's TRIGGER condition, call the `Skill` tool with the skill name and arguments. Parameters: `skill` (skill name, required) and `args` (user arguments, optional). The tool returns a JSON with `prompt` (the skill's prompt template) — follow that prompt as your operating instructions for the rest of the task.
+
+            \(skillsPrompt)
+            """
         }
 
         return prompt

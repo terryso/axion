@@ -66,6 +66,8 @@
 
 generated: 2026-05-08
 last_updated: 2026-05-18
+# story-17-4-started: 2026-05-18
+# story-17-4-created: 2026-05-18
 # story-17-3-created: 2026-05-18
 # story-17-2-created: 2026-05-18
 # story-17-1-created: 2026-05-18
@@ -222,7 +224,7 @@ development_status:
   17-1-runcommand-integrate-skillregistry: done
   17-2-dual-track-skill-lookup: done
   17-3-explicit-skill-name-trigger: done
-  17-4-implicit-skill-trigger: backlog
+  17-4-implicit-skill-trigger: done
   epic-17-retrospective: optional
 
   # Epic 18: Axion 桌面技能增强
