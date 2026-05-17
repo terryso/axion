@@ -74,15 +74,17 @@ struct RunCommand: AsyncParsableCommand {
             skillRegisteredCount = skillRegistry.registerDiscoveredSkills()
         }
 
+        // Explicitly triggered skill (set when /skill-name resolves to a prompt skill)
+        var explicitSkill: OpenAgentSDK.Skill? = nil
+
         // 0b. Dual-track skill lookup: parse /skill-name prefix
         if let invocation = SkillLookupService.parseSkillInvocation(task), !noSkills {
             let lookupService = SkillLookupService(registry: skillRegistry)
 
             switch lookupService.lookup(name: invocation.name) {
-            case .promptSkill:
-                // Prompt skill found — continue normal Agent flow.
-                // SkillTool is already registered, LLM will use promptTemplate.
-                break
+            case .promptSkill(let skill):
+                explicitSkill = skill
+                task = invocation.args ?? "Execute skill \(skill.name)"
             case .recordedSkill(let skill, let skillPath):
                 // Recorded skill found — execute via SkillExecutor and return early.
                 let paramValues: [String: String]
@@ -178,14 +180,33 @@ struct RunCommand: AsyncParsableCommand {
 
         let skillsPrompt = noSkills ? "" : skillRegistry.formatSkillsForPrompt()
 
-        let systemPrompt = buildFullSystemPrompt(
-            basePrompt: baseSystemPrompt,
-            fast: fast,
-            dryrun: dryrun,
-            verbose: verbose,
-            memoryContext: memoryContext,
-            skillsPrompt: skillsPrompt
-        )
+        let systemPrompt: String
+        if let skill = explicitSkill {
+            // Explicit skill trigger: use promptTemplate + tool list, skip skillsPrompt
+            // When toolRestrictions are set, only list those tools (MCP tools will be blocked)
+            let toolNames: [String]
+            if let restrictions = skill.toolRestrictions {
+                toolNames = restrictions.map(\.rawValue)
+            } else {
+                toolNames = mcpPrefixedToolNames
+            }
+            let toolList = PromptBuilder.buildToolListDescription(from: toolNames)
+            var prompt = skill.promptTemplate
+            prompt += "\n\n## Available Tools\n\(toolList)"
+            if let memCtx = memoryContext, !memCtx.isEmpty {
+                prompt += "\n\n\(memCtx)"
+            }
+            systemPrompt = prompt
+        } else {
+            systemPrompt = buildFullSystemPrompt(
+                basePrompt: baseSystemPrompt,
+                fast: fast,
+                dryrun: dryrun,
+                verbose: verbose,
+                memoryContext: memoryContext,
+                skillsPrompt: skillsPrompt
+            )
+        }
 
         // 6. Configure MCP servers: Helper for desktop, Playwright for web
         let mcpServers: [String: McpServerConfig] = [
@@ -202,6 +223,13 @@ struct RunCommand: AsyncParsableCommand {
         let effectiveMaxSteps = Self.computeEffectiveMaxSteps(fast: fast, maxSteps: maxSteps, configMaxSteps: config.maxSteps)
         let effectiveMaxTokens = Self.computeEffectiveMaxTokens(fast: fast)
 
+        let effectiveModel = explicitSkill?.modelOverride ?? config.model
+
+        var allowedTools: [String]? = nil
+        if let restrictions = explicitSkill?.toolRestrictions {
+            allowedTools = restrictions.map(\.rawValue)
+        }
+
         var agentTools: [ToolProtocol] = [createPauseForHumanTool()]
         if !noSkills {
             agentTools.append(createSkillTool(registry: skillRegistry))
@@ -209,7 +237,7 @@ struct RunCommand: AsyncParsableCommand {
 
         let options = AgentOptions(
             apiKey: apiKey,
-            model: config.model,
+            model: effectiveModel,
             baseURL: config.baseURL,
             systemPrompt: systemPrompt,
             maxTurns: effectiveMaxSteps,
@@ -220,6 +248,7 @@ struct RunCommand: AsyncParsableCommand {
             memoryStore: memoryStore,
             hookRegistry: hookRegistry,
             logLevel: verbose ? .debug : .info,
+            allowedTools: allowedTools,
             pauseTimeoutMs: 300_000
         )
 

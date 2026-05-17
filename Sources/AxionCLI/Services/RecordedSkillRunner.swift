@@ -9,6 +9,21 @@ struct RecordedSkillRunner {
         skillPath: String,
         paramValues: [String: String]
     ) async throws {
+        // Validate required parameters and fill defaults before starting helper
+        var resolvedParams = paramValues
+        for param in skill.parameters {
+            if resolvedParams[param.name] == nil, let defaultVal = param.defaultValue {
+                resolvedParams[param.name] = defaultVal
+            }
+        }
+        let requiredParams = skill.parameters.filter { $0.defaultValue == nil }
+        let missingParams = requiredParams.filter { resolvedParams[$0.name] == nil }
+        if !missingParams.isEmpty {
+            let names = missingParams.map(\.name).joined(separator: ", ")
+            fputs("技能 '\(skill.name)' 缺少必需参数: \(names)\n", stderr)
+            throw ExitCode(1)
+        }
+
         let helperManager = HelperProcessManager()
         print("[axion] 正在启动 Helper...")
         try await helperManager.start()
@@ -17,7 +32,7 @@ struct RecordedSkillRunner {
         do {
             let client = HelperMCPClientAdapter(manager: helperManager)
             let executor = SkillExecutor(client: client)
-            result = try await executor.execute(skill: skill, paramValues: paramValues)
+            result = try await executor.execute(skill: skill, paramValues: resolvedParams)
         } catch {
             await helperManager.stop()
             throw error
