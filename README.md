@@ -105,8 +105,16 @@ Axion is a Swift-based macOS desktop automation platform that takes natural lang
 
 ### Install
 
+**Homebrew (recommended):**
+
 ```bash
-# Build from source
+brew tap terryso/tap
+brew install axion
+```
+
+**Build from source:**
+
+```bash
 git clone https://github.com/terryso/axion.git
 cd axion
 swift build -c release

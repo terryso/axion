@@ -1,0 +1,152 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    name: Build & Release
+    runs-on: macos-15
+
+    steps:
+      - name: Checkout axion
+        uses: actions/checkout@v4
+
+      - name: Select Xcode with Swift 6.2
+        run: sudo xcode-select -s /Applications/Xcode_26.2.app/Contents/Developer
+
+      - name: Extract version from tag
+        id: version
+        run: |
+          VERSION="${GITHUB_REF_NAME#v}"
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+          echo "Building version: $VERSION"
+
+      - name: Sync VERSION file
+        run: echo "${{ steps.version.outputs.version }}" > VERSION
+
+      - name: Cache Swift build
+        uses: actions/cache@v4
+        with:
+          path: .build
+          key: swift-release-${{ runner.os }}-${{ hashFiles('Package.resolved') }}
+          restore-keys: swift-release-${{ runner.os }}-
+
+      - name: Build release package
+        run: bash Distribution/homebrew/build-release.sh "${{ steps.version.outputs.version }}"
+
+      - name: Add AxionBar.app to distribution
+        run: |
+          VERSION="${{ steps.version.outputs.version }}"
+          ARCH="$(uname -m)"
+          DIST_DIR=".build/dist/axion-$VERSION"
+          BUILD_DIR=".build/$ARCH-apple-macosx/release"
+
+          mkdir -p "$DIST_DIR/libexec/axion/AxionBar.app/Contents/MacOS"
+
+          cp "$BUILD_DIR/AxionBar" "$DIST_DIR/libexec/axion/AxionBar.app/Contents/MacOS/AxionBar"
+
+          cat > "$DIST_DIR/libexec/axion/AxionBar.app/Contents/Info.plist" << EOF
+          <?xml version="1.0" encoding="UTF-8"?>
+          <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+          <plist version="1.0">
+          <dict>
+              <key>CFBundleDevelopmentRegion</key>
+              <string>en</string>
+              <key>CFBundleExecutable</key>
+              <string>AxionBar</string>
+              <key>CFBundleIdentifier</key>
+              <string>com.axion.AxionBar</string>
+              <key>CFBundleName</key>
+              <string>AxionBar</string>
+              <key>CFBundlePackageType</key>
+              <string>APPL</string>
+              <key>CFBundleShortVersionString</key>
+              <string>$VERSION</string>
+              <key>CFBundleVersion</key>
+              <string>1</string>
+              <key>LSMinimumSystemVersion</key>
+              <string>14.0</string>
+              <key>LSUIElement</key>
+              <true/>
+              <key>NSHighResolutionCapable</key>
+              <true/>
+          </dict>
+          </plist>
+          EOF
+
+      - name: Repackage tar.gz with AxionBar
+        run: |
+          VERSION="${{ steps.version.outputs.version }}"
+          DIST_DIR=".build/dist"
+
+          rm -f "$DIST_DIR/axion-$VERSION.tar.gz"
+          tar -czf "$DIST_DIR/axion-$VERSION.tar.gz" -C "$DIST_DIR" "axion-$VERSION"
+
+          SHA256=$(shasum -a 256 "$DIST_DIR/axion-$VERSION.tar.gz" | cut -d' ' -f1)
+          echo "sha256=$SHA256" >> $GITHUB_OUTPUT
+
+          echo "Archive: $DIST_DIR/axion-$VERSION.tar.gz"
+          echo "SHA256: $SHA256"
+
+      - name: Regenerate Homebrew formula
+        run: |
+          VERSION="${{ steps.version.outputs.version }}"
+          SHA256="${{ steps.repackage.outputs.sha256 }}"
+          URL="https://github.com/terryso/axion/releases/download/v$VERSION/axion-$VERSION.tar.gz"
+
+          sed -e "s|{{VERSION}}|$VERSION|g" \
+              -e "s|{{SHA256}}|$SHA256|g" \
+              -e "s|{{URL}}|$URL|g" \
+              Distribution/homebrew/axion.rb.template > Distribution/homebrew/axion.rb
+
+          echo "Generated formula:"
+          cat Distribution/homebrew/axion.rb
+
+      - name: Create GitHub Release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          VERSION="${{ steps.version.outputs.version }}"
+          SHA256="${{ steps.repackage.outputs.sha256 }}"
+          TAR_PATH=".build/dist/axion-$VERSION.tar.gz"
+
+          gh release create "v$VERSION" "$TAR_PATH" \
+            --title "Axion v$VERSION" \
+            --generate-notes \
+            --notes "SHA256: \`$SHA256\`
+
+          ### Installation
+
+          \`\`\`bash
+          brew tap terryso/tap
+          brew install axion
+          \`\`\`"
+
+      - name: Update homebrew-tap formula
+        if: env.HOMEBREW_TAP_TOKEN != ''
+        env:
+          HOMEBREW_TAP_TOKEN: ${{ secrets.HOMEBREW_TAP_TOKEN }}
+        run: |
+          VERSION="${{ steps.version.outputs.version }}"
+          CLONE_DIR=$(mktemp -d)
+          trap 'rm -rf "$CLONE_DIR"' EXIT
+
+          git clone "https://x-access-token:${HOMEBREW_TAP_TOKEN}@github.com/terryso/homebrew-tap.git" "$CLONE_DIR" 2>/dev/null
+
+          mkdir -p "$CLONE_DIR/Formula"
+          cp Distribution/homebrew/axion.rb "$CLONE_DIR/Formula/axion.rb"
+
+          cd "$CLONE_DIR"
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add Formula/axion.rb
+          git diff --cached --quiet || git commit -m "axion $VERSION"
+          git push origin main 2>/dev/null || git push origin master 2>/dev/null
+
+          echo "Homebrew tap formula updated to $VERSION"

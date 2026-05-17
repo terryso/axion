@@ -105,8 +105,16 @@ Axion 是一个基于 Swift 的 macOS 桌面自动化平台，能够通过自然
 
 ### 安装
 
+**Homebrew（推荐）：**
+
 ```bash
-# 从源码构建
+brew tap terryso/tap
+brew install axion
+```
+
+**从源码构建：**
+
+```bash
 git clone https://github.com/terryso/axion.git
 cd axion
 swift build -c release
