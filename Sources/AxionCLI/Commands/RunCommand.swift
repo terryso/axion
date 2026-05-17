@@ -71,7 +71,12 @@ struct RunCommand: AsyncParsableCommand {
         let skillRegistry = SkillRegistry()
         var skillRegisteredCount = 0
         if !noSkills {
+            // 0a-1. Register built-in desktop skills first (Epic 18)
+            AxionBuiltInSkills.registerAll(into: skillRegistry)
+
+            // 0a-2. Register filesystem-discovered skills (overrides built-in on name collision)
             skillRegisteredCount = skillRegistry.registerDiscoveredSkills()
+            skillRegisteredCount = skillRegistry.allSkills.count
         }
 
         // Explicitly triggered skill (set when /skill-name resolves to a prompt skill)

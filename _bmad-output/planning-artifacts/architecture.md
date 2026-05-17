@@ -770,7 +770,7 @@ axion/
 │   │   ├── main.swift                         # 入口：ArgumentParser 根命令
 │   │   ├── Commands/
 │   │   │   ├── AxionCommand.swift             # 根命令（注册子命令）
-│   │   │   ├── RunCommand.swift               # FR6–FR10: axion run
+│   │   │   ├── RunCommand.swift               # FR6–FR10: axion run（Epic 17: Skill 系统集成入口）
 │   │   │   ├── SetupCommand.swift             # FR2: axion setup
 │   │   │   ├── DoctorCommand.swift            # FR3: axion doctor
 │   │   │   ├── ServerCommand.swift            # FR45–FR46: axion server（Epic 5）
@@ -794,18 +794,21 @@ axion/
 │   │   │   ├── TaskVerifier.swift             # FR21: 验证任务完成状态
 │   │   │   ├── StopConditionEvaluator.swift   # FR22: 评估 stopWhen 条件
 │   │   │   └── VisualDeltaChecker.swift       # Epic 13: 截图像素级差异比较 + VisualDeltaTracker actor
-│   │   ├── Services/                            # Epic 13: 运行时安全与成本控制 + Epic 16: Daemon
+│   │   ├── Services/                            # Epic 13: 运行时安全与成本控制 + Epic 16: Daemon + Epic 17: Skill
 │   │   │   ├── RunLockService.swift            # Epic 13: 桌面级运行锁 actor（~/.axion/run.lock）
 │   │   │   ├── CostTracker.swift               # Epic 13: 预算控制 + 成本遥测 actor
 │   │   │   ├── SeatActivityMonitor.swift       # Epic 13: 桌面活动检测 actor（学习保护）
-│   │   │   └── DaemonService.swift             # Epic 16: launchd plist 生成、install/uninstall/status
+│   │   │   ├── DaemonService.swift             # Epic 16: launchd plist 生成、install/uninstall/status
+│   │   │   ├── SkillLookupService.swift        # Epic 17: 双轨技能查找（prompt 技能优先、录制技能回退）
+│   │   │   └── RecordedSkillRunner.swift       # Epic 17: 录制技能执行器（Helper 启动 + SkillExecutor + 元数据更新）
 │   │   ├── Engine/
 │   │   │   └── RunEngine.swift                # D3: 状态机编排 plan→exec→verify 循环
 │   │   ├── Config/
 │   │   │   ├── ConfigManager.swift            # FR4–FR5: 分层配置加载
 │   │   │   └── KeychainStore.swift            # D1: API Key 安全存储
 │   │   ├── Helper/
-│   │   │   └── HelperProcessManager.swift     # D8: Helper 进程启停管理
+│   │   │   ├── HelperProcessManager.swift     # D8: Helper 进程启停管理
+│   │   │   └── HelperMCPClientAdapter.swift   # Epic 17: Helper MCP 客户端适配器（共享）
 │   │   ├── Trace/
 │   │   │   └── TraceRecorder.swift            # D7/NFR20: JSONL trace 记录
 │   │   └── Output/
@@ -898,7 +901,8 @@ axion/
 │   │   │   ├── RunCommandTests.swift
 │   │   │   ├── SetupCommandTests.swift
 │   │   │   ├── DoctorCommandTests.swift
-│   │   │   └── MemoryLearnTakeoverCommandTests.swift  # Epic 15: Takeover CLI 命令测试
+│   │   │   ├── MemoryLearnTakeoverCommandTests.swift  # Epic 15: Takeover CLI 命令测试
+│   │   │   └── SkillIntegrationTests.swift           # Epic 17: SkillRegistry 集成测试
 │   │   ├── Planner/
 │   │   │   ├── LLMPlannerTests.swift
 │   │   │   └── PlanParserTests.swift
@@ -911,10 +915,13 @@ axion/
 │   │   │   └── VisualDeltaCheckerTests.swift   # Epic 13: 视觉增量检查测试
 │   │   └── Engine/
 │   │       └── RunEngineTests.swift
-│   │   ├── Services/                            # Epic 13: 运行时服务测试
+│   │   ├── Services/                            # Epic 13: 运行时服务测试 + Epic 17: Skill 服务测试
 │   │   │   ├── RunLockServiceTests.swift       # Epic 13: 运行锁测试
 │   │   │   ├── CostTrackerTests.swift          # Epic 13: 预算控制测试
-│   │   │   └── SeatActivityMonitorTests.swift  # Epic 13: 活动检测测试
+│   │   │   ├── SeatActivityMonitorTests.swift  # Epic 13: 活动检测测试
+│   │   │   ├── SkillLookupServiceTests.swift      # Epic 17: 双轨技能查找测试
+│   │   │   ├── ExplicitSkillTriggerTests.swift    # Epic 17: 显式 /skill-name 触发测试
+│   │   │   └── ImplicitSkillTriggerTests.swift    # Epic 17: 隐式技能触发测试
 │   │   ├── Memory/                                # Epic 4 + Epic 12 + Epic 15: Memory 测试
 │   │   │   ├── AppMemoryFactTests.swift             # Epic 12: 模型 Codable + normalizeFact + factId
 │   │   │   ├── MemoryLifecycleServiceTests.swift    # Epic 12: promote/demote/reactivate 生命周期
@@ -1045,6 +1052,10 @@ AxionBar ← SwiftUI + AppKit（独立 macOS App）
 | FR75 | TakeoverMarker.swift + TakeoverIO.swift + RunCommand.swift + TraceRecorder.swift | Takeover 结构化标记：InterventionReason 分类 + 用户反馈 + duration 计时（Epic 15） |
 | FR76 | DaemonService.swift + DaemonCommand.swift + ServerCommand.swift | launchd Daemon：开机自启守护进程 + 崩溃自动重启（Epic 16） |
 | FR77 | RunPersistenceService.swift + RunRecoveryService.swift + RunTracker.swift + EventBroadcaster.swift + ServerCommand.swift | 运行状态恢复：磁盘持久化 + 启动恢复 + SSE 历史重放（Epic 16） |
+| FR78 | RunCommand.swift + SkillRegistry + SkillLoader | Skill 加载：多目录技能发现与注册（Epic 17） |
+| FR79 | RunCommand.swift + SkillTool + SkillLookupService | 显式技能触发：`/skill-name` 语法解析 + promptTemplate/toolRestrictions/modelOverride 注入（Epic 17） |
+| FR80 | RunCommand.swift + SkillTool + formatSkillsForPrompt | 隐式技能触发：LLM 自动匹配 TRIGGER 条件（Epic 17） |
+| FR81 | SkillLookupService + RecordedSkillRunner | 双轨技能查找：prompt 技能优先 + 录制技能回退（Epic 17） |
 
 **跨切关注点到位置的映射：**
 
@@ -1166,7 +1177,7 @@ TrackedRun.toStandardOutput() → StandardTaskOutput  # [Epic 14] 统一 API 输
 
 ### 需求覆盖验证
 
-**功能需求覆盖（46/46 FR — 100%）：**
+**功能需求覆盖（50/50 FR — 100%）：**
 
 | FR 范围 | 数量 | 覆盖状态 | 关键文件 |
 |---------|------|----------|----------|
@@ -1179,8 +1190,9 @@ TrackedRun.toStandardOutput() → StandardTaskOutput  # [Epic 14] 统一 API 输
 | FR33–FR41 进度与 SDK | 9 | ✅ 全覆盖 | TerminalOutput, JSONOutput, RunEngine (SDK 集成) |
 | FR71–FR73 API 规范化 | 3 | ✅ 全覆盖 | APITypes.swift (StandardTaskOutput, CapabilitiesResponse, Settings API), AxionAPI.swift, DoctorCommand |
 | FR74–FR75 Takeover 学习与标记 | 2 | ✅ 全覆盖 | TakeoverLearningService.swift, TakeoverMarker.swift, MemoryLearnTakeoverCommand.swift, TakeoverIO.swift |
+| FR78–FR81 Skill 系统集成 | 4 | ✅ 全覆盖 | RunCommand.swift, SkillLookupService.swift, RecordedSkillRunner.swift, SkillRegistry, SkillTool |
 
-**非功能需求覆盖（29/29 NFR — 100%）：**
+**非功能需求覆盖（31/31 NFR — 100%）：**
 
 | NFR 范围 | 数量 | 覆盖状态 |
 |---------|------|----------|
@@ -1191,6 +1203,7 @@ TrackedRun.toStandardOutput() → StandardTaskOutput  # [Epic 14] 统一 API 输
 | NFR17–NFR20 可维护性 | 4 | ✅ SPM 解耦 + ToolRegistrar + 外部 Prompt + JSONL Trace |
 | NFR21–NFR23 兼容性 | 3 | ✅ macOS 14 platform + 静态编译 + SPM multi-arch |
 | NFR37–NFR42 Phase 4 | 6 | ✅ 视觉增量 <50ms + 运行锁 <10ms + Memory 导入/导出 <2s + Daemon 重启 <15s + 序列化 <5ms + 活动检测 CPU <2% |
+| NFR44–NFR45 Phase 5 Skill | 2 | ✅ 显式触发延迟 <100ms + 技能描述 <500 token |
 
 ### 实现就绪性验证
 
