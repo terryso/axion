@@ -21,8 +21,8 @@ struct HelperPathResolver {
         }
 
         // 策略 2: 相对于可执行文件解析（Homebrew 安装布局）
-        if let execURL = Bundle.main.executableURL {
-            let execDir = execURL.deletingLastPathComponent()
+        if let execPath = resolveExecutablePath() {
+            let execDir = URL(fileURLWithPath: execPath).deletingLastPathComponent()
             let helperPath = execDir
                 .deletingLastPathComponent()
                 .appendingPathComponent("libexec/axion/AxionHelper.app/Contents/MacOS/AxionHelper")
@@ -32,8 +32,8 @@ struct HelperPathResolver {
             }
 
             // 策略 3: 开发模式回退
-            if execURL.path.contains(".build") {
-                if let projectRoot = findProjectRoot(from: execURL) {
+            if execPath.contains(".build") {
+                if let projectRoot = findProjectRoot(from: URL(fileURLWithPath: execPath)) {
                     let devPath = projectRoot
                         .appendingPathComponent(".build/AxionHelper.app/Contents/MacOS/AxionHelper")
                     if FileManager.default.fileExists(atPath: devPath.path) {
@@ -44,6 +44,33 @@ struct HelperPathResolver {
         }
 
         return nil
+    }
+
+    /// 获取当前可执行文件的绝对路径。
+    /// Bundle.main.executableURL 对 SPM 裸二进制可能返回 nil，
+    /// 回退到 /proc/self/exe (Linux) 或 _NSGetExecutablePath (macOS)。
+    private static func resolveExecutablePath() -> String? {
+        let rawPath: String?
+        if let url = Bundle.main.executableURL {
+            rawPath = url.path
+        } else {
+            // Fallback: _NSGetExecutablePath
+            var size = UInt32(PATH_MAX)
+            var buffer = [CChar](repeating: 0, count: Int(PATH_MAX))
+            if _NSGetExecutablePath(&buffer, &size) == 0 {
+                rawPath = String(decoding: buffer.prefix(while: { $0 != 0 }).map { UInt8($0) }, as: UTF8.self)
+            } else {
+                rawPath = nil
+            }
+        }
+
+        guard let path = rawPath, !path.isEmpty else { return nil }
+
+        // Resolve symlinks (Homebrew installs bin/axion as symlink to Cellar)
+        if let resolved = realpath(path, nil) {
+            return String(cString: resolved)
+        }
+        return path
     }
 
     /// 从当前路径向上查找项目根目录（包含 `Package.swift` 的目录）。
