@@ -39,7 +39,8 @@ final class TakeoverIO {
     /// - Parameters:
     ///   - completedSteps: 已完成的步骤数，用于 abort 时显示摘要。
     ///   - userInput: 非跳过/终止时，回传用户的原始输入文本。
-    func displayTakeoverPrompt(reason: String, allowForeground: Bool, completedSteps: Int = 0) -> (action: TakeoverAction, userInput: String?) {
+    ///   - feedback: 用户输入的反馈文本（描述手动操作），仅当 action == .resume 且输入非空时有值。
+    func displayTakeoverPrompt(reason: String, allowForeground: Bool, completedSteps: Int = 0) -> (action: TakeoverAction, userInput: String?, feedback: String?) {
         write("")
         write("━━━ Axion Takeover ━━━")
         write("任务受阻: \(reason)")
@@ -47,16 +48,20 @@ final class TakeoverIO {
             write("前台操作限制已暂时解除，你可以自由操作桌面。")
         }
         write("")
-        write("请在桌面上手动完成操作，然后回到终端按 Enter 继续。")
-        write("也可以输入信息（如凭据）供 agent 使用，或输入 skip 跳过 / abort 终止。")
+        write("请在桌面上手动完成操作。")
+        write("手动完成后按 Enter 继续。可选：输入反馈描述你的操作（如 '使用了 Cmd+Shift+G 输入路径'），或直接 Enter 跳过。")
+        write("输入 skip 跳过当前步骤 / abort 终止任务。")
 
         let input = readLine()
         let action = TakeoverAction.fromInput(input)
 
+        let trimmedInput = input?.trimmingCharacters(in: .whitespacesAndNewlines)
+        let feedback: String? = (action == .resume && !(trimmedInput?.isEmpty ?? true)) ? input : nil
+
         switch action {
         case .resume:
-            if let input, !input.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                write("[axion] 用户继续执行...")
+            if feedback != nil {
+                write("[axion] 用户继续执行（已记录反馈）...")
             } else {
                 write("[axion] 用户继续执行...")
             }
@@ -66,7 +71,7 @@ final class TakeoverIO {
             write("[axion] 用户终止任务。已完成 \(completedSteps) 步。")
         }
 
-        return (action, input)
+        return (action, input, feedback)
     }
 
     /// 显示超时提示。

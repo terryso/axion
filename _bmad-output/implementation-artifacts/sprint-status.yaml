@@ -1,5 +1,6 @@
 # generated: 2026-05-08
 # last_updated: 2026-05-17
+# story-15.2-created: 2026-05-17
 # story-15.1-review: 2026-05-17
 # retro-epic-14: 2026-05-17
 # story-15.1-created: 2026-05-17
@@ -64,7 +65,7 @@
 
 generated: 2026-05-08
 last_updated: 2026-05-17
-project: axion
+
 project_key: NOKEY
 tracking_system: file-system
 story_location: _bmad-output/implementation-artifacts
@@ -196,7 +197,7 @@ development_status:
   # Epic 15: Takeover 学习与桌面活动感知
   epic-15: in-progress
   15-1-takeover-experience-auto-learning: done
-  15-2-takeover-structured-markers: backlog
+  15-2-takeover-structured-markers: done
   epic-15-retrospective: optional
 
   # Epic 16: Daemon 模式与运维便利性

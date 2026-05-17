@@ -37,6 +37,7 @@ actor TraceRecorder {
         static let budgetExceeded = "budget_exceeded"
         static let externalActivityDetected = "external_activity_detected"
         static let seatBaseline = "seat_baseline"
+        static let takeover = "takeover"
     }
 
     // MARK: - Properties

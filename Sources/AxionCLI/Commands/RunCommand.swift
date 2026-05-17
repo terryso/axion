@@ -283,7 +283,8 @@ struct RunCommand: AsyncParsableCommand {
         var seatActivityReported = false
 
         // Story 15.1: Takeover event context for auto-learning
-        var takeoverEvent: (issue: String, summary: String)? = nil
+        // Story 15.2: Extended with feedback, duration for structured markers
+        var takeoverEvent: (issue: String, summary: String, feedback: String?, reason: String, duration: TimeInterval?)? = nil
         var runSucceeded = false
         var runCompleted = false
 
@@ -355,6 +356,7 @@ struct RunCommand: AsyncParsableCommand {
                     switch data.subtype {
                     case .paused:
                         guard let pausedData = data.pausedData else { break }
+                        let takeoverStartTime = ContinuousClock.now
                         await tracer?.record(event: "takeover_paused", payload: [
                             "reason": pausedData.reason
                         ])
@@ -368,13 +370,23 @@ struct RunCommand: AsyncParsableCommand {
                             let userAction = result.userInput?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty == false
                                 ? result.userInput! : "用户已完成手动操作"
                             takeoverIO.write("[axion] 正在恢复执行...")
-                            // Story 15.1: Capture takeover context for auto-learning
-                            takeoverEvent = (issue: pausedData.reason, summary: userAction)
+                            // Story 15.2: Capture full takeover context including feedback and timing
+                            let elapsed = ContinuousClock.now - takeoverStartTime
+                            let durationSeconds = TakeoverMarker.durationToSeconds(elapsed)
+                            takeoverEvent = (issue: pausedData.reason, summary: userAction, feedback: result.feedback, reason: pausedData.reason, duration: durationSeconds)
                             agent.resume(context: userAction)
-                            await tracer?.record(event: "takeover_resumed", payload: [
-                                "context": userAction,
-                                "method": "resume"
-                            ])
+                            if let feedback = result.feedback {
+                                await tracer?.record(event: "takeover_resumed", payload: [
+                                    "context": userAction,
+                                    "method": "resume",
+                                    "feedback": feedback
+                                ])
+                            } else {
+                                await tracer?.record(event: "takeover_resumed", payload: [
+                                    "context": userAction,
+                                    "method": "resume"
+                                ])
+                            }
                         case .skip:
                             agent.resume(context: "skip")
                             await tracer?.record(event: "takeover_resumed", payload: [
@@ -519,6 +531,7 @@ struct RunCommand: AsyncParsableCommand {
             }
 
             // Story 15.1: Record takeover learning independently (AC1, AC2, AC3, AC7, AC8, AC9)
+            // Story 15.2: Extended with TakeoverMarker, feedback, duration, reason classification
             // Placed outside the memory extraction do/catch so extraction failures
             // don't prevent takeover learning from being recorded.
             if let event = takeoverEvent, !noMemory, !externallyModified, runCompleted {
@@ -529,12 +542,32 @@ struct RunCommand: AsyncParsableCommand {
                 )
                 let domain = Self.inferDomain(from: collectedPairs)
                 let outcome: TakeoverOutcome = runSucceeded ? .success : .failed
+
+                let reasonType = InterventionReason.classifyReason(event.reason)
+
+                // Write structured marker to trace (AC4, AC5)
+                let marker = TakeoverMarker.create(
+                    runId: runId,
+                    outcome: outcome,
+                    issue: event.issue,
+                    summary: event.summary,
+                    reasonType: reasonType,
+                    feedback: event.feedback,
+                    duration: event.duration,
+                    bundleId: domain,
+                    task: task
+                )
+                await tracer?.record(event: TraceRecorder.TraceEventType.takeover, payload: marker.toDictionary())
+
+                // Pass feedback to learning service (AC2, AC3)
                 await takeoverService.recordTakeoverLearning(
                     bundleId: domain,
                     task: task,
                     issue: event.issue,
                     summary: event.summary,
-                    outcome: outcome
+                    outcome: outcome,
+                    reasonType: reasonType.rawValue,
+                    feedback: event.feedback
                 )
             }
         }
