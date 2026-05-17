@@ -17,6 +17,7 @@ public enum AxionError: Error, Equatable {
     case unknown(reason: String)
     case missingApiKey(suggestion: String)
     case helperNotFound(suggestion: String)
+    case runLocked(runId: String, pid: Int32)
 
     public struct MCPErrorPayload: Codable, Equatable {
         public let error: String
@@ -121,6 +122,12 @@ public enum AxionError: Error, Equatable {
                 error: "helper_not_found",
                 message: "AxionHelper.app could not be found.",
                 suggestion: suggestion
+            )
+        case .runLocked(let runId, let pid):
+            return MCPErrorPayload(
+                error: "run_locked",
+                message: "另一个 live run（run_id: \(runId), pid: \(pid)）正在执行，请等待其完成或使用 `axion cancel \(runId)` 取消",
+                suggestion: "等待当前 run 完成或取消它后再试"
             )
         }
     }

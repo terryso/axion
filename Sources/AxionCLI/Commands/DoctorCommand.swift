@@ -95,6 +95,10 @@ struct DoctorCommand: ParsableCommand {
         let memoryCheck = checkMemory(at: memoryDir)
         results.append(memoryCheck)
 
+        // Check 7: Run lock status
+        let lockCheck = checkRunLock(at: dir)
+        results.append(lockCheck)
+
         // 输出所有检查结果
         for result in results {
             let mark = result.status == .ok ? "[OK]  " : "[FAIL] "
@@ -232,6 +236,48 @@ struct DoctorCommand: ParsableCommand {
                 status: .fail,
                 detail: "未知状态",
                 fixHint: "打开 系统设置 > 隐私与安全 > 屏幕录制，添加 AxionHelper.app"
+            )
+        }
+    }
+
+    private static func checkRunLock(at axionDir: String) -> CheckResult {
+        let lockPath = (axionDir as NSString).appendingPathComponent("run.lock")
+        let fm = FileManager.default
+
+        guard fm.fileExists(atPath: lockPath) else {
+            return CheckResult(
+                name: "Run Lock",
+                status: .ok,
+                detail: "No run lock",
+                fixHint: nil
+            )
+        }
+
+        guard let data = fm.contents(atPath: lockPath),
+              let lock = try? JSONDecoder().decode(RunLockData.self, from: data) else {
+            return CheckResult(
+                name: "Run Lock",
+                status: .fail,
+                detail: "Stale run.lock（文件格式损坏）",
+                fixHint: "删除 ~/.axion/run.lock: rm ~/.axion/run.lock"
+            )
+        }
+
+        // Check if the process holding the lock is still alive
+        let isAlive = Darwin.kill(lock.pid, 0) == 0
+        if isAlive {
+            return CheckResult(
+                name: "Run Lock",
+                status: .ok,
+                detail: "Active run.lock (run_id: \(lock.runId), pid: \(lock.pid))",
+                fixHint: nil
+            )
+        } else {
+            return CheckResult(
+                name: "Run Lock",
+                status: .fail,
+                detail: "Stale run.lock (进程已退出, run_id: \(lock.runId), pid: \(lock.pid))",
+                fixHint: "删除 stale lock: rm ~/.axion/run.lock"
             )
         }
     }

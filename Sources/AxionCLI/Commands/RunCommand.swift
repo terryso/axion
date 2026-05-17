@@ -182,8 +182,33 @@ struct RunCommand: AsyncParsableCommand {
         let runId = Self.generateRunId()
         outputHandler.displayRunStart(runId: runId, task: task)
 
+        // Acquire desktop-level run lock (only for non-dryrun live runs)
+        let runLockService = RunLockService()
+        if !dryrun {
+            let acquired = await runLockService.acquire(runId: runId)
+            if !acquired {
+                if let existingLock = await runLockService.readExistingLock() {
+                    throw AxionError.runLocked(runId: existingLock.runId, pid: existingLock.pid)
+                } else {
+                    throw AxionError.runLocked(runId: "unknown", pid: 0)
+                }
+            }
+        }
+
+        // Execute run body — lock is released at end of function
+        // Note: defer cannot be used with await (actor-isolated release).
+        // All code between acquire and release uses try?/do-catch, so no throws escape.
+
         let tracer = try? TraceRecorder(runId: runId, config: config)
         await tracer?.recordRunStart(runId: runId, task: task, mode: Self.traceMode(fast: fast, dryrun: dryrun))
+
+        // Record lock trace events
+        if !dryrun {
+            await tracer?.record(event: TraceRecorder.TraceEventType.lockAcquired, payload: [
+                "runId": runId,
+                "pid": ProcessInfo.processInfo.processIdentifier
+            ])
+        }
 
         // Cleanup expired memory entries at run start
         do {
@@ -299,6 +324,14 @@ struct RunCommand: AsyncParsableCommand {
         signal(SIGINT, SIG_DFL)
         outputHandler.displayCompletion()
         await tracer?.recordRunDone(totalSteps: totalSteps, durationMs: durationMs, replanCount: 0)
+
+        // Record lock release trace event (lock actually released by defer)
+        if !dryrun {
+            await tracer?.record(event: TraceRecorder.TraceEventType.lockReleased, payload: [
+                "runId": runId
+            ])
+        }
+
         await tracer?.close()
 
         // Extract and save memory (non-blocking — failures are logged but don't fail the run)
@@ -370,6 +403,17 @@ struct RunCommand: AsyncParsableCommand {
             fputs("[axion] warning: memory extraction failed: \(error.localizedDescription)\n", stderr)
         }
 
+        // Record lock release trace event
+        if !dryrun {
+            await tracer?.record(event: TraceRecorder.TraceEventType.lockReleased, payload: [
+                "runId": runId
+            ])
+        }
+
+        // Release desktop-level run lock
+        if !dryrun {
+            await runLockService.release()
+        }
     }
 
     // MARK: - Private Helpers

@@ -428,6 +428,11 @@ struct AxionAPIRoutesTests {
         authKey: String? = nil,
         concurrencyLimiter: ConcurrencyLimiter? = nil
     ) async throws -> Application<RouterResponder<BasicRequestContext>> {
+        // Use a temp directory for the run lock to avoid test interference
+        let tempLockDir = NSTemporaryDirectory() + "axion-test-lock-\(UUID().uuidString)"
+        try? FileManager.default.createDirectory(atPath: tempLockDir, withIntermediateDirectories: true)
+        let testRunLockService = RunLockService(lockDirectory: tempLockDir, processAliveChecker: { _ in false })
+
         let broadcaster = eventBroadcaster ?? EventBroadcaster()
         let tracker = runTracker ?? RunTracker(eventBroadcaster: broadcaster)
         let router = Router()
@@ -437,7 +442,8 @@ struct AxionAPIRoutesTests {
             eventBroadcaster: broadcaster,
             config: .default,
             authKey: authKey,
-            concurrencyLimiter: concurrencyLimiter
+            concurrencyLimiter: concurrencyLimiter,
+            runLockService: testRunLockService
         )
 
         let app = Application(

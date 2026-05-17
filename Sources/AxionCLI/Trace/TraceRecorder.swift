@@ -29,6 +29,9 @@ actor TraceRecorder {
         static let replan = "replan"
         static let runDone = "run_done"
         static let error = "error"
+        static let lockAcquired = "lock_acquired"
+        static let lockReleased = "lock_released"
+        static let staleLockCleaned = "stale_lock_cleaned"
     }
 
     // MARK: - Properties

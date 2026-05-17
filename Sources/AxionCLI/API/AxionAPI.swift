@@ -25,7 +25,8 @@ enum AxionAPI {
         eventBroadcaster: EventBroadcaster,
         config: AxionConfig,
         authKey: String? = nil,
-        concurrencyLimiter: ConcurrencyLimiter? = nil
+        concurrencyLimiter: ConcurrencyLimiter? = nil,
+        runLockService: RunLockService? = nil
     ) {
         let v1 = router.group("v1")
 
@@ -152,6 +153,20 @@ enum AxionAPI {
                 )
             )
 
+            // Check run lock (desktop-level exclusive access)
+            let runLockService = runLockService ?? RunLockService()
+            let lockAcquired = await runLockService.acquire(runId: runId)
+            if !lockAcquired {
+                let existingLock = await runLockService.readExistingLock()
+                throw AxionAPIError(
+                    status: .conflict,
+                    error: APIErrorResponse(
+                        error: "run_locked",
+                        message: "另一个 live run（run_id: \(existingLock?.runId ?? "unknown")）正在执行，请等待其完成或使用 `axion cancel \(existingLock?.runId ?? "")` 取消"
+                    )
+                )
+            }
+
             // Check concurrency limiter
             if let limiter = concurrencyLimiter {
                 let acquired = await limiter.tryAcquire()
@@ -180,6 +195,7 @@ enum AxionAPI {
                             replanCount: result.replanCount
                         )
                         await limiter.release()
+                        await runLockService.release()
                     }
 
                     var resp = try context.responseEncoder.encode(
@@ -196,7 +212,10 @@ enum AxionAPI {
                 let capturedConfig = config
                 _ = Task.detached {
                     let slotResult = await limiter.acquire()
-                    guard slotResult >= 0 else { return }
+                    guard slotResult >= 0 else {
+                        await runLockService.release()
+                        return
+                    }
                     let result = await AgentRunner.runAgent(
                         config: capturedConfig,
                         task: createRequest.task,
@@ -218,6 +237,7 @@ enum AxionAPI {
                         replanCount: result.replanCount
                     )
                     await limiter.release()
+                    await runLockService.release()
                 }
 
                 let queuedResp = QueuedRunResponse(runId: runId, status: "queued", position: position)
@@ -249,6 +269,7 @@ enum AxionAPI {
                     durationMs: result.durationMs,
                     replanCount: result.replanCount
                 )
+                await runLockService.release()
             }
 
             var resp = try context.responseEncoder.encode(

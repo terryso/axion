@@ -22,6 +22,10 @@ struct MCPProtocolIntegrationTests {
     }
 
     private func createRunTaskTool() -> RunTaskTool {
+        let tempLockDir = NSTemporaryDirectory() + "axion-test-lock-\(UUID().uuidString)"
+        try? FileManager.default.createDirectory(atPath: tempLockDir, withIntermediateDirectories: true)
+        let testRunLockService = RunLockService(lockDirectory: tempLockDir, processAliveChecker: { _ in false })
+
         let tracker = RunTracker()
         let queue = TaskQueue()
         let agent = createAgent(options: AgentOptions(
@@ -32,7 +36,7 @@ struct MCPProtocolIntegrationTests {
             maxTokens: 100,
             permissionMode: .bypassPermissions
         ))
-        return RunTaskTool(agent: agent, runTracker: tracker, taskQueue: queue)
+        return RunTaskTool(agent: agent, runTracker: tracker, taskQueue: queue, runLockService: testRunLockService)
     }
 
     private func createQueryTool() -> QueryTaskStatusTool {
@@ -136,6 +140,10 @@ struct MCPProtocolIntegrationTests {
 
     @Test("run_task then query_task_status succeeds")
     func toolCallRunTaskThenQueryStatusSucceeds() async throws {
+        let tempLockDir = NSTemporaryDirectory() + "axion-test-lock-\(UUID().uuidString)"
+        try? FileManager.default.createDirectory(atPath: tempLockDir, withIntermediateDirectories: true)
+        let testRunLockService = RunLockService(lockDirectory: tempLockDir, processAliveChecker: { _ in false })
+
         let tracker = RunTracker()
         let queue = TaskQueue()
         let agent = createAgent(options: AgentOptions(
@@ -146,7 +154,7 @@ struct MCPProtocolIntegrationTests {
             maxTokens: 100,
             permissionMode: .bypassPermissions
         ))
-        let runTask = RunTaskTool(agent: agent, runTracker: tracker, taskQueue: queue)
+        let runTask = RunTaskTool(agent: agent, runTracker: tracker, taskQueue: queue, runLockService: testRunLockService)
         let queryTool = QueryTaskStatusTool(runTracker: tracker)
         let (_, mcpServer, client) = try await createTestServer(tools: [runTask, queryTool])
 
