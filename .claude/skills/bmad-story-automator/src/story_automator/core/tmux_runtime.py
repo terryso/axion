@@ -24,6 +24,7 @@ from .utils import (
     read_text,
     run_cmd,
 )
+from .runtime_layout import runtime_provider
 
 STATE_SCHEMA_VERSION = 1
 DEFAULT_WIDTH = 200
@@ -78,7 +79,10 @@ def generate_session_name(step: str, epic: str, story_id: str, cycle: str = "") 
 
 
 def agent_type() -> str:
-    return os.environ.get("AI_AGENT", "claude")
+    value = os.environ.get("AI_AGENT", "").strip().lower()
+    if value in {"claude", "codex"}:
+        return value
+    return runtime_provider()
 
 
 def agent_cli(agent: str) -> str:

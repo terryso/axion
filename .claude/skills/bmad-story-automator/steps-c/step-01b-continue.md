@@ -11,9 +11,9 @@ executeReviewStep: './step-03a-execute-review.md'
 executeFinishStep: './step-03b-execute-finish.md'
 executeCompleteStep: './step-03c-execute-complete.md'
 wrapupStep: './step-04-wrapup.md'
-markerFile: '{project-root}/.claude/.story-automator-active'
 stateFilePattern: '{outputFolder}/orchestration-*.md'
 stateHelper: '../scripts/story-automator'
+ensureMarkerGitignore: '../scripts/story-automator'
 deriveProjectSlug: '../scripts/story-automator'
 listSessions: '../scripts/story-automator'
 sprintCompare: '../scripts/story-automator'
@@ -170,7 +170,7 @@ Active sessions: {count or 'None'}
 
 **CRITICAL:** Only create marker file when user confirms resume. This prevents stop hook from firing during menu wait.
 
-Create `{markerFile}` with orchestration context:
+Create the active runtime marker with orchestration context:
 ```json
 {
   "epic": "{epic}",
@@ -183,6 +183,10 @@ Create `{markerFile}` with orchestration context:
 
 Use deterministic marker creation:
 ```bash
+marker_info=$("{stateHelper}" orchestrator-helper marker path)
+marker_entry=$(echo "$marker_info" | jq -r '.entry')
+"{ensureMarkerGitignore}" ensure-marker-gitignore --gitignore ".gitignore" --entry "$marker_entry"
+
 "{stateHelper}" orchestrator-helper marker create --epic "{epic}" --story "{currentStory}" \
   --remaining {remaining_count} --state-file "{state_document_path}" \
   --project-slug "$project_slug" --pid "$$" --heartbeat "{timestamp}"

@@ -51,7 +51,7 @@ Your stories by complexity:
 | Low | claude | claude | claude | claude | Claude handles simple tasks well |
 | Medium | codex | codex | codex | codex | Codex for moderate complexity (Claude fallback) |
 | High | codex | codex | codex | codex | Codex for complex work (Claude fallback) |
-| Retro | claude | - | - | - | Retrospectives always use Claude |
+| Retro | inherits default | - | - | - | Retrospectives follow the configured primary agent unless overridden |
 
 **Options:**
 1. **[S]uggested** - Apply complexity-based defaults above
@@ -85,7 +85,7 @@ Your stories by complexity:
 | Low | claude | claude | claude | Claude handles simple tasks well |
 | Medium | codex | codex | codex | Codex for moderate complexity (Claude fallback) |
 | High | codex | codex | codex | Codex for complex work (Claude fallback) |
-| Retro | claude | - | - | Retrospectives always use Claude |
+| Retro | inherits default | - | - | Retrospectives follow the configured primary agent unless overridden |
 
 **Options:**
 1. **[S]uggested** - Apply complexity-based defaults above

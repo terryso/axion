@@ -48,7 +48,7 @@ agentConfig:
 ### 1. Spawn Review Session
 
 ```bash
-scripts="$(printf "%s" "{project_root}/.claude/skills/bmad-story-automator/scripts/story-automator")"
+scripts="$(printf "%s" "{project_root}/<installed-skill-root>/bmad-story-automator/scripts/story-automator")"
 [ -n "$scripts" ] || { echo "story-automator helper not found" >&2; exit 1; }
 
 # ⚠️ CRITICAL: --command is REQUIRED - without it, no command runs → never_active failure!

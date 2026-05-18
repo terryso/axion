@@ -118,7 +118,7 @@
       },
       "success": {
         "verifier": "review_completion",
-        "contractFile": ".claude/skills/bmad-story-automator-review/contract.json"
+        "contractFile": "<skills-root>/bmad-story-automator-review/contract.json"
       }
     },
     "retro": {

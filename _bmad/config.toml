@@ -12,7 +12,7 @@
 
 [core]
 project_name = "axion"
-document_output_language = "Mandarin"
+document_output_language = "English"
 output_folder = "{project-root}/_bmad-output"
 
 [modules.bmm]

@@ -79,12 +79,26 @@ def cmd_build_state_doc(args: list[str]) -> int:
     text = re.sub(r"(?m)^customInstructions:.*$", lambda m: f"customInstructions: {custom_instructions}", text)
     agent_config = config.get("agentConfig")
     if isinstance(agent_config, dict):
+        per_task = agent_config.get("perTask", {})
+        if not isinstance(per_task, dict):
+            per_task = {}
+        legacy_retro = agent_config.get("retro")
+        if isinstance(legacy_retro, dict) and "retro" not in per_task:
+            per_task = {**per_task, "retro": legacy_retro}
+        default_fallback = agent_config.get("defaultFallback")
+        if "defaultFallback" not in agent_config:
+            default_fallback = agent_config.get("fallback", False)
+        if default_fallback is None:
+            default_fallback = False
+        default_primary = agent_config.get("defaultPrimary")
+        if default_primary is None:
+            default_primary = agent_config.get("primary") or "auto"
+
         lines = [
             "agentConfig:",
-            f"  defaultPrimary: {json.dumps(agent_config.get('defaultPrimary', agent_config.get('primary', 'claude')))}",
-            f"  defaultFallback: {json.dumps(agent_config.get('defaultFallback', agent_config.get('fallback', 'codex')))}",
+            f"  defaultPrimary: {json.dumps(default_primary)}",
+            f"  defaultFallback: {json.dumps(default_fallback)}",
         ]
-        per_task = agent_config.get("perTask", {})
         if isinstance(per_task, dict) and per_task:
             lines.append("  perTask:")
             for task in sorted(per_task):
@@ -220,7 +234,9 @@ def cmd_validate_state(args: list[str]) -> int:
     if not state or not file_exists(state):
         write_json({"ok": False, "error": "state_not_found"})
         return 1
-    fields = parse_simple_frontmatter(read_text(state))
+    text = read_text(state)
+    frontmatter = extract_frontmatter(text)
+    fields = parse_simple_frontmatter(text)
     issues: list[str] = []
 
     def required(key: str, validator: Any = None) -> None:
@@ -237,10 +253,37 @@ def cmd_validate_state(args: list[str]) -> int:
     required("storyRange")
     required("status", lambda value: isinstance(value, str) and value in allowed)
     required("lastUpdated", lambda value: isinstance(value, str) and re.search(r"\d{4}-\d{2}-\d{2}T", value))
-    required("aiCommand")
+    if not _has_runtime_command_config(fields, frontmatter):
+        issues.append("Missing or empty aiCommand")
     try:
         load_policy_for_state(state)
     except PolicyError as exc:
         issues.append(str(exc))
     write_json({"ok": True, "structure": "issues" if issues else "ok", "issues": issues})
     return 0
+
+
+def _has_runtime_command_config(fields: dict[str, Any], frontmatter: str) -> bool:
+    ai_command = fields.get("aiCommand")
+    if ai_command not in ("", [], None):
+        return True
+    return _has_agent_config_block(frontmatter)
+
+
+def _has_agent_config_block(frontmatter: str) -> bool:
+    in_agent_config = False
+    for raw_line in frontmatter.splitlines():
+        stripped = raw_line.strip()
+        if not in_agent_config:
+            if re.match(r"^agentConfig:\s*(?:#.*)?$", stripped):
+                in_agent_config = True
+            continue
+        if raw_line and not raw_line.startswith(" "):
+            break
+        if not stripped or stripped.startswith("#") or ":" not in stripped:
+            continue
+        key, raw = stripped.split(":", 1)
+        if key.strip() in {"defaultPrimary", "defaultFallback", "perTask", "complexityOverrides", "retro"}:
+            if key.strip() in {"perTask", "complexityOverrides", "retro"} or raw.strip():
+                return True
+    return False

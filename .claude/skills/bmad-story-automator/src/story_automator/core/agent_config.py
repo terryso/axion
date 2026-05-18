@@ -8,6 +8,7 @@ from typing import Any
 
 from .common import ensure_dir, file_exists, iso_now, read_text, write_atomic
 from .frontmatter import find_frontmatter_value
+from .runtime_layout import runtime_provider
 
 
 @dataclass
@@ -18,8 +19,8 @@ class AgentTaskConfig:
 
 @dataclass
 class AgentConfigResolved:
-    default_primary: str = "claude"
-    default_fallback: str = "codex"
+    default_primary: str = "auto"
+    default_fallback: str = "false"
     per_task: dict[str, AgentTaskConfig] = field(default_factory=dict)
     complexity_overrides: dict[str, dict[str, AgentTaskConfig]] = field(default_factory=dict)
 
@@ -42,9 +43,19 @@ def save_presets_file(path: str | Path, data: dict[str, Any]) -> None:
 def parse_agent_config_json(raw: str) -> AgentConfigResolved:
     data = json.loads(raw)
     config = AgentConfigResolved()
-    config.default_primary = data.get("defaultPrimary") or data.get("primary") or "claude"
-    config.default_fallback = data.get("defaultFallback") or data.get("fallback") or "codex"
+    config.default_primary = data.get("defaultPrimary") or data.get("primary") or "auto"
+    if "defaultFallback" in data:
+        fallback_raw = data.get("defaultFallback")
+    elif "fallback" in data:
+        fallback_raw = data.get("fallback")
+    else:
+        fallback_raw = False
+    normalized_fallback = normalize_fallback_value(fallback_raw)
+    config.default_fallback = normalized_fallback or "false"
     config.per_task = _parse_task_map(data.get("perTask"))
+    retro_task = _parse_task_entry(data.get("retro"))
+    if retro_task is not None:
+        config.per_task.setdefault("retro", retro_task)
     for level, value in (data.get("complexityOverrides") or {}).items():
         config.complexity_overrides[level] = _parse_task_map(value)
     for level in ("low", "medium", "high"):
@@ -60,10 +71,17 @@ def _parse_task_map(raw: Any) -> dict[str, AgentTaskConfig]:
         return {}
     output: dict[str, AgentTaskConfig] = {}
     for task, entry in raw.items():
-        if not isinstance(entry, dict):
+        parsed = _parse_task_entry(entry)
+        if parsed is None:
             continue
-        output[task] = AgentTaskConfig(primary=str(entry.get("primary", "")), fallback=entry.get("fallback"))
+        output[task] = parsed
     return output
+
+
+def _parse_task_entry(raw: Any) -> AgentTaskConfig | None:
+    if not isinstance(raw, dict):
+        return None
+    return AgentTaskConfig(primary=str(raw.get("primary", "")), fallback=raw.get("fallback"))
 
 
 def normalize_fallback_value(raw: Any) -> str:
@@ -71,15 +89,15 @@ def normalize_fallback_value(raw: Any) -> str:
         lower = raw.strip().lower()
         if lower in {"false", "none", "null"}:
             return "false"
-        return raw
+        return lower
     if isinstance(raw, bool):
         return "true" if raw else "false"
     return ""
 
 
 def resolve_agent_for_task(config: AgentConfigResolved, complexity: str, task: str) -> tuple[str, str]:
-    primary = config.default_primary or "claude"
-    fallback = config.default_fallback or "codex"
+    primary = config.default_primary or "auto"
+    fallback = config.default_fallback or "false"
     per_task = config.per_task.get(task)
     if per_task:
         if per_task.primary:
@@ -93,7 +111,22 @@ def resolve_agent_for_task(config: AgentConfigResolved, complexity: str, task: s
             primary = override.primary
         if override.fallback is not None:
             fallback = normalize_fallback_value(override.fallback)
-    return primary or "claude", fallback or "codex"
+    return _resolve_primary_agent(primary), _resolve_fallback_agent(fallback)
+
+
+def _resolve_primary_agent(raw: Any) -> str:
+    value = str(raw or "").strip().lower()
+    if value in {"", "auto", "runtime"}:
+        return runtime_provider()
+    return value
+
+
+def _resolve_fallback_agent(raw: Any) -> str:
+    value = normalize_fallback_value(raw)
+    normalized = str(value).strip().lower()
+    if normalized in {"", "auto", "runtime"}:
+        return "false"
+    return normalized
 
 
 def extract_json_block(text: str) -> str:

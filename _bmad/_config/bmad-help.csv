@@ -1,18 +1,17 @@
-module,skill,display-name,menu-code,description,action,args,phase,after,before,required,output-location,outputs
+module,skill,display-name,menu-code,description,action,args,phase,preceded-by,followed-by,required,output-location,outputs
 BMad Automator,_meta,,,,,,,,,false,,
 BMad Automator,bmad-story-automator,Story Automator,SA,Automate the BMAD story build cycle across create dev QA review and retrospective steps.,,,4-implementation,bmad-sprint-planning,,false,implementation_artifacts,story automation run
 BMad Automator,bmad-story-automator-review,Story Automator Review,SAR,Runs the autonomous code review flow used by story automator sessions including auto-fix handling and sprint-status sync.,,,4-implementation,bmad-dev-story,,false,implementation_artifacts,review report
 BMad Method,_meta,,,,,,,,,false,https://docs.bmad-method.org/llms.txt,
+BMad Method,bmad-investigate,Investigate,IN,Forensic case investigation calibrated to the input. Evidence-graded analysis with hypothesis tracking. Produces a structured case file.,,4-implementation,,,false,implementation_artifacts,investigation report,
 BMad Method,bmad-brainstorming,Brainstorm Project,BP,Expert guided facilitation through a single or multiple techniques.,,,1-analysis,,,false,planning_artifacts,brainstorming session
 BMad Method,bmad-market-research,Market Research,MR,Market analysis competitive landscape customer needs and trends.,,,1-analysis,,,false,planning_artifacts|project-knowledge,research documents
 BMad Method,bmad-domain-research,Domain Research,DR,Industry domain deep dive subject matter expertise and terminology.,,,1-analysis,,,false,planning_artifacts|project_knowledge,research documents
 BMad Method,bmad-technical-research,Technical Research,TR,Technical feasibility architecture options and implementation approaches.,,,1-analysis,,,false,planning_artifacts|project_knowledge,research documents
 BMad Method,bmad-product-brief,Create Brief,CB,An expert guided experience to nail down your product idea in a brief. a gentler approach than PRFAQ when you are already sure of your concept and nothing will sway you.,,-A,1-analysis,,,false,planning_artifacts,product brief
 BMad Method,bmad-prfaq,PRFAQ Challenge,WB,Working Backwards guided experience to forge and stress-test your product concept to ensure you have a great product that users will love and need through the PRFAQ gauntlet to determine feasibility and alignment with user needs. alternative to product brief.,,-H,1-analysis,,,false,planning_artifacts,prfaq document
-BMad Method,bmad-create-prd,Create PRD,CP,Expert led facilitation to produce your Product Requirements Document.,,,2-planning,,,true,planning_artifacts,prd
-BMad Method,bmad-validate-prd,Validate PRD,VP,,,[path],2-planning,bmad-create-prd,,false,planning_artifacts,prd validation report
-BMad Method,bmad-edit-prd,Edit PRD,EP,,,[path],2-planning,bmad-validate-prd,,false,planning_artifacts,updated prd
-BMad Method,bmad-create-ux-design,Create UX,CU,"Guidance through realizing the plan for your UX, strongly recommended if a UI is a primary piece of the proposed project.",,,2-planning,bmad-create-prd,,false,planning_artifacts,ux design
+BMad Method,bmad-prd,Create Edit and Review PRD,PRD,"Facilitated PRD workflow — create a new PRD via coached discovery, update an existing one against a change signal, or validate a finished PRD against a checklist with an HTML findings report.",,,2-planning,bmad-product-brief,,true,planning_artifacts,prd
+BMad Method,bmad-create-ux-design,Create UX,CU,"Guidance through realizing the plan for your UX, strongly recommended if a UI is a primary piece of the proposed project.",,,2-planning,bmad-prd,,false,planning_artifacts,ux design
 BMad Method,bmad-create-architecture,Create Architecture,CA,Guided workflow to document technical decisions.,,,3-solutioning,,,true,planning_artifacts,architecture
 BMad Method,bmad-create-epics-and-stories,Create Epics and Stories,CE,,,,3-solutioning,bmad-create-architecture,,true,planning_artifacts,epics and stories
 BMad Method,bmad-check-implementation-readiness,Check Implementation Readiness,IR,Ensure PRD UX Architecture and Epics Stories are aligned.,,,3-solutioning,bmad-create-epics-and-stories,,true,planning_artifacts,readiness report
