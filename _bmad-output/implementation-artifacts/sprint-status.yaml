@@ -1,5 +1,5 @@
 # generated: 2026-05-08
-# last_updated: 2026-05-17
+# last_updated: 2026-05-18
 # story-16.1-created: 2026-05-17
 # story-15.2-created: 2026-05-17
 # story-15.1-review: 2026-05-17
@@ -241,3 +241,19 @@ development_status:
   18-2-skill-memory-integration: done
   18-3-http-api-skill-trigger: done
   epic-18-retrospective: done
+
+  # ============================================================
+  # Phase 6 — SDK 使用方式对齐重构
+  # ============================================================
+
+  # Epic 19: SDK 使用方式对齐重构
+  epic-19: backlog
+  19-1-unified-agent-execution-entry: backlog
+  19-2-skill-swiftwork-alignment: backlog
+  19-3-api-runner-alignment: backlog
+  epic-19-retrospective: optional
+
+  # Epic 20: 死代码清理与架构精简
+  epic-20: backlog
+  20-1-delete-dead-agent-loop-code: backlog
+  epic-20-retrospective: optional

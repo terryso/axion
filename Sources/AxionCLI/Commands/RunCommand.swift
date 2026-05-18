@@ -245,10 +245,17 @@ struct RunCommand: AsyncParsableCommand {
             allowedTools = restrictions.map(\.rawValue)
         }
 
+        // When explicitSkill has tool restrictions, only include restricted tools —
+        // the system prompt already contains the skill's instructions so Skill tool
+        // is not needed, and MCP servers are not needed either.
+        let hasToolRestrictions = explicitSkill?.toolRestrictions != nil
+
         var agentTools: [ToolProtocol] = [createPauseForHumanTool()]
-        if !noSkills {
+        if !noSkills && !hasToolRestrictions {
             agentTools.append(createSkillTool(registry: skillRegistry))
         }
+
+        let effectiveMcpServers: [String: McpServerConfig]? = hasToolRestrictions ? nil : mcpServers
 
         let options = AgentOptions(
             apiKey: apiKey,
@@ -259,7 +266,7 @@ struct RunCommand: AsyncParsableCommand {
             maxTokens: effectiveMaxTokens,
             permissionMode: .bypassPermissions,
             tools: agentTools,
-            mcpServers: mcpServers,
+            mcpServers: effectiveMcpServers,
             memoryStore: memoryStore,
             hookRegistry: hookRegistry,
             logLevel: verbose ? .debug : .info,

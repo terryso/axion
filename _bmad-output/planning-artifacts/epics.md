@@ -7,6 +7,7 @@ stepsCompleted:
   - step-05-phase2-epics
   - step-06-phase3-epics
   - step-07-phase5-epics
+  - step-08-phase6-epics
 inputDocuments:
   - _bmad-output/planning-artifacts/prd.md
   - _bmad-output/planning-artifacts/architecture.md
@@ -23,6 +24,7 @@ phase1Status: complete
 phase2EpicsAdded: 2026-05-12
 phase3EpicsAdded: 2026-05-14
 phase5EpicsAdded: 2026-05-18
+phase6EpicsAdded: 2026-05-18
 ---
 
 # Axion - Epic Breakdown
@@ -2534,3 +2536,226 @@ So that 菜单栏 UI 和外部系统也能使用 SDK Skill 系统的所有技能
 - 18.1 极轻量——只需编写几个 SKILL.md prompt 模板
 - 18.3 依赖 HTTP API 基础设施（Epic 5），但可复用 SkillAPIRunner 的 SSE 管线
 - 18.2 优先级最低——Memory 联动是长期价值，不影响核心功能
+
+## Phase 6 Epic List
+
+### Epic 19: SDK 使用方式对齐重构
+
+将 Axion 对 OpenAgentSDK 的使用方式从「越权模式」重构为「正确模式」，参照 SwiftWork 项目的最佳实践。当前 Axion 应用层越权做了大量 SDK 应该做的事（自建 Agent Loop、手动构建 skill prompt、手动设置 allowedTools、不传 skillRegistry），导致 skill 体系失效、代码重复、维护成本高。重构目标：应用层只负责「准备输入 + 处理输出」，agent 生命周期完全交给 SDK。
+
+**核心价值：** SDK 的愿景是让开发一个 agent 应用变得简单。Axion 应该是最能体现这个愿景的项目——而不是反例。
+**依赖：** Phase 1-5 全部完成
+**参考：** `/Users/nick/CascadeProjects/swiftwork/SwiftWork/SDKIntegration/AgentBridge.swift` — 正确使用 SDK 的参考实现
+
+**重构后架构：**
+
+```
+用户输入
+  ├── CLI: axion run "..."     → RunCommand（薄层：CLI 参数解析 → 共享函数 → 终端输出）
+  └── API: POST /api/runs      → ApiRunner（薄层：HTTP 请求解析 → 共享函数 → SSE/DB 输出）
+                                      ↓
+                              共享函数：buildAndRunAgent()
+                                - 加载配置、注册 skill
+                                - 构建 SafetyHook（shared seat mode）
+                                - 加载 Memory 上下文注入 system prompt
+                                - 构建 AgentOptions（传 skillRegistry、tools、mcpServers、hookRegistry、memoryStore）
+                                - 调用 agent.stream()
+                                - 由 SDK 管理 agent 生命周期
+```
+
+### Epic 20: 死代码清理与架构精简
+
+删除 Axion 中从未被使用的自建 Agent Loop 及其依赖的协议和模型。当前 Engine/、Executor/、Planner/、Verifier/、Output/ 目录下的代码以及 AxionCore 中对应的协议定义都是死代码——RunEngine 从未被实例化。这些代码增加了理解成本和维护负担。
+
+**核心价值：** 删代码比写代码更重要。每一行死代码都是未来重构的障碍。
+**依赖：** 无（可独立于 Epic 19 执行）
+**参考：** `RunEngine.swift`、`LLMPlanner.swift`、`StepExecutor.swift`、`PlanParser.swift` 从未被引用
+
+---
+
+## Epic 19: SDK 使用方式对齐重构
+
+### Story 19.1: 统一 Agent 执行入口
+
+As a 开发者,
+I want RunCommand 和 ApiRunner 共用同一个 Agent 构建函数,
+So that 配置逻辑、prompt 构建、工具注册只在一处维护, 不会出现"修了 CLI 忘了 API"的问题.
+
+**现状问题：**
+- `RunCommand.run()` 和 `AgentRunner.runAgent()` 各有 ~300 行几乎一样的代码
+- 两处都有 skill prompt 手动构建、allowedTools 手动设置的 bug
+- 两处都不传 `skillRegistry` 给 AgentOptions
+- `AgentRunner.runSkillAgent()` 又复制了第三遍
+
+**重构方案：**
+- 将 `AgentRunner` 重命名为 `ApiRunner`，消除与 SDK `Agent` 类的语义冲突
+- 提取共享函数 `buildAndRunAgent()`，RunCommand 和 ApiRunner 都调用它
+- RunCommand 只负责 CLI 参数解析 + 终端输出
+- ApiRunner 只负责 HTTP 请求解析 + SSE/DB 输出
+
+**SwiftWork 参考模式：**
+- `AgentBridge.configure()` — 一个函数准备所有 AgentOptions
+- `AgentBridge.sendMessage()` / `startNextQueuedMessage()` — 统一的执行入口
+
+**Acceptance Criteria:**
+
+**Given** RunCommand (CLI) 和 ApiRunner (API) 都需要执行 agent 任务
+**When** 构建和运行 Agent
+**Then** 两者调用同一个共享函数 `buildAndRunAgent(config:task:options:)` 构建 AgentOptions 并执行
+
+**Given** 共享函数创建 AgentOptions
+**When** 构建选项
+**Then** 必须传入 `skillRegistry`（启用 SDK 的 ToolRestrictionStack）
+**And** 必须传入 `tools`（SDK core + specialist 工具）
+**And** MCP servers 通过 `mcpServers` 参数传入
+**And** 必须传入 `hookRegistry`（SafetyHook，shared seat mode 下阻止前台工具）
+**And** 必须传入 `memoryStore`（Memory 上下文注入 system prompt）
+**And** 不手动设置 `allowedTools`（由 SDK 的 restrictionStack 管理）
+
+---
+
+### Story 19.2: Skill 处理对齐 SwiftWork 模式
+
+As a 用户,
+I want `/skill-name` 触发的技能由 SDK 完整管理,
+So that skill 的 prompt 注入、工具限制、生命周期都正确工作, 不会出现 LLM 调用 screenshot 而不是 bash 的问题.
+
+**现状问题：**
+- RunCommand 用 `skill.promptTemplate` 手动构建 system prompt
+- `allowedTools` 由应用层手动设置，但过滤不生效（case-sensitive 问题、MCP 工具绕过）
+- `skillRegistry` 不传给 SDK → `ToolRestrictionStack` 永远 nil
+- `AgentRunner.runSkillAgent()` 有完全相同的 bug（重构后为 `ApiRunner`）
+
+**SwiftWork 参考模式：**
+- `resolveExplicitSlashSkillRequest()` — 预解析 skill，格式化为 user message
+- `AgentOptions` 中传 `skillRegistry` — 启用 SDK 的 restrictionStack
+- Skill 的 prompt 和限制通过 SkillTool 的返回值传递给 LLM
+
+**Acceptance Criteria:**
+
+**Given** 用户输入 `/polyv-live-cli 获取频道信息`
+**When** RunCommand 检测到显式 skill 触发
+**Then** 预解析 skill（参照 SwiftWork 的 `resolveExplicitSlashSkillRequest`）
+**And** 将解析结果格式化为 user message 传给 `agent.stream()`
+**And** 不修改 system prompt、不设置 allowedTools
+
+**Given** skill 有 `allowed-tools: Bash(...)` 限制
+**When** SkillTool 被 LLM 调用（或预解析执行 SkillTool）
+**Then** SDK 的 ToolRestrictionStack.push(restrictions) 被调用
+**And** 后续 turn 中 ToolExecutor 只允许 Bash 工具
+**And** MCP 工具（screenshot、type_text 等）被自动过滤
+
+**Given** AgentOptions 构建
+**When** 传入 skillRegistry
+**Then** SDK 内部的 `restrictionStack` 不再是 nil
+**And** `Agent.swift:1097` 的判断 `options.skillRegistry != nil` 为 true
+
+---
+
+### Story 19.3: API 路径对齐
+
+As a API 用户,
+I want HTTP API 的 skill 和普通任务执行与 CLI 使用相同的代码路径,
+So that CLI 和 API 的行为一致, 不会出现"CLI 能用但 API 不行"的问题.
+
+**现状问题：**
+- `AgentRunner.runAgent()` 不传 `tools`、不传 `skillRegistry`（重构后为 `ApiRunner`）
+- `AgentRunner.runSkillAgent()` 复制了 RunCommand 的所有 skill bug
+- SSE 事件格式化、CostTracking 等应用层逻辑散落在两个独立函数中
+
+**重构方案：**
+- 将 `AgentRunner.swift` 重命名为 `ApiRunner.swift`，类/枚举名同步修改
+- ApiRunner 调用共享函数 `buildAndRunAgent()`，不再自行构建 AgentOptions
+- SSE 事件、CostTracking、SeatMonitor 等 API 特有逻辑保留在 ApiRunner 中
+
+**Acceptance Criteria:**
+
+**Given** HTTP API 的 `/api/runs` 端点收到任务请求
+**When** ApiRunner 执行任务
+**Then** 使用与 RunCommand 相同的共享构建函数
+**And** 传入 skillRegistry、tools、mcpServers
+**And** SSE 事件和 CostTracking 仍然正常工作
+
+**Given** HTTP API 的 skill 触发端点
+**When** 执行 skill 任务
+**Then** 使用与 CLI `/skill-name` 相同的预解析 + user message 模式
+**And** skill 的工具限制由 SDK 的 ToolRestrictionStack 强制执行
+
+---
+
+## Epic 20: 死代码清理与架构精简
+
+### Story 20.1: 删除自建 Agent Loop 死代码
+
+As a 开发者,
+I want 删除从未被使用的 RunEngine 全套代码,
+So that 代码库更清晰, 新贡献者不会被死代码误导.
+
+**待删除文件清单：**
+- `Sources/AxionCLI/Engine/RunEngine.swift` — 自建 plan→execute→verify→replan 循环，从未实例化
+- `Sources/AxionCLI/Planner/LLMPlanner.swift` — 自建 LLM planner，直接调 LLM API 和 MCP，仅被 RunEngine 使用
+- `Sources/AxionCLI/Planner/PlanParser.swift` — 解析 LLM 输出为 Plan 结构体，仅被 LLMPlanner 使用
+- `Sources/AxionCLI/Executor/StepExecutor.swift` — 直接 MCP 步骤执行器，仅被 RunEngine 使用
+- `Sources/AxionCLI/Executor/PlaceholderResolver.swift` — `$pid`/`$window_id` 占位符解析
+- `Sources/AxionCLI/Executor/SafetyChecker.swift` — 步骤级安全检查（shared seat mode 的 Hook 已替代）
+- `Sources/AxionCLI/Verifier/TaskVerifier.swift` — 任务验证器，仅被 RunEngine 使用
+- `Sources/AxionCLI/Verifier/StopConditionEvaluator.swift` — 停止条件评估
+- `Sources/AxionCLI/Verifier/VisualDeltaChecker.swift` — 视觉增量检查
+- `Sources/AxionCLI/Output/JSONOutput.swift` — RunEngine 的 JSON 输出（非 CLI `--json` 输出）
+- `Sources/AxionCLI/Output/TerminalOutput.swift` — RunEngine 的终端输出
+
+**AxionCore 中待清理的协议/模型（需确认无其他引用）：**
+- `PlannerProtocol`、`ExecutorProtocol`、`VerifierProtocol`、`OutputProtocol` — 仅被死代码引用
+- `MCPClientProtocol` — 被 StepExecutor 和 LLMPlanner 使用（死代码），也被 HelperMCPClientAdapter 使用（需评估）
+- `Plan`、`Step`、`ExecutedStep`、`RunContext`、`RunState` 等模型 — 检查是否仅被死代码引用
+
+**Acceptance Criteria:**
+
+**Given** 上述文件列表
+**When** 删除所有文件
+**Then** `swift build` 编译通过
+**And** `swift test --filter "AxionCLITests"` 全部通过
+**And** `swift test --filter "AxionCoreTests"` 全部通过
+
+**Given** 删除后的代码库
+**When** 搜索 `RunEngine`、`LLMPlanner`、`StepExecutor`、`PlanParser`
+**Then** 零引用
+
+---
+
+## Phase 6 FR 追溯
+
+| FR | Epic | Story |
+|----|------|-------|
+| FR36 | Epic 19 | 19.1 — 统一 Agent 执行入口，使用 SDK Agent 循环 |
+| FR37 | Epic 19 | 19.1 — SDK MCP client 连接，不再手动调 MCP |
+| FR38 | Epic 19 | 19.1 — SDK 工具注册，不再手动筛工具 |
+| FR39 | — | 已在 Phase 1 实现（HookRegistry），Phase 6 保持不变 |
+| FR40 | Epic 19 | 19.1 — SDK 流式消息，统一入口 |
+| FR41 | Epic 19 | 19.2 — 明确 SDK 边界：skill 生命周期由 SDK 管理 |
+
+## Phase 6 新增 NFR
+
+- NFR47: RunCommand 和 ApiRunner 的 Agent 构建逻辑代码重复率 < 10%（共享函数提取）
+- NFR48: 显式 skill 触发后，LLM 不再调用 skill 限制范围外的工具（由 SDK ToolRestrictionStack 保证，不依赖应用层过滤）
+- NFR49: 删除死代码后，AxionCLI 模块文件数减少 ≥ 11 个
+- NFR50: Phase 6 重构完成后，`grep -rl "RunEngine\|LLMPlanner\|StepExecutor\|PlanParser" Sources/` 返回空
+
+## Phase 6 优先级与依赖
+
+| 优先级 | Epic | 依赖 | 理由 |
+|--------|------|------|------|
+| P0 | Epic 20 (死代码清理) | 无 | 独立、低风险、先清理再重构，减少干扰 |
+| P1 | Epic 19 Story 19.1 (统一入口) | Epic 20 | 核心重构，删除死代码后代码库更清晰 |
+| P2 | Epic 19 Story 19.2 (Skill 对齐) | 19.1 | 依赖统一入口完成后才能正确传入 skillRegistry |
+| P3 | Epic 19 Story 19.3 (API 对齐 + AgentRunner→ApiRunner 重命名) | 19.2 | 最后统一 API 路径，复用 CLI 的 skill 逻辑；同时重命名消除语义冲突 |
+
+**实施建议顺序：20.1 → 19.1 → 19.2 → 19.3**
+
+**理由：**
+- 20.1 先行——删掉死代码让整个代码库变小，重构时搜索和验证更准确
+- 19.1 是基础——统一入口后，19.2 和 19.3 的改动只需改一处
+- 19.2 解决用户痛点——当前 skill 执行有 bug（调 screenshot 而不是 bash）
+- 19.3 最后——API 路径依赖 CLI 路径验证通过后再对齐，同时完成 AgentRunner → ApiRunner 重命名
+
+**实施约束：** Phase 6 的详细架构设计见 `_bmad-output/planning-artifacts/phase6-refactor-architecture.md`（重构前后 Mermaid 对比图 + 职责划分表 + 数据流）。实施时必须参照此文档，确保每层只做自己职责内的事，不重复犯应用层越权的错误。
