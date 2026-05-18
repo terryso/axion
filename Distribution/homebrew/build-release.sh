@@ -66,6 +66,7 @@ mkdir -p "$DIST_DIR/libexec/axion"
 
 cp "$BUILD_DIR/AxionCLI" "$DIST_DIR/bin/axion"
 cp -R "$PROJECT_ROOT/.build/AxionHelper.app" "$DIST_DIR/libexec/axion/"
+cp -R "$PROJECT_ROOT/Prompts" "$DIST_DIR/libexec/axion/Prompts"
 chmod +x "$DIST_DIR/bin/axion"
 
 echo "    bin/axion          -> $(du -h "$DIST_DIR/bin/axion" | cut -f1)"

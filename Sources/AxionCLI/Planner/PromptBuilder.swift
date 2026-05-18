@@ -25,11 +25,22 @@ struct PromptBuilder {
             return cwdPrompts
         }
 
-        // Strategy 2: Bundle resource (runtime)
-        let bundlePath = Bundle.main.bundleURL.deletingLastPathComponent()
-            .appendingPathComponent("Prompts").path
-        if FileManager.default.fileExists(atPath: bundlePath) {
-            return bundlePath
+        // Strategy 2: Relative to executable (installed distribution)
+        // Layout: bin/axion + libexec/axion/Prompts/
+        if let execURL = Bundle.main.executableURL {
+            let execDir = execURL.deletingLastPathComponent()  // bin/
+            let installedPrompts = execDir
+                .appendingPathComponent("libexec/axion/Prompts").path
+            if FileManager.default.fileExists(atPath: installedPrompts) {
+                return installedPrompts
+            }
+            // Also try sibling libexec (Homebrew Cellar layout)
+            let cellarPrompts = execDir
+                .appendingPathComponent("../libexec/axion/Prompts").path
+            let resolved = (cellarPrompts as NSString).standardizingPath
+            if FileManager.default.fileExists(atPath: resolved) {
+                return resolved
+            }
         }
 
         // Strategy 3: Fallback to CWD Prompts
