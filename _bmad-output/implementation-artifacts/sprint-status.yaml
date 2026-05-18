@@ -66,6 +66,7 @@
 
 generated: 2026-05-08
 last_updated: 2026-05-18
+# retro-epic-18: 2026-05-18
 # story-18-3-done: 2026-05-18
 # story-18-3-created: 2026-05-18
 # story-18-2-created: 2026-05-18
@@ -235,8 +236,8 @@ development_status:
   epic-17-retrospective: done
 
   # Epic 18: Axion 桌面技能增强
-  epic-18: in-progress
+  epic-18: done
   18-1-built-in-desktop-skills: done
   18-2-skill-memory-integration: done
   18-3-http-api-skill-trigger: done
-  epic-18-retrospective: optional
+  epic-18-retrospective: done

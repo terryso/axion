@@ -116,6 +116,8 @@ axion/
 │   │   ├── Trace/                   # Trace 记录器：运行轨迹持久化
 │   │   ├── Output/                  # 输出格式化：终端进度、JSON 输出
 │   │   ├── Memory/                  # App Memory 系统（Epic 4 + Epic 12 + Epic 15）：跨任务学习 + 知识生命周期 + Takeover 学习
+│   │   ├── Skills/                  # Epic 18: Axion 专有内置桌面技能定义
+│   │   ├── API/                     # Epic 5: HTTP API Server（Epic 18: Skill 触发端点 + runSkillAgent）
 │   ├── AxionHelper/                 # Helper App（可执行目标，独立 macOS App）
 │   │   ├── main.swift               # 入口，启动 MCP Server
 │   │   ├── MCP/                     # MCP Server 实现：工具注册、JSON-RPC 处理
@@ -794,6 +796,8 @@ axion/
 │   │   │   ├── TaskVerifier.swift             # FR21: 验证任务完成状态
 │   │   │   ├── StopConditionEvaluator.swift   # FR22: 评估 stopWhen 条件
 │   │   │   └── VisualDeltaChecker.swift       # Epic 13: 截图像素级差异比较 + VisualDeltaTracker actor
+│   │   ├── Skills/                              # Epic 18: Axion 专有技能定义
+│   │   │   └── AxionBuiltInSkills.swift         # Epic 18: 内置桌面技能（screenshot-analyze, data-extract, form-fill）
 │   │   ├── Services/                            # Epic 13: 运行时安全与成本控制 + Epic 16: Daemon + Epic 17: Skill
 │   │   │   ├── RunLockService.swift            # Epic 13: 桌面级运行锁 actor（~/.axion/run.lock）
 │   │   │   ├── CostTracker.swift               # Epic 13: 预算控制 + 成本遥测 actor
@@ -825,11 +829,11 @@ axion/
 │   │   │   ├── MemoryCleanupService.swift      # 30 天过期清理（保留，不再主动调用）
 │   │   │   ├── AppProfileAnalyzer.swift        # 模式识别 + 高频路径 + 失败经验
 │   │   │   ├── FamiliarityTracker.swift        # 熟悉度追踪（>= 3 次成功标记 familiar）
-│   │   │   ├── MemoryContextProvider.swift      # 构建 Planner Memory 上下文（+ 三类分类注入）
+│   │   │   ├── MemoryContextProvider.swift      # 构建 Planner Memory 上下文（+ 三类分类注入 + Epic 18: skill-scoped Memory 注入）
 │   │   │   ├── TakeoverLearningService.swift    # Epic 15: Takeover 经验→Memory 转换（affordance/avoid）
 │   │   │   └── TakeoverMarker.swift             # Epic 15: InterventionReason 枚举 + TakeoverMarker struct
-│   │   ├── API/                                # Epic 5: HTTP API Server + Epic 14: API 规范化 + Epic 16: 持久化
-│   │   │   ├── AgentRunner.swift              # Agent 执行封装
+│   │   ├── API/                                # Epic 5: HTTP API Server + Epic 14: API 规范化 + Epic 16: 持久化 + Epic 18: Skill 触发
+│   │   │   ├── AgentRunner.swift              # Agent 执行封装（+ runSkillAgent: prompt 技能 API 执行入口）
 │   │   │   ├── RunTracker.swift               # 任务状态追踪（Epic 16: 持久化注入）
 │   │   │   ├── AxionAPI.swift                 # Hummingbird 路由注册
 │   │   │   ├── EventBroadcaster.swift         # SSE 事件广播（Epic 16: 事件持久化 + replay buffer 磁盘回退）
@@ -837,7 +841,7 @@ axion/
 │   │   │   ├── ConcurrencyLimiter.swift       # 并发槽位管理
 │   │   │   ├── RunPersistenceService.swift    # Epic 16: 磁盘持久化（TrackedRun + SSEEvent 读写）
 │   │   │   ├── RunRecoveryService.swift       # Epic 16: 启动恢复（状态映射 + replay buffer 恢复）
-│   │   │   └── Models/APITypes.swift          # API 请求/响应模型（Epic 14: StandardTaskOutput, CapabilitiesResponse, Settings API models）
+│   │   │   └── Models/APITypes.swift          # API 请求/响应模型（Epic 14: StandardTaskOutput, CapabilitiesResponse, Settings API models; Epic 18: PromptSkillRunRequest, type 字段）
 │   │   ├── MCP/                                # Epic 6: MCP Server Mode
 │   │   │   ├── MCPServerRunner.swift          # MCP 编排器
 │   │   │   ├── RunTaskTool.swift              # run_task 工具实现

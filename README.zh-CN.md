@@ -21,6 +21,7 @@ Axion 是一个基于 Swift 的 macOS 桌面自动化平台，能够通过自然
 **核心亮点：**
 
 - **跨任务记忆** — 每次任务自动学习，用得越多越聪明
+- **SDK 技能系统** — Prompt 技能、录制技能和内置桌面技能，支持双轨查找和技能级记忆
 - **录制回放技能** — 录制一次操作，之后无需 LLM 即可瞬间回放
 - **HTTP API 服务** — 通过 REST + SSE 集成 CI/CD 和外部系统
 - **MCP Server 模式** — 作为外部 Agent（Claude Code、Cursor 等）的桌面操作插件
@@ -30,20 +31,21 @@ Axion 是一个基于 Swift 的 macOS 桌面自动化平台，能够通过自然
 ## 架构
 
 ```
-┌───────────────────────────────────────────────────────┐
-│                       AxionCLI                         │
-│  run / setup / doctor / server / mcp / record / skill  │
-│  daemon / Plan → Execute → Verify → Replan Loop        │
-│  Memory · Fast Mode · Takeover · Daemon · Persistence  │
-├──────────────────┬──────────────────┬─────────────────┤
-│    AxionCore     │   AxionHelper    │    AxionBar      │
-│  Models, Proto-  │  MCP Server      │  Menu Bar App    │
-│  cols, Config,   │  21 Native macOS │  Task Panel      │
-│  Errors          │  Tools           │  Global Hotkeys  │
-└──────────────────┴──────────────────┴─────────────────┘
+┌───────────────────────────────────────────────────────────┐
+│                          AxionCLI                          │
+│  run / setup / doctor / server / mcp / record / skill     │
+│  daemon / Plan → Execute → Verify → Replan Loop           │
+│  Memory · Fast Mode · Takeover · Daemon · Persistence     │
+│  Skill System · Built-in Skills · Skill + Memory Context  │
+├──────────────────┬──────────────────┬────────────────────┤
+│    AxionCore     │   AxionHelper    │     AxionBar        │
+│  Models, Proto-  │  MCP Server      │  Menu Bar App       │
+│  cols, Config,   │  21 Native macOS │  Task Panel         │
+│  Errors          │  Tools           │  Global Hotkeys     │
+└──────────────────┴──────────────────┴────────────────────┘
 ```
 
-- **AxionCLI** — 命令行入口，包含 LLM 交互、任务规划、执行引擎、记忆系统、Daemon 管理和服务器模式
+- **AxionCLI** — 命令行入口，包含 LLM 交互、任务规划、执行引擎、记忆系统、技能系统（Prompt + 录制 + 内置）、Daemon 管理和服务器模式
 - **AxionCore** — 共享模型层（Plan, Step, RunState）和协议定义
 - **AxionHelper** — MCP 服务端进程，通过 stdio 协议提供 21 个原生 macOS 自动化工具
 - **AxionBar** — 原生 macOS 菜单栏应用，提供任务面板、技能触发和全局热键
@@ -206,6 +208,9 @@ API 端点：
 | `POST` | `/v1/runs` | 提交任务（`{"task": "..."}`） |
 | `GET` | `/v1/runs/{id}` | 查询任务状态 |
 | `GET` | `/v1/runs/{id}/events` | SSE 实时事件流 |
+| `GET` | `/v1/skills` | 列出所有技能（Phase 5） |
+| `GET` | `/v1/skills/{name}` | 获取技能详情（Phase 5） |
+| `POST` | `/v1/skills/{name}/run` | 执行技能（Phase 5） |
 
 ### MCP Server 模式（Phase 2）
 
@@ -285,6 +290,61 @@ Axion 是 [OpenAgentSDK](https://github.com/terryso/open-agent-sdk-swift) 的旗
 - 通过 `@Tool` 宏注册自定义工具
 - 通过 `axion mcp` 集成 Axion 的桌面操作能力
 - 基于相同的 MCP + Agent Loop 架构构建自己的应用
+
+### SDK 技能系统（Phase 5）
+
+Axion 集成了 [OpenAgentSDK](https://github.com/terryso/open-agent-sdk-swift) 的 Skill 系统，支持两种技能类型：
+
+- **Prompt 技能** — 从 `~/.claude/skills/*/SKILL.md` 文件自动发现，定义 `promptTemplate`、可选的 `toolRestrictions` 和 `modelOverride`
+- **录制技能** — 存储在 `~/.axion/skills/` 中的 JSON 文件，由用户录制操作编译生成（Phase 3）
+
+**双轨查找** — 引用技能名时，Axion 优先查找 Prompt 技能，未命中时回退到录制技能。同名技能始终解析为 Prompt 版本。
+
+**显式触发** — 在任务描述前加 `/skill-name` 前缀直接调用指定技能：
+
+```bash
+# 直接触发 Prompt 技能
+axion run "/screenshot-analyze 分析当前屏幕布局"
+
+# 直接触发录制技能
+axion run "/open-calculator"
+
+# 或使用专用命令
+axion skill run open-calculator
+```
+
+**隐式触发** — Axion 将可用技能列表注入系统提示词，LLM 可根据用户意图自动匹配并调用合适的技能，无需显式指定。
+
+**内置桌面技能** — 三个技能在代码中注册（无需文件系统文件）：
+
+| 技能 | 别名 | 说明 |
+|------|------|------|
+| `screenshot-analyze` | `sa`, `analyze`, `screen` | 截取并分析当前屏幕 |
+| `data-extract` | `extract`, `de` | 从可见内容中提取结构化数据 |
+| `form-fill` | `fill`, `ff` | 自动填写表单字段 |
+
+```bash
+# 列出所有可用技能（Prompt + 录制 + 内置）
+axion skill list
+
+# 单次运行禁用技能系统
+axion run --no-skills "打开计算器"
+```
+
+**技能 + 记忆联动** — 技能与跨任务记忆系统深度集成：
+
+- 技能执行成功时，记录 `affordance` 事实，scope 为 `skill:{name}`
+- 执行失败时，记录 `avoid` 事实，帮助 Planner 从错误中学习
+- 执行前，最多注入 3 条相关技能 scope 的记忆到提示词
+- 使用 `--no-memory` 跳过注入和记录
+
+**HTTP API 技能端点：**
+
+| 方法 | 路径 | 说明 |
+|------|------|------|
+| `GET` | `/v1/skills` | 列出所有技能（合并 Prompt + 录制，含 `type` 字段） |
+| `GET` | `/v1/skills/{name}` | 获取技能详情（type, step_count, parameter_count） |
+| `POST` | `/v1/skills/{name}/run` | 通过 API 执行技能（`{"task": "..."}`） |
 
 ### Daemon 模式与崩溃恢复（Phase 4）
 

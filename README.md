@@ -21,6 +21,7 @@ Axion is a Swift-based macOS desktop automation platform that takes natural lang
 **Key highlights:**
 
 - **Cross-run Memory** — Learns from every task; the more you use it, the smarter it gets
+- **SDK Skill System** — Prompt skills, recorded skills, and built-in desktop skills with dual-track lookup and skill-scoped memory
 - **Record & Replay Skills** — Record a workflow once, replay it instantly without LLM calls
 - **HTTP API Server** — Integrate with CI/CD and external systems via REST + SSE
 - **MCP Server Mode** — Act as a desktop plugin for external agents (Claude Code, Cursor, etc.)
@@ -30,20 +31,21 @@ Axion is a Swift-based macOS desktop automation platform that takes natural lang
 ## Architecture
 
 ```
-┌───────────────────────────────────────────────────────┐
-│                       AxionCLI                         │
-│  run / setup / doctor / server / mcp / record / skill  │
-│  daemon / Plan → Execute → Verify → Replan Loop        │
-│  Memory · Fast Mode · Takeover · Daemon · Persistence  │
-├──────────────────┬──────────────────┬─────────────────┤
-│    AxionCore     │   AxionHelper    │    AxionBar      │
-│  Models, Proto-  │  MCP Server      │  Menu Bar App    │
-│  cols, Config,   │  21 Native macOS │  Task Panel      │
-│  Errors          │  Tools           │  Global Hotkeys  │
-└──────────────────┴──────────────────┴─────────────────┘
+┌───────────────────────────────────────────────────────────┐
+│                          AxionCLI                          │
+│  run / setup / doctor / server / mcp / record / skill     │
+│  daemon / Plan → Execute → Verify → Replan Loop           │
+│  Memory · Fast Mode · Takeover · Daemon · Persistence     │
+│  Skill System · Built-in Skills · Skill + Memory Context  │
+├──────────────────┬──────────────────┬────────────────────┤
+│    AxionCore     │   AxionHelper    │     AxionBar        │
+│  Models, Proto-  │  MCP Server      │  Menu Bar App       │
+│  cols, Config,   │  21 Native macOS │  Task Panel         │
+│  Errors          │  Tools           │  Global Hotkeys     │
+└──────────────────┴──────────────────┴────────────────────┘
 ```
 
-- **AxionCLI** — CLI entry point with LLM interaction, task planning, execution engine, memory, daemon management, and server modes
+- **AxionCLI** — CLI entry point with LLM interaction, task planning, execution engine, memory, skill system (prompt + recorded + built-in), daemon management, and server modes
 - **AxionCore** — Shared model layer (Plan, Step, RunState) and protocol definitions
 - **AxionHelper** — MCP server process providing 21 native macOS automation tools via stdio
 - **AxionBar** — Native macOS menu bar app with task panel, skill triggers, and global hotkeys
@@ -215,6 +217,9 @@ API endpoints:
 | `POST` | `/v1/runs` | Submit a task (`{"task": "..."}`) |
 | `GET` | `/v1/runs/{id}` | Query task status |
 | `GET` | `/v1/runs/{id}/events` | SSE real-time event stream |
+| `GET` | `/v1/skills` | List all skills (Phase 5) |
+| `GET` | `/v1/skills/{name}` | Get skill detail (Phase 5) |
+| `POST` | `/v1/skills/{name}/run` | Execute a skill (Phase 5) |
 
 ### MCP Server Mode (Phase 2)
 
@@ -294,6 +299,61 @@ Axion serves as the flagship reference implementation of [OpenAgentSDK](https://
 - Register custom tools via the `@Tool` macro
 - Integrate with Axion's desktop capabilities via `axion mcp`
 - Build on the same MCP + Agent Loop architecture
+
+### SDK Skill System (Phase 5)
+
+Axion integrates with [OpenAgentSDK](https://github.com/terryso/open-agent-sdk-swift)'s Skill system, supporting two types of skills:
+
+- **Prompt Skills** — Discovered from `~/.claude/skills/*/SKILL.md` files, each defining a `promptTemplate`, optional `toolRestrictions`, and `modelOverride`
+- **Recorded Skills** — JSON files in `~/.axion/skills/` compiled from user recordings (Phase 3)
+
+**Dual-track lookup** — When a skill name is referenced, Axion checks prompt skills first, then falls back to recorded skills. Same-name skills always resolve to the prompt version.
+
+**Explicit triggering** — Type `/skill-name` as the task prefix to invoke a specific skill directly:
+
+```bash
+# Trigger a prompt skill directly
+axion run "/screenshot-analyze analyze the current screen layout"
+
+# Trigger a recorded skill directly
+axion run "/open-calculator"
+
+# Or use the dedicated command
+axion skill run open-calculator
+```
+
+**Implicit triggering** — Axion injects a curated list of available skills into the system prompt. The LLM can automatically invoke the right skill based on the user's intent without explicit mention.
+
+**Built-in desktop skills** — Three skills are registered in code (no filesystem files needed):
+
+| Skill | Aliases | Description |
+|-------|---------|-------------|
+| `screenshot-analyze` | `sa`, `analyze`, `screen` | Capture and analyze the current screen |
+| `data-extract` | `extract`, `de` | Extract structured data from visible content |
+| `form-fill` | `fill`, `ff` | Fill form fields automatically |
+
+```bash
+# List all available skills (prompt + recorded + built-in)
+axion skill list
+
+# Disable skill system for a single run
+axion run --no-skills "Open Calculator"
+```
+
+**Skill + Memory integration** — Skills interact with the cross-run memory system:
+
+- Successful skill execution records an `affordance` fact scoped to `skill:{name}`
+- Failed execution records an `avoid` fact so the Planner learns from errors
+- Before execution, up to 3 relevant skill-scoped memories are injected into the prompt
+- Use `--no-memory` to skip both injection and recording
+
+**HTTP API skill endpoints:**
+
+| Method | Path | Description |
+|--------|------|-------------|
+| `GET` | `/v1/skills` | List all skills (merged prompt + recorded, with `type` field) |
+| `GET` | `/v1/skills/{name}` | Get skill detail (type, step_count, parameter_count) |
+| `POST` | `/v1/skills/{name}/run` | Execute a skill via API (`{"task": "..."}`) |
 
 ### Daemon Mode & Crash Recovery (Phase 4)
 

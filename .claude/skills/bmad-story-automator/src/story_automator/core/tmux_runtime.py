@@ -732,9 +732,14 @@ def _runner_claude_prompt_completed(
 def _claude_completion_marker_present(capture: str) -> bool:
     if not capture:
         return False
+    # Claude CLI uses ~185 random verbs in its spinner. When work completes,
+    # the tense switches from present-participle (-ing) to past-tense (-ed).
+    # Matching past-tense + "for Xm" after line-start or spinner (✻) reliably
+    # detects completion regardless of which spinner verb was used, while
+    # rejecting in-progress forms and generic text like "tests passed for 3m".
     return bool(
         re.search(
-            r"(?im)\b(?:Baked|Done|Finished)\s+for\s+\d+m(?:\s+\d+s)?\b",
+            r"(?im)(?:^|✻\s+)(?:\w+ed|Done)\s+for\s+\d+m(?:\s+\d+s)?\b",
             capture,
         )
     )
