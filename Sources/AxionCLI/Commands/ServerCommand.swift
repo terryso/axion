@@ -3,6 +3,7 @@ import Foundation
 import Hummingbird
 
 import AxionCore
+import OpenAgentSDK
 
 struct ServerCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
@@ -51,7 +52,12 @@ struct ServerCommand: AsyncParsableCommand {
             eventBroadcaster: eventBroadcaster
         )
 
-        // 3. Create router and register API routes
+        // 3. Create SkillRegistry for prompt skill support
+        let skillRegistry = SkillRegistry()
+        AxionBuiltInSkills.registerAll(into: skillRegistry)
+        skillRegistry.registerDiscoveredSkills()
+
+        // 4. Create router and register API routes
         let router = Router()
         AxionAPI.registerRoutes(
             on: router,
@@ -60,10 +66,11 @@ struct ServerCommand: AsyncParsableCommand {
             config: config,
             authKey: resolvedAuthKey,
             concurrencyLimiter: concurrencyLimiter,
-            maxConcurrent: maxConcurrent
+            maxConcurrent: maxConcurrent,
+            skillRegistry: skillRegistry
         )
 
-        // 4. Create Hummingbird Application
+        // 5. Create Hummingbird Application
         let app = Application(
             router: router,
             configuration: .init(
@@ -71,7 +78,7 @@ struct ServerCommand: AsyncParsableCommand {
             )
         )
 
-        // 5. Display startup message
+        // 6. Display startup message
         print("Axion API server running on port \(port)")
         print("  Listening on \(host):\(port)")
         print("  Auth: \(resolvedAuthKey != nil ? "enabled" : "disabled")")
@@ -79,10 +86,10 @@ struct ServerCommand: AsyncParsableCommand {
         print("  Press Ctrl+C to stop")
         fflush(stdout)
 
-        // 6. Start server — Hummingbird handles SIGINT/SIGTERM graceful shutdown
+        // 7. Start server — Hummingbird handles SIGINT/SIGTERM graceful shutdown
         try await app.runService()
 
-        // 7. After server stops, wait for active tasks (max 30s)
+        // 8. After server stops, wait for active tasks (max 30s)
         await waitForActiveTasks(limiter: concurrencyLimiter, timeout: 30)
     }
 }
@@ -98,7 +105,7 @@ private func waitForActiveTasks(limiter: ConcurrencyLimiter, timeout: Int) async
                 print("Shutdown timeout — forcing shutdown with \(await limiter.activeRunCount) task(s) still active.")
                 break
             }
-            try? await Task.sleep(for: .milliseconds(200))
+            try? await _Concurrency.Task.sleep(for: .milliseconds(200))
         }
     }
 

@@ -3,6 +3,10 @@ import Hummingbird
 import NIOCore
 
 import AxionCore
+import OpenAgentSDK
+
+// Disambiguate: AxionCore.Skill = recorded skill model, OpenAgentSDK.Skill = prompt skill model
+typealias RecordedSkill = AxionCore.Skill
 
 /// AxionAPI — Hummingbird route definitions for the Axion HTTP API.
 /// Provides REST endpoints for task submission, status queries, health checks,
@@ -28,7 +32,8 @@ enum AxionAPI {
         concurrencyLimiter: ConcurrencyLimiter? = nil,
         runLockService: RunLockService? = nil,
         maxConcurrent: Int = 10,
-        configDirectory: String = ConfigManager.defaultConfigDirectory
+        configDirectory: String = ConfigManager.defaultConfigDirectory,
+        skillRegistry: SkillRegistry? = nil
     ) {
         let v1 = router.group("v1")
 
@@ -304,7 +309,7 @@ enum AxionAPI {
                 if acquired {
                     // Slot available immediately — launch agent in background
                     let capturedConfig = config
-                    _ = Task.detached {
+                    _ = _Concurrency.Task.detached {
                         let result = await AgentRunner.runAgent(
                             config: capturedConfig,
                             task: createRequest.task,
@@ -348,7 +353,7 @@ enum AxionAPI {
                 // Queue full — return queued response immediately, background task will execute when slot available
                 let position = await limiter.queueDepth + 1
                 let capturedConfig = config
-                _ = Task.detached {
+                _ = _Concurrency.Task.detached {
                     let slotResult = await limiter.acquire()
                     guard slotResult >= 0 else {
                         await runLockService.release()
@@ -388,7 +393,7 @@ enum AxionAPI {
 
             // No concurrency limiter — original behavior
             let capturedConfig = config
-            _ = Task.detached {
+            _ = _Concurrency.Task.detached {
                 let result = await AgentRunner.runAgent(
                     config: capturedConfig,
                     task: createRequest.task,
@@ -539,11 +544,11 @@ enum AxionAPI {
             }
         }
 
-        // MARK: - Skill API Routes (Story 10.3)
+        // MARK: - Skill API Routes (Story 10.3, Story 18.3)
 
-        // GET /v1/skills — list all skills
+        // GET /v1/skills — list all skills (merged dual sources)
         v1Authed.get("skills") { _, _ in
-            let summaries = Self.loadSkillSummaries()
+            let summaries = Self.loadAllSkillSummaries(registry: skillRegistry)
             let encoder = JSONEncoder()
             encoder.outputFormatting = [.sortedKeys]
             let data = try encoder.encode(summaries)
@@ -555,7 +560,7 @@ enum AxionAPI {
             )
         }
 
-        // GET /v1/skills/:name — skill detail
+        // GET /v1/skills/:name — skill detail (dual source lookup)
         v1Authed.get("skills/:name") { _, context in
             guard let name = context.parameters.get("name") else {
                 throw AxionAPIError(
@@ -567,23 +572,41 @@ enum AxionAPI {
                 )
             }
 
-            guard let detail = Self.loadSkillDetail(name: name) else {
-                throw AxionAPIError(
-                    status: .notFound,
-                    error: APIErrorResponse(
-                        error: "skill_not_found",
-                        message: "Skill '\(name)' not found."
+            // Track 1: prompt skill via SkillRegistry
+            if let promptSkill = skillRegistry?.find(name) {
+                return EditedResponse(
+                    headers: [.contentType: "application/json"],
+                    response: SkillDetailResponse(
+                        name: promptSkill.name,
+                        description: promptSkill.whenToUse ?? promptSkill.description,
+                        type: "prompt",
+                        version: 1,
+                        parameters: [],
+                        stepCount: 0,
+                        lastUsedAt: nil,
+                        executionCount: 0
                     )
                 )
             }
 
-            return EditedResponse(
-                headers: [.contentType: "application/json"],
-                response: detail
+            // Track 2: recorded skill from JSON file
+            if let detail = Self.loadSkillDetail(name: name) {
+                return EditedResponse(
+                    headers: [.contentType: "application/json"],
+                    response: detail
+                )
+            }
+
+            throw AxionAPIError(
+                status: .notFound,
+                error: APIErrorResponse(
+                    error: "skill_not_found",
+                    message: "Skill '\(name)' not found."
+                )
             )
         }
 
-        // POST /v1/skills/:name/run — execute a skill
+        // POST /v1/skills/:name/run — execute a skill (dual path: prompt vs recorded)
         v1Authed.post("skills/:name/run") { request, context in
             guard let name = context.parameters.get("name") else {
                 throw AxionAPIError(
@@ -595,6 +618,141 @@ enum AxionAPI {
                 )
             }
 
+            // Track 1: prompt skill via SkillRegistry
+            if let promptSkill = skillRegistry?.find(name) {
+                // Parse request body for task description
+                let buffer = try await request.body.collect(upTo: context.maxUploadSize)
+                let bodyData = Data(buffer: buffer)
+                var task: String
+                if !bodyData.isEmpty, let runRequest = try? JSONDecoder().decode(PromptSkillRunRequest.self, from: bodyData) {
+                    task = runRequest.task
+                } else {
+                    task = "Execute skill \(promptSkill.name)"
+                }
+                if task.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                    task = "Execute skill \(promptSkill.name)"
+                }
+
+                // Submit run via RunTracker
+                let taskDescription = "技能(prompt): \(promptSkill.name) — \(task)"
+                let runId = await runTracker.submitRun(
+                    task: taskDescription,
+                    options: RunOptions(task: taskDescription)
+                )
+
+                // Check run lock (desktop-level exclusive access)
+                let activeRunLockService = runLockService ?? RunLockService()
+                let lockAcquired = await activeRunLockService.acquire(runId: runId)
+                if !lockAcquired {
+                    let existingLock = await activeRunLockService.readExistingLock()
+                    throw AxionAPIError(
+                        status: .conflict,
+                        error: APIErrorResponse(
+                            error: "run_locked",
+                            message: "另一个 live run（run_id: \(existingLock?.runId ?? "unknown")）正在执行，请等待其完成或使用 `axion cancel \(existingLock?.runId ?? "")` 取消"
+                        )
+                    )
+                }
+
+                // Check concurrency limiter
+                if let limiter = concurrencyLimiter {
+                    let acquired = await limiter.tryAcquire()
+                    if acquired {
+                        let capturedConfig = config
+                        let capturedSkill = promptSkill
+                        _ = _Concurrency.Task.detached {
+                            let result = await AgentRunner.runSkillAgent(
+                                skill: capturedSkill,
+                                task: task,
+                                config: capturedConfig,
+                                runId: runId,
+                                eventBroadcaster: eventBroadcaster,
+                                runTracker: runTracker,
+                                verbose: false,
+                                completion: { _, _, _, _, _, _, _ in }
+                            )
+                            await runTracker.updateRun(
+                                runId: runId,
+                                status: result.finalStatus,
+                                steps: result.stepSummaries,
+                                durationMs: result.durationMs,
+                                replanCount: result.replanCount,
+                                costTelemetry: result.costTelemetry
+                            )
+                            await limiter.release()
+                            await activeRunLockService.release()
+                        }
+                    } else {
+                        // Queue full — queue in background
+                        let position = await limiter.queueDepth + 1
+                        let capturedConfig = config
+                        let capturedSkill = promptSkill
+                        _ = _Concurrency.Task.detached {
+                            let slotResult = await limiter.acquire()
+                            guard slotResult >= 0 else {
+                                await activeRunLockService.release()
+                                return
+                            }
+                            let result = await AgentRunner.runSkillAgent(
+                                skill: capturedSkill,
+                                task: task,
+                                config: capturedConfig,
+                                runId: runId,
+                                eventBroadcaster: eventBroadcaster,
+                                runTracker: runTracker,
+                                verbose: false,
+                                completion: { _, _, _, _, _, _, _ in }
+                            )
+                            await runTracker.updateRun(
+                                runId: runId,
+                                status: result.finalStatus,
+                                steps: result.stepSummaries,
+                                durationMs: result.durationMs,
+                                replanCount: result.replanCount,
+                                costTelemetry: result.costTelemetry
+                            )
+                            await limiter.release()
+                            await activeRunLockService.release()
+                        }
+                        let queuedResp = QueuedRunResponse(runId: runId, status: "queued", position: position)
+                        var response = try context.responseEncoder.encode(queuedResp, from: request, context: context)
+                        response.status = .accepted
+                        return response
+                    }
+                } else {
+                    // No concurrency limiter — launch directly
+                    let capturedConfig = config
+                    let capturedSkill = promptSkill
+                    _ = _Concurrency.Task.detached {
+                        let result = await AgentRunner.runSkillAgent(
+                            skill: capturedSkill,
+                            task: task,
+                            config: capturedConfig,
+                            runId: runId,
+                            eventBroadcaster: eventBroadcaster,
+                            runTracker: runTracker,
+                            verbose: false,
+                            completion: { _, _, _, _, _, _, _ in }
+                        )
+                        await runTracker.updateRun(
+                            runId: runId,
+                            status: result.finalStatus,
+                            steps: result.stepSummaries,
+                            durationMs: result.durationMs,
+                            replanCount: result.replanCount,
+                            costTelemetry: result.costTelemetry
+                        )
+                        await activeRunLockService.release()
+                    }
+                }
+
+                let response = SkillRunResponse(runId: runId, status: "running")
+                var resp = try context.responseEncoder.encode(response, from: request, context: context)
+                resp.status = .accepted
+                return resp
+            }
+
+            // Track 2: recorded skill from JSON file
             let safeName = RecordCommand.sanitizeFileName(name)
             let skillsDir = SkillCompileCommand.skillsDirectory()
             let skillPath = (skillsDir as NSString).appendingPathComponent("\(safeName).json")
@@ -613,9 +771,9 @@ enum AxionAPI {
             let skillData = try Data(contentsOf: URL(fileURLWithPath: skillPath))
             let decoder = JSONDecoder()
             decoder.dateDecodingStrategy = .iso8601
-            let skill: Skill
+            let skill: RecordedSkill
             do {
-                skill = try decoder.decode(Skill.self, from: skillData)
+                skill = try decoder.decode(RecordedSkill.self, from: skillData)
             } catch {
                 throw AxionAPIError(
                     status: .badRequest,
@@ -658,7 +816,7 @@ enum AxionAPI {
 
             let capturedConfig = config
             let capturedSkill = skill
-            _ = Task.detached {
+            _ = _Concurrency.Task.detached {
                 let result = await SkillAPIRunner.runSkill(
                     config: capturedConfig,
                     skill: capturedSkill,
@@ -704,7 +862,36 @@ enum AxionAPI {
 
     // MARK: - Skill Helpers
 
-    private static func loadSkillSummaries() -> [SkillSummaryResponse] {
+    /// Load skill summaries from both prompt skills (SkillRegistry) and recorded skills (JSON files).
+    /// Prompt skills take priority on name collision (consistent with CLI dual-track lookup).
+    private static func loadAllSkillSummaries(registry: SkillRegistry?) -> [SkillSummaryResponse] {
+        var summariesByName: [String: SkillSummaryResponse] = [:]
+
+        // Load recorded skills from ~/.axion/skills/*.json
+        let recordedSummaries = loadRecordedSkillSummaries()
+        for summary in recordedSummaries {
+            summariesByName[summary.name] = summary
+        }
+
+        // Load prompt skills from SkillRegistry (overrides recorded on collision)
+        if let registry {
+            for skill in registry.allSkills where skill.userInvocable {
+                summariesByName[skill.name] = SkillSummaryResponse(
+                    name: skill.name,
+                    description: skill.whenToUse ?? skill.description,
+                    type: "prompt",
+                    parameterCount: 0,
+                    stepCount: 0,
+                    lastUsedAt: nil,
+                    executionCount: 0
+                )
+            }
+        }
+
+        return summariesByName.values.sorted { $0.name < $1.name }
+    }
+
+    private static func loadRecordedSkillSummaries() -> [SkillSummaryResponse] {
         let skillsDir = SkillCompileCommand.skillsDirectory()
         let fm = FileManager.default
 
@@ -723,10 +910,11 @@ enum AxionAPI {
         for fileName in jsonFiles {
             let filePath = (skillsDir as NSString).appendingPathComponent(fileName)
             guard let data = fm.contents(atPath: filePath),
-                  let skill = try? decoder.decode(Skill.self, from: data) else { continue }
+                  let skill = try? decoder.decode(RecordedSkill.self, from: data) else { continue }
             summaries.append(SkillSummaryResponse(
                 name: skill.name,
                 description: skill.description,
+                type: "recorded",
                 parameterCount: skill.parameters.count,
                 stepCount: skill.steps.count,
                 lastUsedAt: skill.lastUsedAt.map { dateFormatter.string(from: $0) },
@@ -745,7 +933,7 @@ enum AxionAPI {
         guard let data = FileManager.default.contents(atPath: skillPath) else { return nil }
         let decoder = JSONDecoder()
         decoder.dateDecodingStrategy = .iso8601
-        guard let skill = try? decoder.decode(Skill.self, from: data) else { return nil }
+        guard let skill = try? decoder.decode(RecordedSkill.self, from: data) else { return nil }
 
         let dateFormatter = ISO8601DateFormatter()
         dateFormatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
@@ -753,6 +941,7 @@ enum AxionAPI {
         return SkillDetailResponse(
             name: skill.name,
             description: skill.description,
+            type: "recorded",
             version: skill.version,
             parameters: skill.parameters.map { p in
                 SkillParameterResponse(name: p.name, defaultValue: p.defaultValue, description: p.description)
@@ -763,7 +952,7 @@ enum AxionAPI {
         )
     }
 
-    private static func updateSkillMetadata(skillPath: String, skill: Skill) {
+    private static func updateSkillMetadata(skillPath: String, skill: RecordedSkill) {
         var updated = skill
         updated.lastUsedAt = Date()
         updated.executionCount += 1

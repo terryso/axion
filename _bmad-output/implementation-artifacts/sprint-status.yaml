@@ -66,6 +66,8 @@
 
 generated: 2026-05-08
 last_updated: 2026-05-18
+# story-18-3-done: 2026-05-18
+# story-18-3-created: 2026-05-18
 # story-18-2-created: 2026-05-18
 # story-18-1-done: 2026-05-18
 # story-18-1-started: 2026-05-18
@@ -236,5 +238,5 @@ development_status:
   epic-18: in-progress
   18-1-built-in-desktop-skills: done
   18-2-skill-memory-integration: done
-  18-3-http-api-skill-trigger: backlog
+  18-3-http-api-skill-trigger: done
   epic-18-retrospective: optional

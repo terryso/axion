@@ -6,6 +6,7 @@ import Testing
 
 @testable import AxionCLI
 @testable import AxionCore
+import OpenAgentSDK
 
 @Suite("AxionAPI Skill Routes", .serialized)
 struct AxionAPISkillRoutesTests {
@@ -103,6 +104,7 @@ struct AxionAPISkillRoutesTests {
                 let summaries = try JSONDecoder().decode([SkillSummaryResponse].self, from: response.body)
                 #expect(summaries.count == 1)
                 #expect(summaries[0].name == "test_skill")
+                #expect(summaries[0].type == "recorded")
                 #expect(summaries[0].stepCount == 1)
                 #expect(summaries[0].parameterCount == 1)
             }
@@ -143,6 +145,7 @@ struct AxionAPISkillRoutesTests {
 
                 let detail = try JSONDecoder().decode(SkillDetailResponse.self, from: response.body)
                 #expect(detail.name == "detail_test")
+                #expect(detail.type == "recorded")
                 #expect(detail.version == 2)
                 #expect(detail.stepCount == 1)
             }
@@ -264,13 +267,177 @@ struct AxionAPISkillRoutesTests {
         }
     }
 
+    // MARK: - Prompt skill tests (Story 18.3)
+
+    @Test("GET /v1/skills includes prompt skills from SkillRegistry")
+    func getSkillsIncludesPromptSkills() async throws {
+        Self.cleanupTestSkills()
+        let registry = SkillRegistry()
+        registry.register(OpenAgentSDK.Skill(
+            name: "test-prompt-skill",
+            description: "A prompt skill for testing",
+            promptTemplate: "Do something useful"
+        ))
+
+        let app = try await buildTestApplication(skillRegistry: registry)
+
+        try await app.test(.router) { client in
+            try await client.execute(uri: "/v1/skills", method: .get) { response in
+                #expect(response.status == .ok)
+
+                let summaries = try JSONDecoder().decode([SkillSummaryResponse].self, from: response.body)
+                #expect(summaries.count == 1)
+                #expect(summaries[0].name == "test-prompt-skill")
+                #expect(summaries[0].type == "prompt")
+                #expect(summaries[0].stepCount == 0)
+                #expect(summaries[0].parameterCount == 0)
+            }
+        }
+    }
+
+    @Test("GET /v1/skills merges both prompt and recorded skills")
+    func getSkillsMergesDualSources() async throws {
+        Self.cleanupTestSkills()
+        let skillsDir = SkillCompileCommand.skillsDirectory()
+        try FileManager.default.createDirectory(atPath: skillsDir, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(atPath: skillsDir + "/recorded_skill.json") }
+
+        let recorded = Skill(
+            name: "recorded_skill",
+            description: "A recorded skill",
+            version: 1,
+            createdAt: Date(),
+            sourceRecording: "test",
+            parameters: [],
+            steps: [SkillStep(tool: "click", arguments: [:], waitAfterSeconds: 0)]
+        )
+        let encoder = JSONEncoder()
+        encoder.outputFormatting = [.sortedKeys, .prettyPrinted]
+        encoder.dateEncodingStrategy = .iso8601
+        let data = try encoder.encode(recorded)
+        try data.write(to: URL(fileURLWithPath: skillsDir + "/recorded_skill.json"))
+
+        let registry = SkillRegistry()
+        registry.register(OpenAgentSDK.Skill(
+            name: "prompt-skill",
+            description: "A prompt skill",
+            promptTemplate: "Do something"
+        ))
+
+        let app = try await buildTestApplication(skillRegistry: registry)
+
+        try await app.test(.router) { client in
+            try await client.execute(uri: "/v1/skills", method: .get) { response in
+                #expect(response.status == .ok)
+
+                let summaries = try JSONDecoder().decode([SkillSummaryResponse].self, from: response.body)
+                #expect(summaries.count == 2)
+
+                let promptSkill = summaries.first { $0.name == "prompt-skill" }
+                let recordedSkill = summaries.first { $0.name == "recorded_skill" }
+                #expect(promptSkill != nil)
+                #expect(promptSkill?.type == "prompt")
+                #expect(recordedSkill != nil)
+                #expect(recordedSkill?.type == "recorded")
+            }
+        }
+    }
+
+    @Test("GET /v1/skills/:name returns prompt skill detail from SkillRegistry")
+    func getSkillDetailPromptSkill() async throws {
+        Self.cleanupTestSkills()
+        let registry = SkillRegistry()
+        registry.register(OpenAgentSDK.Skill(
+            name: "my-prompt-skill",
+            description: "A prompt skill",
+            promptTemplate: "Analyze stuff",
+            whenToUse: "Use when analyzing"
+        ))
+
+        let app = try await buildTestApplication(skillRegistry: registry)
+
+        try await app.test(.router) { client in
+            try await client.execute(uri: "/v1/skills/my-prompt-skill", method: .get) { response in
+                #expect(response.status == .ok)
+
+                let detail = try JSONDecoder().decode(SkillDetailResponse.self, from: response.body)
+                #expect(detail.name == "my-prompt-skill")
+                #expect(detail.type == "prompt")
+                #expect(detail.description == "Use when analyzing")
+                #expect(detail.parameters.isEmpty)
+                #expect(detail.stepCount == 0)
+            }
+        }
+    }
+
+    @Test("GET /v1/skills/:name prompt skill takes priority over recorded")
+    func getSkillDetailPromptOverridesRecorded() async throws {
+        Self.cleanupTestSkills()
+        let skillsDir = SkillCompileCommand.skillsDirectory()
+        try FileManager.default.createDirectory(atPath: skillsDir, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(atPath: skillsDir + "/overlap_skill.json") }
+
+        let recorded = Skill(
+            name: "overlap_skill",
+            description: "Recorded version",
+            version: 1,
+            createdAt: Date(),
+            sourceRecording: "test",
+            parameters: [],
+            steps: []
+        )
+        let encoder = JSONEncoder()
+        encoder.outputFormatting = [.sortedKeys, .prettyPrinted]
+        encoder.dateEncodingStrategy = .iso8601
+        let data = try encoder.encode(recorded)
+        try data.write(to: URL(fileURLWithPath: skillsDir + "/overlap_skill.json"))
+
+        let registry = SkillRegistry()
+        registry.register(OpenAgentSDK.Skill(
+            name: "overlap_skill",
+            description: "Prompt version",
+            promptTemplate: "Prompt template",
+            whenToUse: "Use when overlapping"
+        ))
+
+        let app = try await buildTestApplication(skillRegistry: registry)
+
+        try await app.test(.router) { client in
+            try await client.execute(uri: "/v1/skills/overlap_skill", method: .get) { response in
+                #expect(response.status == .ok)
+
+                let detail = try JSONDecoder().decode(SkillDetailResponse.self, from: response.body)
+                #expect(detail.type == "prompt")
+                #expect(detail.description == "Use when overlapping")
+            }
+        }
+    }
+
+    @Test("POST /v1/skills/:name/run returns 404 when skill not in either source")
+    func runSkillNotFoundBothSources() async throws {
+        Self.cleanupTestSkills()
+        let registry = SkillRegistry()
+        let app = try await buildTestApplication(skillRegistry: registry)
+
+        try await app.test(.router) { client in
+            let body = ByteBuffer(string: "{\"task\": \"do something\"}")
+            try await client.execute(uri: "/v1/skills/nonexistent/run", method: .post, body: body) { response in
+                #expect(response.status == .notFound)
+
+                let errorBody = try JSONDecoder().decode(APIErrorResponse.self, from: response.body)
+                #expect(errorBody.error == "skill_not_found")
+            }
+        }
+    }
+
     // MARK: - Helper
 
     private func buildTestApplication(
         runTracker: RunTracker? = nil,
         eventBroadcaster: EventBroadcaster? = nil,
         authKey: String? = nil,
-        concurrencyLimiter: ConcurrencyLimiter? = nil
+        concurrencyLimiter: ConcurrencyLimiter? = nil,
+        skillRegistry: SkillRegistry? = nil
     ) async throws -> Application<RouterResponder<BasicRequestContext>> {
         let tempLockDir = NSTemporaryDirectory() + "axion-test-lock-\(UUID().uuidString)"
         try? FileManager.default.createDirectory(atPath: tempLockDir, withIntermediateDirectories: true)
@@ -286,7 +453,8 @@ struct AxionAPISkillRoutesTests {
             config: .default,
             authKey: authKey,
             concurrencyLimiter: concurrencyLimiter,
-            runLockService: testRunLockService
+            runLockService: testRunLockService,
+            skillRegistry: skillRegistry
         )
 
         let app = Application(

@@ -268,6 +268,205 @@ enum AgentRunner {
         return (totalSteps: totalSteps, durationMs: durationMs, replanCount: 0, finalStatus: finalStatus, stepSummaries: stepSummaries, costTelemetry: resultCostTelemetry, externallyModified: externallyModified)
     }
 
+    // MARK: - Skill Agent API
+
+    /// Run a prompt skill as an agent task.
+    /// Builds a skill-specific systemPrompt from promptTemplate + tools + Memory,
+    /// then delegates to the same Agent execution pipeline as runAgent.
+    static func runSkillAgent(
+        skill: OpenAgentSDK.Skill,
+        task: String,
+        config: AxionConfig,
+        runId: String = "",
+        eventBroadcaster: EventBroadcaster? = nil,
+        runTracker: RunTracker? = nil,
+        verbose: Bool = false,
+        completion: @escaping (String, APIRunStatus, [StepSummary], Int?, Int, CostTelemetry?, Bool) -> Void
+    ) async -> (totalSteps: Int, durationMs: Int, replanCount: Int, finalStatus: APIRunStatus, stepSummaries: [StepSummary], costTelemetry: CostTelemetry?, externallyModified: Bool) {
+        // 1. Resolve API key
+        let apiKey = config.apiKey
+            ?? ProcessInfo.processInfo.environment["AXION_API_KEY"]
+
+        guard let apiKey, !apiKey.isEmpty else {
+            completion("", .failed, [], nil, 0, nil, false)
+            return (0, 0, 0, .failed, [], nil, false)
+        }
+
+        // 2. Resolve Helper path
+        guard let helperPath = HelperPathResolver.resolveHelperPath() else {
+            completion("", .failed, [], nil, 0, nil, false)
+            return (0, 0, 0, .failed, [], nil, false)
+        }
+
+        // 3. Build skill systemPrompt
+        let mcpPrefixedToolNames = ToolNames.allToolNames.map { "mcp__axion-helper__\($0)" }
+        let toolNames: [String]
+        if let restrictions = skill.toolRestrictions {
+            toolNames = restrictions.map(\.rawValue)
+        } else {
+            toolNames = mcpPrefixedToolNames
+        }
+        let toolList = PromptBuilder.buildToolListDescription(from: toolNames)
+        var systemPrompt = skill.promptTemplate
+        systemPrompt += "\n\n## Available Tools\n\(toolList)"
+
+        // Inject Memory context (app-level)
+        let memoryDir = (ConfigManager.defaultConfigDirectory as NSString).appendingPathComponent("memory")
+        let memoryStore = FileBasedMemoryStore(memoryDir: memoryDir)
+        let contextProvider = MemoryContextProvider()
+        let factStore = MemoryFactStore(memoryDir: memoryDir)
+
+        if let memCtx = try? await contextProvider.buildMemoryContext(
+            task: task,
+            store: memoryStore
+        ) {
+            systemPrompt += "\n\n\(memCtx)"
+        }
+
+        // Inject skill-scoped Memory
+        if let skillMemCtx = await contextProvider.buildSkillMemoryContext(
+            skillName: skill.name,
+            task: task,
+            factStore: factStore
+        ) {
+            systemPrompt += "\n\n\(skillMemCtx)"
+        }
+
+        // 4. Configure MCP server for Helper
+        let mcpServers: [String: McpServerConfig] = [
+            "axion-helper": .stdio(McpStdioConfig(command: helperPath))
+        ]
+
+        // 5. Build AgentOptions with skill overrides
+        let effectiveModel = skill.modelOverride ?? config.model
+
+        var allowedTools: [String]? = nil
+        if let restrictions = skill.toolRestrictions {
+            allowedTools = restrictions.map(\.rawValue)
+        }
+
+        let agentOptions = AgentOptions(
+            apiKey: apiKey,
+            model: effectiveModel,
+            baseURL: config.baseURL,
+            systemPrompt: systemPrompt,
+            maxTurns: config.maxSteps,
+            maxTokens: 4096,
+            permissionMode: .bypassPermissions,
+            mcpServers: mcpServers,
+            memoryStore: memoryStore,
+            hookRegistry: await buildSafetyHookRegistry(sharedSeatMode: config.sharedSeatMode),
+            logLevel: verbose ? .debug : .info,
+            allowedTools: allowedTools
+        )
+
+        // 6. Create and run Agent
+        let agent = createAgent(options: agentOptions)
+
+        var totalSteps = 0
+        var stepSummaries: [StepSummary] = []
+        var pendingToolUses: [String: SDKMessage.ToolUseData] = [:]
+        var resultSubtype: SDKMessage.ResultData.Subtype? = nil
+        var resultCostTelemetry: CostTelemetry? = nil
+        let startTime = ContinuousClock.now
+
+        let costTracker = CostTracker(maxModelCalls: config.maxModelCalls, maxScreenshots: config.maxScreenshots)
+
+        let messageStream = agent.stream(task)
+        for await message in messageStream {
+            if _Concurrency.Task.isCancelled { break }
+
+            switch message {
+            case .assistant:
+                _ = await costTracker.recordModelCall(model: effectiveModel)
+
+            case .toolUse(let data):
+                totalSteps += 1
+                pendingToolUses[data.toolUseId] = data
+
+                if data.toolName.contains("screenshot") {
+                    _ = await costTracker.recordScreenshot()
+                }
+
+                if let broadcaster = eventBroadcaster, !runId.isEmpty {
+                    let stepIndex = totalSteps - 1
+                    let event = SSEEvent.stepStarted(StepStartedData(
+                        stepIndex: stepIndex,
+                        tool: data.toolName
+                    ))
+                    await broadcaster.emit(runId: runId, event: event)
+                }
+
+            case .toolResult(let data):
+                if let toolUse = pendingToolUses.removeValue(forKey: data.toolUseId) {
+                    let stepIndex = stepSummaries.count
+                    stepSummaries.append(StepSummary(
+                        index: stepIndex,
+                        tool: toolUse.toolName,
+                        purpose: extractPurpose(from: toolUse),
+                        success: !data.isError
+                    ))
+
+                    if let broadcaster = eventBroadcaster, !runId.isEmpty {
+                        let event = SSEEvent.stepCompleted(StepCompletedData(
+                            stepIndex: stepIndex,
+                            tool: toolUse.toolName,
+                            purpose: extractPurpose(from: toolUse),
+                            success: !data.isError,
+                            durationMs: nil
+                        ))
+                        await broadcaster.emit(runId: runId, event: event)
+                    }
+                }
+
+            case .result(let data):
+                resultSubtype = data.subtype
+                await costTracker.finalizeWithSDKData(
+                    usage: data.usage,
+                    totalCostUsd: data.totalCostUsd,
+                    costBreakdown: data.costBreakdown
+                )
+                resultCostTelemetry = await costTracker.getTelemetry()
+
+                if let tracker = runTracker, !runId.isEmpty {
+                    let kind = inferResultKind(task: task, output: data.text)
+                    let formatter = ISO8601DateFormatter()
+                    formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+                    let taskResult = ApiTaskResult(
+                        kind: kind,
+                        title: task,
+                        body: String(data.text.prefix(500)),
+                        createdAt: formatter.string(from: Date())
+                    )
+                    await tracker.updateRunResult(runId: runId, result: taskResult)
+                }
+
+            default:
+                break
+            }
+        }
+
+        let elapsed = ContinuousClock.now - startTime
+        let durationMs = Int(
+            elapsed.components.seconds * 1000 +
+            elapsed.components.attoseconds / 1_000_000_000_000
+        )
+
+        try? await agent.close()
+
+        let finalStatus: APIRunStatus
+        switch resultSubtype {
+        case .success:
+            finalStatus = .completed
+        case .none:
+            finalStatus = .completed
+        default:
+            finalStatus = .failed
+        }
+
+        return (totalSteps: totalSteps, durationMs: durationMs, replanCount: 0, finalStatus: finalStatus, stepSummaries: stepSummaries, costTelemetry: resultCostTelemetry, externallyModified: false)
+    }
+
     // MARK: - Private Helpers
 
     private static func buildFullSystemPrompt(basePrompt: String, memoryContext: String? = nil) -> String {
