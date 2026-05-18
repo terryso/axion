@@ -310,7 +310,7 @@ enum AxionAPI {
                     // Slot available immediately — launch agent in background
                     let capturedConfig = config
                     _ = _Concurrency.Task.detached {
-                        let result = await AgentRunner.runAgent(
+                        let result = await ApiRunner.runAgent(
                             config: capturedConfig,
                             task: createRequest.task,
                             options: RunOptions(
@@ -359,7 +359,7 @@ enum AxionAPI {
                         await runLockService.release()
                         return
                     }
-                    let result = await AgentRunner.runAgent(
+                    let result = await ApiRunner.runAgent(
                         config: capturedConfig,
                         task: createRequest.task,
                         options: RunOptions(
@@ -394,7 +394,7 @@ enum AxionAPI {
             // No concurrency limiter — original behavior
             let capturedConfig = config
             _ = _Concurrency.Task.detached {
-                let result = await AgentRunner.runAgent(
+                let result = await ApiRunner.runAgent(
                     config: capturedConfig,
                     task: createRequest.task,
                     options: RunOptions(
@@ -661,7 +661,7 @@ enum AxionAPI {
                         let capturedConfig = config
                         let capturedSkill = promptSkill
                         _ = _Concurrency.Task.detached {
-                            let result = await AgentRunner.runSkillAgent(
+                            let result = await ApiRunner.runSkillAgent(
                                 skill: capturedSkill,
                                 task: task,
                                 config: capturedConfig,
@@ -693,7 +693,7 @@ enum AxionAPI {
                                 await activeRunLockService.release()
                                 return
                             }
-                            let result = await AgentRunner.runSkillAgent(
+                            let result = await ApiRunner.runSkillAgent(
                                 skill: capturedSkill,
                                 task: task,
                                 config: capturedConfig,
@@ -724,7 +724,7 @@ enum AxionAPI {
                     let capturedConfig = config
                     let capturedSkill = promptSkill
                     _ = _Concurrency.Task.detached {
-                        let result = await AgentRunner.runSkillAgent(
+                        let result = await ApiRunner.runSkillAgent(
                             skill: capturedSkill,
                             task: task,
                             config: capturedConfig,

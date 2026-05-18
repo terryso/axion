@@ -122,45 +122,6 @@ struct PromptBuilderTests {
         #expect(description.isEmpty)
     }
 
-    @Test("buildPlannerPrompt includes task")
-    func buildPlannerPromptIncludesTask() async throws {
-        let prompt = PromptBuilder.buildPlannerPrompt(
-            task: "Open Calculator and compute 17 * 23",
-            currentStateSummary: "Desktop is visible",
-            maxStepsPerPlan: 10,
-            replanContext: nil
-        )
-
-        #expect(prompt.contains("Open Calculator"))
-        #expect(prompt.contains("10"))
-    }
-
-    @Test("buildPlannerPrompt with replanContext includes failure info")
-    func buildPlannerPromptWithReplanContextIncludesFailureInfo() async throws {
-        let replanContext = ReplanContext(
-            failedStepIndex: 2,
-            failedStep: Step(index: 2, tool: "click", parameters: ["x": .int(100), "y": .int(200)], purpose: "Click button", expectedChange: "Button clicked"),
-            errorMessage: "Element not found at coordinates",
-            executedSteps: [
-                Step(index: 0, tool: "launch_app", parameters: ["name": .string("Safari")], purpose: "Launch Safari", expectedChange: "Safari opens"),
-                Step(index: 1, tool: "click", parameters: ["x": .int(50), "y": .int(50)], purpose: "Click URL bar", expectedChange: "URL bar focused"),
-            ],
-            liveAxTree: nil,
-            runHistory: nil
-        )
-
-        let prompt = PromptBuilder.buildPlannerPrompt(
-            task: "Open Safari",
-            currentStateSummary: "Safari is running",
-            maxStepsPerPlan: 5,
-            replanContext: replanContext
-        )
-
-        #expect(prompt.contains("REPLAN"))
-        #expect(prompt.contains("Element not found"))
-        #expect(prompt.contains("launch_app"))
-    }
-
     @Test("resolvePromptDirectory returns valid path")
     func resolvePromptDirectoryReturnsValidPath() async throws {
         let path = PromptBuilder.resolvePromptDirectory()

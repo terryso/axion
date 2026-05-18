@@ -88,8 +88,21 @@ struct RunCommand: AsyncParsableCommand {
 
             switch lookupService.lookup(name: invocation.name) {
             case .promptSkill(let skill):
+                // Pre-resolve skill via SwiftWork pattern: call SkillTool directly
+                // to get the resolved prompt as a user message. System prompt stays generic.
+                if let resolvedMessage = await AgentBuilder.resolveExplicitSlashSkillRequest(
+                    skill: skill,
+                    args: invocation.args,
+                    skillRegistry: skillRegistry
+                ) {
+                    task = resolvedMessage
+                } else {
+                    // Fallback: use args as task (pre-resolution failed)
+                    task = invocation.args ?? "Execute skill \(skill.name)"
+                }
+                // Keep explicitSkill for model override + tool restriction info,
+                // but do NOT inject skill.promptTemplate into system prompt.
                 explicitSkill = skill
-                task = invocation.args ?? "Execute skill \(skill.name)"
             case .recordedSkill(let skill, let skillPath):
                 // Recorded skill found — execute via SkillExecutor and return early.
                 let paramValues: [String: String]
@@ -120,162 +133,33 @@ struct RunCommand: AsyncParsableCommand {
         )
         let config = try await ConfigManager.loadConfig(cliOverrides: cliOverrides)
 
-        // 2. Resolve API key: config -> environment variable
-        let apiKey = config.apiKey
-            ?? ProcessInfo.processInfo.environment["AXION_API_KEY"]
+        // 2. Build agent via shared builder (API key, helper path, memory, prompt, MCP, hooks, tools)
+        let effectiveMaxSteps = Self.computeEffectiveMaxSteps(fast: fast, maxSteps: maxSteps, configMaxSteps: config.maxSteps)
+        let effectiveMaxTokens = Self.computeEffectiveMaxTokens(fast: fast)
 
-        guard let apiKey, !apiKey.isEmpty else {
-            throw AxionError.missingApiKey(
-                suggestion: "Run 'axion setup' to configure your API key, or set AXION_API_KEY environment variable."
-            )
-        }
-
-        // 3. Resolve Helper path for MCP stdio server
-        let resolvedHelperPath = HelperPathResolver.resolveHelperPath()
-        guard resolvedHelperPath != nil || dryrun else {
-            throw AxionError.helperNotFound(
-                suggestion: "Ensure AxionHelper.app is installed. Run 'axion doctor' to diagnose."
-            )
-        }
-        let helperPath = resolvedHelperPath ?? "/usr/bin/true"
-
-        // 4. Create MemoryStore for cross-run knowledge accumulation (needed before prompt building)
-        let memoryDir = (ConfigManager.defaultConfigDirectory as NSString).appendingPathComponent("memory")
-        let memoryStore = FileBasedMemoryStore(memoryDir: memoryDir)
-
-        // 5. Load system prompt from planner-system.md
-        let promptDir = PromptBuilder.resolvePromptDirectory()
-        let mcpPrefixedToolNames = ToolNames.allToolNames.map { "mcp__axion-helper__\($0)" }
-        let baseSystemPrompt = try PromptBuilder.load(
-            name: "planner-system",
-            variables: [
-                "tools": PromptBuilder.buildToolListDescription(from: mcpPrefixedToolNames),
-                "max_steps": String(config.maxSteps),
-            ],
-            fromDirectory: promptDir
+        let buildConfig = AgentBuilder.BuildConfig.forCLI(
+            config: config,
+            task: task,
+            skillRegistry: skillRegistry,
+            explicitSkill: explicitSkill,
+            noMemory: noMemory,
+            noSkills: noSkills,
+            allowForeground: allowForeground,
+            maxSteps: effectiveMaxSteps,
+            maxTokens: effectiveMaxTokens,
+            verbose: verbose,
+            dryrun: dryrun,
+            fast: fast
         )
 
-        // Build full system prompt with mode-specific instructions
-        // Memory context injection (AC1, AC2, AC3, AC4)
-        let contextProvider = MemoryContextProvider()
-        let factStore = MemoryFactStore(memoryDir: memoryDir)
-        var memoryContext: String? = nil
-        if !noMemory {
-            do {
-                if let factContext = await contextProvider.buildFactMemoryContext(
-                    task: task,
-                    factStore: factStore
-                ) {
-                    memoryContext = factContext
-                } else {
-                    memoryContext = try await contextProvider.buildMemoryContext(
-                        task: task,
-                        store: memoryStore
-                    )
-                }
-            } catch {
-                fputs("[axion] warning: memory context injection failed: \(error.localizedDescription)\n", stderr)
-            }
-        }
-
-        // 5b. Discover and register skills (Story 17.1)
         if skillRegisteredCount > 0 {
             fputs("[axion] 已加载 \(skillRegisteredCount) 个技能\n", stderr)
         }
 
-        let skillsPrompt = noSkills ? "" : skillRegistry.formatSkillsForPrompt()
-
-        let systemPrompt: String
-        if let skill = explicitSkill {
-            // Explicit skill trigger: use promptTemplate + tool list, skip skillsPrompt
-            // When toolRestrictions are set, only list those tools (MCP tools will be blocked)
-            let toolNames: [String]
-            if let restrictions = skill.toolRestrictions {
-                toolNames = restrictions.map(\.rawValue)
-            } else {
-                toolNames = mcpPrefixedToolNames
-            }
-            let toolList = PromptBuilder.buildToolListDescription(from: toolNames)
-            var prompt = skill.promptTemplate
-            prompt += "\n\n## Available Tools\n\(toolList)"
-            if let memCtx = memoryContext, !memCtx.isEmpty {
-                prompt += "\n\n\(memCtx)"
-            }
-            // Skill-scoped Memory injection (Story 18.2 AC2, AC3, AC4)
-            if !noMemory {
-                if let skillMemCtx = await contextProvider.buildSkillMemoryContext(
-                    skillName: skill.name,
-                    task: task,
-                    factStore: factStore
-                ) {
-                    prompt += "\n\n\(skillMemCtx)"
-                }
-            }
-            systemPrompt = prompt
-        } else {
-            systemPrompt = buildFullSystemPrompt(
-                basePrompt: baseSystemPrompt,
-                fast: fast,
-                dryrun: dryrun,
-                verbose: verbose,
-                memoryContext: memoryContext,
-                skillsPrompt: skillsPrompt
-            )
-        }
-
-        // 6. Configure MCP servers: Helper for desktop, Playwright for web
-        let mcpServers: [String: McpServerConfig] = [
-            "axion-helper": .stdio(McpStdioConfig(command: helperPath)),
-            "playwright": .stdio(McpStdioConfig(command: "npx", args: ["@playwright/mcp@latest"])),
-        ]
-
-        // 7. Build safety hook registry
-        let hookRegistry = await buildSafetyHookRegistry(
-            sharedSeatMode: config.sharedSeatMode && !allowForeground
-        )
-
-        // 8. Build AgentOptions
-        let effectiveMaxSteps = Self.computeEffectiveMaxSteps(fast: fast, maxSteps: maxSteps, configMaxSteps: config.maxSteps)
-        let effectiveMaxTokens = Self.computeEffectiveMaxTokens(fast: fast)
-
-        let effectiveModel = explicitSkill?.modelOverride ?? config.model
-
-        var allowedTools: [String]? = nil
-        if let restrictions = explicitSkill?.toolRestrictions {
-            allowedTools = restrictions.map(\.rawValue)
-        }
-
-        // When explicitSkill has tool restrictions, only include restricted tools —
-        // the system prompt already contains the skill's instructions so Skill tool
-        // is not needed, and MCP servers are not needed either.
-        let hasToolRestrictions = explicitSkill?.toolRestrictions != nil
-
-        var agentTools: [ToolProtocol] = [createPauseForHumanTool()]
-        if !noSkills && !hasToolRestrictions {
-            agentTools.append(createSkillTool(registry: skillRegistry))
-        }
-
-        let effectiveMcpServers: [String: McpServerConfig]? = hasToolRestrictions ? nil : mcpServers
-
-        let options = AgentOptions(
-            apiKey: apiKey,
-            model: effectiveModel,
-            baseURL: config.baseURL,
-            systemPrompt: systemPrompt,
-            maxTurns: effectiveMaxSteps,
-            maxTokens: effectiveMaxTokens,
-            permissionMode: .bypassPermissions,
-            tools: agentTools,
-            mcpServers: effectiveMcpServers,
-            memoryStore: memoryStore,
-            hookRegistry: hookRegistry,
-            logLevel: verbose ? .debug : .info,
-            allowedTools: allowedTools,
-            pauseTimeoutMs: 300_000
-        )
-
-        // 8. Create Agent
-        let agent = createAgent(options: options)
+        let buildResult = try await AgentBuilder.build(buildConfig)
+        let agent = buildResult.agent
+        let memoryDir = buildResult.memoryDir
+        let memoryStore = buildResult.agentOptions.memoryStore as! FileBasedMemoryStore
 
         // 9. Select output handler
         let runMode = fast ? "fast" : (dryrun ? "dryrun" : "standard")
@@ -745,70 +629,6 @@ struct RunCommand: AsyncParsableCommand {
     /// Fast takes priority over dryrun when both are set.
     internal static func traceMode(fast: Bool, dryrun: Bool) -> String {
         return fast ? "fast" : (dryrun ? "dryrun" : "standard")
-    }
-
-    /// Builds the full system prompt with mode-specific instructions appended.
-    internal func buildFullSystemPrompt(basePrompt: String, fast: Bool, dryrun: Bool, verbose: Bool, memoryContext: String? = nil, skillsPrompt: String = "") -> String {
-        var prompt = basePrompt
-
-        if fast {
-            prompt += """
-
-            IMPORTANT: You are in FAST mode. Generate the MINIMUM steps needed (1-3 steps max).
-            - Skip discovery steps (list_apps, list_windows, get_accessibility_tree) when the target app is obvious
-            - Do NOT call screenshot for verification — trust tool results
-            - Prefer direct actions (launch_app, type_text, hotkey) over exploration
-            - If a step fails, do NOT retry with alternative approaches — report failure immediately
-            """
-        }
-
-        if dryrun {
-            prompt += "\n\nIMPORTANT: You are in DRYRUN mode. Generate a plan but do NOT execute any tools. Return a plan JSON with status 'done' and the steps you would execute."
-        }
-
-        // Append Memory context if available
-        if let memoryContext, !memoryContext.isEmpty {
-            prompt += "\n\n\(memoryContext)"
-        }
-
-        // Append skills prompt if available (Story 17.1 AC5, Story 17.4 AC1)
-        if !skillsPrompt.isEmpty {
-            prompt += """
-
-            ## Available Skills
-
-            When the user's task matches a skill's TRIGGER condition, call the `Skill` tool with the skill name and arguments. Parameters: `skill` (skill name, required) and `args` (user arguments, optional). The tool returns a JSON with `prompt` (the skill's prompt template) — follow that prompt as your operating instructions for the rest of the task.
-
-            \(skillsPrompt)
-            """
-        }
-
-        return prompt
-    }
-
-    /// Creates a HookRegistry with preToolUse hook implementing SafetyChecker logic.
-    private func buildSafetyHookRegistry(sharedSeatMode: Bool) async -> HookRegistry {
-        let registry = HookRegistry()
-
-        if sharedSeatMode {
-            // SDK passes MCP-prefixed names (e.g. "mcp__axion-helper__click"), so match against those.
-            let foregroundTools = ToolNames.foregroundToolNames.map { "mcp__axion-helper__\($0)" }
-            let safetyHook = HookDefinition(handler: { input in
-                guard let toolName = input.toolName else { return HookOutput(decision: .approve) }
-
-                if foregroundTools.contains(toolName) {
-                    return HookOutput(
-                        decision: .block,
-                        reason: "Tool '\(toolName)' requires foreground interaction and is blocked in shared seat mode for safety. Use --allow-foreground to enable."
-                    )
-                }
-                return HookOutput(decision: .approve)
-            })
-
-            await registry.register(.preToolUse, definition: safetyHook)
-        }
-
-        return registry
     }
 
     /// Build a text content string from an AppProfile for storage as KnowledgeEntry.

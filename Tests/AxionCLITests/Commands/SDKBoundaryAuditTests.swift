@@ -108,12 +108,12 @@ struct SDKBoundaryAuditTests {
         guard SDK_API_USAGE_VERIFIED else { return }
 
         let sourcesDir = sourcesDirectory()
-        let runCommandPath = "\(sourcesDir)/AxionCLI/Commands/RunCommand.swift"
-
-        let content = try String(contentsOfFile: runCommandPath, encoding: .utf8)
+        // createAgent is called via AgentBuilder — check both RunCommand and AgentBuilder
+        let agentBuilderPath = "\(sourcesDir)/AxionCLI/Services/AgentBuilder.swift"
+        let content = try String(contentsOfFile: agentBuilderPath, encoding: .utf8)
 
         #expect(content.contains("createAgent("),
-            "RunCommand MUST use createAgent() public API from OpenAgentSDK")
+            "AgentBuilder MUST use createAgent() public API from OpenAgentSDK")
     }
 
     // ========================================================================
@@ -142,14 +142,14 @@ struct SDKBoundaryAuditTests {
         guard SDK_API_USAGE_VERIFIED else { return }
 
         let sourcesDir = sourcesDirectory()
-        let runCommandPath = "\(sourcesDir)/AxionCLI/Commands/RunCommand.swift"
-
-        let content = try String(contentsOfFile: runCommandPath, encoding: .utf8)
+        // MCP config is now in AgentBuilder
+        let agentBuilderPath = "\(sourcesDir)/AxionCLI/Services/AgentBuilder.swift"
+        let content = try String(contentsOfFile: agentBuilderPath, encoding: .utf8)
 
         #expect(content.contains("McpStdioConfig("),
-            "RunCommand MUST use McpStdioConfig to configure Helper as MCP stdio server")
+            "AgentBuilder MUST use McpStdioConfig to configure Helper as MCP stdio server")
         #expect(content.contains("McpServerConfig"),
-            "RunCommand MUST use McpServerConfig for MCP server configuration")
+            "AgentBuilder MUST use McpServerConfig for MCP server configuration")
     }
 
     // ========================================================================
@@ -161,13 +161,13 @@ struct SDKBoundaryAuditTests {
         guard SDK_API_USAGE_VERIFIED else { return }
 
         let sourcesDir = sourcesDirectory()
-        let runCommandPath = "\(sourcesDir)/AxionCLI/Commands/RunCommand.swift"
+        // HookRegistry is now managed by AgentBuilder
+        let agentBuilderPath = "\(sourcesDir)/AxionCLI/Services/AgentBuilder.swift"
+        let content = try String(contentsOfFile: agentBuilderPath, encoding: .utf8)
 
-        let content = try String(contentsOfFile: runCommandPath, encoding: .utf8)
-
-        #expect(content.contains("HookRegistry"), "RunCommand MUST use HookRegistry for hook management")
-        #expect(content.contains("HookDefinition"), "RunCommand MUST use HookDefinition for hook configuration")
-        #expect(content.contains(".preToolUse"), "RunCommand MUST register preToolUse hook for safety checking")
+        #expect(content.contains("HookRegistry"), "AgentBuilder MUST use HookRegistry for hook management")
+        #expect(content.contains("HookDefinition"), "AgentBuilder MUST use HookDefinition for hook configuration")
+        #expect(content.contains(".preToolUse"), "AgentBuilder MUST register preToolUse hook for safety checking")
     }
 
     // ========================================================================

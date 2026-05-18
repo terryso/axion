@@ -99,7 +99,7 @@ struct RealLLME2ETests {
 
         // Verify the result is success
         if let result = finalResult {
-            #expect(result.subtype == .success, "Task should complete successfully, got: \(result.subtype)")
+            #expect(result.subtype == .success, "Task should complete successfully, got: \(String(describing: result.subtype))")
         }
 
         // Clean up: quit Calculator
@@ -182,7 +182,7 @@ struct RealLLME2ETests {
         #expect(!toolCalls.isEmpty, "Agent should have called at least one tool")
 
         if let result = finalResult {
-            #expect(result.subtype == .success, "Task should complete successfully, got: \(result.subtype)")
+            #expect(result.subtype == .success, "Task should complete successfully, got: \(String(describing: result.subtype))")
         }
         await fixture.tearDown()
     }
@@ -279,7 +279,7 @@ struct RealLLME2ETests {
         )
 
         if let result = finalResult {
-            #expect(result.subtype == .success, "Task should complete successfully, got: \(result.subtype)")
+            #expect(result.subtype == .success, "Task should complete successfully, got: \(String(describing: result.subtype))")
         }
 
         // Clean up: quit TextEdit
@@ -315,7 +315,7 @@ struct RealLLME2ETests {
         )
 
         if let result = finalResult {
-            #expect(result.subtype == .success, "Task should complete successfully, got: \(result.subtype)")
+            #expect(result.subtype == .success, "Task should complete successfully, got: \(String(describing: result.subtype))")
         }
         await fixture.tearDown()
     }
@@ -346,7 +346,7 @@ struct RealLLME2ETests {
         )
 
         if let result = finalResult {
-            #expect(result.subtype == .success, "Task should complete successfully, got: \(result.subtype)")
+            #expect(result.subtype == .success, "Task should complete successfully, got: \(String(describing: result.subtype))")
         }
         await fixture.tearDown()
     }

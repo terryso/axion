@@ -66,6 +66,11 @@
 
 generated: 2026-05-08
 last_updated: 2026-05-18
+# story-19-3-started: 2026-05-18
+# story-20-1-created: 2026-05-18
+# story-19-3-created: 2026-05-18
+# story-19-2-created: 2026-05-18
+# story-19-1-created: 2026-05-18
 # retro-epic-18: 2026-05-18
 # story-18-3-done: 2026-05-18
 # story-18-3-created: 2026-05-18
@@ -247,13 +252,13 @@ development_status:
   # ============================================================
 
   # Epic 19: SDK 使用方式对齐重构
-  epic-19: backlog
-  19-1-unified-agent-execution-entry: backlog
-  19-2-skill-swiftwork-alignment: backlog
-  19-3-api-runner-alignment: backlog
+  epic-19: in-progress
+  19-1-unified-agent-execution-entry: done
+  19-2-skill-swiftwork-alignment: done
+  19-3-api-runner-alignment: done
   epic-19-retrospective: optional
 
   # Epic 20: 死代码清理与架构精简
-  epic-20: backlog
-  20-1-delete-dead-agent-loop-code: backlog
+  epic-20: in-progress
+  20-1-delete-dead-agent-loop-code: done
   epic-20-retrospective: optional

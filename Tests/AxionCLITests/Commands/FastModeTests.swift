@@ -24,13 +24,11 @@ struct FastModeTests {
     // MARK: - Task 2: Fast Mode System Prompt (AC#2)
 
     @Test("fast mode system prompt includes fast instructions")
-    func buildFullSystemPromptFastModeIncludesFastInstructions() throws {
-        let command = try RunCommand.parse(["test-task", "--fast"])
-        let prompt = command.buildFullSystemPrompt(
+    func buildCLISystemPromptFastModeIncludesFastInstructions() {
+        let prompt = AgentBuilder.buildCLISystemPrompt(
             basePrompt: "Base prompt",
             fast: true,
-            dryrun: false,
-            verbose: false
+            dryrun: false
         )
         #expect(prompt.contains("FAST mode"))
         #expect(prompt.contains("1-3 steps max"))
@@ -40,13 +38,11 @@ struct FastModeTests {
     }
 
     @Test("fast mode system prompt appears before dryrun")
-    func buildFullSystemPromptFastModeBeforeDryrun() throws {
-        let command = try RunCommand.parse(["test-task", "--fast", "--dryrun"])
-        let prompt = command.buildFullSystemPrompt(
+    func buildCLISystemPromptFastModeBeforeDryrun() {
+        let prompt = AgentBuilder.buildCLISystemPrompt(
             basePrompt: "Base prompt",
             fast: true,
-            dryrun: true,
-            verbose: false
+            dryrun: true
         )
         let fastRange = prompt.range(of: "FAST mode")!
         let dryrunRange = prompt.range(of: "DRYRUN mode")!
@@ -54,13 +50,11 @@ struct FastModeTests {
     }
 
     @Test("standard mode has no fast instructions")
-    func buildFullSystemPromptStandardModeNoFastInstructions() throws {
-        let command = try RunCommand.parse(["test-task"])
-        let prompt = command.buildFullSystemPrompt(
+    func buildCLISystemPromptStandardModeNoFastInstructions() {
+        let prompt = AgentBuilder.buildCLISystemPrompt(
             basePrompt: "Base prompt",
             fast: false,
-            dryrun: false,
-            verbose: false
+            dryrun: false
         )
         #expect(!prompt.contains("FAST mode"))
     }

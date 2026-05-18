@@ -44,7 +44,7 @@ struct MCPServerRunner {
             return
         }
 
-        // 3. Build system prompt (reuse AgentRunner logic)
+        // 3. Build system prompt (reuse ApiRunner logic)
         let memoryDir = (ConfigManager.defaultConfigDirectory as NSString).appendingPathComponent("memory")
         let memoryStore = FileBasedMemoryStore(memoryDir: memoryDir)
 
@@ -147,7 +147,7 @@ struct MCPServerRunner {
         let registry = HookRegistry()
 
         if sharedSeatMode {
-            let foregroundTools = ToolNames.foregroundToolNames
+            let foregroundTools = ToolNames.foregroundToolNames.map { "mcp__axion-helper__\($0)" }
             let safetyHook = HookDefinition(handler: { input in
                 guard let toolName = input.toolName else { return HookOutput(decision: .approve) }
 

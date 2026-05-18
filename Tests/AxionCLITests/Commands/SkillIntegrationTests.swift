@@ -161,13 +161,9 @@ struct SkillIntegrationTests {
     // MARK: - AC5: Skills prompt injected into system prompt
 
     @Test("buildFullSystemPrompt appends skills section")
-    func test_buildFullSystemPrompt_withSkills() throws {
-        let cmd = try RunCommand.parse(["test"])
-        let prompt = cmd.buildFullSystemPrompt(
+    func test_buildFullSystemPrompt_withSkills() {
+        let prompt = AgentBuilder.buildFullSystemPrompt(
             basePrompt: "Base prompt",
-            fast: false,
-            dryrun: false,
-            verbose: false,
             skillsPrompt: "- my-skill: A useful skill"
         )
 
@@ -176,17 +172,45 @@ struct SkillIntegrationTests {
     }
 
     @Test("buildFullSystemPrompt without skills does not append section")
-    func test_buildFullSystemPrompt_withoutSkills() throws {
-        let cmd = try RunCommand.parse(["test"])
-        let prompt = cmd.buildFullSystemPrompt(
+    func test_buildFullSystemPrompt_withoutSkills() {
+        let prompt = AgentBuilder.buildFullSystemPrompt(
             basePrompt: "Base prompt",
-            fast: false,
-            dryrun: false,
-            verbose: false,
             skillsPrompt: ""
         )
 
         #expect(!prompt.contains("## Available Skills"))
+    }
+
+    // MARK: - Story 19.2: No allowedTools set for explicit skill
+
+    @Test("Explicit skill path no longer sets allowedTools — SDK manages via ToolRestrictionStack")
+    func testExplicitSkillNoAllowedTools() {
+        let skill = OpenAgentSDK.Skill(
+            name: "restricted",
+            description: "Restricted skill",
+            toolRestrictions: [.bash, .read],
+            promptTemplate: "Do stuff"
+        )
+
+        // After Story 19.2: allowedTools is NOT set by application layer.
+        // SDK's ToolRestrictionStack manages tool filtering internally
+        // when SkillTool.call() is invoked via pre-resolution.
+        // We verify the restriction info is still on the skill object for the builder to use.
+        #expect(skill.toolRestrictions != nil)
+        #expect(skill.toolRestrictions?.map(\.rawValue) == ["bash", "read"])
+
+        // Verify AgentBuilder does NOT have any allowedTools-setting code path.
+        // The build() method should not reference allowedTools in AgentOptions.
+        let sourcesDir = FileManager.default.currentDirectoryPath + "/Sources/AxionCLI/Services/AgentBuilder.swift"
+        if let content = try? String(contentsOfFile: sourcesDir, encoding: .utf8) {
+            // Verify no "allowedTools" assignment in AgentOptions construction
+            let optionsBlock = content.components(separatedBy: "AgentOptions(")
+            if optionsBlock.count > 1 {
+                let optionsBody = optionsBlock[1].components(separatedBy: ")").first ?? ""
+                #expect(!optionsBody.contains("allowedTools"),
+                    "AgentOptions must NOT contain allowedTools — SDK manages via ToolRestrictionStack")
+            }
+        }
     }
 
     // MARK: - AC6: --no-skills mode
@@ -203,12 +227,10 @@ struct SkillIntegrationTests {
     @Test("No skills prompt when --no-skills mode")
     func test_noSkillsMode_noPromptInjection() throws {
         let cmd = try RunCommand.parse(["--no-skills", "test"])
-        let prompt = cmd.buildFullSystemPrompt(
+        let skillsPrompt = cmd.noSkills ? "" : "dummy"
+        let prompt = AgentBuilder.buildFullSystemPrompt(
             basePrompt: "Base",
-            fast: false,
-            dryrun: false,
-            verbose: false,
-            skillsPrompt: ""
+            skillsPrompt: skillsPrompt
         )
         #expect(!prompt.contains("Available Skills"))
     }
@@ -225,11 +247,8 @@ struct SkillIntegrationTests {
     func test_noSkillsFlag_omitsSkillsFromPrompt() throws {
         let cmd = try RunCommand.parse(["--no-skills", "test"])
         #expect(cmd.noSkills == true)
-        let prompt = cmd.buildFullSystemPrompt(
+        let prompt = AgentBuilder.buildFullSystemPrompt(
             basePrompt: "Base",
-            fast: false,
-            dryrun: false,
-            verbose: false,
             skillsPrompt: ""
         )
         #expect(!prompt.contains("Available Skills"))

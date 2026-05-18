@@ -1,29 +1,5 @@
 import Foundation
 
-// MARK: - Step
-
-public struct Step: Codable, Equatable {
-    public let index: Int
-    public let tool: String
-    public let parameters: [String: Value]
-    public let purpose: String
-    public let expectedChange: String
-
-    public init(
-        index: Int,
-        tool: String,
-        parameters: [String: Value],
-        purpose: String,
-        expectedChange: String
-    ) {
-        self.index = index
-        self.tool = tool
-        self.parameters = parameters
-        self.purpose = purpose
-        self.expectedChange = expectedChange
-    }
-}
-
 // MARK: - Value
 
 public enum Value: Codable, Equatable, Sendable {

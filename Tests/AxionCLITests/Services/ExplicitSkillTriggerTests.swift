@@ -9,7 +9,64 @@ import Testing
 @Suite("ExplicitSkillTrigger")
 struct ExplicitSkillTriggerTests {
 
-    // MARK: - AC1: Prompt skill — promptTemplate injected as systemPrompt
+    // MARK: - AC1: Pre-resolution via resolveExplicitSlashSkillRequest
+
+    @Test("AC1: resolveExplicitSlashSkillRequest returns non-nil for valid skill")
+    func testPreResolutionReturnsPromptForValidSkill() async {
+        let registry = SkillRegistry()
+        registry.register(Skill(
+            name: "test-skill",
+            description: "Test",
+            promptTemplate: "You are a test agent. Do X, Y, Z."
+        ))
+
+        let result = await AgentBuilder.resolveExplicitSlashSkillRequest(
+            skill: Skill(name: "test-skill", description: "Test", promptTemplate: "You are a test agent. Do X, Y, Z."),
+            args: "获取频道列表",
+            skillRegistry: registry
+        )
+
+        #expect(result != nil)
+        // Verify the full promptTemplate content is returned by pre-resolution
+        #expect(result!.contains("You are a test agent"))
+        #expect(result!.contains("Do X, Y, Z"))
+    }
+
+    @Test("AC1: resolveExplicitSlashSkillRequest returns nil for non-existent skill")
+    func testPreResolutionReturnsNilForNonExistentSkill() async {
+        let registry = SkillRegistry()
+
+        let result = await AgentBuilder.resolveExplicitSlashSkillRequest(
+            skill: Skill(name: "non-existent", description: "Missing", promptTemplate: "Template"),
+            args: nil,
+            skillRegistry: registry
+        )
+
+        #expect(result == nil)
+    }
+
+    @Test("AC1: Pre-resolution returns user message, not system prompt injection")
+    func testPreResolutionReturnsUserMessage() async {
+        let registry = SkillRegistry()
+        let template = "你是直播管理助手。执行以下任务。"
+        registry.register(Skill(
+            name: "polyv-live-cli",
+            description: "直播管理",
+            promptTemplate: template
+        ))
+
+        let result = await AgentBuilder.resolveExplicitSlashSkillRequest(
+            skill: Skill(name: "polyv-live-cli", description: "直播管理", promptTemplate: template),
+            args: "获取频道列表",
+            skillRegistry: registry
+        )
+
+        #expect(result != nil)
+        // The resolved prompt should contain the skill template content
+        #expect(result!.contains("直播管理助手"))
+    }
+
+    // MARK: - AC1: Prompt skill — invocation parsing
 
     @Test("AC1: Explicit prompt skill parses invocation correctly")
     func testPromptTemplateInjection() throws {
@@ -20,26 +77,20 @@ struct ExplicitSkillTriggerTests {
         #expect(invocation?.args == "获取频道列表")
     }
 
-    @Test("AC1: Explicit skill prompt includes promptTemplate and Available Tools, no Skills section")
-    func testExplicitSkillPromptContent() {
-        let skill = OpenAgentSDK.Skill(
-            name: "test-skill",
-            description: "Test",
-            promptTemplate: "You are a test skill agent. Do X, Y, Z.",
-            whenToUse: "when testing"
+    @Test("AC1: System prompt is generic planner — skill content is in user message")
+    func testExplicitSkillSystemPromptIsGeneric() {
+        // After refactoring: system prompt is always the generic planner prompt.
+        // Skill content is passed as user message via pre-resolution.
+        let result = AgentBuilder.buildFullSystemPrompt(
+            basePrompt: "Base planner prompt",
+            skillsPrompt: ""
         )
-
-        let toolList = PromptBuilder.buildToolListDescription(from: ["mcp__axion-helper__click"])
-        var prompt = skill.promptTemplate
-        prompt += "\n\n## Available Tools\n\(toolList)"
-
-        #expect(prompt.hasPrefix("You are a test skill agent"))
-        #expect(prompt.contains("## Available Tools"))
-        #expect(!prompt.contains("## Available Skills"))
+        #expect(result.contains("Base planner prompt"))
+        #expect(!result.contains("You are a test skill agent"))
     }
 
-    @Test("AC2/H1: toolRestrictions limits Available Tools in prompt, no MCP tools listed")
-    func testToolRestrictionsLimitsToolList() {
+    @Test("AC2/H1: toolRestrictions are preserved in explicitSkill for model/restriction info")
+    func testToolRestrictionsPreserved() {
         let skill = OpenAgentSDK.Skill(
             name: "restricted",
             description: "Restricted skill",
@@ -47,52 +98,30 @@ struct ExplicitSkillTriggerTests {
             promptTemplate: "Do stuff"
         )
 
-        // Simulate the conditional logic from RunCommand
-        let mcpPrefixedToolNames = ["mcp__axion-helper__click", "mcp__axion-helper__screenshot"]
-        let toolNames: [String]
-        if let restrictions = skill.toolRestrictions {
-            toolNames = restrictions.map(\.rawValue)
-        } else {
-            toolNames = mcpPrefixedToolNames
-        }
-        let toolList = PromptBuilder.buildToolListDescription(from: toolNames)
-        var prompt = skill.promptTemplate
-        prompt += "\n\n## Available Tools\n\(toolList)"
-
-        #expect(prompt.contains("## Available Tools"))
-        #expect(prompt.contains("bash"))
-        #expect(prompt.contains("read"))
-        #expect(!prompt.contains("mcp__axion-helper__"))
+        // After refactoring: toolRestrictions still available on the skill object
+        // for SDK's ToolRestrictionStack management, not for system prompt construction
+        let restrictions = skill.toolRestrictions
+        #expect(restrictions != nil)
+        #expect(restrictions!.map(\.rawValue) == ["bash", "read"])
     }
 
-    @Test("AC1: Explicit skill prompt includes memory context when available")
+    @Test("AC1: Memory context still injected in generic system prompt")
     func testExplicitSkillPromptWithMemory() {
-        let skill = OpenAgentSDK.Skill(
-            name: "test-skill",
-            description: "Test",
-            promptTemplate: "Do the thing."
+        // Memory is still injected into the generic system prompt
+        let result = AgentBuilder.buildFullSystemPrompt(
+            basePrompt: "Base prompt",
+            memoryContext: "## Memory\nYou previously worked with Calculator app.",
+            skillsPrompt: ""
         )
 
-        let toolList = PromptBuilder.buildToolListDescription(from: [])
-        var prompt = skill.promptTemplate
-        prompt += "\n\n## Available Tools\n\(toolList)"
-        let memoryContext = "## Memory\nYou previously worked with Calculator app."
-        prompt += "\n\n\(memoryContext)"
-
-        #expect(prompt.contains("## Memory"))
-        #expect(prompt.contains("Calculator"))
+        #expect(result.contains("## Memory"))
+        #expect(result.contains("Calculator"))
     }
 
     @Test("AC1: Normal flow uses buildFullSystemPrompt with Available Skills")
-    func testNormalFlowIncludesSkills() throws {
-        let cmd = try RunCommand.parse(["do something"])
-        // In normal flow, buildFullSystemPrompt appends skillsPrompt
-        let result = cmd.buildFullSystemPrompt(
+    func testNormalFlowIncludesSkills() {
+        let result = AgentBuilder.buildFullSystemPrompt(
             basePrompt: "Base prompt",
-            fast: false,
-            dryrun: false,
-            verbose: false,
-            memoryContext: nil,
             skillsPrompt: "- **test-skill**: Test skill"
         )
         #expect(result.hasPrefix("Base prompt"))
@@ -254,8 +283,8 @@ struct ExplicitSkillTriggerTests {
 
     // MARK: - Combined: explicit trigger with all features
 
-    @Test("Combined: explicit skill with promptTemplate + toolRestrictions + modelOverride")
-    func testCombinedExplicitTrigger() {
+    @Test("Combined: explicit skill with toolRestrictions + modelOverride uses pre-resolution")
+    func testCombinedExplicitTrigger() async {
         let skill = OpenAgentSDK.Skill(
             name: "polyv-live-cli",
             description: "直播管理",
@@ -265,16 +294,20 @@ struct ExplicitSkillTriggerTests {
         )
 
         let effectiveModel = skill.modelOverride ?? "claude-sonnet-4-6"
-        let allowedTools: [String]? = skill.toolRestrictions?.map(\.rawValue)
-
         #expect(effectiveModel == "claude-opus-4-6")
-        #expect(allowedTools == ["bash", "read", "glob", "grep"])
 
-        let toolList = PromptBuilder.buildToolListDescription(from: ["mcp__axion-helper__click"])
-        var prompt = skill.promptTemplate
-        prompt += "\n\n## Available Tools\n\(toolList)"
-        #expect(prompt.hasPrefix("你是直播管理助手"))
-        #expect(prompt.contains("## Available Tools"))
+        // Pre-resolution: skill content goes to user message, not system prompt
+        let registry = SkillRegistry()
+        registry.register(skill)
+
+        let resolved = await AgentBuilder.resolveExplicitSlashSkillRequest(
+            skill: skill,
+            args: "获取频道列表",
+            skillRegistry: registry
+        )
+
+        #expect(resolved != nil)
+        #expect(resolved!.contains("直播管理助手"))
     }
 
     // MARK: - Task override when no args provided
