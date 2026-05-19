@@ -1099,6 +1099,103 @@ public class Agent: CustomStringConvertible, CustomDebugStringConvertible, @unch
         return await promptImpl(prompt)
     }
 
+    /// Execute a registered skill by name, returning results as a stream of ``SDKMessage`` events.
+    ///
+    /// This is the streaming counterpart to ``executeSkill(_:args:)``. It applies the same
+    /// skill lookup, tool restrictions, and model overrides, but yields ``SDKMessage`` events
+    /// as they arrive instead of waiting for the full result.
+    ///
+    /// State (allowedTools, model) is automatically restored when the stream finishes.
+    ///
+    /// - Parameters:
+    ///   - skillName: The skill name or alias to execute.
+    ///   - args: Optional arguments to append to the skill's prompt template.
+    /// - Returns: An ``AsyncStream`` of ``SDKMessage`` events.
+    public func executeSkillStream(_ skillName: String, args: String? = nil) -> AsyncStream<SDKMessage> {
+        guard !isClosed else {
+            return AsyncStream<SDKMessage> { $0.finish() }
+        }
+
+        guard let skill = options.skillRegistry?.find(skillName) else {
+            return AsyncStream<SDKMessage> { continuation in
+                continuation.yield(.result(SDKMessage.ResultData(
+                    subtype: .errorDuringExecution,
+                    text: "",
+                    usage: nil,
+                    numTurns: 0,
+                    durationMs: 0,
+                    totalCostUsd: 0,
+                    errors: ["Skill \"\(skillName)\" not found or not registered"]
+                )))
+                continuation.finish()
+            }
+        }
+
+        guard skill.isAvailable() else {
+            return AsyncStream<SDKMessage> { continuation in
+                continuation.yield(.result(SDKMessage.ResultData(
+                    subtype: .errorDuringExecution,
+                    text: "",
+                    usage: nil,
+                    numTurns: 0,
+                    durationMs: 0,
+                    totalCostUsd: 0,
+                    errors: ["Skill \"\(skillName)\" is not available in the current environment"]
+                )))
+                continuation.finish()
+            }
+        }
+
+        let prompt: String
+        if let args, !args.isEmpty {
+            prompt = "\(skill.promptTemplate)\n\n---\nUser request: \(args)"
+        } else {
+            prompt = skill.promptTemplate
+        }
+
+        let savedAllowedTools = options.allowedTools
+        let savedModel = model
+
+        if let restrictions = skill.toolRestrictions {
+            options.allowedTools = restrictions.map(\.rawValue)
+        }
+        let hasModelOverride: Bool
+        if let modelOverride = skill.modelOverride, !modelOverride.isEmpty {
+            self.model = modelOverride
+            options.model = modelOverride
+            hasModelOverride = true
+        } else {
+            hasModelOverride = false
+        }
+
+        let resultStream = stream(prompt)
+
+        // Wrap to restore state when the stream finishes
+        return AsyncStream<SDKMessage> { continuation in
+            let task = _Concurrency.Task {
+                for await message in resultStream {
+                    continuation.yield(message)
+                }
+                // Restore original state after stream completes
+                self.options.allowedTools = savedAllowedTools
+                if hasModelOverride {
+                    self.model = savedModel
+                    self.options.model = savedModel
+                }
+                continuation.finish()
+            }
+            continuation.onTermination = { @Sendable _ in
+                task.cancel()
+                // Restore state on early termination too
+                self.options.allowedTools = savedAllowedTools
+                if hasModelOverride {
+                    self.model = savedModel
+                    self.options.model = savedModel
+                }
+            }
+        }
+    }
+
     /// Internal implementation of prompt(), separated for cancellation handler support.
     private func promptImpl(_ text: String) async -> QueryResult {
         let startTime = ContinuousClock.now

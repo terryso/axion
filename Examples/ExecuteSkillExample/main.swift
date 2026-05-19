@@ -13,6 +13,7 @@
 //   2. 编程式注册自定义技能
 //   3. 通过 executeSkill() 直接执行，支持 args 传参、toolRestrictions、modelOverride
 //   4. 执行后自动恢复 agent 原始状态（allowedTools、model）
+//   5. 通过 executeSkillStream() 流式执行技能，实时接收 SDKMessage 事件
 //
 // 运行方式：swift run ExecuteSkillExample
 // 前提条件：在 .env 文件或环境变量中设置 CODEANY_API_KEY 或 ANTHROPIC_API_KEY
@@ -138,6 +139,40 @@ registry.register(restrictedSkill)
 print("  Before executeSkill: model=\(agent.model)")
 _ = await agent.executeSkill("read-only-analysis")
 print("  After executeSkill:  model=\(agent.model) (restored)")
+print()
+
+// MARK: - Part 6: executeSkillStream() 流式执行
+
+print("--- Part 6: Streaming executeSkillStream() ---")
+print("  Calling: agent.executeSkillStream(\"greet\")")
+print()
+
+let stream = agent.executeSkillStream("greet")
+var streamedText = ""
+var streamTurns = 0
+var streamCost: Double = 0
+var streamDuration: Int = 0
+for await message in stream {
+    switch message {
+    case .partialMessage(let data):
+        // 实时输出流式文本片段
+        print(data.text, terminator: "")
+        fflush(stdout)
+    case .result(let data):
+        streamedText = data.text
+        streamTurns = data.numTurns
+        streamCost = data.totalCostUsd
+        streamDuration = data.durationMs
+    default:
+        break
+    }
+}
+print()
+print()
+print("  Status: success")
+print("  Turns: \(streamTurns)")
+print("  Duration: \(streamDuration)ms")
+print("  Cost: $\(String(format: "%.6f", streamCost))")
 print()
 
 print("=== ExecuteSkillExample Completed ===")
