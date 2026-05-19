@@ -1017,6 +1017,88 @@ public class Agent: CustomStringConvertible, CustomDebugStringConvertible, @unch
         return await promptImpl(text)
     }
 
+    /// Executes a registered skill directly by name, bypassing LLM skill-discovery.
+    ///
+    /// Unlike `prompt()`, which lets the LLM decide whether to invoke a skill,
+    /// this method resolves the skill by name, injects its prompt template as
+    /// the user message, applies tool restrictions and model overrides, then
+    /// runs the normal agent loop. This saves one round-trip to the LLM and
+    /// provides deterministic skill routing — ideal for CLI slash-command dispatch.
+    ///
+    /// - Parameters:
+    ///   - skillName: The skill name or alias to execute.
+    ///   - args: Optional user arguments appended to the skill's prompt template.
+    /// - Returns: A ``QueryResult`` with the agent's response.
+    public func executeSkill(_ skillName: String, args: String? = nil) async -> QueryResult {
+        guard !isClosed else {
+            return QueryResult(
+                text: "", usage: TokenUsage(inputTokens: 0, outputTokens: 0),
+                numTurns: 0, durationMs: 0, messages: [],
+                status: .errorDuringExecution,
+                errors: ["Agent is already closed"]
+            )
+        }
+
+        // Find skill in registry
+        guard let skill = options.skillRegistry?.find(skillName) else {
+            return QueryResult(
+                text: "", usage: TokenUsage(inputTokens: 0, outputTokens: 0),
+                numTurns: 0, durationMs: 0, messages: [],
+                status: .errorDuringExecution,
+                errors: ["Skill \"\(skillName)\" not found or not registered"]
+            )
+        }
+
+        // Check availability
+        guard skill.isAvailable() else {
+            return QueryResult(
+                text: "", usage: TokenUsage(inputTokens: 0, outputTokens: 0),
+                numTurns: 0, durationMs: 0, messages: [],
+                status: .errorDuringExecution,
+                errors: ["Skill \"\(skillName)\" is not available in the current environment"]
+            )
+        }
+
+        // Build prompt from skill template + args
+        let prompt: String
+        if let args, !args.isEmpty {
+            prompt = "\(skill.promptTemplate)\n\n---\nUser request: \(args)"
+        } else {
+            prompt = skill.promptTemplate
+        }
+
+        // Save current state for restoration after execution
+        let savedAllowedTools = options.allowedTools
+        let savedModel = model
+
+        // Apply skill overrides: tool restrictions → allowedTools filter
+        if let restrictions = skill.toolRestrictions {
+            options.allowedTools = restrictions.map(\.rawValue)
+        }
+
+        // Apply skill model override
+        let hasModelOverride: Bool
+        if let modelOverride = skill.modelOverride, !modelOverride.isEmpty {
+            self.model = modelOverride
+            options.model = modelOverride
+            hasModelOverride = true
+        } else {
+            hasModelOverride = false
+        }
+
+        defer {
+            // Restore original state
+            options.allowedTools = savedAllowedTools
+            if hasModelOverride {
+                self.model = savedModel
+                options.model = savedModel
+            }
+        }
+
+        _interrupted = false
+        return await promptImpl(prompt)
+    }
+
     /// Internal implementation of prompt(), separated for cancellation handler support.
     private func promptImpl(_ text: String) async -> QueryResult {
         let startTime = ContinuousClock.now

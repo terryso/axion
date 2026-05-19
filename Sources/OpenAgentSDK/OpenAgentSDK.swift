@@ -135,4 +135,4 @@
 /// - ``clearPauseHandler()`` — Clear the pause handler
 
 /// Current SDK version.
-public let SDK_VERSION = "0.3.6"
+public let SDK_VERSION = "0.3.7"
