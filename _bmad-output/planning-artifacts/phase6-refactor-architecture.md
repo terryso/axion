@@ -80,8 +80,8 @@ graph TB
     end
 
     subgraph 共享函数["共享 Agent 构建层"]
-        BAA["buildAndRunAgent()"]
-        SRS["Skill 预解析<br/>resolveExplicitSkill()"]
+        BAA["AgentBuilder.build()"]
+        SRS["Skill 预解析<br/>AgentBuilder.resolveExplicitSlashSkillRequest()"]
         HOOK["SafetyHook<br/>（shared seat mode 前台工具阻止）"]
         MEM["MemoryContextProvider<br/>FactStore（记忆注入 system prompt）"]
     end
@@ -120,8 +120,8 @@ graph TB
 |---|---|---|
 | **RunCommand** | CLI 参数解析、终端输出、TakeoverIO | 不构建 AgentOptions、不处理 skill prompt、不做 SafetyHook/Memory |
 | **ApiRunner** | HTTP 请求解析、SSE 推送、结果持久化、CostTracking、SeatMonitor | 不构建 AgentOptions、不处理 skill prompt、不做 SafetyHook/Memory |
-| **buildAndRunAgent()** | 加载配置、注册 skill、SafetyHook、Memory 注入、构建 AgentOptions、调 agent.stream() | 不做输出格式化（交给调用方） |
-| **resolveExplicitSkill()** | 预解析 /skill-name、格式化为 user message | 不改 system prompt、不设 allowedTools |
+| **AgentBuilder.build()** | 加载配置、注册 skill、SafetyHook、Memory 注入、构建 AgentOptions、调 agent.stream() | 不做输出格式化（交给调用方） |
+| **AgentBuilder.resolveExplicitSlashSkillRequest()** | 预解析 /skill-name、格式化为 user message | 不改 system prompt、不设 allowedTools |
 | **SDK** | Agent loop、工具执行、Skill 生命周期、restrictionStack 过滤 | — |
 
 ### 重构后数据流
@@ -132,14 +132,14 @@ graph TB
          ▼
 ┌─ RunCommand ──────────────────────────────┐
 │ 1. 解析 CLI 参数                           │
-│ 2. 调用 resolveExplicitSkill()            │
+│ 2. 调用 resolveExplicitSlashSkillRequest()│
 │    → 预解析 skill，生成 user message       │
-│ 3. 调用 buildAndRunAgent(config, task, options) │
+│ 3. 调用 AgentBuilder.build(config)         │
 │ 4. 处理 stream 输出 → 终端打印             │
 └───────────────────────────────────────────┘
          │
          ▼
-┌─ buildAndRunAgent() ──────────────────────┐
+┌─ AgentBuilder.build() ────────────────────┐
 │ 1. 加载配置、解析 API key                  │
 │ 2. 注册 SkillRegistry                     │
 │ 3. 构建 SafetyHook（shared seat mode）    │

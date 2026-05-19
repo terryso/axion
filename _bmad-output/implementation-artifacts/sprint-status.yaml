@@ -65,7 +65,8 @@
 # - Dev moves story to 'review', then runs code-review (fresh context, different LLM recommended)
 
 generated: 2026-05-08
-last_updated: 2026-05-18
+last_updated: 2026-05-19
+# retro-epic-20: 2026-05-19
 # story-19-3-started: 2026-05-18
 # story-20-1-created: 2026-05-18
 # story-19-3-created: 2026-05-18
@@ -252,13 +253,13 @@ development_status:
   # ============================================================
 
   # Epic 19: SDK 使用方式对齐重构
-  epic-19: in-progress
+  epic-19: done
   19-1-unified-agent-execution-entry: done
   19-2-skill-swiftwork-alignment: done
   19-3-api-runner-alignment: done
-  epic-19-retrospective: optional
+  epic-19-retrospective: done
 
   # Epic 20: 死代码清理与架构精简
-  epic-20: in-progress
+  epic-20: done
   20-1-delete-dead-agent-loop-code: done
-  epic-20-retrospective: optional
+  epic-20-retrospective: done

@@ -125,8 +125,8 @@ axion/
 │   │   │                            #   KeyboardService, MouseService, AppLauncher
 │   │   └── Models/                  # Helper 专有模型：窗口状态、AX 元素等
 │   └── AxionCore/                   # 共享库（library target）
-│       ├── Models/                  # 共享数据模型：Plan, Step, ToolResult, RunState
-│       ├── Protocols/               # 协议定义：PlannerProtocol, ExecutorProtocol
+│       ├── Models/                  # 共享数据模型：AxionConfig, AxionError, Value, Skill
+│       ├── Protocols/               # 协议定义：MCPClientProtocol
 │       └── Constants/               # 共享常量：工具名、错误码、配置键
 ├── Tests/
 │   ├── AxionCLITests/
@@ -247,9 +247,11 @@ let package = Package(
 
 ---
 
-### D2: Plan 数据模型
+### D2: Plan 数据模型 ~~（已废弃 — SDK Agent Loop 不使用 Plan/Step 模型）~~
 
-**决策：结构化 Plan 模型（Codable JSON）**
+> **注意：** Plan, Step, StopCondition 模型已在 Epic 20 删除。SDK Agent Loop 通过 `agent.stream()` 直接管理工具调用，无需预先生成结构化 Plan。Value 枚举保留用于 MCP 参数传递。
+
+**原始决策：结构化 Plan 模型（Codable JSON）**
 
 ```swift
 // AxionCore/Models/Plan.swift
@@ -297,9 +299,11 @@ struct StopCondition: Codable {
 
 ---
 
-### D3: 执行循环状态机
+### D3: 执行循环状态机 ~~（已废弃 — 改用 SDK Agent Loop）~~
 
-**决策：显式状态机（RunState 枚举 + 状态转换规则）**
+> **注意：** 自建 RunEngine 状态机已在 Epic 20 删除。当前执行循环由 SDK Agent Loop（`agent.stream()`）管理，应用层通过 AgentBuilder 构建 Agent，无需手动管理状态。
+
+**原始决策：显式状态机（RunState 枚举 + 状态转换规则）**
 
 ```
 ┌──────────┐
@@ -353,11 +357,11 @@ struct RunContext {
 }
 ```
 
-**理由：**
-- 显式状态机比隐式 if/else 更容易验证和调试
-- RunContext 贯穿整个执行循环，是 trace 文件的内存表示
-- 状态转换规则可以在编译时通过枚举穷举检查
-- SDK 的 Agent Loop 管理外层 turn 循环，RunState 管理内层 plan-execute-verify 循环
+**原始理由（已废弃）：**
+- ~~显式状态机比隐式 if/else 更容易验证和调试~~ — SDK Agent Loop 内部管理状态
+- ~~RunContext 贯穿整个执行循环，是 trace 文件的内存表示~~ — 已删除
+- ~~状态转换规则可以在编译时通过枚举穷举检查~~ — 已删除
+- ~~SDK 的 Agent Loop 管理外层 turn 循环，RunState 管理内层 plan-execute-verify 循环~~ — 现在全部由 SDK 管理
 
 ---
 
@@ -490,21 +494,18 @@ actor HelperProcessManager {
 
 **实现顺序：**
 
-1. **AxionCore**（共享模型） — Plan, Step, RunState, AxionConfig, AxionError
+1. **AxionCore**（共享模型） — AxionConfig, AxionError, Value, Skill
 2. **AxionHelper**（MCP Server + AX 服务） — 可独立开发和测试
 3. **Config 系统** — KeychainStore + ConfigManager
-4. **Planner** — Prompt 加载 + LLM 调用 + Plan 解析
-5. **Executor** — 步骤执行 + MCP 调用 + 占位符解析
-6. **Verifier** — 截图/AX 验证 + StopCondition 评估
-7. **执行循环** — RunState 状态机编排上述三个模块
-8. **CLI 入口** — ArgumentParser 子命令 + 流式输出 + Trace 记录
+4. **SDK 集成** — AgentBuilder + BuildConfig 构建 Agent
+5. **CLI 入口** — ArgumentParser 子命令 + 流式输出 + Trace 记录
+6. **API 入口** — ApiRunner HTTP 请求处理 + SSE 推送
 
 **跨组件依赖：**
 
-- Planner → AxionCore（Plan 模型）、Config（模型选择）、Helper（截图/AX 上下文）
-- Executor → AxionCore（Step 模型）、Helper（MCP 工具调用）
-- Verifier → AxionCore（StopCondition）、Helper（截图/AX tree）
-- CLI → 所有模块（编排入口）
+- AgentBuilder → AxionCore（配置模型）、Config（API key）、SDK（Agent 创建）
+- CLI → AgentBuilder（构建 Agent）、Helper（MCP 工具调用）
+- API → AgentBuilder（构建 Agent）、Helper（MCP 工具调用）
 - Helper → AxionCore（共享模型）
 
 ## 实现模式与一致性规则
@@ -528,12 +529,12 @@ AI Agent 在实现 Axion 时可能产生不一致的 6 个关键区域：
 
 | 类别 | 规则 | 示例 |
 |------|------|------|
-| 类型（struct/enum/class/protocol） | PascalCase | `Plan`, `RunState`, `PlannerProtocol` |
-| 函数和方法 | camelCase，动词开头 | `executeStep()`, `loadPrompt()` |
+| 类型（struct/enum/class/protocol） | PascalCase | `AxionConfig`, `Skill`, `MCPClientProtocol` |
+| 函数和方法 | camelCase，动词开头 | `buildAgent()`, `loadPrompt()` |
 | 属性和变量 | camelCase | `maxSteps`, `currentPlan` |
 | 枚举 case | camelCase | `.done`, `.needsClarification` |
-| 协议 | 名词 + Protocol 后缀（能力型用 -able/-ible） | `PlannerProtocol`, `Configurable` |
-| 文件名 | 与主类型同名 | `Plan.swift`, `RunState.swift` |
+| 协议 | 名词 + Protocol 后缀（能力型用 -able/-ible） | `MCPClientProtocol`, `Configurable` |
+| 文件名 | 与主类型同名 | `Skill.swift`, `Value.swift` |
 | 目录名 | PascalCase 复数 | `Commands/`, `Services/`, `Models/` |
 
 **MCP 工具命名（跨进程通信，Helper 暴露给 CLI 的工具）：**
@@ -560,10 +561,10 @@ AI Agent 在实现 Axion 时可能产生不一致的 6 个关键区域：
 
 | 规则 | 说明 |
 |------|------|
-| 一个文件一个主类型 | `Plan.swift` 只定义 `Plan` 及其私有辅助类型 |
-| Protocol 与实现分离 | `PlannerProtocol` 在 `Protocols/`，`LLMPlanner` 在 `Planner/` |
-| Extension 按功能分文件 | `RunState+Codable.swift`, `Plan+Validation.swift` |
-| 测试镜像源结构 | `Tests/AxionCLITests/Planner/LLMPlannerTests.swift` |
+| 一个文件一个主类型 | `Skill.swift` 只定义 `Skill` 及其私有辅助类型 |
+| Protocol 与实现分离 | `MCPClientProtocol` 在 `Protocols/`，`HelperMCPClientAdapter` 在 `Helper/` |
+| Extension 按功能分文件 | `AxionConfig+Codable.swift`, `Skill+Validation.swift` |
+| 测试镜像源结构 | `Tests/AxionCLITests/Services/CostTrackerTests.swift` |
 
 **模块间依赖规则：**
 
@@ -704,8 +705,8 @@ func test_runStateTransition_fromExecutingToVerifying_isValid() async throws
 | 被测模块 | Mock 对象 | 方式 |
 |----------|-----------|------|
 | Planner | LLM API | Mock AnthropicClient（Protocol 注入） |
-| Executor | MCP 连接 | Mock PlannerProtocol + MCPClientProtocol |
-| Verifier | Helper | Mock 截图/AX tree 返回值 |
+| RunCommand | SDK Agent | Mock MCPClientProtocol + AgentBuilder |
+| ApiRunner | SDK Agent | Mock MCPClientProtocol + AgentBuilder |
 | CLI 命令 | 全部内部模块 | 依赖注入 + Protocol Mock |
 
 **不 Mock 的层：**
@@ -749,19 +750,12 @@ axion/
 ├── Sources/
 │   ├── AxionCore/                             # 共享库目标
 │   │   ├── Models/
-│   │   │   ├── Plan.swift                     # D2: Plan 结构体
-│   │   │   ├── Step.swift                     # D2: Step + Value 枚举
-│   │   │   ├── StopCondition.swift            # D2: StopCondition + StopType
-│   │   │   ├── RunState.swift                 # D3: RunState 枚举
-│   │   │   ├── RunContext.swift               # D3: RunContext（运行时状态）
-│   │   │   ├── ExecutedStep.swift             # 已执行步骤记录（含结果）
-│   │   │   └── AxionConfig.swift              # D4: 配置模型
+│   │   │   ├── AxionConfig.swift              # D4: 配置模型
+│   │   │   ├── Value.swift                    # D2: Value 枚举（从 Step.swift 提取）
+│   │   │   ├── RecordedEvent.swift            # Epic 9: 录制事件模型
+│   │   │   └── Skill.swift                    # Epic 9: 技能模型
 │   │   ├── Protocols/
-│   │   │   ├── PlannerProtocol.swift          # Planner 接口
-│   │   │   ├── ExecutorProtocol.swift         # Executor 接口
-│   │   │   ├── VerifierProtocol.swift         # Verifier 接口
-│   │   │   ├── MCPClientProtocol.swift        # MCP 客户端抽象
-│   │   │   └── OutputProtocol.swift           # 输出格式化接口
+│   │   │   └── MCPClientProtocol.swift        # MCP 客户端抽象
 │   │   ├── Errors/
 │   │   │   └── AxionError.swift               # 统一错误类型
 │   │   └── Constants/
@@ -785,28 +779,20 @@ axion/
 │   │   │   └── MemoryLearnTakeoverCommand.swift # Epic 15: axion memory learn-takeover（手动记录接管经验）
 │   │   │   └── DaemonCommand.swift             # Epic 16: axion daemon install/status/uninstall
 │   │   ├── Planner/
-│   │   │   ├── LLMPlanner.swift               # FR11–FR14: 调用 LLM 生成 Plan
-│   │   │   ├── PlanParser.swift               # FR14–FR15: 解析 LLM 输出为 Plan
 │   │   │   └── PromptBuilder.swift            # D6: 构建含上下文的 prompt
-│   │   ├── Executor/
-│   │   │   ├── StepExecutor.swift             # FR16–FR17: 执行单个 Step
-│   │   │   ├── PlaceholderResolver.swift      # FR17: 解析 $pid/$window_id
-│   │   │   └── SafetyChecker.swift            # FR20: 共享座椅安全策略
-│   │   ├── Verifier/
-│   │   │   ├── TaskVerifier.swift             # FR21: 验证任务完成状态
-│   │   │   ├── StopConditionEvaluator.swift   # FR22: 评估 stopWhen 条件
-│   │   │   └── VisualDeltaChecker.swift       # Epic 13: 截图像素级差异比较 + VisualDeltaTracker actor
 │   │   ├── Skills/                              # Epic 18: Axion 专有技能定义
 │   │   │   └── AxionBuiltInSkills.swift         # Epic 18: 内置桌面技能（screenshot-analyze, data-extract, form-fill）
-│   │   ├── Services/                            # Epic 13: 运行时安全与成本控制 + Epic 16: Daemon + Epic 17: Skill
+│   │   ├── Services/                            # Epic 13: 运行时安全与成本控制 + Epic 16: Daemon + Epic 17: Skill + Epic 19: 统一构建
+│   │   │   ├── AgentBuilder.swift              # Epic 19: 统一 Agent 构建（BuildConfig 工厂 + build() + resolveExplicitSlashSkillRequest()）
 │   │   │   ├── RunLockService.swift            # Epic 13: 桌面级运行锁 actor（~/.axion/run.lock）
 │   │   │   ├── CostTracker.swift               # Epic 13: 预算控制 + 成本遥测 actor
 │   │   │   ├── SeatActivityMonitor.swift       # Epic 13: 桌面活动检测 actor（学习保护）
 │   │   │   ├── DaemonService.swift             # Epic 16: launchd plist 生成、install/uninstall/status
 │   │   │   ├── SkillLookupService.swift        # Epic 17: 双轨技能查找（prompt 技能优先、录制技能回退）
-│   │   │   └── RecordedSkillRunner.swift       # Epic 17: 录制技能执行器（Helper 启动 + SkillExecutor + 元数据更新）
-│   │   ├── Engine/
-│   │   │   └── RunEngine.swift                # D3: 状态机编排 plan→exec→verify 循环
+│   │   │   ├── RecordedSkillRunner.swift       # Epic 17: 录制技能执行器（Helper 启动 + SkillExecutor + 元数据更新）
+│   │   │   ├── SkillExecutor.swift             # Epic 17: 技能步骤执行引擎（MCP 调用 Helper）
+│   │   │   ├── RecordingCompiler.swift         # Epic 9: 录制→技能编译（纯数据转换）
+│   │   │   └── VisualDeltaTracker.swift        # Epic 13: 视觉增量检查 actor
 │   │   ├── Config/
 │   │   │   ├── ConfigManager.swift            # FR4–FR5: 分层配置加载
 │   │   │   └── KeychainStore.swift            # D1: API Key 安全存储
@@ -833,7 +819,7 @@ axion/
 │   │   │   ├── TakeoverLearningService.swift    # Epic 15: Takeover 经验→Memory 转换（affordance/avoid）
 │   │   │   └── TakeoverMarker.swift             # Epic 15: InterventionReason 枚举 + TakeoverMarker struct
 │   │   ├── API/                                # Epic 5: HTTP API Server + Epic 14: API 规范化 + Epic 16: 持久化 + Epic 18: Skill 触发
-│   │   │   ├── AgentRunner.swift              # Agent 执行封装（+ runSkillAgent: prompt 技能 API 执行入口）
+│   │   │   ├── ApiRunner.swift                # Epic 19: Agent 执行封装（+ runSkillAgent: prompt 技能 API 执行入口 + processStream 共享流处理）
 │   │   │   ├── RunTracker.swift               # 任务状态追踪（Epic 16: 持久化注入）
 │   │   │   ├── AxionAPI.swift                 # Hummingbird 路由注册
 │   │   │   ├── EventBroadcaster.swift         # SSE 事件广播（Epic 16: 事件持久化 + replay buffer 磁盘回退）
@@ -896,10 +882,13 @@ axion/
 │
 ├── Tests/
 │   ├── AxionCoreTests/
-│   │   ├── PlanTests.swift
-│   │   ├── RunStateTests.swift
 │   │   ├── AxionConfigTests.swift
-│   │   └── AxionErrorTests.swift
+│   │   ├── AxionErrorTests.swift
+│   │   ├── SPMScaffoldTests.swift
+│   │   └── Models/
+│   │       ├── RecordedEventTests.swift
+│   │       ├── SkillTests.swift
+│   │       └── ValueTests.swift
 │   ├── AxionCLITests/
 │   │   ├── Commands/
 │   │   │   ├── RunCommandTests.swift
@@ -908,17 +897,7 @@ axion/
 │   │   │   ├── MemoryLearnTakeoverCommandTests.swift  # Epic 15: Takeover CLI 命令测试
 │   │   │   └── SkillIntegrationTests.swift           # Epic 17: SkillRegistry 集成测试
 │   │   ├── Planner/
-│   │   │   ├── LLMPlannerTests.swift
-│   │   │   └── PlanParserTests.swift
-│   │   ├── Executor/
-│   │   │   ├── StepExecutorTests.swift
-│   │   │   └── PlaceholderResolverTests.swift
-│   │   ├── Verifier/
-│   │   │   ├── TaskVerifierTests.swift
-│   │   │   ├── StopConditionEvaluatorTests.swift
-│   │   │   └── VisualDeltaCheckerTests.swift   # Epic 13: 视觉增量检查测试
-│   │   └── Engine/
-│   │       └── RunEngineTests.swift
+│   │   │   └── PromptBuilderTests.swift
 │   │   ├── Services/                            # Epic 13: 运行时服务测试 + Epic 17: Skill 服务测试
 │   │   │   ├── RunLockServiceTests.swift       # Epic 13: 运行锁测试
 │   │   │   ├── CostTrackerTests.swift          # Epic 13: 预算控制测试
@@ -1027,19 +1006,19 @@ AxionBar ← SwiftUI + AppKit（独立 macOS App）
 | FR2 | SetupCommand.swift + KeychainStore.swift | 首次配置 |
 | FR3 | DoctorCommand.swift | 环境检查 |
 | FR4–FR5 | ConfigManager.swift | 配置加载 |
-| FR6–FR10 | RunCommand.swift + RunEngine.swift | 任务执行入口 |
-| FR11–FR15 | LLMPlanner.swift + PlanParser.swift | 规划引擎 |
-| FR16–FR17 | StepExecutor.swift + PlaceholderResolver.swift | 步骤执行 |
-| FR18 | StepExecutor.swift | 自动刷新窗口状态 |
-| FR19 | SafetyChecker.swift | 共享座椅安全 |
-| FR20 | SafetyChecker.swift | 前台操作限制 |
-| FR21–FR23 | TaskVerifier.swift + StopConditionEvaluator.swift | 任务验证 |
+| FR6–FR10 | RunCommand.swift + AgentBuilder.swift | 任务执行入口（via SDK Agent Loop） |
+| FR11–FR15 | PromptBuilder.swift + SDK Agent | 规划引擎（LLM 规划由 SDK Agent Loop 内置完成） |
+| FR16–FR17 | SDK Agent Loop + MCP tools | 步骤执行（SDK 管理工具调用） |
+| FR18 | SDK Agent Loop | 自动刷新窗口状态 |
+| FR19 | SafetyHook (AgentBuilder) | 共享座椅安全 |
+| FR20 | SafetyHook (AgentBuilder) | 前台操作限制 |
+| FR21–FR23 | SDK Agent Loop + VisualDeltaTracker | 任务验证（LLM 判断完成状态） |
 | FR24 | AppLauncher.swift | 应用管理 |
 | FR25–FR29 | AccessibilityEngine.swift + ScreenshotService.swift 等 | 桌面操作 |
 | FR30 | URLOpener.swift | URL 打开 |
 | FR31–FR32 | HelperMCPServer.swift + ToolRegistrar.swift | MCP Server |
 | FR33–FR35 | TerminalOutput.swift + JSONOutput.swift | 输出格式 |
-| FR36–FR40 | RunEngine.swift + SDK 集成 | SDK 使用 |
+| FR36–FR40 | RunCommand.swift + AgentBuilder.swift + SDK Agent | SDK 使用（统一入口 via AgentBuilder） |
 | FR41 | 本文档 + SDK 边界文档 | 边界记录 |
 | FR42 | AppMemoryExtractor.swift + MemoryCleanupService.swift | Memory 提取（Epic 4） |
 | FR43 | AppProfileAnalyzer.swift + MemoryContextProvider.swift | Memory 增强规划（Epic 4） |
@@ -1047,9 +1026,9 @@ AxionBar ← SwiftUI + AppKit（独立 macOS App）
 | FR66 | RunLockService.swift + RunCommand.swift + AxionAPI.swift | 桌面级运行锁，防止多任务桌面冲突（Epic 13） |
 | FR67 | VisualDeltaChecker.swift + RunCommand.swift | 视觉增量检查，跳过无变化的 verifier 调用（Epic 13） |
 | FR68 | CostTracker.swift + RunCommand.swift | --max-model-calls/--max-screenshots 精细预算控制（Epic 13） |
-| FR69 | CostTracker.swift + TraceRecorder.swift + AgentRunner.swift | 成本遥测：model_call trace + API cost_telemetry（Epic 13） |
-| FR70 | SeatActivityMonitor.swift + RunCommand.swift + AgentRunner.swift | 桌面活动检测与学习保护（Epic 13） |
-| FR71 | APITypes.swift + AxionAPI.swift + RunTracker.swift + AgentRunner.swift | StandardTaskOutput 统一 API 输出契约（Epic 14） |
+| FR69 | CostTracker.swift + TraceRecorder.swift + ApiRunner.swift | 成本遥测：model_call trace + API cost_telemetry（Epic 13） |
+| FR70 | SeatActivityMonitor.swift + RunCommand.swift + ApiRunner.swift | 桌面活动检测与学习保护（Epic 13） |
+| FR71 | APITypes.swift + AxionAPI.swift + RunTracker.swift + ApiRunner.swift | StandardTaskOutput 统一 API 输出契约（Epic 14） |
 | FR72 | APITypes.swift + AxionAPI.swift | Capabilities 端点：能力发现（Epic 14） |
 | FR73 | APITypes.swift + AxionAPI.swift + DoctorCommand.swift | Settings API：HTTP 配置管理（Epic 14） |
 | FR74 | TakeoverLearningService.swift + RunCommand.swift + MemoryLearnTakeoverCommand.swift | Takeover 经验自动学习：接管经验→Memory（affordance/avoid）（Epic 15） |
@@ -1068,7 +1047,7 @@ AxionBar ← SwiftUI + AppKit（独立 macOS App）
 | 错误处理 | AxionCore/Errors/AxionError.swift | 统一错误类型，所有模块使用 |
 | 配置管理 | AxionCLI/Config/ | 分层配置 + Keychain |
 | 进程生命周期 | AxionCLI/Helper/HelperProcessManager.swift | Helper 启停 + 信号传播 |
-| 安全策略 | AxionCLI/Executor/SafetyChecker.swift | 共享座椅模式 |
+| 安全策略 | AxionCLI/Services/AgentBuilder.swift (SafetyHook) | 共享座椅模式（Epic 19 统一） |
 | 运行时安全 | AxionCLI/Services/ (RunLockService, CostTracker, SeatActivityMonitor) | 桌面锁、预算控制、学习保护（Epic 13） |
 | API 规范化 | AxionCLI/API/Models/APITypes.swift (StandardTaskOutput, CapabilitiesResponse, Settings API) | 统一输出契约、能力发现、配置管理（Epic 14） |
 | 可观测性 | AxionCLI/Trace/TraceRecorder.swift | JSONL trace |
@@ -1106,44 +1085,35 @@ AxionBar ← SwiftUI + AppKit（独立 macOS App）
 RunCommand.parse()                          # ArgumentParser 解析
     │
     ▼
-ConfigManager.load()                        # 分层加载配置
+AgentBuilder.build(BuildConfig.forCLI())    # [Epic 19] 统一 Agent 构建
+    ├── ConfigManager.load()                # 分层加载配置
+    ├── SkillRegistry 注册                   # [Epic 17] 技能发现
+    ├── SafetyHook 注册（shared seat mode）  # [Epic 19] MCP-prefixed tool names
+    ├── MemoryContextProvider 注入           # [Epic 4] 记忆上下文
+    └── AgentOptions 构建（skillRegistry + tools + mcpServers）
     │
     ▼
 RunLockService.acquire()                    # [Epic 13] 获取桌面级运行锁
-    │
-    ▼
-HelperProcessManager.start()                # 启动 Helper
-    │
-    ▼
+HelperProcessManager.start()                # 启动 Helper（MCP stdio）
 CostTracker.init(maxModelCalls, maxScreenshots)  # [Epic 13] 初始化预算追踪
-SeatActivityMonitor.create()                # [Epic 13] 采样活动基线（shared-seat 模式）
+SeatActivityMonitor.create()                # [Epic 13] 采样活动基线
     │
     ▼
-RunEngine.run()                             # 状态机开始
+agent.stream(task)                          # SDK Agent Loop 执行
     │
-    ├──► LLMPlanner.plan()                  # 调用 Anthropic API
+    ├──► LLM 规划 + 工具调用                 # SDK Agent 自动编排
     │        │
-    │        ▼
-    │    PlanParser.parse() → Plan          # 解析为结构化 Plan
-    │
-    ├──► StepExecutor.execute(plan)         # 逐步执行
-    │        │
-    │        ▼ (每个 Step)
-    │    HelperMCPServer.tool_call()        # MCP JSON-RPC → Helper
+    │        ▼ (每个 turn)
+    │    ToolExecutor → MCP tools           # SDK 通过 MCP 调用 Helper
     │        │
     │        ▼
     │    AX/Screenshot/KB/Mouse Service     # Helper 执行桌面操作
     │
-    ├──► TaskVerifier.verify()              # 验证完成状态
-    │        │
-    │        ▼ (如果未完成)
-    │    LLMPlanner.replan()                # 携带失败上下文重规划
+    ├──► VisualDeltaTracker.check()         # [Epic 13] 视觉增量检查
+    ├──► CostTracker.recordModelCall()      # [Epic 13] 记录 LLM 调用
+    ├──► SeatActivityMonitor.check()        # [Epic 13] 检测桌面活动
     │
-    ├──► VisualDeltaTracker.check()         # [Epic 13] 视觉增量检查（跳过无变化验证）
-    ├──► CostTracker.recordModelCall()      # [Epic 13] 记录 LLM 调用 + 预算检查
-    ├──► SeatActivityMonitor.check()        # [Epic 13] 检测外部桌面活动
-    │
-    └──► TerminalOutput.display()           # 实时输出到终端
+    └──► SDKTerminalOutputHandler           # 实时输出到终端
          TraceRecorder.record()             # 记录到 trace 文件
     │
     ▼
@@ -1186,12 +1156,12 @@ TrackedRun.toStandardOutput() → StandardTaskOutput  # [Epic 14] 统一 API 输
 | FR 范围 | 数量 | 覆盖状态 | 关键文件 |
 |---------|------|----------|----------|
 | FR1–FR5 安装与配置 | 5 | ✅ 全覆盖 | SetupCommand, DoctorCommand, ConfigManager, KeychainStore |
-| FR6–FR10 任务执行 | 5 | ✅ 全覆盖 | RunCommand, RunEngine |
-| FR11–FR15 规划引擎 | 5 | ✅ 全覆盖 | LLMPlanner, PlanParser, PromptBuilder |
-| FR16–FR20 本地执行 | 5 | ✅ 全覆盖 | StepExecutor, PlaceholderResolver, SafetyChecker |
-| FR21–FR23 任务验证 | 3 | ✅ 全覆盖 | TaskVerifier, StopConditionEvaluator |
+| FR6–FR10 任务执行 | 5 | ✅ 全覆盖 | RunCommand, AgentBuilder (via SDK Agent Loop) |
+| FR11–FR15 规划引擎 | 5 | ✅ 全覆盖 | PromptBuilder, SDK Agent (LLM 规划由 SDK 内置) |
+| FR16–FR20 本地执行 | 5 | ✅ 全覆盖 | SDK Agent Loop, MCP tools, SafetyHook |
+| FR21–FR23 任务验证 | 3 | ✅ 全覆盖 | SDK Agent Loop, VisualDeltaTracker |
 | FR24–FR32 AxionHelper | 9 | ✅ 全覆盖 | AppLauncher, AccessibilityEngine, ScreenshotService, KeyboardService, MouseService, URLOpener, HelperMCPServer |
-| FR33–FR41 进度与 SDK | 9 | ✅ 全覆盖 | TerminalOutput, JSONOutput, RunEngine (SDK 集成) |
+| FR33–FR41 进度与 SDK | 9 | ✅ 全覆盖 | TerminalOutput, JSONOutput, SDK Agent (via AgentBuilder) |
 | FR71–FR73 API 规范化 | 3 | ✅ 全覆盖 | APITypes.swift (StandardTaskOutput, CapabilitiesResponse, Settings API), AxionAPI.swift, DoctorCommand |
 | FR74–FR75 Takeover 学习与标记 | 2 | ✅ 全覆盖 | TakeoverLearningService.swift, TakeoverMarker.swift, MemoryLearnTakeoverCommand.swift, TakeoverIO.swift |
 | FR78–FR81 Skill 系统集成 | 4 | ✅ 全覆盖 | RunCommand.swift, SkillLookupService.swift, RecordedSkillRunner.swift, SkillRegistry, SkillTool |
@@ -1276,7 +1246,7 @@ TrackedRun.toStandardOutput() → StandardTaskOutput  # [Epic 14] 统一 API 输
 
 1. **SDK 边界清晰** — 每个模块归属明确，Axion 的核心价值（验证 SDK 能力）有架构保障
 2. **双进程隔离** — CLI 崩溃不影响 Helper，Helper 崩溃可检测恢复，安全性高
-3. **强类型契约** — Plan/Step/RunState 等 Codable 模型确保模块间接口一致
+3. **强类型契约** — AxionConfig/Skill/Value 等 Codable 模型确保模块间接口一致
 4. **可观测性** — JSONL trace 贯穿整个执行流，调试和 SDK 改进有数据支撑
 5. **一致性规则** — 命名、结构、模式规则足以防止 AI Agent 间冲突
 
@@ -1299,10 +1269,10 @@ TrackedRun.toStandardOutput() → StandardTaskOutput  # [Epic 14] 统一 API 输
 **首要实现优先级：**
 
 1. 创建 `Package.swift` 和目录结构（Step 3 定义的项目结构）
-2. 实现 `AxionCore` 共享模型（Plan, Step, RunState, AxionConfig, AxionError）
+2. 实现 `AxionCore` 共享模型（AxionConfig, AxionError, Value, Skill）
 3. 实现 `AxionHelper` MCP Server + AX 服务（可独立开发和测试）
 4. 实现 CLI Config 系统（ConfigManager + KeychainStore）
-5. 实现 Planner → Executor → Verifier 执行循环
+5. 实现 SDK Agent 集成（AgentBuilder + BuildConfig）
 
 ## OpenClick 参考指南
 
@@ -1342,10 +1312,10 @@ Axion 在实现时需要参考本地 OpenClick 仓库（`/Users/nick/CascadeProj
 | Axion 文件 | 参考 OpenClick 文件 | 提取什么 |
 |-----------|-------------------|---------|
 | `AxionCLI/Planner/PromptBuilder.swift` | `src/planner.ts:119-167`（SYSTEM_GUIDANCE 常量） | **完整的 Planner system prompt** — 工具描述、规划原则、输出格式要求、shifted key 处理、background-safe 策略 |
-| `AxionCLI/Planner/LLMPlanner.swift` | `src/planner.ts:169-185`（generatePlan 函数） | Plan 生成流程：构建 prompt → 调用 LLM → 解析 JSON → 验证 |
-| `AxionCLI/Planner/PlanParser.swift` | `src/planner.ts:255-280`（stripFences 函数） | LLM 输出解析：剥离 markdown 围栏、提取 JSON 对象、处理 prose 前缀/后缀 |
-| `AxionCore/Models/Plan.swift` | `src/planner.ts:17-39`（PlanStep / Plan 接口） | Plan 数据结构：status (ready/done/blocked/needs_clarification)、steps、stopWhen、message |
-| `AxionCore/Models/Step.swift` | `src/planner.ts:17-26`（PlanStep 接口） | Step 数据结构：tool、args、purpose、expected_change |
+| ~~`AxionCLI/Planner/LLMPlanner.swift`~~ *(已删除 — Epic 20)* | `src/planner.ts:169-185`（generatePlan 函数） | ~~Plan 生成流程~~（现已由 SDK Agent Loop 内置） |
+| ~~`AxionCLI/Planner/PlanParser.swift`~~ *(已删除 — Epic 20)* | `src/planner.ts:255-280`（stripFences 函数） | ~~LLM 输出解析~~（现已由 SDK Agent Loop 内置） |
+| ~~`AxionCore/Models/Plan.swift`~~ *(已删除 — Epic 20)* | `src/planner.ts:17-39`（PlanStep / Plan 接口） | ~~Plan 数据结构~~（自建 Plan 模型已删除，SDK Agent 管理 plan） |
+| ~~`AxionCore/Models/Step.swift`~~ *(已删除 — Epic 20)* | `src/planner.ts:17-26`（PlanStep 接口） | ~~Step 数据结构~~（Value 枚举已提取为 Value.swift） |
 | Planner 重规划逻辑 | `src/planner.ts:80-98`（ReplanContext 接口）+ `src/planner.ts:200-245`（buildPlannerPrompt replan 分支） | 重规划上下文传递：失败步骤、已执行步骤、live AX tree、run history、恢复策略 |
 | shifted key 处理 | `src/planner.ts:41-63`（SHIFTED_KEY_MAP） | 符号键到基础键的映射表（如 `"*"` → `shift+"8"`） |
 
@@ -1359,13 +1329,12 @@ Axion 在实现时需要参考本地 OpenClick 仓库（`/Users/nick/CascadeProj
 
 | Axion 文件 | 参考 OpenClick 文件 | 提取什么 |
 |-----------|-------------------|---------|
-| `AxionCLI/Executor/PlaceholderResolver.swift` | `src/executor.ts:90-115`（ExecutorContext 接口） | 占位符解析：$pid/$window_id 的上下文跟踪、AX index 缓存、screenshot 尺寸 |
-| `AxionCLI/Executor/StepExecutor.swift` | `src/executor.ts:12-18`（StepResult 接口） | 步骤执行结果模型 |
-| `AxionCLI/Executor/StepExecutor.swift` | `src/executor.ts:33-70`（ExecutePlanOptions 接口） | 执行选项：dryRun、confirm、refreshBeforeAxClick、executionPolicy、maxSteps |
-| `AxionCLI/Executor/SafetyChecker.swift` | `src/executor.ts:147-158`（ExecutionPolicy / StepSafety 类型）+ `src/executor.ts:160+`（BACKGROUND_SAFE_TOOLS） | 工具安全分类逻辑、foreground vs background 模式策略 |
-| AxionCore/Models/ 相关 | `src/executor.ts:122-145`（AxIndexEntry 接口） | AX 元素索引结构：index、role、id、title、subtreeText、ancestorPath、ordinal |
+| ~~`AxionCLI/Executor/PlaceholderResolver.swift`~~ *(已删除 — Epic 20)* | `src/executor.ts:90-115`（ExecutorContext 接口） | ~~占位符解析~~（现已由 SDK Agent Loop 内置） |
+| ~~`AxionCLI/Executor/StepExecutor.swift`~~ *(已删除 — Epic 20)* | `src/executor.ts:12-18`（StepResult 接口） | ~~步骤执行结果模型~~ |
+| ~~`AxionCLI/Executor/StepExecutor.swift`~~ *(已删除 — Epic 20)* | `src/executor.ts:33-70`（ExecutePlanOptions 接口） | ~~执行选项~~（现已由 SDK AgentOptions 管理） |
+| ~~`AxionCLI/Executor/SafetyChecker.swift`~~ *(已删除 — Epic 20)* | `src/executor.ts:147-158`（ExecutionPolicy / StepSafety 类型）+ `src/executor.ts:160+`（BACKGROUND_SAFE_TOOLS） | ~~工具安全分类逻辑~~（现已由 SafetyHook 替代，见 AgentBuilder） |
 
-**关键注意：** OpenClick 的 Executor 通过 `spawnSync` 调用 cua-driver 子进程执行每个步骤。Axion 通过 MCP stdio 调用 AxionHelper — 通信机制完全不同，但步骤执行逻辑（占位符解析、安全检查、错误处理）可以复用思路。
+**关键注意：** OpenClick 的 Executor 通过 `spawnSync` 调用 cua-driver 子进程执行每个步骤。Axion 现在通过 SDK Agent Loop + MCP tools 调用 AxionHelper — Executor 模块已删除，执行由 SDK 管理。
 
 ---
 
@@ -1382,14 +1351,14 @@ Axion 在实现时需要参考本地 OpenClick 仓库（`/Users/nick/CascadeProj
 
 ---
 
-### Run Loop → OpenClick src/run.ts
+### Run Loop → OpenClick src/run.ts ~~（已删除 — Epic 20）~~
 
-**何时参考：创建 RunEngine Story 时必须读取。**
+> **注意：** Axion 已改用 SDK Agent Loop（`AgentBuilder.build()` → `agent.stream()`），自建 RunEngine 已删除。以下为历史参考。
 
 | Axion 文件 | 参考 OpenClick 文件 | 提取什么 |
 |-----------|-------------------|---------|
-| `AxionCLI/Engine/RunEngine.swift` | `src/run.ts:54-80`（RunOptions 接口） | 运行参数模型：taskPrompt、live、maxSteps、maxBatches、maxReplans、cursor、fast |
-| RunEngine 主循环 | `src/run.ts` 全文 | 批次循环：plan → execute → verify → replan 的完整编排流程、锁机制、中断处理 |
+| ~~`AxionCLI/Engine/RunEngine.swift`~~（已删除） | `src/run.ts:54-80`（RunOptions 接口） | ~~运行参数模型~~ — 现由 AgentBuilder + BuildConfig 处理 |
+| ~~RunEngine 主循环~~（已删除） | `src/run.ts` 全文 | ~~批次循环：plan → execute → verify → replan~~ — 现由 SDK Agent Loop 处理 |
 
 ---
 
