@@ -27,7 +27,8 @@ enum ConfigManager {
     /// - Returns: 合并后的完整配置（含 API Key）。
     static func loadConfig(
         configDirectory: String? = nil,
-        cliOverrides: CLIOverrides? = nil
+        cliOverrides: CLIOverrides? = nil,
+        environment: [String: String]? = nil
     ) async throws -> AxionConfig {
         // 第 1-2 层：config.json（部分 JSON 由 AxionConfig.init(from:) 处理默认值回退）
         let dir = configDirectory ?? defaultConfigDirectory
@@ -42,7 +43,7 @@ enum ConfigManager {
         }
 
         // 第 3 层：环境变量
-        applyEnvOverrides(&config)
+        applyEnvOverrides(&config, env: environment ?? ProcessInfo.processInfo.environment)
 
         // 第 4 层：CLI 参数
         if let cli = cliOverrides {
@@ -89,8 +90,7 @@ enum ConfigManager {
     }
 
     /// 应用环境变量覆盖。
-    static func applyEnvOverrides(_ config: inout AxionConfig) {
-        let env = ProcessInfo.processInfo.environment
+    static func applyEnvOverrides(_ config: inout AxionConfig, env: [String: String] = ProcessInfo.processInfo.environment) {
 
         if let v = env["AXION_API_KEY"], !v.isEmpty {
             config.apiKey = v

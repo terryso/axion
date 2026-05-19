@@ -24,9 +24,9 @@ struct FastModeTests {
     // MARK: - Task 2: Fast Mode System Prompt (AC#2)
 
     @Test("fast mode system prompt includes fast instructions")
-    func buildCLISystemPromptFastModeIncludesFastInstructions() {
-        let prompt = AgentBuilder.buildCLISystemPrompt(
-            basePrompt: "Base prompt",
+    func appendModeInstructionsFastModeIncludesFastInstructions() {
+        let prompt = AgentBuilder.appendModeInstructions(
+            to: "Base prompt",
             fast: true,
             dryrun: false
         )
@@ -38,9 +38,9 @@ struct FastModeTests {
     }
 
     @Test("fast mode system prompt appears before dryrun")
-    func buildCLISystemPromptFastModeBeforeDryrun() {
-        let prompt = AgentBuilder.buildCLISystemPrompt(
-            basePrompt: "Base prompt",
+    func appendModeInstructionsFastModeBeforeDryrun() {
+        let prompt = AgentBuilder.appendModeInstructions(
+            to: "Base prompt",
             fast: true,
             dryrun: true
         )
@@ -50,9 +50,9 @@ struct FastModeTests {
     }
 
     @Test("standard mode has no fast instructions")
-    func buildCLISystemPromptStandardModeNoFastInstructions() {
-        let prompt = AgentBuilder.buildCLISystemPrompt(
-            basePrompt: "Base prompt",
+    func appendModeInstructionsStandardModeNoFastInstructions() {
+        let prompt = AgentBuilder.appendModeInstructions(
+            to: "Base prompt",
             fast: false,
             dryrun: false
         )

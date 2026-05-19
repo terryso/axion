@@ -3,34 +3,11 @@ import Foundation
 @testable import AxionCLI
 @testable import AxionCore
 
-/// Serializes env var access to prevent parallel test races.
-actor EnvGate {
-    static let shared = EnvGate()
-
-    func withSavedEnv(_ keys: [String], body: @Sendable () async throws -> Void) async throws {
-        let saved = keys.reduce(into: [String: String?]()) { result, key in
-            result[key] = ProcessInfo.processInfo.environment[key]
-        }
-        for key in keys { unsetenv(key) }
-        defer {
-            for (key, value) in saved {
-                if let value { setenv(key, value, 1) } else { unsetenv(key) }
-            }
-        }
-        try await body()
-    }
-}
-
 @Suite("ConfigManager")
 struct ConfigManagerTests: ~Copyable {
 
     private var tempDir: String!
     private var configFilePath: String!
-
-    private let envKeys = [
-        "AXION_API_KEY", "AXION_MODEL", "AXION_MAX_STEPS", "AXION_MAX_BATCHES",
-        "AXION_MAX_REPLAN_RETRIES", "AXION_TRACE_ENABLED", "AXION_SHARED_SEAT_MODE"
-    ]
 
     init() {
         tempDir = NSTemporaryDirectory() + "axion-test-config-\(UUID().uuidString)"
@@ -46,10 +23,6 @@ struct ConfigManagerTests: ~Copyable {
         if let tempDir = tempDir {
             try? FileManager.default.removeItem(atPath: tempDir)
         }
-    }
-
-    private func withCleanEnv(_ body: @Sendable () async throws -> Void) async throws {
-        try await EnvGate.shared.withSavedEnv(envKeys, body: body)
     }
 
     private func writeConfigJSON(_ json: String) throws {
@@ -72,196 +45,178 @@ struct ConfigManagerTests: ~Copyable {
 
     @Test("apiKey and maxSteps read from config.json")
     func loadConfigApiKeyFromFile() async throws {
-        try await withCleanEnv {
-            let configJSON = """
-            {
-              "apiKey": "sk-ant-test-key-12345678",
-              "maxSteps": 30
-            }
-            """
-            try writeConfigJSON(configJSON)
-
-            let config = try await ConfigManager.loadConfig(
-                configDirectory: tempDir,
-                cliOverrides: nil
-            )
-
-            #expect(config.apiKey == "sk-ant-test-key-12345678")
-            #expect(config.maxSteps == 30)
+        let configJSON = """
+        {
+          "apiKey": "sk-ant-test-key-12345678",
+          "maxSteps": 30
         }
+        """
+        try writeConfigJSON(configJSON)
+
+        let config = try await ConfigManager.loadConfig(
+            configDirectory: tempDir,
+            cliOverrides: nil,
+            environment: [:]
+        )
+
+        #expect(config.apiKey == "sk-ant-test-key-12345678")
+        #expect(config.maxSteps == 30)
     }
 
     @Test("config.json overrides default values")
     func loadConfigFileOverridesDefault() async throws {
-        try await withCleanEnv {
-            let configJSON = """
-            {
-              "maxSteps": 30
-            }
-            """
-            try writeConfigJSON(configJSON)
-
-            let config = try await ConfigManager.loadConfig(
-                configDirectory: tempDir,
-                cliOverrides: nil
-            )
-
-            #expect(config.maxSteps == 30)
-            #expect(config.model == AxionConfig.default.model)
-            #expect(config.maxBatches == AxionConfig.default.maxBatches)
+        let configJSON = """
+        {
+          "maxSteps": 30
         }
+        """
+        try writeConfigJSON(configJSON)
+
+        let config = try await ConfigManager.loadConfig(
+            configDirectory: tempDir,
+            cliOverrides: nil,
+            environment: [:]
+        )
+
+        #expect(config.maxSteps == 30)
+        #expect(config.model == AxionConfig.default.model)
+        #expect(config.maxBatches == AxionConfig.default.maxBatches)
     }
 
     @Test("environment variable AXION_MODEL overrides config.json")
     func loadConfigEnvOverridesFile() async throws {
-        try await withCleanEnv {
-            let configJSON = """
-            {
-              "model": "claude-sonnet-4-20250514"
-            }
-            """
-            try writeConfigJSON(configJSON)
-            setenv("AXION_MODEL", "claude-opus-4", 1)
-
-            let config = try await ConfigManager.loadConfig(
-                configDirectory: tempDir,
-                cliOverrides: nil
-            )
-
-            #expect(config.model == "claude-opus-4")
+        let configJSON = """
+        {
+          "model": "claude-sonnet-4-20250514"
         }
+        """
+        try writeConfigJSON(configJSON)
+
+        let config = try await ConfigManager.loadConfig(
+            configDirectory: tempDir,
+            cliOverrides: nil,
+            environment: ["AXION_MODEL": "claude-opus-4"]
+        )
+
+        #expect(config.model == "claude-opus-4")
     }
 
     @Test("environment variable AXION_MAX_STEPS overrides config.json")
     func loadConfigEnvMaxStepsOverridesFile() async throws {
-        try await withCleanEnv {
-            let configJSON = """
-            {
-              "maxSteps": 30
-            }
-            """
-            try writeConfigJSON(configJSON)
-            setenv("AXION_MAX_STEPS", "50", 1)
-
-            let config = try await ConfigManager.loadConfig(
-                configDirectory: tempDir,
-                cliOverrides: nil
-            )
-
-            #expect(config.maxSteps == 50)
+        let configJSON = """
+        {
+          "maxSteps": 30
         }
+        """
+        try writeConfigJSON(configJSON)
+
+        let config = try await ConfigManager.loadConfig(
+            configDirectory: tempDir,
+            cliOverrides: nil,
+            environment: ["AXION_MAX_STEPS": "50"]
+        )
+
+        #expect(config.maxSteps == 50)
     }
 
     @Test("AXION_TRACE_ENABLED=false parsed correctly")
     func loadConfigEnvBoolTraceEnabled() async throws {
-        try await withCleanEnv {
-            setenv("AXION_TRACE_ENABLED", "false", 1)
+        let config = try await ConfigManager.loadConfig(
+            configDirectory: tempDir,
+            cliOverrides: nil,
+            environment: ["AXION_TRACE_ENABLED": "false"]
+        )
 
-            let config = try await ConfigManager.loadConfig(
-                configDirectory: tempDir,
-                cliOverrides: nil
-            )
-
-            #expect(!config.traceEnabled)
-        }
+        #expect(!config.traceEnabled)
     }
 
     @Test("CLI arguments override environment variables")
     func loadConfigCLIOverridesEnv() async throws {
-        try await withCleanEnv {
-            setenv("AXION_MAX_STEPS", "50", 1)
+        let cliOverrides = CLIOverrides(
+            maxSteps: 10,
+            maxBatches: nil
+        )
 
-            let cliOverrides = CLIOverrides(
-                maxSteps: 10,
-                maxBatches: nil
-            )
+        let config = try await ConfigManager.loadConfig(
+            configDirectory: tempDir,
+            cliOverrides: cliOverrides,
+            environment: ["AXION_MAX_STEPS": "50"]
+        )
 
-            let config = try await ConfigManager.loadConfig(
-                configDirectory: tempDir,
-                cliOverrides: cliOverrides
-            )
-
-            #expect(config.maxSteps == 10)
-        }
+        #expect(config.maxSteps == 10)
     }
 
     @Test("CLI arguments override all layers")
     func loadConfigCLIOverridesAllLayers() async throws {
-        try await withCleanEnv {
-            let configJSON = """
-            {
-              "maxSteps": 30,
-              "maxBatches": 8
-            }
-            """
-            try writeConfigJSON(configJSON)
-            setenv("AXION_MAX_STEPS", "50", 1)
-
-            let cliOverrides = CLIOverrides(
-                maxSteps: 10,
-                maxBatches: 2
-            )
-
-            let config = try await ConfigManager.loadConfig(
-                configDirectory: tempDir,
-                cliOverrides: cliOverrides
-            )
-
-            #expect(config.maxSteps == 10)
-            #expect(config.maxBatches == 2)
+        let configJSON = """
+        {
+          "maxSteps": 30,
+          "maxBatches": 8
         }
+        """
+        try writeConfigJSON(configJSON)
+
+        let cliOverrides = CLIOverrides(
+            maxSteps: 10,
+            maxBatches: 2
+        )
+
+        let config = try await ConfigManager.loadConfig(
+            configDirectory: tempDir,
+            cliOverrides: cliOverrides,
+            environment: ["AXION_MAX_STEPS": "50"]
+        )
+
+        #expect(config.maxSteps == 10)
+        #expect(config.maxBatches == 2)
     }
 
     @Test("no file and no env vars returns defaults")
     func loadConfigNoFileNoEnvReturnsDefault() async throws {
-        try await withCleanEnv {
-            let config = try await ConfigManager.loadConfig(
-                configDirectory: tempDir,
-                cliOverrides: nil
-            )
+        let config = try await ConfigManager.loadConfig(
+            configDirectory: tempDir,
+            cliOverrides: nil,
+            environment: [:]
+        )
 
-            #expect(config.model == AxionConfig.default.model)
-            #expect(config.maxSteps == AxionConfig.default.maxSteps)
-            #expect(config.maxBatches == AxionConfig.default.maxBatches)
-            #expect(config.maxReplanRetries == AxionConfig.default.maxReplanRetries)
-            #expect(config.traceEnabled == AxionConfig.default.traceEnabled)
-            #expect(config.sharedSeatMode == AxionConfig.default.sharedSeatMode)
-            #expect(config.apiKey == nil)
-        }
+        #expect(config.model == AxionConfig.default.model)
+        #expect(config.maxSteps == AxionConfig.default.maxSteps)
+        #expect(config.maxBatches == AxionConfig.default.maxBatches)
+        #expect(config.maxReplanRetries == AxionConfig.default.maxReplanRetries)
+        #expect(config.traceEnabled == AxionConfig.default.traceEnabled)
+        #expect(config.sharedSeatMode == AxionConfig.default.sharedSeatMode)
+        #expect(config.apiKey == nil)
     }
 
     @Test("invalid JSON file falls back to defaults")
     func loadConfigInvalidJsonFileFallsBackToDefault() async throws {
-        try await withCleanEnv {
-            try writeConfigJSON("}{not valid json")
+        try writeConfigJSON("}{not valid json")
 
-            let config = try await ConfigManager.loadConfig(
-                configDirectory: tempDir,
-                cliOverrides: nil
-            )
+        let config = try await ConfigManager.loadConfig(
+            configDirectory: tempDir,
+            cliOverrides: nil,
+            environment: [:]
+        )
 
-            #expect(config.maxSteps == AxionConfig.default.maxSteps)
-        }
+        #expect(config.maxSteps == AxionConfig.default.maxSteps)
     }
 
     @Test("AXION_API_KEY env overrides file")
     func loadConfigApiKeyEnvOverridesFile() async throws {
-        try await withCleanEnv {
-            let configJSON = """
-            {
-              "apiKey": "sk-ant-from-file"
-            }
-            """
-            try writeConfigJSON(configJSON)
-            setenv("AXION_API_KEY", "sk-ant-from-env", 1)
-
-            let config = try await ConfigManager.loadConfig(
-                configDirectory: tempDir,
-                cliOverrides: nil
-            )
-
-            #expect(config.apiKey == "sk-ant-from-env")
+        let configJSON = """
+        {
+          "apiKey": "sk-ant-from-file"
         }
+        """
+        try writeConfigJSON(configJSON)
+
+        let config = try await ConfigManager.loadConfig(
+            configDirectory: tempDir,
+            cliOverrides: nil,
+            environment: ["AXION_API_KEY": "sk-ant-from-env"]
+        )
+
+        #expect(config.apiKey == "sk-ant-from-env")
     }
 
     @Test("saveConfigFile includes apiKey")
@@ -307,36 +262,35 @@ struct ConfigManagerTests: ~Copyable {
 
     @Test("full layer stack: defaults -> file -> env -> CLI")
     func loadConfigFullLayerStack() async throws {
-        try await withCleanEnv {
-            let configJSON = """
-            {
-              "model": "file-model",
-              "maxSteps": 30,
-              "maxBatches": 8,
-              "traceEnabled": false
-            }
-            """
-            try writeConfigJSON(configJSON)
-
-            setenv("AXION_MODEL", "env-model", 1)
-            setenv("AXION_MAX_STEPS", "40", 1)
-
-            let cliOverrides = CLIOverrides(
-                maxSteps: 10,
-                maxBatches: nil
-            )
-
-            let config = try await ConfigManager.loadConfig(
-                configDirectory: tempDir,
-                cliOverrides: cliOverrides
-            )
-
-            #expect(config.maxSteps == 10)
-            #expect(config.model == "env-model")
-            #expect(config.maxBatches == 8)
-            #expect(!config.traceEnabled)
-            #expect(config.maxReplanRetries == AxionConfig.default.maxReplanRetries)
-            #expect(config.sharedSeatMode == AxionConfig.default.sharedSeatMode)
+        let configJSON = """
+        {
+          "model": "file-model",
+          "maxSteps": 30,
+          "maxBatches": 8,
+          "traceEnabled": false
         }
+        """
+        try writeConfigJSON(configJSON)
+
+        let cliOverrides = CLIOverrides(
+            maxSteps: 10,
+            maxBatches: nil
+        )
+
+        let config = try await ConfigManager.loadConfig(
+            configDirectory: tempDir,
+            cliOverrides: cliOverrides,
+            environment: [
+                "AXION_MODEL": "env-model",
+                "AXION_MAX_STEPS": "40",
+            ]
+        )
+
+        #expect(config.maxSteps == 10)
+        #expect(config.model == "env-model")
+        #expect(config.maxBatches == 8)
+        #expect(!config.traceEnabled)
+        #expect(config.maxReplanRetries == AxionConfig.default.maxReplanRetries)
+        #expect(config.sharedSeatMode == AxionConfig.default.sharedSeatMode)
     }
 }

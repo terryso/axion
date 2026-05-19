@@ -84,8 +84,7 @@ enum ApiRunner {
 
     // MARK: - Skill Agent API
 
-    /// Run a prompt skill as an agent task.
-    /// Uses shared AgentBuilder with pre-resolved skill content as user message.
+    /// Run a prompt skill as an agent task using SDK's executeSkillStream().
     static func runSkillAgent(
         skill: OpenAgentSDK.Skill,
         task: String,
@@ -96,53 +95,30 @@ enum ApiRunner {
         verbose: Bool = false,
         completion: @escaping (String, APIRunStatus, [StepSummary], Int?, Int, CostTelemetry?, Bool) -> Void
     ) async -> (totalSteps: Int, durationMs: Int, replanCount: Int, finalStatus: APIRunStatus, stepSummaries: [StepSummary], costTelemetry: CostTelemetry?, externallyModified: Bool) {
-        // 1. Pre-resolve skill content via SwiftWork pattern
-        let skillRegistry = SkillRegistry()
-        skillRegistry.register(skill)
-        let resolvedTask: String
-        if let resolvedMessage = await AgentBuilder.resolveExplicitSlashSkillRequest(
-            skill: skill,
-            args: task,
-            skillRegistry: skillRegistry
-        ) {
-            resolvedTask = resolvedMessage
-        } else {
-            resolvedTask = task
-        }
-
-        // 2. Build agent via shared builder with explicitSkill for model/restriction info
-        let buildConfig = AgentBuilder.BuildConfig.forAPISkill(
-            config: config,
-            task: resolvedTask,
-            skill: skill,
-            skillRegistry: skillRegistry,
-            verbose: verbose
-        )
-
-        let buildResult: AgentBuildResult
+        // Build minimal skill agent (no MCP, core tools only)
+        let agent: Agent
         do {
-            buildResult = try await AgentBuilder.build(buildConfig)
+            agent = try await AgentBuilder.buildSkillAgent(
+                config: config,
+                skill: skill,
+                verbose: verbose
+            )
         } catch {
             completion("", .failed, [], nil, 0, nil, false)
             return (0, 0, 0, .failed, [], nil, false)
         }
-        let agent = buildResult.agent
-        let effectiveModel = skill.modelOverride ?? config.model
 
         let costTracker = CostTracker(maxModelCalls: config.maxModelCalls, maxScreenshots: config.maxScreenshots)
 
-        // Process the message stream via shared processor
-        let result = await processStream(
-            agent: agent,
-            task: task,
-            resolvedTask: resolvedTask,
-            model: effectiveModel,
+        // Use executeSkillStream for streaming skill execution
+        let skillStream = agent.executeSkillStream(skill.name, args: task)
+        let result = await processStreamFromAsyncStream(
+            messageStream: skillStream,
+            model: skill.modelOverride ?? config.model,
             runId: runId,
             eventBroadcaster: eventBroadcaster,
             runTracker: runTracker,
-            costTracker: costTracker,
-            seatMonitor: nil,
-            tracer: nil
+            costTracker: costTracker
         )
 
         completion("", result.finalStatus, result.stepSummaries, nil, 0, result.costTelemetry, result.externallyModified)
@@ -177,6 +153,34 @@ enum ApiRunner {
         seatMonitor: SeatActivityMonitor?,
         tracer: TraceRecorder?
     ) async -> StreamResult {
+        let messageStream = agent.stream(resolvedTask)
+        return await processStreamFromAsyncStream(
+            messageStream: messageStream,
+            task: task,
+            model: model,
+            runId: runId,
+            eventBroadcaster: eventBroadcaster,
+            runTracker: runTracker,
+            costTracker: costTracker,
+            seatMonitor: seatMonitor,
+            tracer: tracer,
+            cleanup: { try? await agent.close() }
+        )
+    }
+
+    /// Process a pre-built `AsyncStream<SDKMessage>` (e.g., from `executeSkillStream()`).
+    private static func processStreamFromAsyncStream(
+        messageStream: AsyncStream<SDKMessage>,
+        task: String = "",
+        model: String,
+        runId: String,
+        eventBroadcaster: EventBroadcaster?,
+        runTracker: RunTracker? = nil,
+        costTracker: CostTracker,
+        seatMonitor: SeatActivityMonitor? = nil,
+        tracer: TraceRecorder? = nil,
+        cleanup: @escaping () async -> Void = {}
+    ) async -> StreamResult {
         var totalSteps = 0
         var stepSummaries: [StepSummary] = []
         var pendingToolUses: [String: SDKMessage.ToolUseData] = [:]
@@ -186,7 +190,6 @@ enum ApiRunner {
         var seatActivityReported = false
         let startTime = ContinuousClock.now
 
-        let messageStream = agent.stream(resolvedTask)
         for await message in messageStream {
             if _Concurrency.Task.isCancelled { break }
 
@@ -282,7 +285,7 @@ enum ApiRunner {
         )
 
         // Cleanup
-        try? await agent.close()
+        await cleanup()
         await tracer?.close()
 
         let finalStatus: APIRunStatus

@@ -9,63 +9,6 @@ import Testing
 @Suite("ExplicitSkillTrigger")
 struct ExplicitSkillTriggerTests {
 
-    // MARK: - AC1: Pre-resolution via resolveExplicitSlashSkillRequest
-
-    @Test("AC1: resolveExplicitSlashSkillRequest returns non-nil for valid skill")
-    func testPreResolutionReturnsPromptForValidSkill() async {
-        let registry = SkillRegistry()
-        registry.register(Skill(
-            name: "test-skill",
-            description: "Test",
-            promptTemplate: "You are a test agent. Do X, Y, Z."
-        ))
-
-        let result = await AgentBuilder.resolveExplicitSlashSkillRequest(
-            skill: Skill(name: "test-skill", description: "Test", promptTemplate: "You are a test agent. Do X, Y, Z."),
-            args: "获取频道列表",
-            skillRegistry: registry
-        )
-
-        #expect(result != nil)
-        // Verify the full promptTemplate content is returned by pre-resolution
-        #expect(result!.contains("You are a test agent"))
-        #expect(result!.contains("Do X, Y, Z"))
-    }
-
-    @Test("AC1: resolveExplicitSlashSkillRequest returns nil for non-existent skill")
-    func testPreResolutionReturnsNilForNonExistentSkill() async {
-        let registry = SkillRegistry()
-
-        let result = await AgentBuilder.resolveExplicitSlashSkillRequest(
-            skill: Skill(name: "non-existent", description: "Missing", promptTemplate: "Template"),
-            args: nil,
-            skillRegistry: registry
-        )
-
-        #expect(result == nil)
-    }
-
-    @Test("AC1: Pre-resolution returns user message, not system prompt injection")
-    func testPreResolutionReturnsUserMessage() async {
-        let registry = SkillRegistry()
-        let template = "你是直播管理助手。执行以下任务。"
-        registry.register(Skill(
-            name: "polyv-live-cli",
-            description: "直播管理",
-            promptTemplate: template
-        ))
-
-        let result = await AgentBuilder.resolveExplicitSlashSkillRequest(
-            skill: Skill(name: "polyv-live-cli", description: "直播管理", promptTemplate: template),
-            args: "获取频道列表",
-            skillRegistry: registry
-        )
-
-        #expect(result != nil)
-        // The resolved prompt should contain the skill template content
-        #expect(result!.contains("直播管理助手"))
-    }
-
     // MARK: - AC1: Prompt skill — invocation parsing
 
     @Test("AC1: Explicit prompt skill parses invocation correctly")
@@ -281,10 +224,33 @@ struct ExplicitSkillTriggerTests {
         // The task "/polyv-live-cli test" is sent as a plain prompt to the LLM.
     }
 
-    // MARK: - Combined: explicit trigger with all features
+    // MARK: - BuildConfig.forSkillExecution
 
-    @Test("Combined: explicit skill with toolRestrictions + modelOverride uses pre-resolution")
-    func testCombinedExplicitTrigger() async {
+    @Test("forSkillExecution creates minimal config: no MCP, no skills, no memory")
+    func testForSkillExecutionConfig() {
+        let skill = OpenAgentSDK.Skill(
+            name: "polyv-live-cli",
+            description: "直播管理",
+            toolRestrictions: [.bash, .read],
+            modelOverride: "claude-opus-4-6",
+            promptTemplate: "你是直播管理助手。"
+        )
+
+        let config = AxionConfig.default
+        let buildConfig = AgentBuilder.BuildConfig.forSkillExecution(
+            config: config,
+            skill: skill,
+            verbose: false
+        )
+
+        #expect(buildConfig.noMemory == true)
+        #expect(buildConfig.noSkills == true)
+        #expect(buildConfig.includePlaywright == false)
+        #expect(buildConfig.allowForeground == false)
+    }
+
+    @Test("Combined: explicit skill with toolRestrictions + modelOverride via skill object")
+    func testCombinedExplicitTrigger() {
         let skill = OpenAgentSDK.Skill(
             name: "polyv-live-cli",
             description: "直播管理",
@@ -296,18 +262,8 @@ struct ExplicitSkillTriggerTests {
         let effectiveModel = skill.modelOverride ?? "claude-sonnet-4-6"
         #expect(effectiveModel == "claude-opus-4-6")
 
-        // Pre-resolution: skill content goes to user message, not system prompt
-        let registry = SkillRegistry()
-        registry.register(skill)
-
-        let resolved = await AgentBuilder.resolveExplicitSlashSkillRequest(
-            skill: skill,
-            args: "获取频道列表",
-            skillRegistry: registry
-        )
-
-        #expect(resolved != nil)
-        #expect(resolved!.contains("直播管理助手"))
+        let restrictions = skill.toolRestrictions?.map(\.rawValue)
+        #expect(restrictions == ["bash", "read", "glob", "grep"])
     }
 
     // MARK: - Task override when no args provided

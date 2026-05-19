@@ -79,30 +79,53 @@ struct RunCommand: AsyncParsableCommand {
             skillRegisteredCount = skillRegistry.allSkills.count
         }
 
-        // Explicitly triggered skill (set when /skill-name resolves to a prompt skill)
-        var explicitSkill: OpenAgentSDK.Skill? = nil
-
         // 0b. Dual-track skill lookup: parse /skill-name prefix
         if let invocation = SkillLookupService.parseSkillInvocation(task), !noSkills {
             let lookupService = SkillLookupService(registry: skillRegistry)
 
             switch lookupService.lookup(name: invocation.name) {
             case .promptSkill(let skill):
-                // Pre-resolve skill via SwiftWork pattern: call SkillTool directly
-                // to get the resolved prompt as a user message. System prompt stays generic.
-                if let resolvedMessage = await AgentBuilder.resolveExplicitSlashSkillRequest(
+                // Prompt skill: build a minimal agent and use SDK's executeSkillStream()
+                let cliOverrides = CLIOverrides(
+                    maxSteps: maxSteps,
+                    maxBatches: maxBatches,
+                    maxModelCalls: maxModelCalls,
+                    maxScreenshots: maxScreenshots
+                )
+                let config = try await ConfigManager.loadConfig(cliOverrides: cliOverrides)
+                let effectiveMaxSteps = Self.computeEffectiveMaxSteps(fast: fast, maxSteps: maxSteps, configMaxSteps: config.maxSteps)
+
+                let agent = try await AgentBuilder.buildSkillAgent(
+                    config: config,
                     skill: skill,
-                    args: invocation.args,
-                    skillRegistry: skillRegistry
-                ) {
-                    task = resolvedMessage
-                } else {
-                    // Fallback: use args as task (pre-resolution failed)
-                    task = invocation.args ?? "Execute skill \(skill.name)"
+                    maxSteps: effectiveMaxSteps,
+                    verbose: verbose
+                )
+
+                let runId = Self.generateRunId()
+                let runMode = fast ? "fast" : "standard"
+                let outputHandler: any SDKMessageOutputHandler = json
+                    ? SDKJSONOutputHandler(mode: runMode)
+                    : SDKTerminalOutputHandler(mode: runMode)
+                outputHandler.displayRunStart(runId: runId, task: task)
+
+                let startTime = ContinuousClock.now
+                var totalSteps = 0
+
+                let skillStream = agent.executeSkillStream(skill.name, args: invocation.args)
+                for await message in skillStream {
+                    if _Concurrency.Task.isCancelled { break }
+                    if case .toolUse = message { totalSteps += 1 }
+                    outputHandler.handleMessage(message)
                 }
-                // Keep explicitSkill for model override + tool restriction info,
-                // but do NOT inject skill.promptTemplate into system prompt.
-                explicitSkill = skill
+
+                try? await agent.close()
+                outputHandler.displayCompletion()
+
+                let elapsed = ContinuousClock.now - startTime
+                let durationMs = Int(elapsed.components.seconds * 1000 + elapsed.components.attoseconds / 1_000_000_000_000)
+                fputs("[axion] LLM 调用: 1次, 耗时: \(durationMs)ms, 步骤: \(totalSteps)\n", stderr)
+                return
             case .recordedSkill(let skill, let skillPath):
                 // Recorded skill found — execute via SkillExecutor and return early.
                 let paramValues: [String: String]
@@ -141,7 +164,6 @@ struct RunCommand: AsyncParsableCommand {
             config: config,
             task: task,
             skillRegistry: skillRegistry,
-            explicitSkill: explicitSkill,
             noMemory: noMemory,
             noSkills: noSkills,
             allowForeground: allowForeground,
@@ -476,11 +498,6 @@ struct RunCommand: AsyncParsableCommand {
                     runId: runId
                 )
                 for var fact in facts {
-                    // Skill-scoped Memory: tag facts with skill scope (Story 18.2 AC1)
-                    // AC3: Respect --no-memory — skip scope tagging when noMemory is true
-                    if let skill = explicitSkill, !noMemory {
-                        fact.scope = "skill:\(skill.name)"
-                    }
                     do {
                         let existing = try await factStore.query(domain: fact.domain)
                         let result = lifecycleService.addFact(fact, mergingWith: existing)
@@ -810,9 +827,6 @@ final class SDKTerminalOutputHandler: SDKMessageOutputHandler {
             let isFast = mode == "fast"
             switch data.subtype {
             case .success:
-                if !data.text.isEmpty {
-                    output.write("[axion] 完成: \(data.text)")
-                }
                 if isFast {
                     let elapsed = computeElapsedSeconds()
                     output.write("[axion] Fast mode 完成。\(totalSteps) 步，耗时 \(elapsed) 秒。")

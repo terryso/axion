@@ -57,14 +57,15 @@ struct SDKOutputHandlerTests {
         #expect(lines.contains(where: { $0.contains("[screenshot captured]") }))
     }
 
-    @Test("terminal handler result success with text")
+    @Test("terminal handler result success with text — text was already streamed via .assistant")
     func terminalHandlerResultSuccessWithText() {
         var lines: [String] = []
         let output = TerminalOutput(write: { lines.append($0) })
         let handler = SDKTerminalOutputHandler(output: output)
 
         handler.handleMessage(.result(.init(subtype: .success, text: "All done", usage: nil, numTurns: 3, durationMs: 1000)))
-        #expect(lines.contains(where: { $0.contains("完成") && $0.contains("All done") }))
+        // Success result no longer outputs text — it was already displayed via .assistant messages
+        #expect(lines.isEmpty)
     }
 
     @Test("terminal handler result success empty text")
@@ -74,7 +75,7 @@ struct SDKOutputHandlerTests {
         let handler = SDKTerminalOutputHandler(output: output)
 
         handler.handleMessage(.result(.init(subtype: .success, text: "", usage: nil, numTurns: 1, durationMs: 500)))
-        #expect(!lines.contains(where: { $0.contains("完成:") }))
+        #expect(lines.isEmpty)
     }
 
     @Test("terminal handler result maxTurns")

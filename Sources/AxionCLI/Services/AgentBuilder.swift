@@ -15,7 +15,6 @@ struct AgentBuildResult: Sendable {
     let systemPrompt: String
     let agentOptions: AgentOptions
     let skillRegistry: SkillRegistry
-    let explicitSkill: OpenAgentSDK.Skill?
 }
 
 /// Single source of truth for constructing an Agent used by both CLI (RunCommand)
@@ -30,7 +29,6 @@ enum AgentBuilder {
         let config: AxionConfig
         let task: String
         let skillRegistry: SkillRegistry
-        let explicitSkill: OpenAgentSDK.Skill?
         let noMemory: Bool
         let noSkills: Bool
         let includePlaywright: Bool
@@ -45,7 +43,6 @@ enum AgentBuilder {
             config: AxionConfig,
             task: String,
             skillRegistry: SkillRegistry,
-            explicitSkill: OpenAgentSDK.Skill?,
             noMemory: Bool = false,
             noSkills: Bool = false,
             allowForeground: Bool = false,
@@ -59,7 +56,6 @@ enum AgentBuilder {
                 config: config,
                 task: task,
                 skillRegistry: skillRegistry,
-                explicitSkill: explicitSkill,
                 noMemory: noMemory,
                 noSkills: noSkills,
                 includePlaywright: true,
@@ -81,7 +77,6 @@ enum AgentBuilder {
                 config: config,
                 task: task,
                 skillRegistry: SkillRegistry(),
-                explicitSkill: nil,
                 noMemory: false,
                 noSkills: false,
                 includePlaywright: false,
@@ -94,23 +89,23 @@ enum AgentBuilder {
             )
         }
 
-        static func forAPISkill(
+        /// Build config for skill execution via SDK's `executeSkillStream()`.
+        /// Creates a minimal agent: no MCP, no SkillTool, core tools only (no ToolSearch/AskUser).
+        static func forSkillExecution(
             config: AxionConfig,
-            task: String,
             skill: OpenAgentSDK.Skill,
-            skillRegistry: SkillRegistry,
+            maxSteps: Int? = nil,
             verbose: Bool = false
         ) -> BuildConfig {
             BuildConfig(
                 config: config,
-                task: task,
-                skillRegistry: skillRegistry,
-                explicitSkill: skill,
-                noMemory: false,
-                noSkills: false,
+                task: "",
+                skillRegistry: SkillRegistry(),
+                noMemory: true,
+                noSkills: true,
                 includePlaywright: false,
                 allowForeground: false,
-                maxSteps: nil,
+                maxSteps: maxSteps,
                 maxTokens: nil,
                 verbose: verbose,
                 dryrun: false,
@@ -153,7 +148,7 @@ enum AgentBuilder {
         let memoryDir = (ConfigManager.defaultConfigDirectory as NSString).appendingPathComponent("memory")
         let memoryStore = FileBasedMemoryStore(memoryDir: memoryDir)
 
-        // 4. Build system prompt (always generic planner — skill content is in user message)
+        // 4. Build system prompt
         let systemPrompt = await buildSystemPrompt(
             config: config,
             task: task,
@@ -179,36 +174,26 @@ enum AgentBuilder {
             sharedSeatMode: config.sharedSeatMode && !buildConfig.allowForeground
         )
 
-        // 7. Build tools — always include SkillTool (SDK manages restrictions)
-        let hasToolRestrictions = buildConfig.explicitSkill?.toolRestrictions != nil
-
+        // 7. Build tools: MCP tools + pause_for_human + Skill
         var agentTools: [ToolProtocol] = [createPauseForHumanTool()]
         if !buildConfig.noSkills {
             agentTools.append(createSkillTool(registry: buildConfig.skillRegistry))
         }
 
-        // When explicitSkill has tool restrictions, exclude MCP servers
-        let effectiveMcpServers: [String: McpServerConfig]? = hasToolRestrictions ? nil : mcpServers
-
-        // 8. Determine effective model
-        let effectiveModel = buildConfig.explicitSkill?.modelOverride ?? config.model
-
-        // 9. Don't set allowedTools — let SDK's ToolRestrictionStack manage tool filtering
-
-        // 10. Build AgentOptions — pass skillRegistry (unblocks SDK's ToolRestrictionStack)
+        // 8. Build AgentOptions
         let effectiveMaxSteps = buildConfig.maxSteps ?? config.maxSteps
         let effectiveMaxTokens = buildConfig.maxTokens ?? 4096
 
         let agentOptions = AgentOptions(
             apiKey: apiKey,
-            model: effectiveModel,
+            model: config.model,
             baseURL: config.baseURL,
             systemPrompt: systemPrompt,
             maxTurns: effectiveMaxSteps,
             maxTokens: effectiveMaxTokens,
             permissionMode: .bypassPermissions,
             tools: agentTools,
-            mcpServers: effectiveMcpServers,
+            mcpServers: mcpServers,
             memoryStore: memoryStore,
             hookRegistry: hookRegistry,
             skillRegistry: buildConfig.skillRegistry,
@@ -216,7 +201,7 @@ enum AgentBuilder {
             pauseTimeoutMs: 300_000
         )
 
-        // 11. Create Agent
+        // 9. Create Agent
         let agent = createAgent(options: agentOptions)
 
         return AgentBuildResult(
@@ -225,59 +210,63 @@ enum AgentBuilder {
             memoryDir: memoryDir,
             systemPrompt: systemPrompt,
             agentOptions: agentOptions,
-            skillRegistry: buildConfig.skillRegistry,
-            explicitSkill: buildConfig.explicitSkill
+            skillRegistry: buildConfig.skillRegistry
         )
     }
 
-    // MARK: - Skill Pre-Resolution
-
-    /// Pre-resolves an explicit `/skill-name` invocation by calling the SDK's
-    /// SkillTool directly (mirrors SwiftWork's `resolveExplicitSlashSkillRequest`).
+    /// Builds a minimal agent for skill execution via SDK's `executeSkillStream()`.
     ///
-    /// Instead of injecting `skill.promptTemplate` into the system prompt, this
-    /// method extracts the resolved skill content so it can be passed as the
-    /// **user message** to `agent.stream()`. The SDK's `ToolRestrictionStack` is
-    /// managed internally when SkillTool.call() executes.
-    ///
-    /// - Returns: The resolved user message string (skill prompt content), or nil
-    ///   if resolution failed.
-    static func resolveExplicitSlashSkillRequest(
+    /// Unlike `build()`, this creates a lightweight agent:
+    /// - No MCP servers (no desktop automation tools)
+    /// - No SkillTool (skill is already resolved)
+    /// - No memory injection
+    /// - Core tools only (ToolSearch/AskUser excluded)
+    /// - Model overridden by skill if specified
+    static func buildSkillAgent(
+        config: AxionConfig,
         skill: OpenAgentSDK.Skill,
-        args: String?,
-        skillRegistry: SkillRegistry
-    ) async -> String? {
-        let tool = createSkillTool(registry: skillRegistry)
-        let context = ToolContext(
-            cwd: "/",
-            toolUseId: UUID().uuidString,
-            skillRegistry: skillRegistry,
-            restrictionStack: ToolRestrictionStack()
-        )
+        maxSteps: Int? = nil,
+        verbose: Bool = false
+    ) async throws -> Agent {
+        let apiKey = config.apiKey
+            ?? ProcessInfo.processInfo.environment["AXION_API_KEY"]
 
-        let inputPayload: [String: String] = [
-            "skill": skill.name,
-            "args": args ?? ""
-        ]
-
-        let result = await tool.call(input: inputPayload, context: context)
-
-        guard !result.isError else { return nil }
-
-        // Parse the JSON result to extract the prompt field
-        guard let data = result.content.data(using: .utf8),
-              let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
-              let prompt = json["prompt"] as? String else {
-            return nil
+        guard let apiKey, !apiKey.isEmpty else {
+            throw AxionError.missingApiKey(
+                suggestion: "Run 'axion setup' to configure your API key, or set AXION_API_KEY environment variable."
+            )
         }
 
-        return prompt
+        let registry = SkillRegistry()
+        registry.register(skill)
+
+        // Core tools only — exclude ToolSearch/AskUser to avoid confusing the LLM
+        let excludedTools: Set<String> = ["ToolSearch", "AskUser"]
+        let tools = getAllBaseTools(tier: .core).filter { !excludedTools.contains($0.name) }
+
+        let effectiveMaxSteps = maxSteps ?? config.maxSteps
+        let effectiveModel = skill.modelOverride ?? config.model
+
+        let agentOptions = AgentOptions(
+            apiKey: apiKey,
+            model: effectiveModel,
+            baseURL: config.baseURL,
+            systemPrompt: "All filesystem and terminal operations should use the current working directory.",
+            maxTurns: effectiveMaxSteps,
+            maxTokens: 16384,
+            permissionMode: .bypassPermissions,
+            tools: tools,
+            mcpServers: nil,
+            skillRegistry: registry,
+            logLevel: verbose ? .debug : .info
+        )
+
+        return createAgent(options: agentOptions)
     }
 
     // MARK: - System Prompt
 
-    /// Builds the full system prompt — always uses generic planner prompt.
-    /// Skill content is now passed as user message via pre-resolution, not injected here.
+    /// Builds the full system prompt for desktop automation.
     private static func buildSystemPrompt(
         config: AxionConfig,
         task: String,
@@ -314,7 +303,6 @@ enum AgentBuilder {
             }
         }
 
-        // Always load generic planner prompt (skill content is in user message)
         let baseSystemPrompt = (try? PromptBuilder.load(
             name: "planner-system",
             variables: [
@@ -326,13 +314,18 @@ enum AgentBuilder {
 
         let skillsPrompt = noSkills ? "" : skillRegistry.formatSkillsForPrompt()
 
-        var prompt = buildFullSystemPrompt(
+        let prompt = buildFullSystemPrompt(
             basePrompt: baseSystemPrompt,
             memoryContext: memoryContext,
             skillsPrompt: skillsPrompt
         )
 
-        // CLI mode-specific instructions (fast/dryrun)
+        return appendModeInstructions(to: prompt, fast: fast, dryrun: dryrun)
+    }
+
+    /// Appends fast/dryrun mode instructions to a system prompt.
+    static func appendModeInstructions(to prompt: String, fast: Bool, dryrun: Bool) -> String {
+        var prompt = prompt
         if fast {
             prompt += """
 
@@ -343,11 +336,9 @@ enum AgentBuilder {
             - If a step fails, do NOT retry with alternative approaches — report failure immediately
             """
         }
-
         if dryrun {
             prompt += "\n\nIMPORTANT: You are in DRYRUN mode. Generate a plan but do NOT execute any tools. Return a plan JSON with status 'done' and the steps you would execute."
         }
-
         return prompt
     }
 
@@ -377,44 +368,9 @@ enum AgentBuilder {
         return prompt
     }
 
-    /// Builds the full system prompt with CLI mode instructions (fast/dryrun) appended.
-    /// Used for testing the prompt construction pipeline.
-    static func buildCLISystemPrompt(
-        basePrompt: String,
-        fast: Bool = false,
-        dryrun: Bool = false,
-        memoryContext: String? = nil,
-        skillsPrompt: String = ""
-    ) -> String {
-        var prompt = buildFullSystemPrompt(
-            basePrompt: basePrompt,
-            memoryContext: memoryContext,
-            skillsPrompt: skillsPrompt
-        )
-
-        if fast {
-            prompt += """
-
-            IMPORTANT: You are in FAST mode. Generate the MINIMUM steps needed (1-3 steps max).
-            - Skip discovery steps (list_apps, list_windows, get_accessibility_tree) when the target app is obvious
-            - Do NOT call screenshot for verification — trust tool results
-            - Prefer direct actions (launch_app, type_text, hotkey) over exploration
-            - If a step fails, do NOT retry with alternative approaches — report failure immediately
-            """
-        }
-
-        if dryrun {
-            prompt += "\n\nIMPORTANT: You are in DRYRUN mode. Generate a plan but do NOT execute any tools. Return a plan JSON with status 'done' and the steps you would execute."
-        }
-
-        return prompt
-    }
-
     // MARK: - Safety Hook
 
     /// Creates a HookRegistry with preToolUse hook implementing SafetyChecker logic.
-    /// Uses MCP-prefixed tool names (e.g., "mcp__axion-helper__click") since that's
-    /// what the SDK passes through hooks.
     static func buildSafetyHookRegistry(sharedSeatMode: Bool) async -> HookRegistry {
         let registry = HookRegistry()
 
