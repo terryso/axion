@@ -67,86 +67,6 @@ struct RunCommand: AsyncParsableCommand {
     var maxScreenshots: Int?
 
     mutating func run() async throws {
-        // 0a. Discover skills once — reuse for both lookup and Agent flow
-        let skillRegistry = SkillRegistry()
-        var skillRegisteredCount = 0
-        if !noSkills {
-            // 0a-1. Register built-in desktop skills first (Epic 18)
-            AxionBuiltInSkills.registerAll(into: skillRegistry)
-
-            // 0a-2. Register filesystem-discovered skills (overrides built-in on name collision)
-            skillRegisteredCount = skillRegistry.registerDiscoveredSkills()
-            skillRegisteredCount = skillRegistry.allSkills.count
-        }
-
-        // 0b. Dual-track skill lookup: parse /skill-name prefix
-        if let invocation = SkillLookupService.parseSkillInvocation(task), !noSkills {
-            let lookupService = SkillLookupService(registry: skillRegistry)
-
-            switch lookupService.lookup(name: invocation.name) {
-            case .promptSkill(let skill):
-                // Prompt skill: build a minimal agent and use SDK's executeSkillStream()
-                let cliOverrides = CLIOverrides(
-                    maxSteps: maxSteps,
-                    maxBatches: maxBatches,
-                    maxModelCalls: maxModelCalls,
-                    maxScreenshots: maxScreenshots
-                )
-                let config = try await ConfigManager.loadConfig(cliOverrides: cliOverrides)
-                let effectiveMaxSteps = Self.computeEffectiveMaxSteps(fast: fast, maxSteps: maxSteps, configMaxSteps: config.maxSteps)
-
-                let agent = try await AgentBuilder.buildSkillAgent(
-                    config: config,
-                    skill: skill,
-                    maxSteps: effectiveMaxSteps,
-                    verbose: verbose
-                )
-
-                let runId = Self.generateRunId()
-                let runMode = fast ? "fast" : "standard"
-                let outputHandler: any SDKMessageOutputHandler = json
-                    ? SDKJSONOutputHandler(mode: runMode)
-                    : SDKTerminalOutputHandler(mode: runMode)
-                outputHandler.displayRunStart(runId: runId, task: task)
-
-                let startTime = ContinuousClock.now
-                var totalSteps = 0
-
-                let skillStream = agent.executeSkillStream(skill.name, args: invocation.args)
-                for await message in skillStream {
-                    if _Concurrency.Task.isCancelled { break }
-                    if case .toolUse = message { totalSteps += 1 }
-                    outputHandler.handleMessage(message)
-                }
-
-                try? await agent.close()
-                outputHandler.displayCompletion()
-
-                let elapsed = ContinuousClock.now - startTime
-                let durationMs = Int(elapsed.components.seconds * 1000 + elapsed.components.attoseconds / 1_000_000_000_000)
-                fputs("[axion] LLM 调用: 1次, 耗时: \(durationMs)ms, 步骤: \(totalSteps)\n", stderr)
-                return
-            case .recordedSkill(let skill, let skillPath):
-                // Recorded skill found — execute via SkillExecutor and return early.
-                let paramValues: [String: String]
-                if let args = invocation.args {
-                    let parts = args.split(separator: " ").map(String.init)
-                    paramValues = (try? SkillRunCommand.parseParamStrings(parts)) ?? [:]
-                } else {
-                    paramValues = [:]
-                }
-                try await RecordedSkillRunner.run(
-                    skill: skill,
-                    skillPath: skillPath,
-                    paramValues: paramValues
-                )
-                return
-            case .notFound:
-                // Neither track found — continue normal Agent flow with original task.
-                break
-            }
-        }
-
         // 1. Load configuration (layered: defaults -> config.json -> env -> CLI args)
         let cliOverrides = CLIOverrides(
             maxSteps: maxSteps,
@@ -163,7 +83,6 @@ struct RunCommand: AsyncParsableCommand {
         let buildConfig = AgentBuilder.BuildConfig.forCLI(
             config: config,
             task: task,
-            skillRegistry: skillRegistry,
             noMemory: noMemory,
             noSkills: noSkills,
             allowForeground: allowForeground,
@@ -174,14 +93,14 @@ struct RunCommand: AsyncParsableCommand {
             fast: fast
         )
 
-        if skillRegisteredCount > 0 {
-            fputs("[axion] 已加载 \(skillRegisteredCount) 个技能\n", stderr)
-        }
-
         let buildResult = try await AgentBuilder.build(buildConfig)
         let agent = buildResult.agent
         let memoryDir = buildResult.memoryDir
         let memoryStore = buildResult.agentOptions.memoryStore as! FileBasedMemoryStore
+
+        if buildResult.skillRegisteredCount > 0 {
+            fputs("[axion] 已加载 \(buildResult.skillRegisteredCount) 个技能\n", stderr)
+        }
 
         // 9. Select output handler
         let runMode = fast ? "fast" : (dryrun ? "dryrun" : "standard")
@@ -233,30 +152,9 @@ struct RunCommand: AsyncParsableCommand {
             ])
         }
 
-        // Cleanup expired memory entries at run start
-        do {
-            let cleanupService = MemoryCleanupService()
-            _ = try await cleanupService.cleanupExpired(in: memoryStore)
-        } catch {
-            fputs("[axion] warning: memory cleanup failed: \(error.localizedDescription)\n", stderr)
-        }
-
-        // Demote retired memory facts at run start (Story 12.1 AC5, AC8)
-        do {
-            let factStore = MemoryFactStore(memoryDir: memoryDir)
-            let lifecycleService = MemoryLifecycleService()
-            let cutoffDate = Date().addingTimeInterval(-MemoryLifecycleService.demotionInterval)
-            let domains = try await factStore.listDomains()
-            for domain in domains {
-                let facts = try await factStore.query(domain: domain)
-                let demoted = lifecycleService.demoteRetired(facts: facts, lastVerifiedBefore: cutoffDate)
-                let changed = zip(facts, demoted).filter { $0.status != $1.status }
-                for (_, demotedFact) in changed {
-                    try await factStore.save(domain: domain, fact: demotedFact)
-                }
-            }
-        } catch {
-            fputs("[axion] warning: memory fact lifecycle demotion failed: \(error.localizedDescription)\n", stderr)
+        // Pre-run memory cleanup (expired entries + fact demotion)
+        if !noMemory {
+            await RunMemoryProcessor.preRunCleanup(memoryStore: memoryStore, memoryDir: memoryDir)
         }
 
         var totalSteps = 0
@@ -271,9 +169,8 @@ struct RunCommand: AsyncParsableCommand {
         }
         sigintSource.resume()
 
-        // Collect toolUse/toolResult pairs for memory extraction (matched by toolUseId)
-        var pendingToolUses: [String: SDKMessage.ToolUseData] = [:]
-        var collectedPairs: [(toolUse: SDKMessage.ToolUseData, toolResult: SDKMessage.ToolResultData)] = []
+        // Collect tool pairs from SDK result (replaces manual pendingToolUses/collectedPairs)
+        var resultToolPairs: [SDKMessage.ToolExecutionPair] = []
 
         // Visual delta tracking (AC5: --no-visual-delta disables)
         let visualDeltaTracker = noVisualDelta ? nil : VisualDeltaTracker()
@@ -281,9 +178,8 @@ struct RunCommand: AsyncParsableCommand {
         var visualDeltaSkipped = 0
         var visualDeltaChecked = 0
 
-        // Budget/cost tracking (Story 13.3)
-        let costTracker = CostTracker(maxModelCalls: config.maxModelCalls, maxScreenshots: config.maxScreenshots)
-        var budgetExceeded = false
+        // Budget/cost tracking — screenshot counting only (model calls handled by SDK maxModelCalls)
+        let costTracker = CostTracker(maxScreenshots: config.maxScreenshots)
 
         // Seat activity monitoring (Story 13.4) — detect external desktop operations
         let seatMonitor = (config.sharedSeatMode && !allowForeground && !dryrun)
@@ -292,7 +188,6 @@ struct RunCommand: AsyncParsableCommand {
             await tracer?.recordSeatBaseline(baseline: await monitor.describeBaseline())
         }
         var externallyModified = false
-        var seatActivityReported = false
 
         // Story 15.1: Takeover event context for auto-learning
         // Story 15.2: Extended with feedback, duration for structured markers
@@ -308,34 +203,12 @@ struct RunCommand: AsyncParsableCommand {
                 outputHandler.handleMessage(message)
                 await recordToTrace(message: message, tracer: tracer)
 
-                // Collect tool pairs for memory extraction (match by toolUseId)
                 switch message {
-                case .assistant(let data):
-                    // Seat activity check (Story 13.4)
-                    if let activity = await seatMonitor?.check() {
-                        externallyModified = true
-                        await tracer?.recordExternalActivityDetected(
-                            description: activity, phase: "before_llm")
-                        if !seatActivityReported {
-                            fputs("[axion] 检测到外部桌面操作，本次运行的经验不会被记忆\n", stderr)
-                            seatActivityReported = true
-                        }
-                    }
-                    // Budget: record LLM call and check model call limit
-                    let callIndex = await costTracker.currentModelCallCount + 1
-                    let budgetResult = await costTracker.recordModelCall(model: data.model)
-                    await tracer?.recordModelCall(model: data.model, callIndex: callIndex)
-                    if case .modelCallsExceeded(let limit) = budgetResult {
-                        budgetExceeded = true
-                        await tracer?.recordBudgetExceeded(budgetType: "model_calls", current: callIndex, limit: limit)
-                        agent.interrupt()
-                    }
+                case .assistant:
+                    break
                 case .toolUse(let data):
-                    pendingToolUses[data.toolUseId] = data
-                    // Track screenshot tool uses for visual delta
                     if data.toolName.contains("screenshot") {
                         pendingScreenshotToolUseIds.insert(data.toolUseId)
-                        // Budget: record screenshot call
                         let budgetResult = await costTracker.recordScreenshot()
                         if case .screenshotsExceeded(let limit) = budgetResult {
                             let current = await costTracker.currentScreenshotCount
@@ -343,19 +216,16 @@ struct RunCommand: AsyncParsableCommand {
                         }
                     }
                 case .toolResult(let data):
-                    if let toolUse = pendingToolUses.removeValue(forKey: data.toolUseId) {
-                        collectedPairs.append((toolUse: toolUse, toolResult: data))
-                    }
                     // Visual delta: check screenshot results
                     if pendingScreenshotToolUseIds.remove(data.toolUseId) != nil,
                        let tracker = visualDeltaTracker {
                         let base64 = extractBase64FromToolResult(data.content)
                         if let base64 {
-                            let result = await tracker.processScreenshot(base64: base64)
+                            let vdResult = await tracker.processScreenshot(base64: base64)
                             visualDeltaChecked += 1
-                            if result.shouldSkipVerifier {
+                            if vdResult.shouldSkipVerifier {
                                 visualDeltaSkipped += 1
-                                if case .unchanged(let pct) = result {
+                                if case .unchanged(let pct) = vdResult {
                                     await tracer?.recordVerifierSkipped(
                                         deltaPercentage: pct,
                                         reason: "visual_delta_low"
@@ -417,12 +287,14 @@ struct RunCommand: AsyncParsableCommand {
                         break
                     }
                 case .result(let data):
-                    // Story 15.1: Track run outcome for takeover learning
+                    // Capture tool pairs from SDK (replaces manual collection)
+                    resultToolPairs = data.toolPairs
+                    // Track run outcome for takeover learning
                     switch data.subtype {
                     case .success:
                         runSucceeded = true
                         runCompleted = true
-                    case .errorMaxTurns, .errorMaxBudgetUsd, .errorDuringExecution, .errorMaxStructuredOutputRetries:
+                    case .errorMaxTurns, .errorMaxBudgetUsd, .errorDuringExecution, .errorMaxStructuredOutputRetries, .errorMaxModelCalls:
                         runCompleted = true
                     default:
                         break
@@ -441,6 +313,14 @@ struct RunCommand: AsyncParsableCommand {
             agent.interrupt()
         }
 
+        // Post-stream: check for external desktop activity (Story 13.4)
+        if let activity = await seatMonitor?.check() {
+            externallyModified = true
+            await tracer?.recordExternalActivityDetected(
+                description: activity, phase: "post_stream")
+            fputs("[axion] 检测到外部桌面操作，本次运行的经验不会被记忆\n", stderr)
+        }
+
         let elapsed = ContinuousClock.now - startTime
         let durationMs = Int(elapsed.components.seconds * 1000 + elapsed.components.attoseconds / 1_000_000_000_000)
 
@@ -455,134 +335,37 @@ struct RunCommand: AsyncParsableCommand {
             fputs("[axion] 视觉增量: 跳过 \(visualDeltaSkipped)/\(visualDeltaChecked) 次验证\n", stderr)
         }
 
-        // Cost summary (Story 13.3)
+        // Cost summary
         let costSummary = await costTracker.getSummary()
-        if budgetExceeded {
-            if let limit = config.maxModelCalls {
-                fputs("[axion] ❌ 已达到模型调用上限（\(limit)次）\n", stderr)
-            }
-        }
         fputs("[axion] LLM 调用: \(costSummary.modelCalls)次, Tokens: \(costSummary.totalTokens), 预估成本: $\(String(format: "%.2f", costSummary.estimatedCostUsd)), 截图: \(costSummary.screenshotCount)次\n", stderr)
 
         await tracer?.recordRunDone(totalSteps: totalSteps, durationMs: durationMs, replanCount: 0)
 
         await tracer?.close()
 
-        // Extract and save memory (non-blocking — failures are logged but don't fail the run)
-        // Story 13.4: Skip memory extraction if external desktop activity was detected
-        if externallyModified {
-            fputs("[axion] 检测到外部桌面操作，本次运行的经验不会被记忆\n", stderr)
-        } else {
-            do {
-                let extractor = AppMemoryExtractor()
-                let entries = try await extractor.extract(
-                    from: collectedPairs,
-                    task: task,
-                    runId: runId
-                )
-                var processedDomains: Set<String> = []
-                for entry in entries {
-                    // Determine domain from tags (app:xxx)
-                    let domain = entry.tags.first(where: { $0.hasPrefix("app:") })?
-                        .dropFirst("app:".count).description ?? "unknown"
-                    try await memoryStore.save(domain: domain, knowledge: entry)
-                    processedDomains.insert(domain)
-                }
-
-                // Story 12.1: Also extract AppMemoryFact entries (AC2, AC8)
-                let factStore = MemoryFactStore(memoryDir: memoryDir)
-                let lifecycleService = MemoryLifecycleService()
-                let facts = extractor.extractFacts(
-                    from: collectedPairs,
-                    task: task,
-                    runId: runId
-                )
-                for var fact in facts {
-                    do {
-                        let existing = try await factStore.query(domain: fact.domain)
-                        let result = lifecycleService.addFact(fact, mergingWith: existing)
-                        try await factStore.save(domain: fact.domain, fact: result)
-                    } catch {
-                        fputs("[axion] warning: memory fact save failed for \(fact.domain): \(error.localizedDescription)\n", stderr)
-                    }
-                }
-
-                // Story 4.2: Profile analysis and familiarity tracking
-                for domain in processedDomains {
-                    do {
-                        // Query history for this domain
-                        let history = try await memoryStore.query(domain: domain, filter: nil)
-
-                        // Analyze and generate AppProfile
-                        let analyzer = AppProfileAnalyzer()
-                        let profile = analyzer.analyze(domain: domain, history: history)
-
-                        // Save profile as a KnowledgeEntry (only if there's meaningful data)
-                        if profile.totalRuns > 0 {
-                            let profileContent = Self.buildProfileContent(profile: profile)
-                            let profileEntry = KnowledgeEntry(
-                                id: UUID().uuidString,
-                                content: profileContent,
-                                tags: ["app:\(domain)", "profile"],
-                                createdAt: Date(),
-                                sourceRunId: nil
-                            )
-                            try await memoryStore.save(domain: domain, knowledge: profileEntry)
-                        }
-
-                        // Check and update familiarity
-                        let tracker = FamiliarityTracker()
-                        try await tracker.checkAndUpdateFamiliarity(domain: domain, store: memoryStore)
-                    } catch {
-                        fputs("[axion] warning: profile analysis failed for \(domain): \(error.localizedDescription)\n", stderr)
-                    }
-                }
-
-            } catch {
-                fputs("[axion] warning: memory extraction failed: \(error.localizedDescription)\n", stderr)
-            }
-
-            // Story 15.1: Record takeover learning independently (AC1, AC2, AC3, AC7, AC8, AC9)
-            // Story 15.2: Extended with TakeoverMarker, feedback, duration, reason classification
-            // Placed outside the memory extraction do/catch so extraction failures
-            // don't prevent takeover learning from being recorded.
-            if let event = takeoverEvent, !noMemory, !externallyModified, runCompleted {
-                let takeoverFactStore = MemoryFactStore(memoryDir: memoryDir)
-                let takeoverService = TakeoverLearningService(
-                    factStore: takeoverFactStore,
-                    lifecycleService: MemoryLifecycleService()
-                )
-                let domain = Self.inferDomain(from: collectedPairs)
-                let outcome: TakeoverOutcome = runSucceeded ? .success : .failed
-
-                let reasonType = InterventionReason.classifyReason(event.reason)
-
-                // Write structured marker to trace (AC4, AC5)
-                let marker = TakeoverMarker.create(
-                    runId: runId,
-                    outcome: outcome,
-                    issue: event.issue,
-                    summary: event.summary,
-                    reasonType: reasonType,
-                    feedback: event.feedback,
-                    duration: event.duration,
-                    bundleId: domain,
-                    task: task
-                )
-                await tracer?.record(event: TraceRecorder.TraceEventType.takeover, payload: marker.toDictionary())
-
-                // Pass feedback to learning service (AC2, AC3)
-                await takeoverService.recordTakeoverLearning(
-                    bundleId: domain,
-                    task: task,
-                    issue: event.issue,
-                    summary: event.summary,
-                    outcome: outcome,
-                    reasonType: reasonType.rawValue,
-                    feedback: event.feedback
-                )
-            }
+        // Post-run memory processing (extraction, facts, profile, familiarity, takeover learning)
+        let takeoverContext: RunMemoryProcessor.TakeoverEventContext? = takeoverEvent.map { event in
+            RunMemoryProcessor.TakeoverEventContext(
+                issue: event.issue,
+                summary: event.summary,
+                feedback: event.feedback,
+                reason: event.reason,
+                duration: event.duration
+            )
         }
+        await RunMemoryProcessor.processRunResult(
+            toolPairs: resultToolPairs,
+            task: task,
+            runId: runId,
+            memoryStore: memoryStore,
+            memoryDir: memoryDir,
+            noMemory: noMemory,
+            externallyModified: externallyModified,
+            takeoverEvent: takeoverContext,
+            runSucceeded: runSucceeded,
+            runCompleted: runCompleted,
+            tracer: tracer
+        )
 
         // Record lock release trace event
         if !dryrun {
@@ -598,24 +381,6 @@ struct RunCommand: AsyncParsableCommand {
     }
 
     // MARK: - Private Helpers
-
-    /// Infer the active app domain from collected tool-use pairs.
-    /// Looks for the last `launch_app` result containing a bundle identifier.
-    internal static func inferDomain(
-        from pairs: [(toolUse: SDKMessage.ToolUseData, toolResult: SDKMessage.ToolResultData)]
-    ) -> String {
-        for (toolUse, result) in pairs.reversed() {
-            if toolUse.toolName.contains("launch") {
-                if let data = result.content.data(using: .utf8),
-                   let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any] {
-                    if let bundleId = json["bundle_id"] as? String ?? json["bundleId"] as? String {
-                        return bundleId
-                    }
-                }
-            }
-        }
-        return "unknown"
-    }
 
     /// Generates a unique run ID in the format `YYYYMMDD-{6random}`.
     private static func generateRunId() -> String {
@@ -848,6 +613,8 @@ final class SDKTerminalOutputHandler: SDKMessageOutputHandler {
                 }
             case .errorMaxStructuredOutputRetries:
                 output.write("[axion] 结构化输出重试超限")
+            case .errorMaxModelCalls:
+                output.write("[axion] 已达到模型调用上限")
             }
 
         case .partialMessage(let data):

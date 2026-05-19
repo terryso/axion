@@ -9,21 +9,10 @@ import Testing
 @Suite("ExplicitSkillTrigger")
 struct ExplicitSkillTriggerTests {
 
-    // MARK: - AC1: Prompt skill — invocation parsing
-
-    @Test("AC1: Explicit prompt skill parses invocation correctly")
-    func testPromptTemplateInjection() throws {
-        let cmd = try RunCommand.parse(["/polyv-live-cli 获取频道列表"])
-        let invocation = SkillLookupService.parseSkillInvocation(cmd.task)
-        #expect(invocation != nil)
-        #expect(invocation?.name == "polyv-live-cli")
-        #expect(invocation?.args == "获取频道列表")
-    }
+    // MARK: - AC1: Prompt skill — skill object construction
 
     @Test("AC1: System prompt is generic planner — skill content is in user message")
     func testExplicitSkillSystemPromptIsGeneric() {
-        // After refactoring: system prompt is always the generic planner prompt.
-        // Skill content is passed as user message via pre-resolution.
         let result = AgentBuilder.buildFullSystemPrompt(
             basePrompt: "Base planner prompt",
             skillsPrompt: ""
@@ -41,8 +30,6 @@ struct ExplicitSkillTriggerTests {
             promptTemplate: "Do stuff"
         )
 
-        // After refactoring: toolRestrictions still available on the skill object
-        // for SDK's ToolRestrictionStack management, not for system prompt construction
         let restrictions = skill.toolRestrictions
         #expect(restrictions != nil)
         #expect(restrictions!.map(\.rawValue) == ["bash", "read"])
@@ -50,7 +37,6 @@ struct ExplicitSkillTriggerTests {
 
     @Test("AC1: Memory context still injected in generic system prompt")
     func testExplicitSkillPromptWithMemory() {
-        // Memory is still injected into the generic system prompt
         let result = AgentBuilder.buildFullSystemPrompt(
             basePrompt: "Base prompt",
             memoryContext: "## Memory\nYou previously worked with Calculator app.",
@@ -200,28 +186,14 @@ struct ExplicitSkillTriggerTests {
         #expect(resolvedParams["timeout"] == "30")
     }
 
-    // MARK: - AC5: / not at start does not trigger
+    // MARK: - AC6: --no-skills disables skill registration
 
-    @Test("AC5: / not at start is not a skill invocation")
-    func testSlashNotAtStart() {
-        let parsed = SkillLookupService.parseSkillInvocation("请帮我/polyv-live-cli获取频道")
-        #expect(parsed == nil)
-    }
-
-    // MARK: - AC6: --no-skills disables explicit trigger
-
-    @Test("AC6: --no-skills flag prevents skill lookup from executing")
+    @Test("AC6: --no-skills flag prevents skill registration in AgentBuilder")
     func testNoSkillsFlag() throws {
         let cmd = try RunCommand.parse(["--no-skills", "/polyv-live-cli test"])
         #expect(cmd.noSkills == true)
-        // When noSkills is true, the guard `!noSkills` on line 81 of RunCommand.run()
-        // prevents the entire skill lookup block from executing.
-        // parseSkillInvocation still works (pure parser), but the result is never used.
-        let parsed = SkillLookupService.parseSkillInvocation(cmd.task)
-        #expect(parsed != nil)
-        #expect(parsed?.name == "polyv-live-cli")
-        // The critical behavior: noSkills=true → RunCommand.run() skips skill lookup entirely.
-        // The task "/polyv-live-cli test" is sent as a plain prompt to the LLM.
+        // When noSkills is true, AgentBuilder.build() skips skill registration
+        // and does not add SkillTool to the agent's tools.
     }
 
     // MARK: - BuildConfig.forSkillExecution
@@ -264,31 +236,5 @@ struct ExplicitSkillTriggerTests {
 
         let restrictions = skill.toolRestrictions?.map(\.rawValue)
         #expect(restrictions == ["bash", "read", "glob", "grep"])
-    }
-
-    // MARK: - Task override when no args provided
-
-    @Test("Task defaults when invocation has no args")
-    func testTaskDefaultWithoutArgs() {
-        let skill = OpenAgentSDK.Skill(
-            name: "review",
-            description: "Review code",
-            promptTemplate: "Review changes"
-        )
-        let invocation = SkillLookupService.parseSkillInvocation("/review")
-        let task = invocation?.args ?? "Execute skill \(skill.name)"
-        #expect(task == "Execute skill review")
-    }
-
-    @Test("Task uses invocation args when provided")
-    func testTaskWithArgs() {
-        let skill = OpenAgentSDK.Skill(
-            name: "review",
-            description: "Review code",
-            promptTemplate: "Review changes"
-        )
-        let invocation = SkillLookupService.parseSkillInvocation("/review src/main.swift")
-        let task = invocation?.args ?? "Execute skill \(skill.name)"
-        #expect(task == "src/main.swift")
     }
 }

@@ -52,7 +52,7 @@ enum ApiRunner {
         let agent = buildResult.agent
 
         // Cost tracking (Story 13.3)
-        let costTracker = CostTracker(maxModelCalls: config.maxModelCalls, maxScreenshots: config.maxScreenshots)
+        let costTracker = CostTracker(maxScreenshots: config.maxScreenshots)
 
         // Trace recording
         let tracer = try? TraceRecorder(runId: runId, config: config)
@@ -108,7 +108,7 @@ enum ApiRunner {
             return (0, 0, 0, .failed, [], nil, false)
         }
 
-        let costTracker = CostTracker(maxModelCalls: config.maxModelCalls, maxScreenshots: config.maxScreenshots)
+        let costTracker = CostTracker(maxScreenshots: config.maxScreenshots)
 
         // Use executeSkillStream for streaming skill execution
         let skillStream = agent.executeSkillStream(skill.name, args: task)
@@ -205,7 +205,6 @@ enum ApiRunner {
                         seatActivityReported = true
                     }
                 }
-                _ = await costTracker.recordModelCall(model: model)
 
             case .toolUse(let data):
                 totalSteps += 1

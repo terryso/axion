@@ -15,6 +15,7 @@ struct AgentBuildResult: Sendable {
     let systemPrompt: String
     let agentOptions: AgentOptions
     let skillRegistry: SkillRegistry
+    let skillRegisteredCount: Int
 }
 
 /// Single source of truth for constructing an Agent used by both CLI (RunCommand)
@@ -28,7 +29,6 @@ enum AgentBuilder {
     struct BuildConfig: Sendable {
         let config: AxionConfig
         let task: String
-        let skillRegistry: SkillRegistry
         let noMemory: Bool
         let noSkills: Bool
         let includePlaywright: Bool
@@ -42,7 +42,6 @@ enum AgentBuilder {
         static func forCLI(
             config: AxionConfig,
             task: String,
-            skillRegistry: SkillRegistry,
             noMemory: Bool = false,
             noSkills: Bool = false,
             allowForeground: Bool = false,
@@ -55,7 +54,6 @@ enum AgentBuilder {
             BuildConfig(
                 config: config,
                 task: task,
-                skillRegistry: skillRegistry,
                 noMemory: noMemory,
                 noSkills: noSkills,
                 includePlaywright: true,
@@ -76,7 +74,6 @@ enum AgentBuilder {
             BuildConfig(
                 config: config,
                 task: task,
-                skillRegistry: SkillRegistry(),
                 noMemory: false,
                 noSkills: false,
                 includePlaywright: false,
@@ -100,7 +97,6 @@ enum AgentBuilder {
             BuildConfig(
                 config: config,
                 task: "",
-                skillRegistry: SkillRegistry(),
                 noMemory: true,
                 noSkills: true,
                 includePlaywright: false,
@@ -148,20 +144,29 @@ enum AgentBuilder {
         let memoryDir = (ConfigManager.defaultConfigDirectory as NSString).appendingPathComponent("memory")
         let memoryStore = FileBasedMemoryStore(memoryDir: memoryDir)
 
-        // 4. Build system prompt
+        // 4. Discover and register skills (owned by AgentBuilder)
+        let skillRegistry = SkillRegistry()
+        var skillRegisteredCount = 0
+        if !buildConfig.noSkills {
+            AxionBuiltInSkills.registerAll(into: skillRegistry)
+            _ = skillRegistry.registerDiscoveredSkills()
+            skillRegisteredCount = skillRegistry.allSkills.count
+        }
+
+        // 5. Build system prompt
         let systemPrompt = await buildSystemPrompt(
             config: config,
             task: task,
             memoryStore: memoryStore,
             memoryDir: memoryDir,
-            skillRegistry: buildConfig.skillRegistry,
+            skillRegistry: skillRegistry,
             noMemory: buildConfig.noMemory,
             noSkills: buildConfig.noSkills,
             fast: buildConfig.fast,
             dryrun: buildConfig.dryrun
         )
 
-        // 5. Configure MCP servers
+        // 6. Configure MCP servers
         var mcpServers: [String: McpServerConfig] = [
             "axion-helper": .stdio(McpStdioConfig(command: helperPath)),
         ]
@@ -169,22 +174,22 @@ enum AgentBuilder {
             mcpServers["playwright"] = .stdio(McpStdioConfig(command: "npx", args: ["@playwright/mcp@latest"]))
         }
 
-        // 6. Build safety hook registry
+        // 7. Build safety hook registry
         let hookRegistry = await buildSafetyHookRegistry(
             sharedSeatMode: config.sharedSeatMode && !buildConfig.allowForeground
         )
 
-        // 7. Build tools: MCP tools + pause_for_human + Skill
+        // 8. Build tools: MCP tools + pause_for_human + Skill
         var agentTools: [ToolProtocol] = [createPauseForHumanTool()]
         if !buildConfig.noSkills {
-            agentTools.append(createSkillTool(registry: buildConfig.skillRegistry))
+            agentTools.append(createSkillTool(registry: skillRegistry))
         }
 
-        // 8. Build AgentOptions
+        // 9. Build AgentOptions
         let effectiveMaxSteps = buildConfig.maxSteps ?? config.maxSteps
         let effectiveMaxTokens = buildConfig.maxTokens ?? 4096
 
-        let agentOptions = AgentOptions(
+        var agentOptions = AgentOptions(
             apiKey: apiKey,
             model: config.model,
             baseURL: config.baseURL,
@@ -196,12 +201,13 @@ enum AgentBuilder {
             mcpServers: mcpServers,
             memoryStore: memoryStore,
             hookRegistry: hookRegistry,
-            skillRegistry: buildConfig.skillRegistry,
+            skillRegistry: skillRegistry,
             logLevel: buildConfig.verbose ? .debug : .info,
             pauseTimeoutMs: 300_000
         )
+        agentOptions.maxModelCalls = config.maxModelCalls
 
-        // 9. Create Agent
+        // 10. Create Agent
         let agent = createAgent(options: agentOptions)
 
         return AgentBuildResult(
@@ -210,7 +216,8 @@ enum AgentBuilder {
             memoryDir: memoryDir,
             systemPrompt: systemPrompt,
             agentOptions: agentOptions,
-            skillRegistry: buildConfig.skillRegistry
+            skillRegistry: skillRegistry,
+            skillRegisteredCount: skillRegisteredCount
         )
     }
 
