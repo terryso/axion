@@ -142,14 +142,14 @@ struct SDKBoundaryAuditTests {
         guard SDK_API_USAGE_VERIFIED else { return }
 
         let sourcesDir = sourcesDirectory()
-        // MCP config is now in AgentBuilder
-        let agentBuilderPath = "\(sourcesDir)/AxionCLI/Services/AgentBuilder.swift"
-        let content = try String(contentsOfFile: agentBuilderPath, encoding: .utf8)
+        // MCP config is in MCPConfigResolver (extracted from AgentBuilder)
+        let resolverPath = "\(sourcesDir)/AxionCLI/Services/MCPConfigResolver.swift"
+        let content = try String(contentsOfFile: resolverPath, encoding: .utf8)
 
         #expect(content.contains("McpStdioConfig("),
-            "AgentBuilder MUST use McpStdioConfig to configure Helper as MCP stdio server")
+            "MCPConfigResolver MUST use McpStdioConfig to configure Helper as MCP stdio server")
         #expect(content.contains("McpServerConfig"),
-            "AgentBuilder MUST use McpServerConfig for MCP server configuration")
+            "MCPConfigResolver MUST use McpServerConfig for MCP server configuration")
     }
 
     // ========================================================================
@@ -161,13 +161,13 @@ struct SDKBoundaryAuditTests {
         guard SDK_API_USAGE_VERIFIED else { return }
 
         let sourcesDir = sourcesDirectory()
-        // HookRegistry is now managed by AgentBuilder
-        let agentBuilderPath = "\(sourcesDir)/AxionCLI/Services/AgentBuilder.swift"
-        let content = try String(contentsOfFile: agentBuilderPath, encoding: .utf8)
+        // Safety hooks are in SafetyHookFactory (extracted from AgentBuilder)
+        let factoryPath = "\(sourcesDir)/AxionCLI/Services/SafetyHookFactory.swift"
+        let content = try String(contentsOfFile: factoryPath, encoding: .utf8)
 
-        #expect(content.contains("HookRegistry"), "AgentBuilder MUST use HookRegistry for hook management")
-        #expect(content.contains("HookDefinition"), "AgentBuilder MUST use HookDefinition for hook configuration")
-        #expect(content.contains(".preToolUse"), "AgentBuilder MUST register preToolUse hook for safety checking")
+        #expect(content.contains("HookRegistry"), "SafetyHookFactory MUST use HookRegistry for hook management")
+        #expect(content.contains("HookDefinition"), "SafetyHookFactory MUST use HookDefinition for hook configuration")
+        #expect(content.contains(".preToolUse"), "SafetyHookFactory MUST register preToolUse hook for safety checking")
     }
 
     // ========================================================================

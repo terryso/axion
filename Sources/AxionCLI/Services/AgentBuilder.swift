@@ -194,17 +194,13 @@ enum AgentBuilder {
         )
 
         // 6. Configure MCP servers
-        var mcpServers: [String: McpServerConfig] = [
-            "axion-helper": .stdio(McpStdioConfig(command: helperPath)),
-        ]
-        if buildConfig.includePlaywright {
-            if let playwrightConfig = Self.resolvePlaywrightConfig() {
-                mcpServers["playwright"] = playwrightConfig
-            }
-        }
+        let mcpServers = MCPConfigResolver.resolveMCPServers(
+            helperPath: helperPath,
+            includePlaywright: buildConfig.includePlaywright
+        )
 
         // 7. Build safety hook registry
-        let hookRegistry = await buildSafetyHookRegistry(
+        let hookRegistry = await SafetyHookFactory.buildSafetyHookRegistry(
             sharedSeatMode: config.sharedSeatMode && !buildConfig.allowForeground
         )
 
@@ -413,71 +409,4 @@ enum AgentBuilder {
         return prompt
     }
 
-    // MARK: - Safety Hook
-
-    /// Creates a HookRegistry with preToolUse hook implementing SafetyChecker logic.
-    static func buildSafetyHookRegistry(sharedSeatMode: Bool) async -> HookRegistry {
-        let registry = HookRegistry()
-
-        if sharedSeatMode {
-            let foregroundTools = ToolNames.foregroundToolNames.map { "mcp__axion-helper__\($0)" }
-            let safetyHook = HookDefinition(handler: { input in
-                guard let toolName = input.toolName else { return HookOutput(decision: .approve) }
-
-                if foregroundTools.contains(toolName) {
-                    return HookOutput(
-                        decision: .block,
-                        reason: "Tool '\(toolName)' requires foreground interaction and is blocked in shared seat mode for safety. Use --allow-foreground to enable."
-                    )
-                }
-                return HookOutput(decision: .approve)
-            })
-
-            await registry.register(.preToolUse, definition: safetyHook)
-        }
-
-        return registry
-    }
-
-    /// Resolves the playwright MCP server configuration.
-    ///
-    /// Uses Node directly with the installed `@playwright/mcp` module to avoid
-    /// shebang/PATH issues. Finds the newest Node 18+ version from nvm and
-    /// locates the playwright-mcp CLI entry point.
-    private static func resolvePlaywrightConfig() -> McpServerConfig? {
-        let nvmDir = ProcessInfo.processInfo.environment["NVM_DIR"]
-            ?? "\(FileManager.default.homeDirectoryForCurrentUser.path)/.nvm"
-        let nvmVersionsDir = "\(nvmDir)/versions/node"
-
-        guard let contents = try? FileManager.default.contentsOfDirectory(atPath: nvmVersionsDir) else {
-            return nil
-        }
-
-        // Find the highest Node 18+ version
-        let nodeVersions = contents.filter { $0.hasPrefix("v") }
-            .compactMap { version -> (version: String, major: Int)? in
-                let numStr = version.dropFirst() // drop "v"
-                let major = numStr.split(separator: ".").first.flatMap { Int($0) }
-                guard let major, major >= 18 else { return nil }
-                return (version, major)
-            }
-            .sorted { $0.version > $1.version }
-
-        for (version, _) in nodeVersions {
-            let nodeBin = "\(nvmVersionsDir)/\(version)/bin/node"
-            let cliPath = "\(nvmVersionsDir)/\(version)/lib/node_modules/@playwright/mcp/cli.js"
-
-            guard FileManager.default.fileExists(atPath: nodeBin),
-                  FileManager.default.fileExists(atPath: cliPath) else {
-                continue
-            }
-
-            return .stdio(McpStdioConfig(
-                command: nodeBin,
-                args: [cliPath, "--headless"]
-            ))
-        }
-
-        return nil
-    }
 }
