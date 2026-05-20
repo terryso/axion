@@ -31,6 +31,10 @@ Also available in **TypeScript**: [open-agent-sdk-typescript](https://github.com
 - **File Cache & Context** — LRU file cache, Git status auto-injection, project document discovery (CLAUDE.md/AGENT.md)
 - **Runtime Controls** — Dynamic model switching, query abort with partial results, session memory
 - **Sandbox & Logging** — Configurable sandbox for command/path restrictions, structured JSON logging
+- **HTTP API Server** — Expose any Agent as a REST + SSE service with run tracking, concurrency limits, and auth
+- **Cost & Trace** — Built-in CostTracker for token/cost budgeting, TraceRecorder for JSONL execution observability
+- **Enhanced Memory** — Fact-based memory with candidate→active→retired lifecycle, evidence-driven confidence, and import/export
+- **Output Formatting** — SDKMessageOutputHandler protocol with Terminal and JSON output formatters
 
 ## Quick Start (15 minutes)
 
@@ -348,6 +352,70 @@ let agent = createAgent(options: AgentOptions(
 ))
 ```
 
+### HTTP API Server
+
+Expose any Agent as a REST + SSE HTTP service:
+
+```swift
+let agent = createAgent(options: AgentOptions(
+    apiKey: "sk-...",
+    tools: getAllBaseTools(tier: .core)
+))
+
+let server = AgentHTTPServer(
+    agent: agent,
+    host: "127.0.0.1",
+    port: 4242,
+    authKey: "my-secret-key",
+    maxConcurrentRuns: 5
+)
+
+try await server.start()
+// POST /v1/runs        — submit tasks (202 + run_id)
+// GET  /v1/runs        — list runs
+// GET  /v1/runs/{id}   — get run status
+// GET  /v1/runs/{id}/events — SSE stream
+// GET  /v1/health      — health check
+```
+
+### Cost Tracking & Tracing
+
+Monitor agent spending and trace execution:
+
+```swift
+let agent = createAgent(options: AgentOptions(
+    apiKey: "sk-...",
+    maxBudgetUsd: 0.50,
+    traceEnabled: true,
+    traceBaseURL: "/tmp/traces"
+))
+
+for await message in agent.stream("Analyze the codebase") {
+    // CostTracker accumulates per-model token/cost automatically
+    // TraceRecorder writes JSONL events to /tmp/traces/{runId}/trace.jsonl
+}
+```
+
+### Output Formatting
+
+Format SDK message streams for terminal or JSON output:
+
+```swift
+// Terminal output with step counting
+let terminal = TerminalOutputHandler()
+for await message in agent.stream("Summarize this project") {
+    terminal.handle(message)
+}
+
+// JSON output for programmatic consumption
+let json = JSONOutputHandler(write: { print($0) })
+terminal.displayRunStart(runId: "run-1", task: "Summarize")
+for await message in agent.stream("Summarize this project") {
+    json.handle(message)
+}
+let result = json.finalize()  // [String: Any] dictionary
+```
+
 ## Built-in Tools
 
 ### Core Tools (10)
@@ -410,11 +478,15 @@ graph TD
     C --> F
     C --> G
     C --> H
+    C --> I
+    C --> J
     D["<b>LLMClient Protocol</b><br/>AnthropicClient &middot; OpenAIClient"]
     E["<b>34 Built-in Tools</b><br/>Core 10 &middot; Advanced 11 &middot; Specialist 13"]
     F["<b>MCP Servers</b><br/>stdio &middot; SSE &middot; HTTP &middot; In-Process"]
     G["<b>Session Store</b><br/>JSON Persistence &middot; Fork &middot; Restore"]
     H["<b>Hook Registry</b><br/>20+ Lifecycle Events"]
+    I["<b>HTTP API Server</b><br/>REST + SSE &middot; Run Tracking"]
+    J["<b>Cost &amp; Trace</b><br/>Budget Control &middot; JSONL Traces"]
 
     style A fill:#0277bd,stroke:#01579b,color:#fff,stroke-width:2px
     style B fill:#ef6c00,stroke:#e65100,color:#fff,stroke-width:2px
@@ -424,6 +496,8 @@ graph TD
     style F fill:#00695c,stroke:#004d40,color:#fff,stroke-width:2px
     style G fill:#4a148c,stroke:#4a148c,color:#fff,stroke-width:2px
     style H fill:#e65100,stroke:#bf360c,color:#fff,stroke-width:2px
+    style I fill:#1565c0,stroke:#0d47a1,color:#fff,stroke-width:2px
+    style J fill:#880e4f,stroke:#560027,color:#fff,stroke-width:2px
 ```
 
 ## Environment Variables

@@ -246,6 +246,11 @@ let package = Package(
             path: "Examples/AgentHTTPServerExample"
         ),
         .executableTarget(
+            name: "CostTrackerExample",
+            dependencies: ["OpenAgentSDK"],
+            path: "Examples/CostTrackerExample"
+        ),
+        .executableTarget(
             name: "ScaffoldCLI",
             dependencies: [
                 .product(name: "ArgumentParser", package: "swift-argument-parser"),

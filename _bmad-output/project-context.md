@@ -23,7 +23,7 @@ _本文档包含 AI 代理在实现代码时必须遵循的关键规则和模式
 - **测试框架：** XCTest（Swift 内置）
 - **文档：** Swift-DocC
 - **模块名：** `OpenAgentSDK`（单目标库）
-- **外部依赖：** `mcp-swift-sdk`（DePasqualeOrg/mcp-swift-sdk）— MCP stdio/SSE/HTTP 传输；`swift-docc-plugin`（swiftlang/swift-docc-plugin）— 开发时 DocC 文档生成
+- **外部依赖：** `mcp-swift-sdk`（DePasqualeOrg/mcp-swift-sdk）— MCP stdio/SSE/HTTP 传输；`swift-docc-plugin`（swiftlang/swift-docc-plugin）— 开发时 DocC 文档生成；`hummingbird`（hummingbird-project/hummingbird）from 2.0.0 — HTTP API Server（SwiftNIO）
 - **API 客户端：** 自定义 `AnthropicClient`（基于 URLSession），**不使用**社区 Anthropic SDK
 - **参考源码：** TypeScript SDK 位于 `/Users/nick/CascadeProjects/open-agent-sdk-typescript/src/`（~53 个源文件，~7800 行）
 
@@ -33,7 +33,7 @@ _本文档包含 AI 代理在实现代码时必须遵循的关键规则和模式
 
 ### Swift 语言规则
 
-1. **Actor 用于共享可变状态**：所有存储（SessionStore, TaskStore, TeamStore, MailboxStore, PlanStore, CronStore, TodoStore, AgentRegistry, ConfigStore）、QueryEngine、MCPClientManager、HookRegistry 必须是 `actor`。不可变数据类型（SDKMessage, ToolResult, TokenUsage, ConversationMessage）和配置类型（SDKConfiguration, AgentOptions）使用 `struct`。
+1. **Actor 用于共享可变状态**：所有存储（SessionStore, TaskStore, TeamStore, MailboxStore, PlanStore, CronStore, TodoStore, AgentRegistry, ConfigStore, FactStore）、QueryEngine、MCPClientManager、HookRegistry、RunTracker、EventBroadcaster、TraceRecorder、ConcurrencyLimiter 必须是 `actor`。不可变数据类型（SDKMessage, ToolResult, TokenUsage, ConversationMessage）和配置类型（SDKConfiguration, AgentOptions）使用 `struct`。无状态计算服务（MemoryLifecycleService, TraceEventMapping）也使用 `struct`。
 
 2. **结构化并发**：工具执行使用 `TaskGroup`（只读工具，上限 10 个并发）+ 串行 `for` 循环（变更操作）。使用 `AsyncStream<SDKMessage>` 进行流式传输。
 
@@ -54,6 +54,7 @@ _本文档包含 AI 代理在实现代码时必须遵循的关键规则和模式
    - `Types/` → 无出站依赖（叶节点）
    - `Utils/` → 无出站依赖（叶节点，Compact 例外可临时调用 API/AnthropicClient）
    - `API/` → 依赖 `Types/`
+   - `HTTP/` → 依赖 `Types/`、`Core/`（Agent），使用 Hummingbird 2.x（SwiftNIO）
    - `Core/` → 依赖 `Types/`、`API/`、`Utils/`
    - `Tools/` → 依赖 `Types/`、`Utils/`，**永不**导入 `Core/`
    - `Stores/` → 依赖 `Types/`，**永不**导入 `Core/`
@@ -88,7 +89,7 @@ _本文档包含 AI 代理在实现代码时必须遵循的关键规则和模式
 ### 测试规则
 
 23. **测试框架**：XCTest，测试目录结构镜像源码结构
-24. **测试组织**：`Tests/OpenAgentSDKTests/{Core,Tools,Stores,API,Hooks,MCP,Utils}/`
+24. **测试组织**：`Tests/OpenAgentSDKTests/{Core,Tools,Stores,API,HTTP,Hooks,MCP,Utils,Types}/`
 25. **工具测试**：按层级分组 — `CoreToolTests.swift`、`AdvancedToolTests.swift`、`SpecialistToolTests.swift`
 26. **Actor 测试**：使用 `await` 访问 actor 隔离方法
 27. **无 mock 外部 API**：AnthropicClient 测试使用自定义的 mock URL 协议或 URLProtocol 子类
@@ -105,7 +106,7 @@ _本文档包含 AI 代理在实现代码时必须遵循的关键规则和模式
 
 ### 开发工作流规则
 
-35. **项目结构**：`Sources/OpenAgentSDK/` 为主源码目录（75 个 Swift 文件），子目录为 Types/（15 文件）、API/（5 文件）、Core/（3 文件）、Tools/（36 文件，含 Core/、Advanced/、Specialist/、MCP/ 四个子目录）、Stores/（9 文件）、Hooks/（2 文件）、Utils/（4 文件）、MCP/（预留空目录）、Documentation.docc/（DocC 文档）
+35. **项目结构**：`Sources/OpenAgentSDK/` 为主源码目录（90+ 个 Swift 文件），子目录为 Types/（20+ 文件）、API/（5 文件）、Core/（3 文件）、HTTP/（8 文件）、Tools/（36 文件，含 Core/、Advanced/、Specialist/、MCP/ 四个子目录）、Stores/（10 文件）、Hooks/（2 文件）、Utils/（15+ 文件）、MCP/（预留空目录）、Documentation.docc/（DocC 文档）、Skills/（技能系统）
 36. **不使用 Apple 专属框架**：代码必须同时在 macOS 和 Linux 上运行。使用 Foundation 和 POSIX API。
 37. **POSIX shell 执行**：使用 `Process`（macOS Foundation）/ `posix_spawn`（Linux）执行 shell 钩子，通过 stdin JSON 输入、stdout JSON 输出。
 38. **会话存储路径**：`~/.open-agent-sdk/sessions/{sessionId}/transcript.json`
@@ -141,4 +142,4 @@ _本文档包含 AI 代理在实现代码时必须遵循的关键规则和模式
 - 定期审查过时规则
 - 规则变得显而易见时移除
 
-Last Updated: 2026-04-11
+Last Updated: 2026-05-20
