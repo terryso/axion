@@ -76,7 +76,22 @@ struct RunCommand: AsyncParsableCommand {
         )
         let config = try await ConfigManager.loadConfig(cliOverrides: cliOverrides)
 
-        // 2. Build agent via shared builder (API key, helper path, memory, prompt, MCP, hooks, tools)
+        // 2. Detect explicit skill invocation (e.g. "/polyv-live-cli do something")
+        //    Skill tasks bypass the full agent build — no MCP, no desktop tools, saves one LLM round.
+        if !noSkills, let skillName = Self.parseSkillName(from: task) {
+            let registry = SkillRegistry()
+            AxionBuiltInSkills.registerAll(into: registry)
+            _ = registry.registerDiscoveredSkills()
+            if let skill = registry.find(skillName) {
+                fputs("[axion] 已加载 \(registry.allSkills.count) 个技能\n", stderr)
+                try await executeSkillDirectly(
+                    skill: skill, task: task, config: config, verbose: verbose
+                )
+                return
+            }
+        }
+
+        // 3. Build agent via shared builder (API key, helper path, memory, prompt, MCP, hooks, tools)
         let effectiveMaxSteps = Self.computeEffectiveMaxSteps(fast: fast, maxSteps: maxSteps, configMaxSteps: config.maxSteps)
         let effectiveMaxTokens = Self.computeEffectiveMaxTokens(fast: fast)
 
@@ -381,6 +396,75 @@ struct RunCommand: AsyncParsableCommand {
     }
 
     // MARK: - Private Helpers
+
+    /// Parses a skill name from a task that starts with `/`.
+    /// Returns the skill name (without the leading `/`) or nil if the task is not a skill invocation.
+    private static func parseSkillName(from task: String) -> String? {
+        guard task.hasPrefix("/") else { return nil }
+        let afterSlash = task.dropFirst()
+        let name = afterSlash.split(separator: " ", maxSplits: 1).first.map(String.init) ?? String(afterSlash)
+        return name.isEmpty ? nil : name
+    }
+
+    /// Executes a prompt skill directly via `executeSkillStream`, bypassing the full agent build.
+    /// This saves one LLM round trip (no SkillTool call) and avoids loading MCP desktop tools.
+    private func executeSkillDirectly(
+        skill: OpenAgentSDK.Skill,
+        task: String,
+        config: AxionConfig,
+        verbose: Bool
+    ) async throws {
+        let agent = try await AgentBuilder.buildSkillAgent(
+            config: config,
+            skill: skill,
+            verbose: verbose
+        )
+
+        let args = Self.parseSkillName(from: task).flatMap { skillName in
+            let prefix = "/\(skillName) "
+            return task.hasPrefix(prefix) ? String(task.dropFirst(prefix.count)) : nil
+        }
+
+        let runId = Self.generateRunId()
+        let runMode = fast ? "fast" : "standard"
+        let outputHandler: any SDKMessageOutputHandler = json
+            ? SDKJSONOutputHandler(mode: runMode)
+            : SDKTerminalOutputHandler(mode: runMode)
+        outputHandler.displayRunStart(runId: runId, task: task)
+        fputs("[axion] 模式: \(runMode)\n", stderr)
+        fputs("[axion] 运行 ID: \(runId)\n", stderr)
+        fputs("[axion] 任务: \(task)\n", stderr)
+        fputs("[axion] 执行: Skill (direct)\n", stderr)
+
+        signal(SIGINT, SIG_IGN)
+        let sigintSource = DispatchSource.makeSignalSource(signal: SIGINT, queue: .global())
+        sigintSource.setEventHandler { agent.interrupt() }
+        sigintSource.resume()
+
+        let startTime = ContinuousClock.now
+        var totalSteps = 0
+        let costTracker = CostTracker(maxScreenshots: config.maxScreenshots)
+
+        let skillStream = agent.executeSkillStream(skill.name, args: args)
+
+        for await message in skillStream {
+            if _Concurrency.Task.isCancelled { break }
+            if case .toolUse = message { totalSteps += 1 }
+            outputHandler.handleMessage(message)
+
+            if case .toolUse(let data) = message {
+                if data.toolName.contains("screenshot") {
+                    _ = await costTracker.recordScreenshot()
+                }
+            }
+        }
+
+        let elapsed = ContinuousClock.now - startTime
+        let durationMs = Int(elapsed.components.seconds * 1000 + elapsed.components.attoseconds / 1_000_000_000_000)
+        fputs("[axion] 运行结束。步数: \(totalSteps), 耗时: \(String(format: "%.1f", Double(durationMs) / 1000))s\n", stderr)
+
+        try? await agent.close()
+    }
 
     /// Generates a unique run ID in the format `YYYYMMDD-{6random}`.
     private static func generateRunId() -> String {
