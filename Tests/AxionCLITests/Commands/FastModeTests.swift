@@ -106,12 +106,11 @@ struct FastModeTests {
     @Test("terminal handler fast mode success shows fast completion")
     func terminalHandlerFastModeSuccessShowsFastCompletion() {
         var lines: [String] = []
-        let output = TerminalOutput(write: { lines.append($0) })
-        let handler = SDKTerminalOutputHandler(output: output, mode: "fast")
+        let handler = SDKTerminalOutputHandler(write: { lines.append($0) }, mode: "fast")
 
         handler.displayRunStart(runId: "r1", task: "Open Calculator")
-        handler.handleMessage(.toolUse(.init(toolName: "launch_app", toolUseId: "t1", input: "{}")))
-        handler.handleMessage(.result(.init(subtype: .success, text: "Done", usage: nil, numTurns: 1, durationMs: 100)))
+        handler.handle(.toolUse(.init(toolName: "launch_app", toolUseId: "t1", input: "{}")))
+        handler.handle(.result(.init(subtype: .success, text: "Done", usage: nil, numTurns: 1, durationMs: 100)))
 
         let combined = lines.joined(separator: "\n")
         #expect(combined.contains("Fast mode 完成"))
@@ -122,11 +121,10 @@ struct FastModeTests {
     @Test("terminal handler fast mode error max turns shows retry suggestion")
     func terminalHandlerFastModeErrorMaxTurnsShowsRetrySuggestion() {
         var lines: [String] = []
-        let output = TerminalOutput(write: { lines.append($0) })
-        let handler = SDKTerminalOutputHandler(output: output, mode: "fast")
+        let handler = SDKTerminalOutputHandler(write: { lines.append($0) }, mode: "fast")
 
         handler.displayRunStart(runId: "r1", task: "Open Calculator")
-        handler.handleMessage(.result(.init(subtype: .errorMaxTurns, text: "", usage: nil, numTurns: 5, durationMs: 0)))
+        handler.handle(.result(.init(subtype: .errorMaxTurns, text: "", usage: nil, numTurns: 5, durationMs: 0)))
 
         let combined = lines.joined(separator: "\n")
         #expect(combined.contains("最大步数"))
@@ -136,11 +134,10 @@ struct FastModeTests {
     @Test("terminal handler fast mode error during execution shows retry suggestion")
     func terminalHandlerFastModeErrorDuringExecutionShowsRetrySuggestion() {
         var lines: [String] = []
-        let output = TerminalOutput(write: { lines.append($0) })
-        let handler = SDKTerminalOutputHandler(output: output, mode: "fast")
+        let handler = SDKTerminalOutputHandler(write: { lines.append($0) }, mode: "fast")
 
         handler.displayRunStart(runId: "r1", task: "Open Calculator")
-        handler.handleMessage(.result(.init(subtype: .errorDuringExecution, text: "", usage: nil, numTurns: 0, durationMs: 0)))
+        handler.handle(.result(.init(subtype: .errorDuringExecution, text: "", usage: nil, numTurns: 0, durationMs: 0)))
 
         let combined = lines.joined(separator: "\n")
         #expect(combined.contains("执行错误"))
@@ -150,11 +147,10 @@ struct FastModeTests {
     @Test("terminal handler standard mode success no fast message")
     func terminalHandlerStandardModeSuccessNoFastMessage() {
         var lines: [String] = []
-        let output = TerminalOutput(write: { lines.append($0) })
-        let handler = SDKTerminalOutputHandler(output: output, mode: "standard")
+        let handler = SDKTerminalOutputHandler(write: { lines.append($0) }, mode: "standard")
 
         handler.displayRunStart(runId: "r1", task: "Open Calculator")
-        handler.handleMessage(.result(.init(subtype: .success, text: "Done", usage: nil, numTurns: 1, durationMs: 100)))
+        handler.handle(.result(.init(subtype: .success, text: "Done", usage: nil, numTurns: 1, durationMs: 100)))
 
         let combined = lines.joined(separator: "\n")
         #expect(!combined.contains("Fast mode 完成"))
@@ -163,8 +159,7 @@ struct FastModeTests {
     @Test("terminal handler fast mode displayRunStart shows fast mode")
     func terminalHandlerFastModeDisplayRunStartShowsFastMode() {
         var lines: [String] = []
-        let output = TerminalOutput(write: { lines.append($0) })
-        let handler = SDKTerminalOutputHandler(output: output, mode: "fast")
+        let handler = SDKTerminalOutputHandler(write: { lines.append($0) }, mode: "fast")
 
         handler.displayRunStart(runId: "r1", task: "Open Calculator")
 
@@ -180,7 +175,7 @@ struct FastModeTests {
         let handler = SDKJSONOutputHandler(mode: "fast", write: { captured = $0 })
 
         handler.displayRunStart(runId: "r1", task: "Open Calc")
-        handler.handleMessage(.result(.init(subtype: .success, text: "Done", usage: nil, numTurns: 1, durationMs: 100)))
+        handler.handle(.result(.init(subtype: .success, text: "Done", usage: nil, numTurns: 1, durationMs: 100)))
         handler.displayCompletion()
 
         #expect(captured != nil)
@@ -207,8 +202,8 @@ struct FastModeTests {
         let handler = SDKJSONOutputHandler(mode: "fast", write: { captured = $0 })
 
         handler.displayRunStart(runId: "r1", task: "Open Calc")
-        handler.handleMessage(.toolUse(.init(toolName: "click", toolUseId: "t1", input: "{}")))
-        handler.handleMessage(.result(.init(subtype: .success, text: "Done", usage: nil, numTurns: 1, durationMs: 100)))
+        handler.handle(.toolUse(.init(toolName: "click", toolUseId: "t1", input: "{}")))
+        handler.handle(.result(.init(subtype: .success, text: "Done", usage: nil, numTurns: 1, durationMs: 100)))
         handler.displayCompletion()
 
         #expect(captured != nil)

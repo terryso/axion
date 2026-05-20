@@ -15,17 +15,17 @@ struct RecordCommand: AsyncParsableCommand {
     var verbose: Bool = false
 
     mutating func run() async throws {
-        let output = TerminalOutput()
+        let write: (String) -> Void = { fputs($0 + "\n", stdout); fflush(stdout) }
 
         // 1. Start Helper via HelperProcessManager
         let helperManager = HelperProcessManager()
-        output.write("[axion] 正在启动 Helper...")
+        write("[axion] 正在启动 Helper...")
         try await helperManager.start()
 
         // 2. Call start_recording
-        output.write("[axion] 正在启动录制模式...")
+        write("[axion] 正在启动录制模式...")
         _ = try await helperManager.callTool(name: "start_recording", arguments: [:])
-        output.write("[axion] 录制中... 按 Ctrl-C 结束录制")
+        write("[axion] 录制中... 按 Ctrl-C 结束录制")
 
         // 3. Set up SIGINT signal handler
         let startTime = Date()
@@ -45,7 +45,7 @@ struct RecordCommand: AsyncParsableCommand {
         }
 
         // 5. Stop recording and save
-        output.write("[axion] 正在停止录制...")
+        write("[axion] 正在停止录制...")
 
         do {
             let stopResult = try await helperManager.callTool(name: "stop_recording", arguments: [:])
@@ -70,10 +70,10 @@ struct RecordCommand: AsyncParsableCommand {
             let data = try encoder.encode(recording)
             try data.write(to: URL(fileURLWithPath: filePath))
 
-            output.write("[axion] 录制已保存: \(filePath)")
-            output.write("[axion] 录制摘要: \(events.count) 个事件，耗时 \(String(format: "%.1f", elapsed)) 秒")
+            write("[axion] 录制已保存: \(filePath)")
+            write("[axion] 录制摘要: \(events.count) 个事件，耗时 \(String(format: "%.1f", elapsed)) 秒")
         } catch {
-            output.write("[axion] 保存录制失败: \(error.localizedDescription)")
+            write("[axion] 保存录制失败: \(error.localizedDescription)")
         }
 
         await helperManager.stop()

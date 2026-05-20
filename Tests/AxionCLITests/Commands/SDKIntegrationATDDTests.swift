@@ -444,7 +444,7 @@ struct SDKIntegrationATDDTests {
 
         var captured: [String] = []
         let handler = SDKTerminalOutputHandler(
-            output: TerminalOutput(write: { captured.append($0) })
+            write: { captured.append($0) }
         )
 
         handler.displayRunStart(runId: "test-123", task: "Open Calculator")
@@ -454,7 +454,7 @@ struct SDKIntegrationATDDTests {
         let message = SDKMessage.assistant(
             .init(text: "Opening Calculator", model: "test-model", stopReason: "end_turn")
         )
-        handler.handleMessage(message)
+        handler.handle(message)
         #expect(captured.contains(where: { $0.contains("Opening Calculator") }),
             "Terminal output should display assistant text")
     }
@@ -465,13 +465,13 @@ struct SDKIntegrationATDDTests {
 
         var captured: [String] = []
         let handler = SDKTerminalOutputHandler(
-            output: TerminalOutput(write: { captured.append($0) })
+            write: { captured.append($0) }
         )
 
         let message = SDKMessage.toolUse(
             .init(toolName: "launch_app", toolUseId: "t1", input: "{}")
         )
-        handler.handleMessage(message)
+        handler.handle(message)
         #expect(captured.contains(where: { $0.contains("launch_app") }),
             "Terminal output should display tool name")
     }
@@ -482,13 +482,13 @@ struct SDKIntegrationATDDTests {
 
         var captured: [String] = []
         let handler = SDKTerminalOutputHandler(
-            output: TerminalOutput(write: { captured.append($0) })
+            write: { captured.append($0) }
         )
 
         let message = SDKMessage.toolResult(
             .init(toolUseId: "t1", content: "App not found", isError: true)
         )
-        handler.handleMessage(message)
+        handler.handle(message)
         #expect(captured.contains(where: { $0.contains("错误") }),
             "Terminal output should display error indicator")
     }
@@ -499,13 +499,13 @@ struct SDKIntegrationATDDTests {
 
         var captured: [String] = []
         let handler = SDKTerminalOutputHandler(
-            output: TerminalOutput(write: { captured.append($0) })
+            write: { captured.append($0) }
         )
 
         let message = SDKMessage.result(
             .init(subtype: .success, text: "Task completed", usage: nil, numTurns: 3, durationMs: 1500)
         )
-        handler.handleMessage(message)
+        handler.handle(message)
         // Success result no longer outputs text — it was already displayed via .assistant messages
         #expect(captured.isEmpty,
             "Terminal output should not duplicate result text")
@@ -519,13 +519,13 @@ struct SDKIntegrationATDDTests {
 
         handler.displayRunStart(runId: "test-456", task: "Open Calculator")
 
-        handler.handleMessage(SDKMessage.toolUse(
+        handler.handle(SDKMessage.toolUse(
             .init(toolName: "launch_app", toolUseId: "t1", input: "{}")
         ))
-        handler.handleMessage(SDKMessage.toolResult(
+        handler.handle(SDKMessage.toolResult(
             .init(toolUseId: "t1", content: "OK", isError: false)
         ))
-        handler.handleMessage(SDKMessage.result(
+        handler.handle(SDKMessage.result(
             .init(subtype: .success, text: "Done", usage: nil, numTurns: 1, durationMs: 500)
         ))
 

@@ -42,7 +42,7 @@ struct MockLLME2ETests {
 
         // Build mock message sequence simulating a full agent run
         let capturing = CapturingOutput()
-        let handler = SDKTerminalOutputHandler(output: capturing.output)
+        let handler = SDKTerminalOutputHandler(write: capturing.write)
 
         handler.displayRunStart(runId: "e2e-test-001", task: "Open Calculator")
 
@@ -72,7 +72,7 @@ struct MockLLME2ETests {
     @Test("E2E dryrun mode")
     func e2eDryrunMode() async throws {
         let capturing = CapturingOutput()
-        let handler = SDKTerminalOutputHandler(output: capturing.output)
+        let handler = SDKTerminalOutputHandler(write: capturing.write)
 
         handler.displayRunStart(runId: "e2e-dryrun-001", task: "Open Calculator")
 
@@ -108,7 +108,7 @@ struct MockLLME2ETests {
         )
 
         let capturing = CapturingOutput()
-        let handler = SDKTerminalOutputHandler(output: capturing.output)
+        let handler = SDKTerminalOutputHandler(write: capturing.write)
 
         handler.displayRunStart(runId: "e2e-keys-001", task: "Compute 1+2 in Calculator")
 
@@ -147,7 +147,7 @@ struct MockLLME2ETests {
     @Test("E2E error recovery")
     func e2eErrorRecovery() async throws {
         let capturing = CapturingOutput()
-        let handler = SDKTerminalOutputHandler(output: capturing.output)
+        let handler = SDKTerminalOutputHandler(write: capturing.write)
 
         handler.displayRunStart(runId: "e2e-err-001", task: "Open Calculator")
 
@@ -226,7 +226,7 @@ struct MockLLME2ETests {
         await tracer.recordRunStart(runId: runId, task: "Open Calculator", mode: "standard")
 
         let capturing = CapturingOutput()
-        let handler = SDKTerminalOutputHandler(output: capturing.output)
+        let handler = SDKTerminalOutputHandler(write: capturing.write)
         handler.displayRunStart(runId: runId, task: "Open Calculator")
 
         let messages: [SDKMessage] = [

@@ -130,7 +130,7 @@ enum RunOrchestrator {
             for await message in messageStream {
                 if _Concurrency.Task.isCancelled { break }
                 if case .toolUse = message { totalSteps += 1 }
-                outputHandler.handleMessage(message)
+                outputHandler.handle(message)
                 await recordToTrace(message: message, tracer: tracer)
 
                 switch message {
@@ -346,7 +346,7 @@ enum RunOrchestrator {
         for await message in skillStream {
             if _Concurrency.Task.isCancelled { break }
             if case .toolUse = message { totalSteps += 1 }
-            outputHandler.handleMessage(message)
+            outputHandler.handle(message)
         }
 
         let elapsed = ContinuousClock.now - startTime

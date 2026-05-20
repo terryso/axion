@@ -73,7 +73,7 @@ struct RealLLME2ETests {
         let agent = createAgent(options: options)
 
         let capturing = CapturingOutput()
-        let handler = SDKTerminalOutputHandler(output: capturing.output)
+        let handler = SDKTerminalOutputHandler(write: capturing.write)
 
         handler.displayRunStart(runId: "real-e2e-001", task: "启动计算器")
 
@@ -88,7 +88,7 @@ struct RealLLME2ETests {
             if case .result(let data) = message {
                 finalResult = data
             }
-            handler.handleMessage(message)
+            handler.handle(message)
         }
 
         handler.displayCompletion()
@@ -158,7 +158,7 @@ struct RealLLME2ETests {
         let agent = createAgent(options: options)
 
         let capturing = CapturingOutput()
-        let handler = SDKTerminalOutputHandler(output: capturing.output)
+        let handler = SDKTerminalOutputHandler(write: capturing.write)
 
         handler.displayRunStart(runId: "real-e2e-002", task: "打开 https://example.com")
 
@@ -173,7 +173,7 @@ struct RealLLME2ETests {
             if case .result(let data) = message {
                 finalResult = data
             }
-            handler.handleMessage(message)
+            handler.handle(message)
         }
 
         handler.displayCompletion()
@@ -227,7 +227,7 @@ struct RealLLME2ETests {
 
         let agent = createAgent(options: options)
         let capturing = CapturingOutput()
-        let handler = SDKTerminalOutputHandler(output: capturing.output)
+        let handler = SDKTerminalOutputHandler(write: capturing.write)
 
         return (agent, handler, capturing)
     }
@@ -244,7 +244,7 @@ struct RealLLME2ETests {
             if case .result(let data) = message {
                 finalResult = data
             }
-            handler.handleMessage(message)
+            handler.handle(message)
         }
 
         handler.displayCompletion()

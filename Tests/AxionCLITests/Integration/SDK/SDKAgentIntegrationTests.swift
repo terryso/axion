@@ -131,17 +131,17 @@ struct SDKAgentIntegrationTests {
 
         var captured: [String] = []
         let handler = SDKTerminalOutputHandler(
-            output: TerminalOutput(write: { captured.append($0) })
+            write: { captured.append($0) }
         )
 
         handler.displayRunStart(runId: "integ-test", task: "Open Calculator")
-        handler.handleMessage(.assistant(
+        handler.handle(.assistant(
             .init(text: "I'll launch Calculator for you.", model: "test", stopReason: "tool_use")
         ))
-        handler.handleMessage(.toolUse(
+        handler.handle(.toolUse(
             .init(toolName: "launch_app", toolUseId: "tu-1", input: "{\"app_name\":\"Calculator\"}")
         ))
-        handler.handleMessage(.toolResult(
+        handler.handle(.toolResult(
             .init(toolUseId: "tu-1", content: launchResult, isError: false)
         ))
         handler.displayCompletion()
@@ -173,7 +173,7 @@ struct SDKAgentIntegrationTests {
         let handler = SDKJSONOutputHandler(write: { jsonOutput = $0 })
 
         handler.displayRunStart(runId: "json-integ", task: "List tools")
-        handler.handleMessage(.toolUse(
+        handler.handle(.toolUse(
             .init(toolName: "list_apps", toolUseId: "tu-1", input: "{}")
         ))
 
@@ -181,10 +181,10 @@ struct SDKAgentIntegrationTests {
             withJSONObject: tools, options: []
         )).flatMap { String(data: $0, encoding: .utf8) } ?? "[]"
 
-        handler.handleMessage(.toolResult(
+        handler.handle(.toolResult(
             .init(toolUseId: "tu-1", content: toolListJSON, isError: false)
         ))
-        handler.handleMessage(.result(
+        handler.handle(.result(
             .init(subtype: .success, text: "Done", usage: nil, numTurns: 1, durationMs: 100)
         ))
         handler.displayCompletion()

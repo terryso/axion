@@ -19,7 +19,7 @@ struct SDKTerminalOutputHandlerTests {
 
     private func makeHandler(collector: OutputCollector, mode: String = "standard") -> SDKTerminalOutputHandler {
         SDKTerminalOutputHandler(
-            output: TerminalOutput(write: { collector.append($0) }),
+            write: { collector.append($0) },
             mode: mode
         )
     }
@@ -32,7 +32,7 @@ struct SDKTerminalOutputHandlerTests {
         let handler = makeHandler(collector: collector)
 
         handler.displayRunStart(runId: "test-123", task: "open calculator")
-        handler.handleMessage(.toolUse(.init(
+        handler.handle(.toolUse(.init(
             toolName: "launch_app",
             toolUseId: "tu-1",
             input: "{\"app_name\":\"Calculator\"}"
@@ -46,7 +46,7 @@ struct SDKTerminalOutputHandlerTests {
         let collector = OutputCollector()
         let handler = makeHandler(collector: collector)
 
-        handler.handleMessage(.toolResult(.init(
+        handler.handle(.toolResult(.init(
             toolUseId: "tu-1",
             content: "{\"pid\":12345,\"app_name\":\"Calculator\"}",
             isError: false
@@ -60,7 +60,7 @@ struct SDKTerminalOutputHandlerTests {
         let collector = OutputCollector()
         let handler = makeHandler(collector: collector)
 
-        handler.handleMessage(.toolResult(.init(
+        handler.handle(.toolResult(.init(
             toolUseId: "tu-1",
             content: "App not found",
             isError: true
@@ -76,7 +76,7 @@ struct SDKTerminalOutputHandlerTests {
         let collector = OutputCollector()
         let handler = makeHandler(collector: collector)
 
-        handler.handleMessage(.result(makeResult(
+        handler.handle(.result(makeResult(
             subtype: .success,
             text: "Task completed successfully",
             numTurns: 3,
@@ -92,7 +92,7 @@ struct SDKTerminalOutputHandlerTests {
         let collector = OutputCollector()
         let handler = makeHandler(collector: collector)
 
-        handler.handleMessage(.result(makeResult(subtype: .cancelled, numTurns: 2, durationMs: 3000)))
+        handler.handle(.result(makeResult(subtype: .cancelled, numTurns: 2, durationMs: 3000)))
 
         #expect(collector.lines.contains(where: { $0.contains("取消") }))
     }
@@ -102,7 +102,7 @@ struct SDKTerminalOutputHandlerTests {
         let collector = OutputCollector()
         let handler = makeHandler(collector: collector)
 
-        handler.handleMessage(.result(makeResult(subtype: .errorMaxTurns, numTurns: 20, durationMs: 30000)))
+        handler.handle(.result(makeResult(subtype: .errorMaxTurns, numTurns: 20, durationMs: 30000)))
 
         #expect(collector.lines.contains(where: { $0.contains("20") }))
     }
@@ -112,7 +112,7 @@ struct SDKTerminalOutputHandlerTests {
         let collector = OutputCollector()
         let handler = makeHandler(collector: collector)
 
-        handler.handleMessage(.result(makeResult(subtype: .errorMaxBudgetUsd, numTurns: 5, durationMs: 10000)))
+        handler.handle(.result(makeResult(subtype: .errorMaxBudgetUsd, numTurns: 5, durationMs: 10000)))
 
         #expect(collector.lines.contains(where: { $0.contains("预算") }))
     }
@@ -122,7 +122,7 @@ struct SDKTerminalOutputHandlerTests {
         let collector = OutputCollector()
         let handler = makeHandler(collector: collector)
 
-        handler.handleMessage(.result(makeResult(subtype: .errorDuringExecution, numTurns: 3, durationMs: 5000)))
+        handler.handle(.result(makeResult(subtype: .errorDuringExecution, numTurns: 3, durationMs: 5000)))
 
         #expect(collector.lines.contains(where: { $0.contains("执行错误") }))
     }
@@ -132,7 +132,7 @@ struct SDKTerminalOutputHandlerTests {
         let collector = OutputCollector()
         let handler = makeHandler(collector: collector)
 
-        handler.handleMessage(.result(makeResult(subtype: .errorMaxStructuredOutputRetries, numTurns: 1, durationMs: 1000)))
+        handler.handle(.result(makeResult(subtype: .errorMaxStructuredOutputRetries, numTurns: 1, durationMs: 1000)))
 
         #expect(collector.lines.contains(where: { $0.contains("结构化输出") }))
     }
@@ -145,8 +145,8 @@ struct SDKTerminalOutputHandlerTests {
         let handler = makeHandler(collector: collector, mode: "fast")
         handler.displayRunStart(runId: "test", task: "task")
 
-        handler.handleMessage(.toolUse(.init(toolName: "click", toolUseId: "tu-1", input: "{}")))
-        handler.handleMessage(.result(makeResult(subtype: .success, text: "done", numTurns: 2, durationMs: 1500)))
+        handler.handle(.toolUse(.init(toolName: "click", toolUseId: "tu-1", input: "{}")))
+        handler.handle(.result(makeResult(subtype: .success, text: "done", numTurns: 2, durationMs: 1500)))
 
         #expect(collector.lines.contains(where: { $0.contains("Fast mode") }))
         #expect(collector.lines.contains(where: { $0.contains("--fast") }))
@@ -157,7 +157,7 @@ struct SDKTerminalOutputHandlerTests {
         let collector = OutputCollector()
         let handler = makeHandler(collector: collector, mode: "fast")
 
-        handler.handleMessage(.result(makeResult(subtype: .errorMaxTurns, numTurns: 5, durationMs: 3000)))
+        handler.handle(.result(makeResult(subtype: .errorMaxTurns, numTurns: 5, durationMs: 3000)))
 
         #expect(collector.lines.contains(where: { $0.contains("--fast") }))
     }
@@ -167,7 +167,7 @@ struct SDKTerminalOutputHandlerTests {
         let collector = OutputCollector()
         let handler = makeHandler(collector: collector, mode: "fast")
 
-        handler.handleMessage(.result(makeResult(subtype: .errorDuringExecution, numTurns: 3, durationMs: 2000)))
+        handler.handle(.result(makeResult(subtype: .errorDuringExecution, numTurns: 3, durationMs: 2000)))
 
         #expect(collector.lines.contains(where: { $0.contains("--fast") }))
     }
@@ -179,9 +179,9 @@ struct SDKTerminalOutputHandlerTests {
         let collector = OutputCollector()
         let handler = makeHandler(collector: collector)
 
-        handler.handleMessage(.partialMessage(.init(text: "Thinking")))
-        handler.handleMessage(.partialMessage(.init(text: " about task")))
-        handler.handleMessage(.toolUse(.init(toolName: "click", toolUseId: "tu-1", input: "{}")))
+        handler.handle(.partialMessage(.init(text: "Thinking")))
+        handler.handle(.partialMessage(.init(text: " about task")))
+        handler.handle(.toolUse(.init(toolName: "click", toolUseId: "tu-1", input: "{}")))
 
         #expect(collector.lines.contains(where: { $0.contains("Thinking about task") }))
     }
@@ -191,7 +191,7 @@ struct SDKTerminalOutputHandlerTests {
         let collector = OutputCollector()
         let handler = makeHandler(collector: collector)
 
-        handler.handleMessage(.partialMessage(.init(text: "Streaming text")))
+        handler.handle(.partialMessage(.init(text: "Streaming text")))
         handler.displayCompletion()
 
         #expect(collector.lines.contains(where: { $0.contains("Streaming text") }))
@@ -205,7 +205,7 @@ struct SDKTerminalOutputHandlerTests {
         let collector = OutputCollector()
         let handler = makeHandler(collector: collector)
 
-        handler.handleMessage(.system(.init(
+        handler.handle(.system(.init(
             subtype: .paused,
             message: "需要手动操作",
             pausedData: .init(reason: "需要手动操作", canResume: true)
@@ -220,7 +220,7 @@ struct SDKTerminalOutputHandlerTests {
         let collector = OutputCollector()
         let handler = makeHandler(collector: collector)
 
-        handler.handleMessage(.system(.init(
+        handler.handle(.system(.init(
             subtype: .pausedTimeout,
             message: "timeout"
         )))
@@ -235,7 +235,7 @@ struct SDKTerminalOutputHandlerTests {
         let collector = OutputCollector()
         let handler = makeHandler(collector: collector)
 
-        handler.handleMessage(.toolResult(.init(
+        handler.handle(.toolResult(.init(
             toolUseId: "tu-1",
             content: "{\"action\":\"screenshot\",\"image_data\":\"base64data...\"}",
             isError: false
@@ -249,7 +249,7 @@ struct SDKTerminalOutputHandlerTests {
         let collector = OutputCollector()
         let handler = makeHandler(collector: collector)
 
-        handler.handleMessage(.toolResult(.init(
+        handler.handle(.toolResult(.init(
             toolUseId: "tu-1",
             content: "Result with Base64 encoded image data here",
             isError: false
@@ -277,7 +277,7 @@ struct SDKTerminalOutputHandlerTests {
         let collector = OutputCollector()
         let handler = makeHandler(collector: collector)
 
-        handler.handleMessage(.assistant(.init(
+        handler.handle(.assistant(.init(
             text: "I will open Calculator for you",
             model: "claude-sonnet-4-20250514",
             stopReason: "end_turn"
@@ -291,8 +291,8 @@ struct SDKTerminalOutputHandlerTests {
         let collector = OutputCollector()
         let handler = makeHandler(collector: collector)
 
-        handler.handleMessage(.partialMessage(.init(text: "partial text")))
-        handler.handleMessage(.assistant(.init(text: "Real message", model: "model", stopReason: "end_turn")))
+        handler.handle(.partialMessage(.init(text: "partial text")))
+        handler.handle(.assistant(.init(text: "Real message", model: "model", stopReason: "end_turn")))
 
         #expect(collector.lines.contains(where: { $0.contains("partial text") }))
         // When buffer is flushed, assistant text is NOT written (else if branch)
@@ -303,7 +303,7 @@ struct SDKTerminalOutputHandlerTests {
         let collector = OutputCollector()
         let handler = makeHandler(collector: collector)
 
-        handler.handleMessage(.assistant(.init(text: "Direct message", model: "model", stopReason: "end_turn")))
+        handler.handle(.assistant(.init(text: "Direct message", model: "model", stopReason: "end_turn")))
 
         #expect(collector.lines.contains(where: { $0.contains("Direct message") }))
     }
@@ -327,7 +327,7 @@ struct SDKJSONOutputHandlerTests {
         let handler = makeHandler(output: output, events: events)
 
         handler.displayRunStart(runId: "test-123", task: "open calculator")
-        handler.handleMessage(.toolUse(.init(toolName: "launch_app", toolUseId: "tu-1", input: "{}")))
+        handler.handle(.toolUse(.init(toolName: "launch_app", toolUseId: "tu-1", input: "{}")))
         handler.displayCompletion()
 
         #expect(output.lines.count == 1)
@@ -342,7 +342,7 @@ struct SDKJSONOutputHandlerTests {
         let handler = makeHandler(output: output, events: events)
 
         handler.displayRunStart(runId: "test-123", task: "open calculator")
-        handler.handleMessage(.toolResult(.init(toolUseId: "tu-1", content: "App not found", isError: true)))
+        handler.handle(.toolResult(.init(toolUseId: "tu-1", content: "App not found", isError: true)))
         handler.displayCompletion()
 
         #expect(output.lines[0].contains("App not found"))
@@ -355,7 +355,7 @@ struct SDKJSONOutputHandlerTests {
         let handler = makeHandler(output: output, events: events)
 
         handler.displayRunStart(runId: "test-123", task: "open calculator")
-        handler.handleMessage(.result(makeResult(subtype: .success, text: "Done", numTurns: 3, durationMs: 5000)))
+        handler.handle(.result(makeResult(subtype: .success, text: "Done", numTurns: 3, durationMs: 5000)))
         handler.displayCompletion()
 
         #expect(output.lines[0].contains("success"))
@@ -381,8 +381,8 @@ struct SDKJSONOutputHandlerTests {
         let handler = makeHandler(output: output, events: events)
 
         handler.displayRunStart(runId: "test-123", task: "open calc")
-        handler.handleMessage(.toolUse(.init(toolName: "click", toolUseId: "tu-1", input: "{}")))
-        handler.handleMessage(.result(makeResult(subtype: .success, text: "OK", numTurns: 1, durationMs: 1000)))
+        handler.handle(.toolUse(.init(toolName: "click", toolUseId: "tu-1", input: "{}")))
+        handler.handle(.result(makeResult(subtype: .success, text: "OK", numTurns: 1, durationMs: 1000)))
         handler.displayCompletion()
 
         let data = Data(output.lines[0].utf8)
@@ -401,7 +401,7 @@ struct SDKJSONOutputHandlerTests {
         let events = OutputCollector()
         let handler = makeHandler(output: output, events: events)
 
-        handler.handleMessage(.system(.init(
+        handler.handle(.system(.init(
             subtype: .paused,
             message: "need action",
             pausedData: .init(reason: "Need manual action", canResume: true)
@@ -419,7 +419,7 @@ struct SDKJSONOutputHandlerTests {
         let events = OutputCollector()
         let handler = makeHandler(output: output, events: events)
 
-        handler.handleMessage(.system(.init(
+        handler.handle(.system(.init(
             subtype: .pausedTimeout,
             message: "timeout",
             pausedData: .init(reason: "Timed out", canResume: false)
@@ -461,9 +461,9 @@ struct SDKJSONOutputHandlerTests {
         let handler = makeHandler(output: output, events: events)
 
         handler.displayRunStart(runId: "test", task: "task")
-        handler.handleMessage(.toolUse(.init(toolName: "step1", toolUseId: "t1", input: "{}")))
-        handler.handleMessage(.toolUse(.init(toolName: "step2", toolUseId: "t2", input: "{}")))
-        handler.handleMessage(.toolUse(.init(toolName: "step3", toolUseId: "t3", input: "{}")))
+        handler.handle(.toolUse(.init(toolName: "step1", toolUseId: "t1", input: "{}")))
+        handler.handle(.toolUse(.init(toolName: "step2", toolUseId: "t2", input: "{}")))
+        handler.handle(.toolUse(.init(toolName: "step3", toolUseId: "t3", input: "{}")))
         handler.displayCompletion()
 
         let data = Data(output.lines[0].utf8)

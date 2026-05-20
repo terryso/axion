@@ -3,6 +3,7 @@ import Testing
 
 import AxionCore
 @testable import AxionCLI
+import protocol OpenAgentSDK.SDKMessageOutputHandler
 import enum OpenAgentSDK.SDKMessage
 
 // MARK: - E2E Helper Fixture
@@ -98,14 +99,14 @@ private final class LinesBuffer: @unchecked Sendable {
     }
 }
 
-/// A TerminalOutput substitute that captures all written strings for assertions.
+/// A capturing write closure that collects all written strings for assertions.
 final class CapturingOutput {
     private let buffer = LinesBuffer()
-    let output: TerminalOutput
+    let write: (String) -> Void
 
     init() {
         let buffer = self.buffer
-        self.output = TerminalOutput(write: { buffer.append($0) })
+        self.write = { buffer.append($0) }
     }
 
     var lines: [String] { buffer.all }
@@ -192,7 +193,7 @@ struct E2EPipelineRunner {
     func run(messages: [SDKMessage]) async {
         let stream = mockAgentStream(messages: messages)
         for await message in stream {
-            outputHandler.handleMessage(message)
+            outputHandler.handle(message)
             await recordToTrace(message: message)
         }
         outputHandler.displayCompletion()
