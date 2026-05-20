@@ -1,5 +1,5 @@
 # generated: 2026-05-12
-# last_updated: 2026-05-20
+# last_updated: 2026-05-21
 # project: open-agent-sdk-swift
 # project_key: NOKEY
 # tracking_system: file-system
@@ -35,7 +35,7 @@
 # - Dev moves story to 'review', then runs code-review (fresh context, different LLM recommended)
 
 generated: 2026-05-12
-last_updated: 2026-05-20
+last_updated: 2026-05-21
 project_key: NOKEY
 tracking_system: file-system
 story_location: _bmad-output/implementation-artifacts
@@ -243,5 +243,5 @@ development_status:
   20-1-agent-http-server: done
   20-2-cost-tracker-trace-recorder: done
   20-3-enhanced-memory-fact-lifecycle: done
-  20-4-sdkmessage-output-formatting: backlog
+  20-4-sdkmessage-output-formatting: done
   epic-20-retrospective: optional
