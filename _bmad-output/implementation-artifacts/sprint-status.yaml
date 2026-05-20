@@ -1,5 +1,6 @@
 # generated: 2026-05-08
 # last_updated: 2026-05-21
+# story-21.6-created: 2026-05-21
 # story-21-5-started: 2026-05-21
 # story-21.4-created: 2026-05-21
 # story-21.5-created: 2026-05-21
@@ -287,5 +288,5 @@ development_status:
   21-3-sdk-memory-infra-replace-generic: done
   21-4-sdk-output-handler-replace: done
   21-5-internal-refactor-toolregistrar-agentbuilder: done
-  21-6-update-project-docs-new-architecture: backlog
+  21-6-update-project-docs-new-architecture: done
   epic-21-retrospective: optional
