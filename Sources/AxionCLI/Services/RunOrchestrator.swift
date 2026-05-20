@@ -110,9 +110,12 @@ enum RunOrchestrator {
         var takeoverEvent: (issue: String, summary: String, feedback: String?, reason: String, duration: TimeInterval?)? = nil
         var runSucceeded = false
         var runCompleted = false
+        var resultUsage: TokenUsage?
+        var resultTotalCostUsd: Double = 0
+        var resultCostBreakdown: [CostBreakdownEntry] = []
 
         let visualDeltaTracker = runConfig.noVisualDelta ? nil : VisualDeltaTracker()
-        let costTracker = CostTracker(maxScreenshots: config.maxScreenshots)
+        var screenshotCount = 0
         let seatMonitor = (config.sharedSeatMode && !runConfig.allowForeground && !runConfig.dryrun)
             ? await SeatActivityMonitor.create() : nil
         if let monitor = seatMonitor {
@@ -136,10 +139,9 @@ enum RunOrchestrator {
                 case .toolUse(let data):
                     if data.toolName.contains("screenshot") {
                         pendingScreenshotToolUseIds.insert(data.toolUseId)
-                        let budgetResult = await costTracker.recordScreenshot()
-                        if case .screenshotsExceeded(let limit) = budgetResult {
-                            let current = await costTracker.currentScreenshotCount
-                            await tracer?.recordBudgetExceeded(budgetType: "screenshots", current: current, limit: limit)
+                        screenshotCount += 1
+                        if let limit = config.maxScreenshots, screenshotCount >= limit {
+                            await tracer?.recordBudgetExceeded(budgetType: "screenshots", current: screenshotCount, limit: limit)
                         }
                     }
                 case .toolResult(let data):
@@ -213,6 +215,9 @@ enum RunOrchestrator {
                     }
                 case .result(let data):
                     resultToolPairs = data.toolPairs
+                    resultUsage = data.usage
+                    resultTotalCostUsd = data.totalCostUsd
+                    resultCostBreakdown = data.costBreakdown
                     switch data.subtype {
                     case .success:
                         runSucceeded = true
@@ -222,11 +227,6 @@ enum RunOrchestrator {
                     default:
                         break
                     }
-                    await costTracker.finalizeWithSDKData(
-                        usage: data.usage,
-                        totalCostUsd: data.totalCostUsd,
-                        costBreakdown: data.costBreakdown
-                    )
                 default:
                     break
                 }
@@ -257,9 +257,10 @@ enum RunOrchestrator {
             fputs("[axion] 视觉增量: 跳过 \(visualDeltaSkipped)/\(visualDeltaChecked) 次验证\n", stderr)
         }
 
-        // Cost summary
-        let costSummary = await costTracker.getSummary()
-        fputs("[axion] LLM 调用: \(costSummary.modelCalls)次, Tokens: \(costSummary.totalTokens), 预估成本: $\(String(format: "%.2f", costSummary.estimatedCostUsd)), 截图: \(costSummary.screenshotCount)次\n", stderr)
+        // Cost summary — built from SDK's ResultData fields
+        let modelCalls = resultCostBreakdown.filter { $0.inputTokens > 0 || $0.outputTokens > 0 }.count
+        let totalTokens = (resultUsage?.inputTokens ?? 0) + (resultUsage?.outputTokens ?? 0)
+        fputs("[axion] LLM 调用: \(modelCalls)次, Tokens: \(totalTokens), 预估成本: $\(String(format: "%.2f", resultTotalCostUsd)), 截图: \(screenshotCount)次\n", stderr)
 
         await tracer?.recordRunDone(totalSteps: totalSteps, durationMs: durationMs, replanCount: 0)
         await tracer?.close()
@@ -339,7 +340,6 @@ enum RunOrchestrator {
 
         let startTime = ContinuousClock.now
         var totalSteps = 0
-        let costTracker = CostTracker(maxScreenshots: config.maxScreenshots)
 
         let skillStream = agent.executeSkillStream(skill.name, args: args)
 
@@ -347,12 +347,6 @@ enum RunOrchestrator {
             if _Concurrency.Task.isCancelled { break }
             if case .toolUse = message { totalSteps += 1 }
             outputHandler.handleMessage(message)
-
-            if case .toolUse(let data) = message {
-                if data.toolName.contains("screenshot") {
-                    _ = await costTracker.recordScreenshot()
-                }
-            }
         }
 
         let elapsed = ContinuousClock.now - startTime

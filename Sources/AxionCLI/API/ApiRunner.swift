@@ -19,6 +19,8 @@ import AxionCore
 /// - **Status mapping**: internal SDK `ResultData.Subtype` is mapped to `APIRunStatus` enum, providing
 ///   a clean API boundary that abstracts SDK internals. Only `success`/`none` → `.done`; everything
 ///   else → `.failed`. Detailed error information lives in `stepSummaries`, not the status field.
+/// - **Cost data from SDK**: Cost telemetry is built directly from `SDKMessage.ResultData` fields
+///   (totalCostUsd, usage, costBreakdown).
 enum ApiRunner {
 
     // MARK: - Public API
@@ -51,9 +53,6 @@ enum ApiRunner {
         }
         let agent = buildResult.agent
 
-        // Cost tracking (Story 13.3)
-        let costTracker = CostTracker(maxScreenshots: config.maxScreenshots)
-
         // Trace recording
         let tracer = try? TraceRecorder(runId: runId, config: config)
 
@@ -73,9 +72,9 @@ enum ApiRunner {
             runId: runId,
             eventBroadcaster: eventBroadcaster,
             runTracker: runTracker,
-            costTracker: costTracker,
             seatMonitor: seatMonitor,
-            tracer: tracer
+            tracer: tracer,
+            maxScreenshots: config.maxScreenshots
         )
 
         completion("", result.finalStatus, result.stepSummaries, nil, 0, result.costTelemetry, result.externallyModified)
@@ -108,8 +107,6 @@ enum ApiRunner {
             return (0, 0, 0, .failed, [], nil, false)
         }
 
-        let costTracker = CostTracker(maxScreenshots: config.maxScreenshots)
-
         // Use executeSkillStream for streaming skill execution
         let skillStream = agent.executeSkillStream(skill.name, args: task)
         let result = await processStreamFromAsyncStream(
@@ -117,8 +114,7 @@ enum ApiRunner {
             model: skill.modelOverride ?? config.model,
             runId: runId,
             eventBroadcaster: eventBroadcaster,
-            runTracker: runTracker,
-            costTracker: costTracker
+            runTracker: runTracker
         )
 
         completion("", result.finalStatus, result.stepSummaries, nil, 0, result.costTelemetry, result.externallyModified)
@@ -149,9 +145,9 @@ enum ApiRunner {
         runId: String,
         eventBroadcaster: OpenAgentSDK.EventBroadcaster?,
         runTracker: AxionRunTracker?,
-        costTracker: CostTracker,
         seatMonitor: SeatActivityMonitor?,
-        tracer: TraceRecorder?
+        tracer: TraceRecorder?,
+        maxScreenshots: Int?
     ) async -> StreamResult {
         let messageStream = agent.stream(resolvedTask)
         return await processStreamFromAsyncStream(
@@ -161,9 +157,9 @@ enum ApiRunner {
             runId: runId,
             eventBroadcaster: eventBroadcaster,
             runTracker: runTracker,
-            costTracker: costTracker,
             seatMonitor: seatMonitor,
             tracer: tracer,
+            maxScreenshots: maxScreenshots,
             cleanup: { try? await agent.close() }
         )
     }
@@ -176,9 +172,9 @@ enum ApiRunner {
         runId: String,
         eventBroadcaster: OpenAgentSDK.EventBroadcaster?,
         runTracker: AxionRunTracker? = nil,
-        costTracker: CostTracker,
         seatMonitor: SeatActivityMonitor? = nil,
         tracer: TraceRecorder? = nil,
+        maxScreenshots: Int? = nil,
         cleanup: @escaping () async -> Void = {}
     ) async -> StreamResult {
         var totalSteps = 0
@@ -188,6 +184,7 @@ enum ApiRunner {
         var resultCostTelemetry: CostTelemetry? = nil
         var externallyModified = false
         var seatActivityReported = false
+        var screenshotCount = 0
         let startTime = ContinuousClock.now
 
         for await message in messageStream {
@@ -212,7 +209,7 @@ enum ApiRunner {
 
                 // Track screenshot calls for cost telemetry
                 if data.toolName.contains("screenshot") {
-                    _ = await costTracker.recordScreenshot()
+                    screenshotCount += 1
                 }
 
                 // Emit step_started SSE event (Story 5.2)
@@ -249,13 +246,15 @@ enum ApiRunner {
 
             case .result(let data):
                 resultSubtype = data.subtype
-                // Finalize cost data from SDK (Story 13.3)
-                await costTracker.finalizeWithSDKData(
-                    usage: data.usage,
-                    totalCostUsd: data.totalCostUsd,
-                    costBreakdown: data.costBreakdown
+                // Build cost telemetry directly from SDK's ResultData
+                let modelCalls = data.costBreakdown.filter { $0.inputTokens > 0 || $0.outputTokens > 0 }.count
+                let totalTokens = (data.usage?.inputTokens ?? 0) + (data.usage?.outputTokens ?? 0)
+                resultCostTelemetry = CostTelemetry(
+                    modelCalls: modelCalls,
+                    totalTokens: totalTokens,
+                    estimatedCostUsd: data.totalCostUsd,
+                    screenshotCount: screenshotCount
                 )
-                resultCostTelemetry = await costTracker.getTelemetry()
 
                 // Infer result kind and write ApiTaskResult (Story 14.1)
                 if let tracker = runTracker, !runId.isEmpty {

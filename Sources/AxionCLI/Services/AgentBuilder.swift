@@ -38,6 +38,7 @@ enum AgentBuilder {
         let verbose: Bool
         let dryrun: Bool
         let fast: Bool
+        let runId: String?
 
         static func forCLI(
             config: AxionConfig,
@@ -49,7 +50,8 @@ enum AgentBuilder {
             maxTokens: Int? = nil,
             verbose: Bool = false,
             dryrun: Bool = false,
-            fast: Bool = false
+            fast: Bool = false,
+            runId: String? = nil
         ) -> BuildConfig {
             BuildConfig(
                 config: config,
@@ -62,7 +64,8 @@ enum AgentBuilder {
                 maxTokens: maxTokens,
                 verbose: verbose,
                 dryrun: dryrun,
-                fast: fast
+                fast: fast,
+                runId: runId
             )
         }
 
@@ -82,7 +85,8 @@ enum AgentBuilder {
                 maxTokens: nil,
                 verbose: false,
                 dryrun: false,
-                fast: false
+                fast: false,
+                runId: nil
             )
         }
 
@@ -105,7 +109,8 @@ enum AgentBuilder {
                 maxTokens: nil,
                 verbose: verbose,
                 dryrun: false,
-                fast: false
+                fast: false,
+                runId: nil
             )
         }
 
@@ -126,7 +131,8 @@ enum AgentBuilder {
                 maxTokens: nil,
                 verbose: verbose,
                 dryrun: false,
-                fast: false
+                fast: false,
+                runId: nil
             )
         }
     }
@@ -237,6 +243,7 @@ enum AgentBuilder {
             pauseTimeoutMs: 300_000
         )
         agentOptions.maxModelCalls = config.maxModelCalls
+        agentOptions.runId = buildConfig.runId
 
         // 10. Create Agent
         let agent = createAgent(options: agentOptions)

@@ -66,6 +66,8 @@
 
 generated: 2026-05-08
 last_updated: 2026-05-21
+# story-21-2-review: 2026-05-21
+# story-21-2-created: 2026-05-21
 # story-21-1-done: 2026-05-21
 # story-21-1-review: 2026-05-21
 # story-21-1-started: 2026-05-21
@@ -276,7 +278,7 @@ development_status:
   # Epic 21: Axion 消费 SDK 提取能力 + 内部重构
   epic-21: in-progress
   21-1-sdk-components-rebuild-http-api: done
-  21-2-agentoptions-replace-cost-trace: backlog
+  21-2-agentoptions-replace-cost-trace: done
   21-3-sdk-memory-infra-replace-generic: backlog
   21-4-sdk-output-handler-replace: backlog
   21-5-internal-refactor-toolregistrar-agentbuilder: backlog

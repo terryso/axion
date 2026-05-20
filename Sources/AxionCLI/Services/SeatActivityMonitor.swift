@@ -8,7 +8,7 @@ import Foundation
 /// extraction is skipped — preventing the run's corrupted state from polluting learning.
 ///
 /// Uses actor isolation for thread-safe state management (matching RunLockService,
-/// VisualDeltaTracker, CostTracker patterns).
+/// VisualDeltaTracker patterns).
 actor SeatActivityMonitor {
 
     // MARK: - Properties
