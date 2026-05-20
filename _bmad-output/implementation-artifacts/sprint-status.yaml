@@ -1,5 +1,5 @@
 # generated: 2026-05-12
-# last_updated: 2026-05-13
+# last_updated: 2026-05-20
 # project: open-agent-sdk-swift
 # project_key: NOKEY
 # tracking_system: file-system
@@ -35,7 +35,7 @@
 # - Dev moves story to 'review', then runs code-review (fresh context, different LLM recommended)
 
 generated: 2026-05-12
-last_updated: 2026-05-13
+last_updated: 2026-05-20
 project_key: NOKEY
 tracking_system: file-system
 story_location: _bmad-output/implementation-artifacts
@@ -232,8 +232,16 @@ development_status:
   epic-18-retrospective: optional
 
   # Epic 19: Axion Phase 2 驱动的 SDK 新能力
-  epic-19: in-progress
+  epic-19: done
   19-1-cross-run-memory-store: done
   19-2-agent-as-mcp-server: done
   19-3-human-in-the-loop-pause-protocol: done
   epic-19-retrospective: optional
+
+  # Epic 20: Agent HTTP API Server、Cost/Trace 服务与增强 Memory
+  epic-20: backlog
+  20-1-agent-http-server: backlog
+  20-2-cost-tracker-trace-recorder: backlog
+  20-3-enhanced-memory-fact-lifecycle: backlog
+  20-4-sdkmessage-output-formatting: backlog
+  epic-20-retrospective: optional

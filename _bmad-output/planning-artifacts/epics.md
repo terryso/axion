@@ -3874,3 +3874,173 @@ Axion（macOS 桌面自动化 Agent）在 Phase 2 开发中识别出 3 个所有
 **则** 等效于调用 Agent.pause(reason:)，触发暂停协议
 
 **新增 FR70:** 开发者可以通过 Agent.pause/resume/abort 实现 Agent 的人机协作暂停，LLM 可通过内置 pause_for_human 工具主动请求人类介入
+
+---
+
+## Epic 20: Agent HTTP API Server、Cost/Trace 服务与增强 Memory
+
+Axion（macOS 桌面自动化 Agent）作为 SDK 旗舰应用，经过 20 个 Epic 的迭代，AxionCLI 已膨胀至 11,499 行。深度分析发现约 50%（~7,000 行）是通用 Agent 基础设施，任何基于 SDK 的 Agent 项目都会需要。这些能力应下沉到 SDK，使 SDK 从"Agent 引擎"进化为"Agent 全栈框架"。
+
+**覆盖的 FR（新增）：** FR71、FR72、FR73、FR74
+**依赖：** Epic 1（Agent 基础）、Epic 6（MCP 协议）、Epic 7（会话持久化）、Epic 19（Memory Store、AgentMCPServer、Pause Protocol）
+**来源：** Axion Phase 6 深度分析 — `/Users/nick/CascadeProjects/axion/_bmad-output/implementation-artifacts/spec-axion-deep-analysis-sdk-extraction.md`
+
+### Story 20.1: AgentHTTPServer — Agent 的 HTTP API Server
+
+作为 SDK 开发者，
+我希望 SDK 提供开箱即用的 HTTP API Server，
+以便任何 Agent 可以通过 REST + SSE 对外暴露服务，无需每个项目自己实现。
+
+**背景：** SDK 已有 `AgentMCPServer`（通过 MCP 协议暴露 Agent），但没有 HTTP API 模式。Axion 实现了完整的 HTTP Server（Hummingbird）：POST /runs 提交任务、GET /runs/{id}/events SSE 实时推送、GET /runs 列表、GET /health 健康检查、GET /v1/capabilities 能力发现。这套 API 模式对所有需要 GUI/外部集成的 Agent 项目通用 — 不仅是桌面 Agent，也包括代码 Agent、数据分析 Agent 等。
+
+**Axion 参考实现：** `/Users/nick/CascadeProjects/axion/Sources/AxionCLI/API/` — `AxionAPI.swift`（路由定义）、`EventBroadcaster.swift`（SSE 扇出）、`RunPersistenceService.swift`（JSONL 持久化）、`RunRecoveryService.swift`（崩溃恢复）、`AuthMiddleware.swift`（认证中间件）、`APITypes.swift`（数据模型）
+
+**验收标准：**
+
+**给定** `AgentHTTPServer` 类
+**当** 使用 `AgentHTTPServer(agent:agent, host:"127.0.0.1", port:4242)` 创建
+**则** 提供 REST + SSE 端点：POST /v1/runs、GET /v1/runs、GET /v1/runs/{id}、GET /v1/runs/{id}/events (SSE)、GET /v1/health
+
+**给定** POST /v1/runs 请求 `{"task": "分析数据"}`
+**当** Server 收到请求
+**则** 后台启动 Agent 执行，立即返回 202 + `{"run_id": "...", "status": "running"}`
+
+**给定** GET /v1/runs/{id}/events SSE 连接
+**当** Agent 执行中
+**则** 实时推送 stepStarted、stepCompleted、runCompleted 等 SSE 事件，支持 late-joiner replay
+
+**给定** `RunTracker`（Actor 隔离的 Run 生命周期状态机）
+**当** 跟踪 run 状态转换
+**则** 状态机支持：queued → running → completed/failed/cancelled/intervention_needed
+
+**给定** `EventBroadcaster`（Actor 隔离的 SSE 扇出）
+**当** 多个 SSE 客户端订阅同一 run
+**则** 所有客户端同时收到事件，replay buffer 支持后到者补看历史
+
+**给定** `RunPersistenceService`（JSONL 文件持久化）
+**当** Run 状态变更
+**则** 原子写入 api-output.json + 追加 api-events.jsonl，崩溃后可恢复
+
+**给定** `ConcurrencyLimiter`（异步信号量）
+**当** 并发 Run 数达到上限
+**则** 新请求排队等待，释放后自动执行
+
+**给定** `AuthMiddleware`（Bearer Token 认证）
+**当** Server 配置 authKey
+**则** 所有 /v1/* 端点需要 Authorization: Bearer <key>，未认证返回 401
+
+**给定** `RunRecoveryService`
+**当** Server 重启
+**则** 扫描 api-runs/ 目录，将 interrupted runs 标记为 failed，保持 intervention_needed 不变
+
+**新增 FR71:** 开发者可以通过 AgentHTTPServer 将 Agent 暴露为 HTTP API Server，提供 REST + SSE 端点，支持 Run 追踪、并发限制、认证和崩溃恢复
+
+### Story 20.2: CostTracker 与 TraceRecorder — Agent 运行时可观测性
+
+作为 SDK 开发者，
+我希望 SDK 提供内置的 Cost 追踪和 Trace 记录服务，
+以便所有 Agent 项目可以零配置获得运行时成本控制和执行可观测性。
+
+**背景：** SDK 已有 `TokenUsage`（token 计数）和 `MODEL_PRICING`（模型定价），但没有 Run 级别的成本累计和预算控制。SDK 已有 `onRunComplete` 回调，但没有执行过程中的 Trace 事件记录。Axion 实现了 `CostTracker`（token、美元成本、截图预算追踪）和 `TraceRecorder`（JSONL 格式的执行 Trace），这些都是通用需求。
+
+**Axion 参考实现：** `/Users/nick/CascadeProjects/axion/Sources/AxionCLI/Services/CostTracker.swift`（成本追踪）、`/Users/nick/CascadeProjects/axion/Sources/AxionCLI/Trace/TraceRecorder.swift`（JSONL Trace 记录）
+
+**验收标准：**
+
+**给定** `CostTracker`（Sendable struct）
+**当** Agent 执行中消耗 token
+**则** 累计 inputTokens、outputTokens、cacheReadTokens、totalCostUsd，支持 screenshotBudget 限制
+
+**给定** CostTracker 超过 maxBudgetUsd 或 maxScreenshots
+**当** Agent 执行下一步
+**则** 通过 SDK 的 `maxBudgetUsd` 或自定义 Hook 触发停止
+
+**给定** CostTracker 数据
+**当** Run 完成
+**则** 通过 `RunCompleteContext` 暴露完整的 cost 摘要，供 `onRunComplete` 回调使用
+
+**给定** `TraceRecorder`（Actor 隔离）
+**当** Agent 执行中
+**则** 记录 JSONL 格式的 Trace 事件（ts、event、payload），支持自定义事件名
+
+**给定** `AgentOptions.traceBaseURL`（可选）
+**当** 配置 Trace 输出目录
+**则** Trace 文件写入 `{traceBaseURL}/{runId}/trace.jsonl`，默认不开启
+
+**给定** `AgentOptions.traceEnabled`（Bool，默认 false）
+**当** 设置为 true
+**则** Agent 自动将 SDKMessage 流转为 Trace 事件写入文件
+
+**新增 FR72:** 开发者可以通过 CostTracker 追踪 Run 级别的 Token/Cost/截图预算，通过 TraceRecorder 记录 JSONL 执行 Trace
+
+### Story 20.3: 增强 Memory — Fact-based 生命周期与分类
+
+作为 SDK 开发者，
+我希望 SDK 提供基于 Fact 的增强 Memory 系统，
+以便所有 Agent 可以积累和复用带证据支撑的结构化经验，而不是简单的文本记录。
+
+**背景：** SDK 已有 `MemoryStoreProtocol`（save/query/delete/listDomains）和 `KnowledgeEntry`（content + tags + sourceRunId），这是 Phase 2 Epic 19 加入的基础能力。Axion 在此基础上构建了更高级的系统：`AppMemoryFact` 带 candidate→active→retired 生命周期、evidenceCount 驱动的置信度、affordance/avoid/observation 三类分类、以及 Bundle 导入导出。这些增强对所有反复运行的 Agent 通用 — 代码 Agent 可以记住 affordance（项目可用的 test runner）和 avoid（已知会导致 flaky test 的文件）。
+
+**Axion 参考实现：** `/Users/nick/CascadeProjects/axion/Sources/AxionCLI/Memory/` — `AppMemoryFact.swift`（Fact 模型）、`MemoryFactStore.swift`（Fact 持久化）、`MemoryLifecycleService.swift`（生命周期管理）、`MemoryContextProvider.swift`（Prompt 注入）、`MemoryBundleExportService.swift`/`MemoryBundleImportService.swift`（Bundle 导入导出）
+
+**验收标准：**
+
+**给定** `MemoryFact` 模型
+**当** 创建 Fact
+**则** 包含 factId（djb2 确定性 hash）、domain、content、status（candidate/active/retired）、confidence（0-1）、evidenceCount、source（observation/imported）、kind（affordance/avoid/observation）、createdAt、lastVerifiedAt
+
+**给定** `FactStore`（Actor 隔离的 Fact 持久化）
+**当** 按域名查询 Facts
+**则** 返回排序后的 Fact 列表，支持惰性迁移（读旧 KnowledgeEntry 时自动转为 MemoryFact）
+
+**给定** `MemoryLifecycleService`
+**当** Fact 的 evidenceCount >= 2 且 confidence >= 0.65
+**则** 自动从 candidate 提升为 active
+
+**给定** active Fact 超过 30 天未被验证
+**当** Lifecycle 检查
+**则** 降级为 retired；retired Fact 再次被观察到时恢复为 candidate
+
+**给定** `MemoryContextProvider`
+**当** 构建 System Prompt 注入
+**则** 按 affordance（推荐路径）、avoid（注意事项）、observation（环境备注）三类分类，每类最多 5 条（按 confidence 降序），附带 "soft hints, not hard rules" 声明
+
+**给定** `MemoryBundleExportService`
+**当** 导出 Memory
+**则** 支持全量导出或按 domain 过滤，输出包含 facts + metadata 的 JSON Bundle
+
+**给定** `MemoryBundleImportService`
+**当** 导入外部 Memory Bundle
+**则** 所有 imported facts 降级为 candidate，confidence 封顶 0.55，source 标记为 imported
+
+**新增 FR73:** 开发者可以通过 Fact-based Memory 系统实现带证据支撑的结构化经验积累，支持 candidate→active→retired 生命周期、三类分类注入 Prompt、以及 Bundle 导入导出
+
+### Story 20.4: SDKMessage 输出格式化协议
+
+作为 SDK 开发者，
+我希望 SDK 提供结构化的 SDKMessage 输出格式化协议，
+以便所有 Agent 项目可以轻松将 SDK 消息流转换为终端输出、JSON 输出或自定义格式。
+
+**背景：** SDK 已有 `SDKMessage` 枚举（17 种 case），但没有内置的输出格式化。Axion 实现了 `SDKMessageOutputHandler` 协议及其 Terminal/JSON 实现，将 SDK 消息流转为人类可读的终端输出和结构化 JSON。这套协议对所有 CLI 模式的 Agent 项目通用。
+
+**Axion 参考实现：** `/Users/nick/CascadeProjects/axion/Sources/AxionCLI/Commands/SDKOutputHandlers.swift`（Terminal/JSON 输出处理器）
+
+**验收标准：**
+
+**给定** `SDKMessageOutputHandler` 协议
+**当** 定义
+**则** 包含 `handle(_ message: SDKMessage)` 方法，接收 SDK 消息流并格式化输出
+
+**给定** `TerminalOutputHandler`（SDK 内置实现）
+**当** 收到 `.toolUse` 消息
+**则** 输出 `步骤 {n}: {tool} — 开始执行`
+
+**给定** `TerminalOutputHandler`
+**当** 收到 `.result` 消息
+**则** 输出任务完成摘要（总步数、耗时、重规划次数）
+
+**给定** `JSONOutputHandler`（SDK 内置实现）
+**当** 收到任何 SDKMessage
+**则** 累积状态，`finalize()` 时输出完整 JSON 结构
+
+**新增 FR74:** 开发者可以通过 SDKMessageOutputHandler 协议实现自定义输出格式，SDK 提供 Terminal 和 JSON 两种内置实现
