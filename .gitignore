@@ -8,3 +8,4 @@ DerivedData/
 .DS_Store
 .env
 .vscode/
+.claude/.story-automator-active
