@@ -95,7 +95,7 @@ struct AxionAPIRoutesTests {
 
     @Test("GET /v1/runs/{runId} for running task returns 200 with status")
     func getRunExistingRunReturns200WithStatus() async throws {
-        let tracker = RunTracker()
+        let tracker = AxionRunTracker()
         let runId = await tracker.submitRun(task: "open calculator", options: RunOptions(task: "open calculator"))
 
         let app = try await buildTestApplication(runTracker: tracker)
@@ -114,7 +114,7 @@ struct AxionAPIRoutesTests {
 
     @Test("GET /v1/runs/{runId} for completed task returns full result")
     func getRunCompletedRunReturnsFullResult() async throws {
-        let tracker = RunTracker()
+        let tracker = AxionRunTracker()
         let runId = await tracker.submitRun(task: "open calculator", options: RunOptions(task: "open calculator"))
         let steps = [
             StepSummary(index: 0, tool: "launch_app", purpose: "Launch Calculator", success: true),
@@ -180,8 +180,8 @@ struct AxionAPIRoutesTests {
 
     @Test("SSE endpoint existing run returns event-stream content type")
     func sseEndpointExistingRunReturnsEventStreamContentType() async throws {
-        let broadcaster = EventBroadcaster()
-        let tracker = RunTracker(eventBroadcaster: broadcaster)
+        let broadcaster = SKDEventBroadcaster()
+        let tracker = AxionRunTracker(eventBroadcaster: broadcaster)
         let runId = await tracker.submitRun(task: "open calculator", options: RunOptions(task: "open calculator"))
 
         let step = StepSummary(index: 0, tool: "launch_app", purpose: "Launch Calculator", success: true)
@@ -202,8 +202,8 @@ struct AxionAPIRoutesTests {
 
     @Test("SSE endpoint response headers are correct")
     func sseEndpointResponseHeadersAreCorrect() async throws {
-        let broadcaster = EventBroadcaster()
-        let tracker = RunTracker(eventBroadcaster: broadcaster)
+        let broadcaster = SKDEventBroadcaster()
+        let tracker = AxionRunTracker(eventBroadcaster: broadcaster)
         let runId = await tracker.submitRun(task: "open calculator", options: RunOptions(task: "open calculator"))
 
         let step = StepSummary(index: 0, tool: "launch_app", purpose: "Launch Calculator", success: true)
@@ -222,8 +222,8 @@ struct AxionAPIRoutesTests {
 
     @Test("Completed run SSE endpoint replays run_completed event")
     func sseEndpointCompletedRunReplaysRunCompletedEvent() async throws {
-        let broadcaster = EventBroadcaster()
-        let tracker = RunTracker(eventBroadcaster: broadcaster)
+        let broadcaster = SKDEventBroadcaster()
+        let tracker = AxionRunTracker(eventBroadcaster: broadcaster)
         let runId = await tracker.submitRun(task: "open calculator", options: RunOptions(task: "open calculator"))
 
         let step = StepSummary(index: 0, tool: "launch_app", purpose: "Launch Calculator", success: true)
@@ -271,9 +271,9 @@ struct AxionAPIRoutesTests {
 
     @Test("Concurrency limit full returns queued response")
     func createRunConcurrencyLimitFullReturnsQueuedResponse() async throws {
-        let tracker = RunTracker()
-        let limiter = ConcurrencyLimiter(maxConcurrent: 1)
-        _ = await limiter.acquire()
+        let tracker = AxionRunTracker()
+        let limiter = SDKConcurrencyLimiter(maxConcurrent: 1)
+        await limiter.acquire()
 
         let app = try await buildTestApplication(runTracker: tracker, concurrencyLimiter: limiter)
 
@@ -290,7 +290,7 @@ struct AxionAPIRoutesTests {
 
     @Test("GET /v1/runs/:runId with correct auth returns 200")
     func getRunWithAuthKeyCorrectTokenReturns200() async throws {
-        let tracker = RunTracker()
+        let tracker = AxionRunTracker()
         let runId = await tracker.submitRun(task: "open calculator", options: RunOptions(task: "open calculator"))
 
         let app = try await buildTestApplication(runTracker: tracker, authKey: "testsecret")
@@ -320,8 +320,8 @@ struct AxionAPIRoutesTests {
 
     @Test("SSE endpoint with correct auth returns 200")
     func sseEndpointWithAuthKeyCorrectTokenReturns200() async throws {
-        let broadcaster = EventBroadcaster()
-        let tracker = RunTracker(eventBroadcaster: broadcaster)
+        let broadcaster = SKDEventBroadcaster()
+        let tracker = AxionRunTracker(eventBroadcaster: broadcaster)
         let runId = await tracker.submitRun(task: "open calculator", options: RunOptions(task: "open calculator"))
 
         let step = StepSummary(index: 0, tool: "launch_app", purpose: "Launch Calculator", success: true)
@@ -351,9 +351,9 @@ struct AxionAPIRoutesTests {
 
     @Test("Queued response JSON format is valid")
     func queuedResponseJsonFormatIsValid() async throws {
-        let tracker = RunTracker()
-        let limiter = ConcurrencyLimiter(maxConcurrent: 1)
-        _ = await limiter.acquire()
+        let tracker = AxionRunTracker()
+        let limiter = SDKConcurrencyLimiter(maxConcurrent: 1)
+        await limiter.acquire()
 
         let app = try await buildTestApplication(runTracker: tracker, concurrencyLimiter: limiter)
 
@@ -386,9 +386,9 @@ struct AxionAPIRoutesTests {
 
     @Test("Auth + concurrency limiter combined")
     func createRunAuthAndConcurrencyCombined() async throws {
-        let tracker = RunTracker()
-        let limiter = ConcurrencyLimiter(maxConcurrent: 1)
-        _ = await limiter.acquire()
+        let tracker = AxionRunTracker()
+        let limiter = SDKConcurrencyLimiter(maxConcurrent: 1)
+        await limiter.acquire()
 
         let app = try await buildTestApplication(runTracker: tracker, authKey: "mykey", concurrencyLimiter: limiter)
 
@@ -510,10 +510,10 @@ struct AxionAPIRoutesTests {
     }
 
     private func buildTestApplication(
-        runTracker: RunTracker? = nil,
-        eventBroadcaster: EventBroadcaster? = nil,
+        runTracker: AxionRunTracker? = nil,
+        eventBroadcaster: SKDEventBroadcaster? = nil,
         authKey: String? = nil,
-        concurrencyLimiter: ConcurrencyLimiter? = nil,
+        concurrencyLimiter: SDKConcurrencyLimiter? = nil,
         maxConcurrent: Int = 10,
         config: AxionConfig = .default,
         configDirectory: String? = nil
@@ -526,8 +526,8 @@ struct AxionAPIRoutesTests {
         // Use temp directory for config if specified
         let tempConfigDir = configDirectory ?? (NSTemporaryDirectory() + "axion-test-config-\(UUID().uuidString)")
 
-        let broadcaster = eventBroadcaster ?? EventBroadcaster()
-        let tracker = runTracker ?? RunTracker(eventBroadcaster: broadcaster)
+        let broadcaster = eventBroadcaster ?? SKDEventBroadcaster()
+        let tracker = runTracker ?? AxionRunTracker(eventBroadcaster: broadcaster)
         let router = Router()
         AxionAPI.registerRoutes(
             on: router,

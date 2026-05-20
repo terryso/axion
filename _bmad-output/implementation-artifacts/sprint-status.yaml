@@ -65,7 +65,12 @@
 # - Dev moves story to 'review', then runs code-review (fresh context, different LLM recommended)
 
 generated: 2026-05-08
-last_updated: 2026-05-19
+last_updated: 2026-05-21
+# story-21-1-done: 2026-05-21
+# story-21-1-review: 2026-05-21
+# story-21-1-started: 2026-05-21
+# story-21-1-created: 2026-05-21
+# epic-21-added: 2026-05-21
 # retro-epic-20: 2026-05-19
 # story-19-3-started: 2026-05-18
 # story-20-1-created: 2026-05-18
@@ -263,3 +268,17 @@ development_status:
   epic-20: done
   20-1-delete-dead-agent-loop-code: done
   epic-20-retrospective: done
+
+  # ============================================================
+  # Phase 7 — SDK 提取 + Axion 重构
+  # ============================================================
+
+  # Epic 21: Axion 消费 SDK 提取能力 + 内部重构
+  epic-21: in-progress
+  21-1-sdk-components-rebuild-http-api: done
+  21-2-agentoptions-replace-cost-trace: backlog
+  21-3-sdk-memory-infra-replace-generic: backlog
+  21-4-sdk-output-handler-replace: backlog
+  21-5-internal-refactor-toolregistrar-agentbuilder: backlog
+  21-6-update-project-docs-new-architecture: backlog
+  epic-21-retrospective: optional

@@ -2,8 +2,8 @@ import Foundation
 import Testing
 
 import AxionCore
-import OpenAgentSDK
 @testable import AxionCLI
+import enum OpenAgentSDK.SDKMessage
 
 // MARK: - E2E Helper Fixture
 

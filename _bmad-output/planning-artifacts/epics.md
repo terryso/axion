@@ -2759,3 +2759,263 @@ So that 代码库更清晰, 新贡献者不会被死代码误导.
 - 19.3 最后——API 路径依赖 CLI 路径验证通过后再对齐，同时完成 AgentRunner → ApiRunner 重命名
 
 **实施约束：** Phase 6 的详细架构设计见 `_bmad-output/planning-artifacts/phase6-refactor-architecture.md`（重构前后 Mermaid 对比图 + 职责划分表 + 数据流）。实施时必须参照此文档，确保每层只做自己职责内的事，不重复犯应用层越权的错误。
+
+---
+
+## Phase 7: SDK 提取 + Axion 重构
+
+> **前提：** SDK 侧 Epic 20 已完成（`docs/epic20-reference-paths` 分支），提供 AgentHTTPServer、CostTracker、TraceRecorder、增强 Memory、SDKMessageOutputHandler。
+> **SDK 集成方式：** 组件级复用 — 用 SDK 底层组件（RunTracker、EventBroadcaster 等）替换 Axion 实现类，保留 Axion 自有路由和响应格式。
+> **目标：** AxionCLI 从 11,499 行降至 ≤ 6,000 行。桌面专属代码占比显著提高。
+
+### Epic 21: Axion 消费 SDK 提取能力 + 内部重构
+
+**关联 SDK Epic：** SDK Epic 20（分支 `docs/epic20-reference-paths`）
+**详细规格：** `_bmad-output/implementation-artifacts/spec-axion-deep-analysis-sdk-extraction.md`
+
+#### Story 21.1 — Axion 用 SDK 组件重建 HTTP API 层（FR75）
+
+**用户故事：** 作为 SDK 应用开发者，我希望 Axion 的 HTTP API 层使用 SDK 的 Run 追踪、SSE 广播、持久化等底层组件，仅保留 Axion 专属路由。
+
+**实施：**
+- 删除 6 个 SDK 替代文件：`RunTracker.swift`、`EventBroadcaster.swift`、`RunPersistenceService.swift`、`RunRecoveryService.swift`、`ConcurrencyLimiter.swift`、`AuthMiddleware.swift`
+- 用 `OpenAgentSDK.HTTP.*` 对应组件实例化 AxionAPI 的 Hummingbird 路由
+- 保留 Axion 专属端点（settings、capabilities、skills）和 `StandardTaskOutput` 响应格式
+- 精简 `ApiRunner.swift`、`SkillAPIRunner.swift` — SSE 广播和 Run 追踪委托 SDK 组件
+- 精简 `APITypes.swift` — 删除与 SDK `APITypes` 重叠的类型
+- **预计移除：** ~1,500 行
+
+**SDK 组件映射：**
+| 删除的 Axion 文件 | SDK 替代 |
+|---|---|
+| `API/RunTracker.swift` | `OpenAgentSDK.HTTP.RunTracker` |
+| `API/EventBroadcaster.swift` | `OpenAgentSDK.HTTP.EventBroadcaster` |
+| `API/RunPersistenceService.swift` | `OpenAgentSDK.HTTP.RunPersistenceService` |
+| `API/RunRecoveryService.swift` | `OpenAgentSDK.HTTP.RunRecoveryService` |
+| `API/ConcurrencyLimiter.swift` | `OpenAgentSDK.HTTP.ConcurrencyLimiter` |
+| `API/AuthMiddleware.swift` | `OpenAgentSDK.HTTP.AuthMiddleware` |
+
+**Acceptance Criteria:**
+
+**Given** `axion server --port 4242`
+**When** 启动
+**Then** 所有 HTTP API 端点响应与重构前一致（`StandardTaskOutput` 格式不变）
+
+**Given** AxionBar 正在运行
+**When** 连接到 Server
+**Then** 所有功能正常工作
+
+**Given** `Sources/AxionCLI/API/` 目录
+**When** 统计行数
+**Then** 总计 ≤ 1,000 行（从 ~2,500 下降；AxionAPI、ApiRunner、SkillAPIRunner、APITypes 保留但精简）
+
+---
+
+#### Story 21.2 — Axion 用 SDK AgentOptions 替换 CostTracker + TraceRecorder（FR76）
+
+**用户故事：** 作为 SDK 应用开发者，我希望 SDK Agent 内建费用追踪和执行 Trace，Axion 只需配置选项，不需要自建 CostTracker actor 和 TraceRecorder。
+
+**实施：**
+- 删除 `Sources/AxionCLI/Services/CostTracker.swift`（124 行 actor）→ SDK 的 CostTracker 由 Agent loop 内部管理（struct）
+- 删除 `Sources/AxionCLI/Trace/TraceRecorder.swift`（308 行）→ SDK 的 TraceRecorder 由 Agent 自动创建
+- 在 `AgentBuilder` 中配置：
+  - `AgentOptions.maxBudgetUsd` — 预算限制
+  - `AgentOptions.traceEnabled = true` — 启用 Trace
+  - `AgentOptions.onRunComplete` — 回调获取 `RunCompleteContext`（含 totalCostUsd、costBreakdown、usage、durationMs、numTurns、toolPairs）
+- 在 `RunOrchestrator` 中移除手动 Trace 调用和费用追踪代码
+- 费用摘要改从 `RunCompleteContext` 获取
+- 运行后 Memory 提取改在 `onRunComplete` 回调中执行
+- **预计移除：** ~430 行
+
+**Acceptance Criteria:**
+
+**Given** `axion run "打开计算器" --trace`
+**When** 执行完成后检查 Trace 文件
+**Then** trace.jsonl 格式与重构前一致
+
+**Given** `axion run "打开计算器"`
+**When** 执行完成后检查终端输出
+**Then** 费用摘要显示与重构前一致
+
+**Given** `Sources/AxionCLI/Trace/` 目录
+**When** 检查
+**Then** 目录为空或已删除
+
+**Given** `Sources/AxionCLI/Services/CostTracker.swift`
+**When** 检查
+**Then** 文件已删除
+
+---
+
+#### Story 21.3 — Axion 用 SDK Memory 基础设施替换通用逻辑（FR77）
+
+**用户故事：** 作为 SDK 应用开发者，我希望 SDK 提供 Fact-based Memory 核心能力（存储、生命周期、上下文注入、导入导出），Axion 仅保留桌面专属的提取和学习逻辑。
+
+**实施：**
+
+删除（SDK 替代）：
+- `Memory/MemoryFactStore.swift` → `OpenAgentSDK.Stores.FactStore`
+- `Memory/MemoryLifecycleService.swift` → `OpenAgentSDK.Utils.MemoryLifecycleService`
+- `Memory/MemoryContextProvider.swift` → `OpenAgentSDK.Utils.MemoryContextProvider`
+- `Memory/MemoryBundle.swift` → `OpenAgentSDK.Types.MemoryBundle` + `ExportedDomain`
+- `Memory/MemoryBundleExportService.swift` → `OpenAgentSDK.Utils.MemoryBundleExportService`
+- `Memory/MemoryBundleImportService.swift` → `OpenAgentSDK.Utils.MemoryBundleImportService`
+- `Memory/MemoryCleanupService.swift` → SDK 的 `MemoryLifecycleService.demoteRetired()` 已覆盖
+
+保留（Axion 桌面专属）：
+- `AppMemoryExtractor.swift` — `mcp__axion-helper__` 前缀过滤
+- `AppMemoryFact.swift` — Axion 专属 Fact 类型
+- `AppProfileAnalyzer.swift` — 用户画像分析
+- `RunMemoryProcessor.swift` — 运行后 Memory 处理（接入 SDK FactStore）
+- `FamiliarityTracker.swift` — 熟悉度追踪
+- `TakeoverLearningService.swift` — Takeover 学习
+- `TakeoverMarker.swift` — Takeover 标记
+
+- **预计移除：** ~1,000 行
+
+**Acceptance Criteria:**
+
+**Given** `axion run "打开计算器"`
+**When** 执行完成
+**Then** Memory 生命周期行为（candidate→active→retired）与重构前一致
+
+**Given** `axion memory export`
+**When** 执行
+**Then** 导出格式与重构前兼容
+
+**Given** `Sources/AxionCLI/Memory/` 目录
+**When** 列出文件
+**Then** 仅包含 7 个桌面专属文件（AppMemoryExtractor、AppMemoryFact、AppProfileAnalyzer、RunMemoryProcessor、FamiliarityTracker、TakeoverLearningService、TakeoverMarker）
+
+---
+
+#### Story 21.4 — Axion 用 SDK SDKMessageOutputHandler 替换输出处理（FR78）
+
+**用户故事：** 作为 SDK 应用开发者，我希望 SDK 提供统一的 Agent 输出格式化协议，Axion 仅保留桌面专属的输出扩展。
+
+**实施：**
+- 精简 `SDKOutputHandlers.swift` — 协议部分用 SDK 的 `SDKMessageOutputHandler`
+- 用 SDK 的 `TerminalOutputHandler` 和 `JSONOutputHandler` 替换通用实现
+- 保留 Axion 专属扩展（截图 binary 检测、visual delta 信息等）
+- 或：如果桌面专属逻辑可内联到 RunOrchestrator，直接删除用 SDK 实现
+- **预计移除：** ~150 行
+
+**Acceptance Criteria:**
+
+**Given** `axion run "打开计算器"`
+**When** 执行
+**Then** 终端输出格式与重构前一致
+
+**Given** `axion run "打开计算器" --json`
+**When** 执行
+**Then** JSON 输出格式与重构前一致
+
+---
+
+#### Story 21.5 — 内部重构（FR79）
+
+**用户故事：** 作为项目维护者，我希望 Axion 的桌面专属代码组织更清晰，独石式文件拆分为合理的模块。
+
+**实施：**
+
+**5a. 拆分 ToolRegistrar（1,042 行）：**
+- `Sources/AxionHelper/MCP/ToolRegistrar.swift` → 按类别拆分：
+  - `MouseTools.swift`（鼠标相关工具注册）
+  - `KeyboardTools.swift`（键盘相关工具注册）
+  - `WindowTools.swift`（窗口管理工具注册）
+  - `AppTools.swift`（应用启动/切换工具注册）
+  - `ScreenshotTools.swift`（截图工具注册）
+  - `RecordingTools.swift`（录制工具注册）
+  - `ToolRegistrar.swift` 保留为入口（调用各分类注册方法）
+
+**5b. 清理 AgentBuilder：**
+- `Sources/AxionCLI/Services/AgentBuilder.swift` — 将通用 Agent 构建与桌面专属设置分离
+- 提取 `DesktopSafetyHookFactory`（shared seat mode 的前台工具阻止逻辑）
+- 提取 `MCPConfigResolver`（Playwright 配置解析）
+
+**5c. 清理 RunLockService：**
+- `Sources/AxionCLI/Services/RunLockService.swift`（142 行）— 评估是否可简化或合入 RunOrchestrator
+
+**Acceptance Criteria:**
+
+**Given** `ToolRegistrar.swift`
+**When** 检查行数
+**Then** ≤ 200 行（仅入口调用，不含具体工具注册逻辑）
+
+**Given** `Sources/AxionHelper/MCP/` 目录
+**When** 列出文件
+**Then** 包含 MouseTools、KeyboardTools、WindowTools、AppTools、ScreenshotTools、RecordingTools 分类文件
+
+**Given** `AgentBuilder.swift`
+**When** 阅读
+**Then** 通用 Agent 构建与桌面专属设置（HelperProcess、SafetyHook、Playwright）清晰分离
+
+---
+
+#### Story 21.6 — 更新项目文档反映新架构（FR80）
+
+**用户故事：** 作为项目成员，我希望项目文档反映重构后的真实架构，方便后续开发。
+
+**实施：**
+- 更新 `_bmad-output/project-context.md`：模块行数统计、依赖关系、数据流描述
+- 更新 `_bmad-output/planning-artifacts/architecture.md`：反映 SDK 提取后的新架构决策
+- 更新 Package.swift 依赖说明
+
+**Acceptance Criteria:**
+
+**Given** `project-context.md`
+**When** 检查 AxionCLI 行数描述
+**Then** 反映 ≤ 6,000 行的实际值
+
+**Given** 架构文档
+**When** 检查模块依赖图
+**Then** 显示 AxionCLI → OpenAgentSDK.HTTP、OpenAgentSDK.Stores、OpenAgentSDK.Utils 的新依赖
+
+---
+
+## Phase 7 FR 追溯
+
+| FR | Epic | Story |
+|----|------|-------|
+| FR75 | Epic 21 | 21.1 — 用 SDK 组件重建 HTTP API 层 |
+| FR76 | Epic 21 | 21.2 — 用 AgentOptions 替换 CostTracker + TraceRecorder |
+| FR77 | Epic 21 | 21.3 — 用 SDK Memory 基础设施替换通用逻辑 |
+| FR78 | Epic 21 | 21.4 — 用 SDK SDKMessageOutputHandler 替换输出处理 |
+| FR79 | Epic 21 | 21.5 — 内部重构（ToolRegistrar 拆分、AgentBuilder 清理） |
+| FR80 | Epic 21 | 21.6 — 更新项目文档 |
+
+## Phase 7 新增 NFR
+
+- NFR51: AxionCLI 源码总行数 ≤ 6,000（从 11,499 下降）
+- NFR52: AxionCLI 中桌面专属代码占比 ≥ 70%（而非当前的 ~40%）
+- NFR53: Axion 的 API/ 使用 SDK 底层组件（RunTracker、EventBroadcaster 等），保留 Axion 专属端点和 `StandardTaskOutput` 响应格式
+- NFR54: ToolRegistrar.swift ≤ 200 行，具体工具注册分布在 6 个分类文件中
+- NFR55: Memory 通用逻辑（FactStore、Lifecycle、ContextProvider、ImportExport、Cleanup）来自 SDK，Axion 保留 7 个桌面专属文件
+- NFR56: CostTracker 和 TraceRecorder 由 SDK Agent 内建管理（配置 AgentOptions），Axion 不自建 actor
+
+## Phase 7 优先级与依赖
+
+| 优先级 | Story | 依赖 | 理由 |
+|--------|-------|------|------|
+| P0 | 21.5a (ToolRegistrar 拆分) | 无 | 独立重构，无 SDK 依赖，先做减少后续干扰 |
+| P0 | 21.5b (AgentBuilder 清理) | 无 | 独立重构，无 SDK 依赖 |
+| P1 | 21.2 (Cost + Trace) | SDK Epic 20 ✅ | 最干净——只需删文件 + 配 AgentOptions，风险最低 |
+| P2 | 21.1 (HTTP API) | SDK Epic 20 ✅ | 最大提取量（~1,500 行），需仔细处理路由重建 |
+| P2 | 21.4 (OutputHandler) | SDK Epic 20 ✅ | 较小提取，可快速完成 |
+| P3 | 21.3 (Memory) | SDK Epic 20 ✅ | 7 个桌面专属文件需保留，迁移边界最复杂 |
+| P4 | 21.5c (RunLock 清理) | 21.2 | Cost/Trace 完成后再清理 |
+| P5 | 21.6 (文档更新) | 全部完成 | 最后统一更新 |
+
+**实施建议顺序：21.5a → 21.5b → 21.2 → 21.1 → 21.4 → 21.3 → 21.5c → 21.6**
+
+**理由：**
+- 21.5a/b 先行——不依赖 SDK 变更，可立即开始，减少 Axion 内部复杂度
+- 21.2 优先于 21.1——Cost/Trace 只需删文件 + 配 AgentOptions，最简单最安全，验证 SDK 集成模式
+- 21.1 是大头但放第二——HTTP API 组件替换需要更仔细的路由重建
+- 21.3 放后——Memory 有 7 个桌面专属文件需保留，迁移边界最复杂
+- 21.6 最后——所有变更完成后统一更新文档，确保准确性
+
+**关键约束：**
+- 每个 Story 完成后运行 `swift test --filter "AxionHelperTests.Tools" --filter "AxionHelperTests.Models" --filter "AxionHelperTests.MCP" --filter "AxionHelperTests.Services" --filter "AxionCoreTests" --filter "AxionCLITests"` 确保不破坏现有功能
+- API 响应格式（`StandardTaskOutput`）不变——AxionBar 依赖此格式
+- 详细规格参照 `_bmad-output/implementation-artifacts/spec-axion-deep-analysis-sdk-extraction.md`

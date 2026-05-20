@@ -1,5 +1,6 @@
 import AxionCore
 import Foundation
+import OpenAgentSDK
 
 /// Runs a skill through the RunTracker + EventBroadcaster pipeline.
 /// Used by the POST /v1/skills/{name}/run endpoint so AxionBar can
@@ -15,10 +16,10 @@ enum SkillAPIRunner {
 
     static func runSkill(
         config: AxionConfig,
-        skill: Skill,
+        skill: AxionCore.Skill,
         paramValues: [String: String],
         runId: String,
-        eventBroadcaster: EventBroadcaster
+        eventBroadcaster: OpenAgentSDK.EventBroadcaster
     ) async -> RunResult {
         let startTime = ContinuousClock.now
 
@@ -27,12 +28,11 @@ enum SkillAPIRunner {
         do {
             try await helperManager.start()
         } catch {
-            let event = SSEEvent.runCompleted(RunCompletedData(
+            let event = AgentSSEEvent.runCompleted(RunCompletedData(
                 runId: runId,
                 finalStatus: "failed",
                 totalSteps: 0,
-                durationMs: nil,
-                replanCount: 0
+                durationMs: nil
             ))
             await eventBroadcaster.emit(runId: runId, event: event)
             await eventBroadcaster.complete(runId: runId)
@@ -46,10 +46,10 @@ enum SkillAPIRunner {
 
         // Execute each step manually to emit SSE events
         for (index, step) in skill.steps.enumerated() {
-            if Task.isCancelled { break }
+            if _Concurrency.Task.isCancelled { break }
 
             // Emit step_started
-            let startedEvent = SSEEvent.stepStarted(StepStartedData(
+            let startedEvent = AgentSSEEvent.stepStarted(StepStartedData(
                 stepIndex: index,
                 tool: step.tool
             ))
@@ -72,10 +72,9 @@ enum SkillAPIRunner {
 
             if !stepSuccess {
                 // Emit step_completed (failed) and stop
-                let completedEvent = SSEEvent.stepCompleted(StepCompletedData(
+                let completedEvent = AgentSSEEvent.stepCompleted(StepCompletedData(
                     stepIndex: index,
                     tool: step.tool,
-                    purpose: step.tool,
                     success: false,
                     durationMs: nil
                 ))
@@ -87,12 +86,11 @@ enum SkillAPIRunner {
                     elapsed.components.seconds * 1000 +
                     elapsed.components.attoseconds / 1_000_000_000_000
                 )
-                let runCompletedEvent = SSEEvent.runCompleted(RunCompletedData(
+                let runCompletedEvent = AgentSSEEvent.runCompleted(RunCompletedData(
                     runId: runId,
                     finalStatus: "failed",
                     totalSteps: skill.steps.count,
-                    durationMs: durationMs,
-                    replanCount: 0
+                    durationMs: durationMs
                 ))
                 await eventBroadcaster.emit(runId: runId, event: runCompletedEvent)
                 await eventBroadcaster.complete(runId: runId)
@@ -107,10 +105,9 @@ enum SkillAPIRunner {
             }
 
             // Emit step_completed (success)
-            let completedEvent = SSEEvent.stepCompleted(StepCompletedData(
+            let completedEvent = AgentSSEEvent.stepCompleted(StepCompletedData(
                 stepIndex: index,
                 tool: step.tool,
-                purpose: step.tool,
                 success: true,
                 durationMs: nil
             ))
@@ -118,7 +115,7 @@ enum SkillAPIRunner {
 
             // Wait if specified
             if step.waitAfterSeconds > 0 {
-                try? await Task.sleep(nanoseconds: UInt64(step.waitAfterSeconds * 1_000_000_000))
+                try? await _Concurrency.Task.sleep(nanoseconds: UInt64(step.waitAfterSeconds * 1_000_000_000))
             }
         }
 
@@ -130,12 +127,11 @@ enum SkillAPIRunner {
             elapsed.components.attoseconds / 1_000_000_000_000
         )
 
-        let runCompletedEvent = SSEEvent.runCompleted(RunCompletedData(
+        let runCompletedEvent = AgentSSEEvent.runCompleted(RunCompletedData(
             runId: runId,
             finalStatus: "completed",
             totalSteps: skill.steps.count,
-            durationMs: durationMs,
-            replanCount: 0
+            durationMs: durationMs
         ))
         await eventBroadcaster.emit(runId: runId, event: runCompletedEvent)
         await eventBroadcaster.complete(runId: runId)

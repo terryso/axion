@@ -28,7 +28,7 @@ struct MCPProtocolIntegrationTests {
         try? FileManager.default.createDirectory(atPath: tempLockDir, withIntermediateDirectories: true)
         let testRunLockService = RunLockService(lockDirectory: tempLockDir, processAliveChecker: { _ in false })
 
-        let tracker = RunTracker()
+        let tracker = AxionRunTracker()
         let queue = TaskQueue()
         let agent = createAgent(options: AgentOptions(
             apiKey: "test-key",
@@ -43,7 +43,7 @@ struct MCPProtocolIntegrationTests {
     }
 
     private func createQueryTool() -> QueryTaskStatusTool {
-        QueryTaskStatusTool(runTracker: RunTracker())
+        QueryTaskStatusTool(runTracker: AxionRunTracker())
     }
 
     @Test("MCP initialize handshake returns capabilities")
@@ -151,7 +151,7 @@ struct MCPProtocolIntegrationTests {
         try? FileManager.default.createDirectory(atPath: tempLockDir, withIntermediateDirectories: true)
         let testRunLockService = RunLockService(lockDirectory: tempLockDir, processAliveChecker: { _ in false })
 
-        let tracker = RunTracker()
+        let tracker = AxionRunTracker()
         let queue = TaskQueue()
         let agent = createAgent(options: AgentOptions(
             apiKey: "test-key",

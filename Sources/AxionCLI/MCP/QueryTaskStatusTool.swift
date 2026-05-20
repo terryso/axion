@@ -24,11 +24,11 @@ struct QueryTaskStatusTool: ToolProtocol {
 
     // MARK: - Dependencies
 
-    private let runTracker: RunTracker
+    private let runTracker: AxionRunTracker
 
     // MARK: - Init
 
-    init(runTracker: RunTracker) {
+    init(runTracker: AxionRunTracker) {
         self.runTracker = runTracker
     }
 

@@ -1,8 +1,8 @@
 import Foundation
 import Testing
-import OpenAgentSDK
-
 @testable import AxionCLI
+import struct OpenAgentSDK.KnowledgeEntry
+import class OpenAgentSDK.InMemoryStore
 
 // [P0] MemoryContextProvider type existence, domain inference, context assembly
 // [P1] Familiar app compact strategy, failure annotation, edge cases

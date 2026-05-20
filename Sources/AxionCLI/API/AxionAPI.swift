@@ -25,11 +25,11 @@ enum AxionAPI {
     ///   - concurrencyLimiter: Optional concurrency limiter for task execution.
     static func registerRoutes(
         on router: Router<BasicRequestContext>,
-        runTracker: RunTracker,
-        eventBroadcaster: EventBroadcaster,
+        runTracker: AxionRunTracker,
+        eventBroadcaster: OpenAgentSDK.EventBroadcaster,
         config: AxionConfig,
         authKey: String? = nil,
-        concurrencyLimiter: ConcurrencyLimiter? = nil,
+        concurrencyLimiter: OpenAgentSDK.ConcurrencyLimiter? = nil,
         runLockService: RunLockService? = nil,
         maxConcurrent: Int = 10,
         configDirectory: String = ConfigManager.defaultConfigDirectory,
@@ -50,14 +50,9 @@ enum AxionAPI {
             )
         }
 
-        // Authenticated route group
-        let v1Authed: RouterGroup<BasicRequestContext>
-        if let authKey {
-            v1Authed = v1.group().addMiddleware {
-                AuthMiddleware(authKey: authKey)
-            }
-        } else {
-            v1Authed = v1.group()
+        // Authenticated route group — SDK's AuthMiddleware handles nil authKey as passthrough
+        let v1Authed = v1.group().addMiddleware {
+            OpenAgentSDK.AuthMiddleware(authKey: authKey)
         }
 
         // GET /v1/capabilities — discover Axion capabilities (Story 14.2)
@@ -363,8 +358,7 @@ enum AxionAPI {
                 let position = await limiter.queueDepth + 1
                 let capturedConfig = config
                 _ = _Concurrency.Task.detached {
-                    let slotResult = await limiter.acquire()
-                    guard slotResult >= 0 else { return }
+                    await limiter.acquire()
                     let locked = await activeRunLockService.waitForLock(runId: runId)
                     guard locked else {
                         await runTracker.updateRun(runId: runId, status: .failed, steps: [], durationMs: 0, replanCount: 0)
@@ -533,10 +527,10 @@ enum AxionAPI {
                 // Live streaming: subscribe and stream events via AsyncStream
                 let eventStream = await eventBroadcaster.subscribe(runId: runId)
 
-                // Convert AsyncStream<SSEEvent> to AsyncSequence<ByteBuffer>
+                // Convert AsyncStream<AgentSSEEvent> to AsyncSequence<ByteBuffer>
                 // Use an iterator to generate sequential SSE event IDs
                 var sequenceCounter = 0
-                let bufferStream = eventStream.map { (event: SSEEvent) -> ByteBuffer in
+                let bufferStream = eventStream.map { (event: AgentSSEEvent) -> ByteBuffer in
                     sequenceCounter += 1
                     do {
                         let sseString = try event.encodeToSSE(sequenceId: sequenceCounter)
@@ -699,8 +693,7 @@ enum AxionAPI {
                         let capturedConfig = config
                         let capturedSkill = promptSkill
                         _ = _Concurrency.Task.detached {
-                            let slotResult = await limiter.acquire()
-                            guard slotResult >= 0 else { return }
+                            await limiter.acquire()
                             let locked = await activeRunLockService.waitForLock(runId: runId)
                             guard locked else {
                                 await runTracker.updateRun(runId: runId, status: .failed, steps: [], durationMs: 0, replanCount: 0)

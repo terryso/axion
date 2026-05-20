@@ -30,8 +30,8 @@ enum ApiRunner {
         task: String,
         options: RunOptions,
         runId: String = "",
-        eventBroadcaster: EventBroadcaster? = nil,
-        runTracker: RunTracker? = nil,
+        eventBroadcaster: OpenAgentSDK.EventBroadcaster? = nil,
+        runTracker: AxionRunTracker? = nil,
         verbose: Bool = false,
         completion: @escaping (String, APIRunStatus, [StepSummary], Int?, Int, CostTelemetry?, Bool) -> Void
     ) async -> (totalSteps: Int, durationMs: Int, replanCount: Int, finalStatus: APIRunStatus, stepSummaries: [StepSummary], costTelemetry: CostTelemetry?, externallyModified: Bool) {
@@ -90,8 +90,8 @@ enum ApiRunner {
         task: String,
         config: AxionConfig,
         runId: String = "",
-        eventBroadcaster: EventBroadcaster? = nil,
-        runTracker: RunTracker? = nil,
+        eventBroadcaster: OpenAgentSDK.EventBroadcaster? = nil,
+        runTracker: AxionRunTracker? = nil,
         verbose: Bool = false,
         completion: @escaping (String, APIRunStatus, [StepSummary], Int?, Int, CostTelemetry?, Bool) -> Void
     ) async -> (totalSteps: Int, durationMs: Int, replanCount: Int, finalStatus: APIRunStatus, stepSummaries: [StepSummary], costTelemetry: CostTelemetry?, externallyModified: Bool) {
@@ -147,8 +147,8 @@ enum ApiRunner {
         resolvedTask: String,
         model: String,
         runId: String,
-        eventBroadcaster: EventBroadcaster?,
-        runTracker: RunTracker?,
+        eventBroadcaster: OpenAgentSDK.EventBroadcaster?,
+        runTracker: AxionRunTracker?,
         costTracker: CostTracker,
         seatMonitor: SeatActivityMonitor?,
         tracer: TraceRecorder?
@@ -174,8 +174,8 @@ enum ApiRunner {
         task: String = "",
         model: String,
         runId: String,
-        eventBroadcaster: EventBroadcaster?,
-        runTracker: RunTracker? = nil,
+        eventBroadcaster: OpenAgentSDK.EventBroadcaster?,
+        runTracker: AxionRunTracker? = nil,
         costTracker: CostTracker,
         seatMonitor: SeatActivityMonitor? = nil,
         tracer: TraceRecorder? = nil,
@@ -218,7 +218,7 @@ enum ApiRunner {
                 // Emit step_started SSE event (Story 5.2)
                 if let broadcaster = eventBroadcaster, !runId.isEmpty {
                     let stepIndex = totalSteps - 1
-                    let event = SSEEvent.stepStarted(StepStartedData(
+                    let event = AgentSSEEvent.stepStarted(StepStartedData(
                         stepIndex: stepIndex,
                         tool: data.toolName
                     ))
@@ -237,10 +237,9 @@ enum ApiRunner {
 
                     // Emit step_completed SSE event (Story 5.2)
                     if let broadcaster = eventBroadcaster, !runId.isEmpty {
-                        let event = SSEEvent.stepCompleted(StepCompletedData(
+                        let event = AgentSSEEvent.stepCompleted(StepCompletedData(
                             stepIndex: stepIndex,
                             tool: toolUse.toolName,
-                            purpose: extractPurpose(from: toolUse),
                             success: !data.isError,
                             durationMs: nil
                         ))

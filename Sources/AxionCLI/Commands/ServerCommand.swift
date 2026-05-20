@@ -1,9 +1,9 @@
 import ArgumentParser
 import Foundation
 import Hummingbird
+import OpenAgentSDK
 
 import AxionCore
-import OpenAgentSDK
 
 struct ServerCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
@@ -39,14 +39,21 @@ struct ServerCommand: AsyncParsableCommand {
         // 1. Load configuration
         let config = try await ConfigManager.loadConfig()
 
-        // 2. Create persistence service, EventBroadcaster, RunTracker, and ConcurrencyLimiter
-        let persistenceService = RunPersistenceService()
-        let eventBroadcaster = EventBroadcaster(persistenceService: persistenceService)
-        let runTracker = RunTracker(eventBroadcaster: eventBroadcaster, persistenceService: persistenceService)
-        let concurrencyLimiter = ConcurrencyLimiter(maxConcurrent: maxConcurrent)
+        // 2. Create SDK-based persistence, EventBroadcaster, RunTracker, and ConcurrencyLimiter
+        let persistenceService = AxionRunPersistence()
+        // Pass SDK's RunPersistenceService to EventBroadcaster so SSE events are persisted to disk.
+        // Uses Axion's base directory (~/.axion/api-runs/) instead of SDK's default.
+        let axionRunDir = persistenceService.runsDirectory()
+        let sdkEventPersistence = RunPersistenceService(baseDirectory: axionRunDir)
+        let eventBroadcaster = OpenAgentSDK.EventBroadcaster(persistenceService: sdkEventPersistence)
+        let runTracker = AxionRunTracker(
+            eventBroadcaster: eventBroadcaster,
+            persistenceService: persistenceService
+        )
+        let concurrencyLimiter = OpenAgentSDK.ConcurrencyLimiter(maxConcurrent: maxConcurrent)
 
         // 2a. Recover persisted runs from previous server instance
-        await RunRecoveryService.recover(
+        await AxionRunRecovery.recover(
             from: runTracker,
             persistenceService: persistenceService,
             eventBroadcaster: eventBroadcaster
@@ -94,8 +101,8 @@ struct ServerCommand: AsyncParsableCommand {
     }
 }
 
-/// Wait for active tasks to complete with a timeout, then cancel queued tasks.
-private func waitForActiveTasks(limiter: ConcurrencyLimiter, timeout: Int) async {
+/// Wait for active tasks to complete with a timeout.
+private func waitForActiveTasks(limiter: OpenAgentSDK.ConcurrencyLimiter, timeout: Int) async {
     let active = await limiter.activeRunCount
     if active > 0 {
         print("Shutting down: waiting for \(active) active task(s) to complete (max \(timeout)s)...")
@@ -109,10 +116,9 @@ private func waitForActiveTasks(limiter: ConcurrencyLimiter, timeout: Int) async
         }
     }
 
-    let queuedBeforeCancel = await limiter.queueDepth
-    if queuedBeforeCancel > 0 {
-        await limiter.cancelAll()
-        print("Cancelled \(queuedBeforeCancel) queued task(s).")
+    let queued = await limiter.queueDepth
+    if queued > 0 {
+        print("Dropping \(queued) queued task(s) on shutdown.")
     }
 
     print("Server shut down complete.")

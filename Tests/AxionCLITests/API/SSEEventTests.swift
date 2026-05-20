@@ -1,6 +1,6 @@
 import Testing
 import Foundation
-@testable import AxionCLI
+import OpenAgentSDK
 
 @Suite("SSEEvent")
 struct SSEEventTests {
@@ -34,7 +34,6 @@ struct SSEEventTests {
         let data = StepCompletedData(
             stepIndex: 0,
             tool: "launch_app",
-            purpose: "Launch Calculator",
             success: true,
             durationMs: 150
         )
@@ -44,7 +43,6 @@ struct SSEEventTests {
 
         #expect(decoded.stepIndex == 0)
         #expect(decoded.tool == "launch_app")
-        #expect(decoded.purpose == "Launch Calculator")
         #expect(decoded.success == true)
         #expect(decoded.durationMs == 150)
     }
@@ -54,7 +52,6 @@ struct SSEEventTests {
         let data = StepCompletedData(
             stepIndex: 1,
             tool: "click",
-            purpose: "Click button",
             success: false,
             durationMs: nil
         )
@@ -70,7 +67,6 @@ struct SSEEventTests {
         let data = StepCompletedData(
             stepIndex: 1,
             tool: "click",
-            purpose: "Input expression",
             success: true,
             durationMs: 200
         )
@@ -90,8 +86,7 @@ struct SSEEventTests {
             runId: "20260513-abc123",
             finalStatus: "done",
             totalSteps: 3,
-            durationMs: 8200,
-            replanCount: 0
+            durationMs: 8200
         )
 
         let encoded = try JSONEncoder().encode(data)
@@ -101,7 +96,6 @@ struct SSEEventTests {
         #expect(decoded.finalStatus == "done")
         #expect(decoded.totalSteps == 3)
         #expect(decoded.durationMs == 8200)
-        #expect(decoded.replanCount == 0)
     }
 
     @Test("RunCompletedData optional durationMs defaults to nil")
@@ -110,8 +104,7 @@ struct SSEEventTests {
             runId: "20260513-xyz789",
             finalStatus: "failed",
             totalSteps: 1,
-            durationMs: nil,
-            replanCount: 0
+            durationMs: nil
         )
 
         let encoded = try JSONEncoder().encode(data)
@@ -126,8 +119,7 @@ struct SSEEventTests {
             runId: "20260513-abc123",
             finalStatus: "done",
             totalSteps: 3,
-            durationMs: 8200,
-            replanCount: 0
+            durationMs: 8200
         )
 
         let encoder = JSONEncoder()
@@ -139,12 +131,11 @@ struct SSEEventTests {
         #expect(json.contains("\"final_status\""))
         #expect(json.contains("\"total_steps\""))
         #expect(json.contains("\"duration_ms\""))
-        #expect(json.contains("\"replan_count\""))
     }
 
-    @Test("SSEEvent stepStarted encodes correctly")
+    @Test("AgentSSEEvent stepStarted encodes correctly")
     func sseEventStepStartedEncodesCorrectly() throws {
-        let event = SSEEvent.stepStarted(StepStartedData(stepIndex: 0, tool: "launch_app"))
+        let event = AgentSSEEvent.stepStarted(StepStartedData(stepIndex: 0, tool: "launch_app"))
 
         let sseString = try event.encodeToSSE(sequenceId: 1)
 
@@ -154,12 +145,11 @@ struct SSEEventTests {
         #expect(sseString.hasSuffix("\n\n"))
     }
 
-    @Test("SSEEvent stepCompleted encodes correctly")
+    @Test("AgentSSEEvent stepCompleted encodes correctly")
     func sseEventStepCompletedEncodesCorrectly() throws {
-        let event = SSEEvent.stepCompleted(StepCompletedData(
+        let event = AgentSSEEvent.stepCompleted(StepCompletedData(
             stepIndex: 0,
             tool: "launch_app",
-            purpose: "Launch Calculator",
             success: true,
             durationMs: 150
         ))
@@ -170,14 +160,13 @@ struct SSEEventTests {
         #expect(sseString.contains("id: 2\n"))
     }
 
-    @Test("SSEEvent runCompleted encodes correctly")
+    @Test("AgentSSEEvent runCompleted encodes correctly")
     func sseEventRunCompletedEncodesCorrectly() throws {
-        let event = SSEEvent.runCompleted(RunCompletedData(
+        let event = AgentSSEEvent.runCompleted(RunCompletedData(
             runId: "20260513-abc123",
             finalStatus: "done",
             totalSteps: 3,
-            durationMs: 8200,
-            replanCount: 0
+            durationMs: 8200
         ))
 
         let sseString = try event.encodeToSSE(sequenceId: 3)
@@ -186,9 +175,9 @@ struct SSEEventTests {
         #expect(sseString.contains("id: 3\n"))
     }
 
-    @Test("SSEEvent data field contains valid JSON")
+    @Test("AgentSSEEvent data field contains valid JSON")
     func sseEventDataFieldContainsValidJson() throws {
-        let event = SSEEvent.stepStarted(StepStartedData(stepIndex: 0, tool: "launch_app"))
+        let event = AgentSSEEvent.stepStarted(StepStartedData(stepIndex: 0, tool: "launch_app"))
         let sseString = try event.encodeToSSE(sequenceId: 1)
 
         let lines = sseString.components(separatedBy: "\n")

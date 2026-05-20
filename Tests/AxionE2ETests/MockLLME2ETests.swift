@@ -2,8 +2,8 @@ import Foundation
 import Testing
 
 import AxionCore
-import OpenAgentSDK
 @testable import AxionCLI
+import enum OpenAgentSDK.SDKMessage
 
 /// E2E tests with mock LLM responses and real Helper process.
 ///

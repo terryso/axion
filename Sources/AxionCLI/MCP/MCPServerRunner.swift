@@ -48,7 +48,7 @@ struct MCPServerRunner {
         let (helperTools, _) = await agent.assembleFullToolPool()
 
         // Create RunTracker and custom tools
-        let runTracker = RunTracker()
+        let runTracker = AxionRunTracker()
         let taskQueue = TaskQueue()
         let runTaskTool = RunTaskTool(agent: agent, runTracker: runTracker, taskQueue: taskQueue, runLockService: nil)
         let queryTool = QueryTaskStatusTool(runTracker: runTracker)

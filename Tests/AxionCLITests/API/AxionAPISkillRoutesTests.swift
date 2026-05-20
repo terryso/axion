@@ -6,7 +6,12 @@ import Testing
 
 @testable import AxionCLI
 @testable import AxionCore
-import OpenAgentSDK
+import class OpenAgentSDK.SkillRegistry
+import struct OpenAgentSDK.Skill
+
+private typealias AxSkill = AxionCore.Skill
+private typealias AxSkillStep = AxionCore.SkillStep
+private typealias AxSkillParameter = AxionCore.SkillParameter
 
 @Suite("AxionAPI Skill Routes", .serialized)
 struct AxionAPISkillRoutesTests {
@@ -74,14 +79,14 @@ struct AxionAPISkillRoutesTests {
         let tempDir = Self.makeTempSkillsDir()
         defer { try? FileManager.default.removeItem(atPath: tempDir) }
 
-        let skill = Skill(
+        let skill = AxSkill(
             name: "test_skill",
             description: "A test skill",
             version: 1,
             createdAt: Date(),
             sourceRecording: "test",
-            parameters: [SkillParameter(name: "url", defaultValue: nil, description: "URL to open")],
-            steps: [SkillStep(tool: "launch_app", arguments: ["app_name": "Safari"], waitAfterSeconds: 0)]
+            parameters: [AxSkillParameter(name: "url", defaultValue: nil, description: "URL to open")],
+            steps: [AxSkillStep(tool: "launch_app", arguments: ["app_name": "Safari"], waitAfterSeconds: 0)]
         )
         let encoder = JSONEncoder()
         encoder.outputFormatting = [.sortedKeys, .prettyPrinted]
@@ -112,7 +117,7 @@ struct AxionAPISkillRoutesTests {
         let tempDir = Self.makeTempSkillsDir()
         defer { try? FileManager.default.removeItem(atPath: tempDir) }
 
-        let skill = Skill(
+        let skill = AxSkill(
             name: "detail_test",
             description: "Test skill for detail",
             version: 2,
@@ -120,7 +125,7 @@ struct AxionAPISkillRoutesTests {
             sourceRecording: "test",
             parameters: [],
             steps: [
-                SkillStep(tool: "click", arguments: ["x": "100", "y": "200"], waitAfterSeconds: 0.5)
+                AxSkillStep(tool: "click", arguments: ["x": "100", "y": "200"], waitAfterSeconds: 0.5)
             ]
         )
         let encoder = JSONEncoder()
@@ -162,7 +167,7 @@ struct AxionAPISkillRoutesTests {
 
     @Test("GET /v1/runs returns submitted runs sorted by time")
     func getRunsListReturnsSorted() async throws {
-        let tracker = RunTracker()
+        let tracker = AxionRunTracker()
         _ = await tracker.submitRun(task: "first task", options: RunOptions(task: "first task"))
         _ = await tracker.submitRun(task: "second task", options: RunOptions(task: "second task"))
 
@@ -184,7 +189,7 @@ struct AxionAPISkillRoutesTests {
 
     @Test("GET /v1/runs?limit=1 returns limited results")
     func getRunsListWithLimit() async throws {
-        let tracker = RunTracker()
+        let tracker = AxionRunTracker()
         _ = await tracker.submitRun(task: "task1", options: RunOptions(task: "task1"))
         _ = await tracker.submitRun(task: "task2", options: RunOptions(task: "task2"))
 
@@ -291,14 +296,14 @@ struct AxionAPISkillRoutesTests {
         let tempDir = Self.makeTempSkillsDir()
         defer { try? FileManager.default.removeItem(atPath: tempDir) }
 
-        let recorded = Skill(
+        let recorded = AxSkill(
             name: "recorded_skill",
             description: "A recorded skill",
             version: 1,
             createdAt: Date(),
             sourceRecording: "test",
             parameters: [],
-            steps: [SkillStep(tool: "click", arguments: [:], waitAfterSeconds: 0)]
+            steps: [AxSkillStep(tool: "click", arguments: [:], waitAfterSeconds: 0)]
         )
         let encoder = JSONEncoder()
         encoder.outputFormatting = [.sortedKeys, .prettyPrinted]
@@ -363,7 +368,7 @@ struct AxionAPISkillRoutesTests {
         let tempDir = Self.makeTempSkillsDir()
         defer { try? FileManager.default.removeItem(atPath: tempDir) }
 
-        let recorded = Skill(
+        let recorded = AxSkill(
             name: "overlap_skill",
             description: "Recorded version",
             version: 1,
@@ -418,10 +423,10 @@ struct AxionAPISkillRoutesTests {
     // MARK: - Helper
 
     private func buildTestApplication(
-        runTracker: RunTracker? = nil,
-        eventBroadcaster: EventBroadcaster? = nil,
+        runTracker: AxionRunTracker? = nil,
+        eventBroadcaster: SKDEventBroadcaster? = nil,
         authKey: String? = nil,
-        concurrencyLimiter: ConcurrencyLimiter? = nil,
+        concurrencyLimiter: SDKConcurrencyLimiter? = nil,
         skillRegistry: SkillRegistry? = nil,
         skillsDirectory: String? = nil
     ) async throws -> Application<RouterResponder<BasicRequestContext>> {
@@ -432,8 +437,8 @@ struct AxionAPISkillRoutesTests {
         // Use a temp directory for skills if none provided, to avoid reading real filesystem
         let resolvedSkillsDir = skillsDirectory ?? Self.makeTempSkillsDir()
 
-        let broadcaster = eventBroadcaster ?? EventBroadcaster()
-        let tracker = runTracker ?? RunTracker(eventBroadcaster: broadcaster)
+        let broadcaster = eventBroadcaster ?? SKDEventBroadcaster()
+        let tracker = runTracker ?? AxionRunTracker(eventBroadcaster: broadcaster)
         let router = Router()
         AxionAPI.registerRoutes(
             on: router,
