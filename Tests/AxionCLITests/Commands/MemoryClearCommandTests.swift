@@ -44,6 +44,26 @@ struct MemoryClearCommandTests {
             "Domain file should be removed after clear")
     }
 
+    @Test("clear domain also removes -facts.json file")
+    func clearDomainAlsoRemovesFactsFile() async throws {
+        let tempDir = try createTempMemoryDir()
+        defer { try? FileManager.default.removeItem(atPath: tempDir) }
+
+        let domain = "com.apple.calculator"
+        let factsPath = (tempDir as NSString).appendingPathComponent("\(domain)-facts.json")
+        let factsData = "[{\"id\":\"test\"}]".data(using: .utf8)!
+        try factsData.write(to: URL(fileURLWithPath: factsPath))
+
+        #expect(FileManager.default.fileExists(atPath: factsPath),
+            "Precondition: facts file should exist before clear")
+
+        let result = try await MemoryClearCommand.clearDomain(domain, memoryDir: tempDir)
+
+        #expect(result.success, "Clear should succeed")
+        #expect(!FileManager.default.fileExists(atPath: factsPath),
+            "Facts file should be removed after clear")
+    }
+
     @Test("clear existing domain returns success")
     func clearExistingDomainReturnsSuccess() async throws {
         let tempDir = try createTempMemoryDir()

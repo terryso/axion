@@ -103,12 +103,36 @@ actor RunLockService {
         try? fileManager.removeItem(atPath: lockFilePath)
     }
 
+    // MARK: - Wait for Lock
+
+    /// Polls until the run lock can be acquired or the timeout expires.
+    /// - Parameters:
+    ///   - runId: The run ID to acquire the lock for.
+    ///   - timeout: Maximum seconds to wait (default 120).
+    ///   - interval: Seconds between polls (default 0.5).
+    /// - Returns: `true` if lock acquired, `false` on timeout.
+    func waitForLock(runId: String, timeout: TimeInterval = 120, interval: TimeInterval = 0.5) async -> Bool {
+        let deadline = Date().addingTimeInterval(timeout)
+        while Date() < deadline {
+            if acquire(runId: runId) {
+                return true
+            }
+            try? await Task.sleep(nanoseconds: UInt64(interval * 1_000_000_000))
+        }
+        return false
+    }
+
     // MARK: - Read Existing Lock
 
     /// Reads and parses the existing lock file, if present.
     /// Returns `nil` if the file doesn't exist or is corrupted.
     func readExistingLock() -> RunLockData? {
         readExistingLockSync(at: lockFilePath)
+    }
+
+    /// Checks whether a process with the given PID is still alive.
+    func isProcessAlive(_ pid: pid_t) -> Bool {
+        processAliveChecker(pid)
     }
 
     private func readExistingLockSync(at path: String) -> RunLockData? {

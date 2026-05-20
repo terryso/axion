@@ -42,10 +42,15 @@ struct MemoryClearCommand: AsyncParsableCommand {
                 message: "Invalid domain: '\(domain)'. Domain must not contain path separators or '..'."
             )
         }
-        let filePath = (memoryDir as NSString).appendingPathComponent("\(domain).json")
+        let dir = memoryDir as NSString
+        let legacyPath = dir.appendingPathComponent("\(domain).json")
+        let factsPath = dir.appendingPathComponent("\(domain)-facts.json")
         let fm = FileManager.default
 
-        guard fm.fileExists(atPath: filePath) else {
+        let legacyExists = fm.fileExists(atPath: legacyPath)
+        let factsExists = fm.fileExists(atPath: factsPath)
+
+        guard legacyExists || factsExists else {
             return ClearResult(
                 success: false,
                 message: "No Memory found for '\(domain)'."
@@ -53,7 +58,8 @@ struct MemoryClearCommand: AsyncParsableCommand {
         }
 
         do {
-            try fm.removeItem(atPath: filePath)
+            if legacyExists { try fm.removeItem(atPath: legacyPath) }
+            if factsExists { try fm.removeItem(atPath: factsPath) }
             return ClearResult(
                 success: true,
                 message: "Memory cleared for '\(domain)'."

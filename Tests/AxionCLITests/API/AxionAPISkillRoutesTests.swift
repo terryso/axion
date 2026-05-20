@@ -11,20 +11,17 @@ import OpenAgentSDK
 @Suite("AxionAPI Skill Routes", .serialized)
 struct AxionAPISkillRoutesTests {
 
-    private static let testSkillFiles = ["test_skill.json", "detail_test.json"]
-
-    private static func cleanupTestSkills() {
-        let dir = SkillCompileCommand.skillsDirectory()
-        for file in testSkillFiles {
-            try? FileManager.default.removeItem(atPath: dir + "/" + file)
-        }
+    /// Creates a fresh temp directory for each test that needs recorded skills.
+    private static func makeTempSkillsDir() -> String {
+        let dir = NSTemporaryDirectory() + "axion-test-skills-\(UUID().uuidString)"
+        try? FileManager.default.createDirectory(atPath: dir, withIntermediateDirectories: true)
+        return dir
     }
 
     // MARK: - GET /v1/skills (empty)
 
     @Test("GET /v1/skills returns empty array when no skills exist")
     func getSkillsEmpty() async throws {
-        Self.cleanupTestSkills()
         let app = try await buildTestApplication()
 
         try await app.test(.router) { client in
@@ -74,11 +71,8 @@ struct AxionAPISkillRoutesTests {
 
     @Test("GET /v1/skills returns skills list when skills exist")
     func getSkillsReturnsList() async throws {
-        Self.cleanupTestSkills()
-        // Create a temp skill file
-        let skillsDir = SkillCompileCommand.skillsDirectory()
-        try FileManager.default.createDirectory(atPath: skillsDir, withIntermediateDirectories: true)
-        defer { try? FileManager.default.removeItem(atPath: skillsDir + "/test_skill.json") }
+        let tempDir = Self.makeTempSkillsDir()
+        defer { try? FileManager.default.removeItem(atPath: tempDir) }
 
         let skill = Skill(
             name: "test_skill",
@@ -93,9 +87,9 @@ struct AxionAPISkillRoutesTests {
         encoder.outputFormatting = [.sortedKeys, .prettyPrinted]
         encoder.dateEncodingStrategy = .iso8601
         let data = try encoder.encode(skill)
-        try data.write(to: URL(fileURLWithPath: skillsDir + "/test_skill.json"))
+        try data.write(to: URL(fileURLWithPath: tempDir + "/test_skill.json"))
 
-        let app = try await buildTestApplication()
+        let app = try await buildTestApplication(skillsDirectory: tempDir)
 
         try await app.test(.router) { client in
             try await client.execute(uri: "/v1/skills", method: .get) { response in
@@ -115,10 +109,8 @@ struct AxionAPISkillRoutesTests {
 
     @Test("GET /v1/skills/:name returns detail for existing skill")
     func getSkillDetailExisting() async throws {
-        Self.cleanupTestSkills()
-        let skillsDir = SkillCompileCommand.skillsDirectory()
-        try FileManager.default.createDirectory(atPath: skillsDir, withIntermediateDirectories: true)
-        defer { try? FileManager.default.removeItem(atPath: skillsDir + "/detail_test.json") }
+        let tempDir = Self.makeTempSkillsDir()
+        defer { try? FileManager.default.removeItem(atPath: tempDir) }
 
         let skill = Skill(
             name: "detail_test",
@@ -135,9 +127,9 @@ struct AxionAPISkillRoutesTests {
         encoder.outputFormatting = [.sortedKeys, .prettyPrinted]
         encoder.dateEncodingStrategy = .iso8601
         let data = try encoder.encode(skill)
-        try data.write(to: URL(fileURLWithPath: skillsDir + "/detail_test.json"))
+        try data.write(to: URL(fileURLWithPath: tempDir + "/detail_test.json"))
 
-        let app = try await buildTestApplication()
+        let app = try await buildTestApplication(skillsDirectory: tempDir)
 
         try await app.test(.router) { client in
             try await client.execute(uri: "/v1/skills/detail_test", method: .get) { response in
@@ -271,7 +263,6 @@ struct AxionAPISkillRoutesTests {
 
     @Test("GET /v1/skills includes prompt skills from SkillRegistry")
     func getSkillsIncludesPromptSkills() async throws {
-        Self.cleanupTestSkills()
         let registry = SkillRegistry()
         registry.register(OpenAgentSDK.Skill(
             name: "test-prompt-skill",
@@ -297,10 +288,8 @@ struct AxionAPISkillRoutesTests {
 
     @Test("GET /v1/skills merges both prompt and recorded skills")
     func getSkillsMergesDualSources() async throws {
-        Self.cleanupTestSkills()
-        let skillsDir = SkillCompileCommand.skillsDirectory()
-        try FileManager.default.createDirectory(atPath: skillsDir, withIntermediateDirectories: true)
-        defer { try? FileManager.default.removeItem(atPath: skillsDir + "/recorded_skill.json") }
+        let tempDir = Self.makeTempSkillsDir()
+        defer { try? FileManager.default.removeItem(atPath: tempDir) }
 
         let recorded = Skill(
             name: "recorded_skill",
@@ -315,7 +304,7 @@ struct AxionAPISkillRoutesTests {
         encoder.outputFormatting = [.sortedKeys, .prettyPrinted]
         encoder.dateEncodingStrategy = .iso8601
         let data = try encoder.encode(recorded)
-        try data.write(to: URL(fileURLWithPath: skillsDir + "/recorded_skill.json"))
+        try data.write(to: URL(fileURLWithPath: tempDir + "/recorded_skill.json"))
 
         let registry = SkillRegistry()
         registry.register(OpenAgentSDK.Skill(
@@ -324,7 +313,7 @@ struct AxionAPISkillRoutesTests {
             promptTemplate: "Do something"
         ))
 
-        let app = try await buildTestApplication(skillRegistry: registry)
+        let app = try await buildTestApplication(skillRegistry: registry, skillsDirectory: tempDir)
 
         try await app.test(.router) { client in
             try await client.execute(uri: "/v1/skills", method: .get) { response in
@@ -345,7 +334,6 @@ struct AxionAPISkillRoutesTests {
 
     @Test("GET /v1/skills/:name returns prompt skill detail from SkillRegistry")
     func getSkillDetailPromptSkill() async throws {
-        Self.cleanupTestSkills()
         let registry = SkillRegistry()
         registry.register(OpenAgentSDK.Skill(
             name: "my-prompt-skill",
@@ -372,10 +360,8 @@ struct AxionAPISkillRoutesTests {
 
     @Test("GET /v1/skills/:name prompt skill takes priority over recorded")
     func getSkillDetailPromptOverridesRecorded() async throws {
-        Self.cleanupTestSkills()
-        let skillsDir = SkillCompileCommand.skillsDirectory()
-        try FileManager.default.createDirectory(atPath: skillsDir, withIntermediateDirectories: true)
-        defer { try? FileManager.default.removeItem(atPath: skillsDir + "/overlap_skill.json") }
+        let tempDir = Self.makeTempSkillsDir()
+        defer { try? FileManager.default.removeItem(atPath: tempDir) }
 
         let recorded = Skill(
             name: "overlap_skill",
@@ -390,7 +376,7 @@ struct AxionAPISkillRoutesTests {
         encoder.outputFormatting = [.sortedKeys, .prettyPrinted]
         encoder.dateEncodingStrategy = .iso8601
         let data = try encoder.encode(recorded)
-        try data.write(to: URL(fileURLWithPath: skillsDir + "/overlap_skill.json"))
+        try data.write(to: URL(fileURLWithPath: tempDir + "/overlap_skill.json"))
 
         let registry = SkillRegistry()
         registry.register(OpenAgentSDK.Skill(
@@ -400,7 +386,7 @@ struct AxionAPISkillRoutesTests {
             whenToUse: "Use when overlapping"
         ))
 
-        let app = try await buildTestApplication(skillRegistry: registry)
+        let app = try await buildTestApplication(skillRegistry: registry, skillsDirectory: tempDir)
 
         try await app.test(.router) { client in
             try await client.execute(uri: "/v1/skills/overlap_skill", method: .get) { response in
@@ -415,7 +401,6 @@ struct AxionAPISkillRoutesTests {
 
     @Test("POST /v1/skills/:name/run returns 404 when skill not in either source")
     func runSkillNotFoundBothSources() async throws {
-        Self.cleanupTestSkills()
         let registry = SkillRegistry()
         let app = try await buildTestApplication(skillRegistry: registry)
 
@@ -437,11 +422,15 @@ struct AxionAPISkillRoutesTests {
         eventBroadcaster: EventBroadcaster? = nil,
         authKey: String? = nil,
         concurrencyLimiter: ConcurrencyLimiter? = nil,
-        skillRegistry: SkillRegistry? = nil
+        skillRegistry: SkillRegistry? = nil,
+        skillsDirectory: String? = nil
     ) async throws -> Application<RouterResponder<BasicRequestContext>> {
         let tempLockDir = NSTemporaryDirectory() + "axion-test-lock-\(UUID().uuidString)"
         try? FileManager.default.createDirectory(atPath: tempLockDir, withIntermediateDirectories: true)
         let testRunLockService = RunLockService(lockDirectory: tempLockDir, processAliveChecker: { _ in false })
+
+        // Use a temp directory for skills if none provided, to avoid reading real filesystem
+        let resolvedSkillsDir = skillsDirectory ?? Self.makeTempSkillsDir()
 
         let broadcaster = eventBroadcaster ?? EventBroadcaster()
         let tracker = runTracker ?? RunTracker(eventBroadcaster: broadcaster)
@@ -454,7 +443,8 @@ struct AxionAPISkillRoutesTests {
             authKey: authKey,
             concurrencyLimiter: concurrencyLimiter,
             runLockService: testRunLockService,
-            skillRegistry: skillRegistry
+            skillRegistry: skillRegistry,
+            skillsDirectory: resolvedSkillsDir
         )
 
         let app = Application(

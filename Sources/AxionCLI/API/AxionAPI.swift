@@ -33,8 +33,10 @@ enum AxionAPI {
         runLockService: RunLockService? = nil,
         maxConcurrent: Int = 10,
         configDirectory: String = ConfigManager.defaultConfigDirectory,
-        skillRegistry: SkillRegistry? = nil
+        skillRegistry: SkillRegistry? = nil,
+        skillsDirectory: String? = nil
     ) {
+        let resolvedSkillsDir = skillsDirectory ?? SkillCompileCommand.skillsDirectory()
         let v1 = router.group("v1")
 
         // GET /v1/health — no auth required
@@ -289,27 +291,34 @@ enum AxionAPI {
                 )
             )
 
-            // Check run lock (desktop-level exclusive access)
-            let runLockService = runLockService ?? RunLockService()
-            let lockAcquired = await runLockService.acquire(runId: runId)
-            if !lockAcquired {
-                let existingLock = await runLockService.readExistingLock()
+            let activeRunLockService = runLockService ?? RunLockService()
+
+            // Synchronous lock check: reject immediately if desktop lock is held
+            let currentHolder = await activeRunLockService.readExistingLock()
+            if let holder = currentHolder, await activeRunLockService.isProcessAlive(holder.pid) {
+                await runTracker.updateRun(runId: runId, status: .failed, steps: [], durationMs: 0, replanCount: 0)
                 throw AxionAPIError(
                     status: .conflict,
                     error: APIErrorResponse(
                         error: "run_locked",
-                        message: "另一个 live run（run_id: \(existingLock?.runId ?? "unknown")）正在执行，请等待其完成或使用 `axion cancel \(existingLock?.runId ?? "")` 取消"
+                        message: "Another live run (\(holder.runId)) is currently executing (pid \(holder.pid))."
                     )
                 )
             }
 
-            // Check concurrency limiter
+            // Check concurrency limiter — determines running vs queued response
             if let limiter = concurrencyLimiter {
                 let acquired = await limiter.tryAcquire()
                 if acquired {
-                    // Slot available immediately — launch agent in background
+                    // Slot available immediately — launch agent in background (waits for desktop lock internally)
                     let capturedConfig = config
                     _ = _Concurrency.Task.detached {
+                        let locked = await activeRunLockService.waitForLock(runId: runId)
+                        guard locked else {
+                            await runTracker.updateRun(runId: runId, status: .failed, steps: [], durationMs: 0, replanCount: 0)
+                            await limiter.release()
+                            return
+                        }
                         let result = await ApiRunner.runAgent(
                             config: capturedConfig,
                             task: createRequest.task,
@@ -333,7 +342,7 @@ enum AxionAPI {
                             costTelemetry: result.costTelemetry
                         )
                         await limiter.release()
-                        await runLockService.release()
+                        await activeRunLockService.release()
                     }
 
                     var resp = try context.responseEncoder.encode(
@@ -355,8 +364,11 @@ enum AxionAPI {
                 let capturedConfig = config
                 _ = _Concurrency.Task.detached {
                     let slotResult = await limiter.acquire()
-                    guard slotResult >= 0 else {
-                        await runLockService.release()
+                    guard slotResult >= 0 else { return }
+                    let locked = await activeRunLockService.waitForLock(runId: runId)
+                    guard locked else {
+                        await runTracker.updateRun(runId: runId, status: .failed, steps: [], durationMs: 0, replanCount: 0)
+                        await limiter.release()
                         return
                     }
                     let result = await ApiRunner.runAgent(
@@ -382,7 +394,7 @@ enum AxionAPI {
                         costTelemetry: result.costTelemetry
                     )
                     await limiter.release()
-                    await runLockService.release()
+                    await activeRunLockService.release()
                 }
 
                 let queuedResp = QueuedRunResponse(runId: runId, status: "queued", position: position)
@@ -391,9 +403,14 @@ enum AxionAPI {
                 return response
             }
 
-            // No concurrency limiter — original behavior
+            // No concurrency limiter — wait for desktop lock in background
             let capturedConfig = config
             _ = _Concurrency.Task.detached {
+                let locked = await activeRunLockService.waitForLock(runId: runId)
+                guard locked else {
+                    await runTracker.updateRun(runId: runId, status: .failed, steps: [], durationMs: 0, replanCount: 0)
+                    return
+                }
                 let result = await ApiRunner.runAgent(
                     config: capturedConfig,
                     task: createRequest.task,
@@ -416,7 +433,7 @@ enum AxionAPI {
                     replanCount: result.replanCount,
                     costTelemetry: result.costTelemetry
                 )
-                await runLockService.release()
+                await activeRunLockService.release()
             }
 
             var resp = try context.responseEncoder.encode(
@@ -548,7 +565,7 @@ enum AxionAPI {
 
         // GET /v1/skills — list all skills (merged dual sources)
         v1Authed.get("skills") { _, _ in
-            let summaries = Self.loadAllSkillSummaries(registry: skillRegistry)
+            let summaries = Self.loadAllSkillSummaries(registry: skillRegistry, skillsDir: resolvedSkillsDir)
             let encoder = JSONEncoder()
             encoder.outputFormatting = [.sortedKeys]
             let data = try encoder.encode(summaries)
@@ -590,7 +607,7 @@ enum AxionAPI {
             }
 
             // Track 2: recorded skill from JSON file
-            if let detail = Self.loadSkillDetail(name: name) {
+            if let detail = Self.loadSkillDetail(name: name, skillsDir: resolvedSkillsDir) {
                 return EditedResponse(
                     headers: [.contentType: "application/json"],
                     response: detail
@@ -640,27 +657,21 @@ enum AxionAPI {
                     options: RunOptions(task: taskDescription)
                 )
 
-                // Check run lock (desktop-level exclusive access)
                 let activeRunLockService = runLockService ?? RunLockService()
-                let lockAcquired = await activeRunLockService.acquire(runId: runId)
-                if !lockAcquired {
-                    let existingLock = await activeRunLockService.readExistingLock()
-                    throw AxionAPIError(
-                        status: .conflict,
-                        error: APIErrorResponse(
-                            error: "run_locked",
-                            message: "另一个 live run（run_id: \(existingLock?.runId ?? "unknown")）正在执行，请等待其完成或使用 `axion cancel \(existingLock?.runId ?? "")` 取消"
-                        )
-                    )
-                }
 
-                // Check concurrency limiter
+                // Check concurrency limiter — determines running vs queued response
                 if let limiter = concurrencyLimiter {
                     let acquired = await limiter.tryAcquire()
                     if acquired {
                         let capturedConfig = config
                         let capturedSkill = promptSkill
                         _ = _Concurrency.Task.detached {
+                            let locked = await activeRunLockService.waitForLock(runId: runId)
+                            guard locked else {
+                                await runTracker.updateRun(runId: runId, status: .failed, steps: [], durationMs: 0, replanCount: 0)
+                                await limiter.release()
+                                return
+                            }
                             let result = await ApiRunner.runSkillAgent(
                                 skill: capturedSkill,
                                 task: task,
@@ -689,8 +700,11 @@ enum AxionAPI {
                         let capturedSkill = promptSkill
                         _ = _Concurrency.Task.detached {
                             let slotResult = await limiter.acquire()
-                            guard slotResult >= 0 else {
-                                await activeRunLockService.release()
+                            guard slotResult >= 0 else { return }
+                            let locked = await activeRunLockService.waitForLock(runId: runId)
+                            guard locked else {
+                                await runTracker.updateRun(runId: runId, status: .failed, steps: [], durationMs: 0, replanCount: 0)
+                                await limiter.release()
                                 return
                             }
                             let result = await ApiRunner.runSkillAgent(
@@ -720,10 +734,15 @@ enum AxionAPI {
                         return response
                     }
                 } else {
-                    // No concurrency limiter — launch directly
+                    // No concurrency limiter — wait for desktop lock in background
                     let capturedConfig = config
                     let capturedSkill = promptSkill
                     _ = _Concurrency.Task.detached {
+                        let locked = await activeRunLockService.waitForLock(runId: runId)
+                        guard locked else {
+                            await runTracker.updateRun(runId: runId, status: .failed, steps: [], durationMs: 0, replanCount: 0)
+                            return
+                        }
                         let result = await ApiRunner.runSkillAgent(
                             skill: capturedSkill,
                             task: task,
@@ -754,7 +773,7 @@ enum AxionAPI {
 
             // Track 2: recorded skill from JSON file
             let safeName = RecordCommand.sanitizeFileName(name)
-            let skillsDir = SkillCompileCommand.skillsDirectory()
+            let skillsDir = resolvedSkillsDir
             let skillPath = (skillsDir as NSString).appendingPathComponent("\(safeName).json")
 
             guard FileManager.default.fileExists(atPath: skillPath) else {
@@ -864,11 +883,11 @@ enum AxionAPI {
 
     /// Load skill summaries from both prompt skills (SkillRegistry) and recorded skills (JSON files).
     /// Prompt skills take priority on name collision (consistent with CLI dual-track lookup).
-    private static func loadAllSkillSummaries(registry: SkillRegistry?) -> [SkillSummaryResponse] {
+    private static func loadAllSkillSummaries(registry: SkillRegistry?, skillsDir: String) -> [SkillSummaryResponse] {
         var summariesByName: [String: SkillSummaryResponse] = [:]
 
-        // Load recorded skills from ~/.axion/skills/*.json
-        let recordedSummaries = loadRecordedSkillSummaries()
+        // Load recorded skills from skillsDir/*.json
+        let recordedSummaries = loadRecordedSkillSummaries(skillsDir: skillsDir)
         for summary in recordedSummaries {
             summariesByName[summary.name] = summary
         }
@@ -891,8 +910,7 @@ enum AxionAPI {
         return summariesByName.values.sorted { $0.name < $1.name }
     }
 
-    private static func loadRecordedSkillSummaries() -> [SkillSummaryResponse] {
-        let skillsDir = SkillCompileCommand.skillsDirectory()
+    private static func loadRecordedSkillSummaries(skillsDir: String) -> [SkillSummaryResponse] {
         let fm = FileManager.default
 
         guard let fileNames = try? fm.contentsOfDirectory(atPath: skillsDir) else {
@@ -925,9 +943,8 @@ enum AxionAPI {
         return summaries.sorted { $0.name < $1.name }
     }
 
-    private static func loadSkillDetail(name: String) -> SkillDetailResponse? {
+    private static func loadSkillDetail(name: String, skillsDir: String) -> SkillDetailResponse? {
         let safeName = RecordCommand.sanitizeFileName(name)
-        let skillsDir = SkillCompileCommand.skillsDirectory()
         let skillPath = (skillsDir as NSString).appendingPathComponent("\(safeName).json")
 
         guard let data = FileManager.default.contents(atPath: skillPath) else { return nil }
