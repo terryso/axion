@@ -120,7 +120,7 @@ struct RunMemoryProcessor {
                     let profile = analyzer.analyze(domain: domain, history: history)
 
                     if profile.totalRuns > 0 {
-                        let profileContent = RunCommand.buildProfileContent(profile: profile)
+                        let profileContent = RunOrchestrator.buildProfileContent(profile: profile)
                         let profileEntry = KnowledgeEntry(
                             id: UUID().uuidString,
                             content: profileContent,

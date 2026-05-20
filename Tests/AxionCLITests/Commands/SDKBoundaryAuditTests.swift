@@ -125,12 +125,12 @@ struct SDKBoundaryAuditTests {
         guard SDK_API_USAGE_VERIFIED else { return }
 
         let sourcesDir = sourcesDirectory()
-        let runCommandPath = "\(sourcesDir)/AxionCLI/Commands/RunCommand.swift"
+        let orchestratorPath = "\(sourcesDir)/AxionCLI/Services/RunOrchestrator.swift"
 
-        let content = try String(contentsOfFile: runCommandPath, encoding: .utf8)
+        let content = try String(contentsOfFile: orchestratorPath, encoding: .utf8)
 
         #expect(content.contains("agent.stream("),
-            "RunCommand MUST use agent.stream() public API for execution")
+            "RunOrchestrator MUST use agent.stream() public API for execution")
     }
 
     // ========================================================================

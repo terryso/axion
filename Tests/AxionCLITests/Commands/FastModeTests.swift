@@ -63,42 +63,42 @@ struct FastModeTests {
 
     @Test("computeEffectiveMaxSteps fast mode caps at 5")
     func computeEffectiveMaxStepsFastModeCapsAt5() {
-        let result = RunCommand.computeEffectiveMaxSteps(fast: true, maxSteps: nil, configMaxSteps: 20)
+        let result = RunOrchestrator.computeEffectiveMaxSteps(fast: true, maxSteps: nil, configMaxSteps: 20)
         #expect(result == 5)
     }
 
     @Test("computeEffectiveMaxSteps fast mode caps explicit value at 5")
     func computeEffectiveMaxStepsFastModeCapsExplicitValueAt5() {
-        let result = RunCommand.computeEffectiveMaxSteps(fast: true, maxSteps: 10, configMaxSteps: 20)
+        let result = RunOrchestrator.computeEffectiveMaxSteps(fast: true, maxSteps: 10, configMaxSteps: 20)
         #expect(result == 5)
     }
 
     @Test("computeEffectiveMaxSteps fast mode respects explicit below 5")
     func computeEffectiveMaxStepsFastModeRespectsExplicitBelow5() {
-        let result = RunCommand.computeEffectiveMaxSteps(fast: true, maxSteps: 3, configMaxSteps: 20)
+        let result = RunOrchestrator.computeEffectiveMaxSteps(fast: true, maxSteps: 3, configMaxSteps: 20)
         #expect(result == 3)
     }
 
     @Test("computeEffectiveMaxSteps standard mode uses config default")
     func computeEffectiveMaxStepsStandardModeUsesConfigDefault() {
-        let result = RunCommand.computeEffectiveMaxSteps(fast: false, maxSteps: nil, configMaxSteps: 20)
+        let result = RunOrchestrator.computeEffectiveMaxSteps(fast: false, maxSteps: nil, configMaxSteps: 20)
         #expect(result == 20)
     }
 
     @Test("computeEffectiveMaxSteps standard mode respects explicit override")
     func computeEffectiveMaxStepsStandardModeRespectsExplicitOverride() {
-        let result = RunCommand.computeEffectiveMaxSteps(fast: false, maxSteps: 30, configMaxSteps: 20)
+        let result = RunOrchestrator.computeEffectiveMaxSteps(fast: false, maxSteps: 30, configMaxSteps: 20)
         #expect(result == 30)
     }
 
     @Test("computeEffectiveMaxTokens fast mode")
     func computeEffectiveMaxTokensFastMode() {
-        #expect(RunCommand.computeEffectiveMaxTokens(fast: true) == 2048)
+        #expect(RunOrchestrator.computeEffectiveMaxTokens(fast: true) == 2048)
     }
 
     @Test("computeEffectiveMaxTokens standard mode")
     func computeEffectiveMaxTokensStandardMode() {
-        #expect(RunCommand.computeEffectiveMaxTokens(fast: false) == 4096)
+        #expect(RunOrchestrator.computeEffectiveMaxTokens(fast: false) == 4096)
     }
 
     // MARK: - Task 4-5: Output Handler Fast Mode (AC#5, #7)
@@ -225,25 +225,25 @@ struct FastModeTests {
 
     @Test("trace mode fast value")
     func traceModeFastValue() {
-        let mode = RunCommand.traceMode(fast: true, dryrun: false)
+        let mode = RunOrchestrator.traceMode(fast: true, dryrun: false)
         #expect(mode == "fast")
     }
 
     @Test("trace mode fast with dryrun takes priority")
     func traceModeFastWithDryrunFastTakesPriority() {
-        let mode = RunCommand.traceMode(fast: true, dryrun: true)
+        let mode = RunOrchestrator.traceMode(fast: true, dryrun: true)
         #expect(mode == "fast")
     }
 
     @Test("trace mode standard value")
     func traceModeStandardValue() {
-        let mode = RunCommand.traceMode(fast: false, dryrun: false)
+        let mode = RunOrchestrator.traceMode(fast: false, dryrun: false)
         #expect(mode == "standard")
     }
 
     @Test("trace mode dryrun value")
     func traceModeDryrunValue() {
-        let mode = RunCommand.traceMode(fast: false, dryrun: true)
+        let mode = RunOrchestrator.traceMode(fast: false, dryrun: true)
         #expect(mode == "dryrun")
     }
 }

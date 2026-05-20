@@ -41,7 +41,7 @@ struct RunCommandProfileContentTests {
             isFamiliar: true
         )
 
-        let content = RunCommand.buildProfileContent(profile: profile)
+        let content = RunOrchestrator.buildProfileContent(profile: profile)
 
         #expect(content.contains("App Profile: com.apple.calculator"),
             "Should include domain header")
@@ -59,7 +59,7 @@ struct RunCommandProfileContentTests {
     func buildProfileContentNotFamiliarShowsNo() {
         let profile = makeProfile(isFamiliar: false)
 
-        let content = RunCommand.buildProfileContent(profile: profile)
+        let content = RunOrchestrator.buildProfileContent(profile: profile)
 
         #expect(content.contains("已熟悉: 否"), "Should indicate not-familiar status")
     }
@@ -72,7 +72,7 @@ struct RunCommandProfileContentTests {
             axCharacteristics: ["AXButton", "AXTextField"]
         )
 
-        let content = RunCommand.buildProfileContent(profile: profile)
+        let content = RunOrchestrator.buildProfileContent(profile: profile)
 
         #expect(content.contains("AX特征:"), "Should include AX characteristics header")
         #expect(content.contains("AXButton"), "Should include AX characteristic values")
@@ -83,7 +83,7 @@ struct RunCommandProfileContentTests {
     func buildProfileContentNoAxCharacteristicsOmitsLine() {
         let profile = makeProfile(axCharacteristics: [])
 
-        let content = RunCommand.buildProfileContent(profile: profile)
+        let content = RunOrchestrator.buildProfileContent(profile: profile)
 
         #expect(!content.contains("AX特征:"), "Should not include AX characteristics line when empty")
     }
@@ -102,7 +102,7 @@ struct RunCommandProfileContentTests {
         ]
         let profile = makeProfile(commonPatterns: patterns)
 
-        let content = RunCommand.buildProfileContent(profile: profile)
+        let content = RunOrchestrator.buildProfileContent(profile: profile)
 
         #expect(content.contains("高频路径:"), "Should include high-frequency patterns header")
         #expect(content.contains("launch_app → click → type_text"), "Should include pattern sequence")
@@ -114,7 +114,7 @@ struct RunCommandProfileContentTests {
     func buildProfileContentNoPatternsOmitsLine() {
         let profile = makeProfile(commonPatterns: [])
 
-        let content = RunCommand.buildProfileContent(profile: profile)
+        let content = RunOrchestrator.buildProfileContent(profile: profile)
 
         #expect(!content.contains("高频路径:"), "Should not include patterns line when empty")
     }
@@ -132,7 +132,7 @@ struct RunCommandProfileContentTests {
         ]
         let profile = makeProfile(knownFailures: failures)
 
-        let content = RunCommand.buildProfileContent(profile: profile)
+        let content = RunOrchestrator.buildProfileContent(profile: profile)
 
         #expect(content.contains("已知失败:"), "Should include known failures header")
         #expect(content.contains("click(x:300,y:400)"), "Should include failed action")
@@ -151,7 +151,7 @@ struct RunCommandProfileContentTests {
         ]
         let profile = makeProfile(knownFailures: failures)
 
-        let content = RunCommand.buildProfileContent(profile: profile)
+        let content = RunOrchestrator.buildProfileContent(profile: profile)
 
         #expect(content.contains("已知失败:"), "Should include known failures header")
         #expect(!content.contains("修正:"), "Should not include workaround section when none exists")
@@ -161,7 +161,7 @@ struct RunCommandProfileContentTests {
     func buildProfileContentNoFailuresOmitsLine() {
         let profile = makeProfile(knownFailures: [])
 
-        let content = RunCommand.buildProfileContent(profile: profile)
+        let content = RunOrchestrator.buildProfileContent(profile: profile)
 
         #expect(!content.contains("已知失败:"), "Should not include failures line when empty")
     }
@@ -177,7 +177,7 @@ struct RunCommandProfileContentTests {
             isFamiliar: false
         )
 
-        let content = RunCommand.buildProfileContent(profile: profile)
+        let content = RunOrchestrator.buildProfileContent(profile: profile)
 
         #expect(content.contains("总运行次数: 0"), "Should handle zero runs gracefully")
         #expect(!content.contains("AX特征:"), "No AX characteristics for zero runs")
@@ -205,7 +205,7 @@ struct RunCommandProfileContentTests {
         ]
         let profile = makeProfile(commonPatterns: patterns)
 
-        let content = RunCommand.buildProfileContent(profile: profile)
+        let content = RunOrchestrator.buildProfileContent(profile: profile)
 
         #expect(content.contains(";"), "Multiple patterns should be separated by semicolons")
         #expect(content.contains("频率:5"), "Should include first pattern frequency")

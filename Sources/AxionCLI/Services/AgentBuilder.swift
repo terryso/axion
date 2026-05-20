@@ -108,6 +108,27 @@ enum AgentBuilder {
                 fast: false
             )
         }
+
+        /// Build config for MCP Server mode (`axion mcp`).
+        /// No skills, no Playwright, no fast/dryrun modes. Memory context included.
+        static func forMCP(
+            config: AxionConfig,
+            verbose: Bool = false
+        ) -> BuildConfig {
+            BuildConfig(
+                config: config,
+                task: "",
+                noMemory: false,
+                noSkills: true,
+                includePlaywright: false,
+                allowForeground: false,
+                maxSteps: nil,
+                maxTokens: nil,
+                verbose: verbose,
+                dryrun: false,
+                fast: false
+            )
+        }
     }
 
     // MARK: - Build

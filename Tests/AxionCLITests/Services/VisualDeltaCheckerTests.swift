@@ -350,7 +350,7 @@ struct VisualDeltaCheckerTests {
     func extractBase64JsonImageData() {
         let rawBase64 = makeTestJPEG(r: 100, g: 100, b: 100)
         let jsonContent = "{\"image_data\": \"\(rawBase64)\", \"action\": \"screenshot\"}"
-        let extracted = RunCommand.extractBase64FromToolResultForTest(jsonContent)
+        let extracted = RunOrchestrator.extractBase64FromToolResultForTest(jsonContent)
         #expect(extracted == rawBase64)
     }
 
@@ -358,20 +358,20 @@ struct VisualDeltaCheckerTests {
     func extractBase64JsonBase64() {
         let rawBase64 = makeTestJPEG(r: 100, g: 100, b: 100)
         let jsonContent = "{\"base64\": \"\(rawBase64)\"}"
-        let extracted = RunCommand.extractBase64FromToolResultForTest(jsonContent)
+        let extracted = RunOrchestrator.extractBase64FromToolResultForTest(jsonContent)
         #expect(extracted == rawBase64)
     }
 
     @Test("extractBase64FromToolResult parses plain base64 string")
     func extractBase64Plain() {
         let rawBase64 = makeTestJPEG(r: 100, g: 100, b: 100)
-        let extracted = RunCommand.extractBase64FromToolResultForTest(rawBase64)
+        let extracted = RunOrchestrator.extractBase64FromToolResultForTest(rawBase64)
         #expect(extracted == rawBase64)
     }
 
     @Test("extractBase64FromToolResult returns nil for short non-base64 content")
     func extractBase64ShortContent() {
-        let extracted = RunCommand.extractBase64FromToolResultForTest("short text")
+        let extracted = RunOrchestrator.extractBase64FromToolResultForTest("short text")
         #expect(extracted == nil)
     }
 
@@ -379,7 +379,7 @@ struct VisualDeltaCheckerTests {
     func extractBase64JsonImage() {
         let rawBase64 = makeTestJPEG(r: 50, g: 50, b: 50)
         let jsonContent = "{\"image\": \"\(rawBase64)\"}"
-        let extracted = RunCommand.extractBase64FromToolResultForTest(jsonContent)
+        let extracted = RunOrchestrator.extractBase64FromToolResultForTest(jsonContent)
         #expect(extracted == rawBase64)
     }
 }
