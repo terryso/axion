@@ -1,11 +1,12 @@
 import ArgumentParser
 import AxionCore
 import Foundation
+import OpenAgentSDK
 
 struct RecordedSkillRunner {
 
     static func run(
-        skill: Skill,
+        skill: AxionCore.Skill,
         skillPath: String,
         paramValues: [String: String]
     ) async throws {
@@ -58,47 +59,74 @@ struct RecordedSkillRunner {
             }
 
             // Record skill execution Memory (Story 18.2 AC5)
-            do {
-                let memoryDir = (ConfigManager.defaultConfigDirectory as NSString).appendingPathComponent("memory")
-                let factStore = MemoryFactStore(memoryDir: memoryDir)
-                let lifecycleService = MemoryLifecycleService()
-
-                let fact = AppMemoryFact.create(
-                    domain: "unknown",
-                    kind: .affordance,
-                    description: "Recorded skill '\(skill.name)' executed successfully, \(result.stepsExecuted) steps",
-                    confidence: 0.7,
-                    scope: "skill:\(skill.name)"
-                )
-                let existing = try await factStore.query(domain: fact.domain)
-                let merged = lifecycleService.addFact(fact, mergingWith: existing)
-                try await factStore.save(domain: fact.domain, fact: merged)
-            } catch {
-                fputs("[axion] warning: skill memory record failed: \(error.localizedDescription)\n", stderr)
-            }
+            recordSkillMemory(
+                skillName: skill.name,
+                kind: .affordance,
+                description: "Recorded skill '\(skill.name)' executed successfully, \(result.stepsExecuted) steps",
+                confidence: 0.7
+            )
         } else if let error = result.errorMessage {
             // Record failure Memory (Story 18.2 AC5 — avoid kind on error)
-            do {
-                let memoryDir = (ConfigManager.defaultConfigDirectory as NSString).appendingPathComponent("memory")
-                let factStore = MemoryFactStore(memoryDir: memoryDir)
-                let lifecycleService = MemoryLifecycleService()
-
-                let fact = AppMemoryFact.create(
-                    domain: "unknown",
-                    kind: .avoid,
-                    description: "Recorded skill '\(skill.name)' failed: \(error)",
-                    confidence: 0.6,
-                    scope: "skill:\(skill.name)"
-                )
-                let existing = try await factStore.query(domain: fact.domain)
-                let merged = lifecycleService.addFact(fact, mergingWith: existing)
-                try await factStore.save(domain: fact.domain, fact: merged)
-            } catch {
-                fputs("[axion] warning: skill memory record failed: \(error.localizedDescription)\n", stderr)
-            }
+            recordSkillMemory(
+                skillName: skill.name,
+                kind: .avoid,
+                description: "Recorded skill '\(skill.name)' failed: \(error)",
+                confidence: 0.6
+            )
 
             print("技能 '\(skill.name)' \(error)。建议使用 axion run 代替。")
             throw ExitCode(1)
+        }
+    }
+
+    // MARK: - Skill Memory Recording
+
+    private static func recordSkillMemory(
+        skillName: String,
+        kind: MemoryKind,
+        description: String,
+        confidence: Double
+    ) {
+        _Concurrency.Task {
+            do {
+                let memoryDir = (ConfigManager.defaultConfigDirectory as NSString).appendingPathComponent("memory")
+                let factStore = AxionFactStore(memoryDir: memoryDir)
+                let lifecycleService = OpenAgentSDK.MemoryLifecycleService()
+
+                let fact = AppMemoryFact.create(
+                    domain: "unknown",
+                    kind: kind,
+                    description: description,
+                    confidence: confidence,
+                    scope: "skill:\(skillName)"
+                )
+                let sdkFact = fact.toSDKFact()
+                let existing = try await factStore.query(domain: fact.domain)
+                let sdkExisting = existing.map { $0.toSDKFact() }
+                let sdkResult = lifecycleService.addFact(sdkFact, mergingWith: sdkExisting)
+
+                // Preserve Axion-specific fields lost in SDK round-trip
+                let existingMatch = existing.first(where: { $0.id == fact.id })
+                let mergedFact: AppMemoryFact
+                if let existingFact = existingMatch {
+                    var updated = existingFact
+                    updated.status = MemoryFactStatus(rawValue: sdkResult.status.rawValue) ?? existingFact.status
+                    updated.confidence = sdkResult.confidence
+                    updated.evidenceCount = sdkResult.evidenceCount
+                    updated.updatedAt = sdkResult.lastVerifiedAt
+                    mergedFact = updated
+                } else {
+                    mergedFact = AppMemoryFact.fromSDKFact(
+                        sdkResult,
+                        scope: fact.scope,
+                        cause: fact.cause,
+                        evidence: fact.evidence
+                    )
+                }
+                try await factStore.save(domain: fact.domain, fact: AppMemoryFact.normalizeFact(mergedFact))
+            } catch {
+                fputs("[axion] warning: skill memory record failed: \(error.localizedDescription)\n", stderr)
+            }
         }
     }
 }

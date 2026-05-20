@@ -26,6 +26,10 @@ import OpenAgentSDK
 ///   without requiring a structured schema.
 struct MemoryContextProvider {
 
+    // Disambiguate SDK types that shadow Axion's.
+    typealias SDKFactStore = OpenAgentSDK.FactStore
+    typealias SDKMemoryLifecycleService = OpenAgentSDK.MemoryLifecycleService
+
     // MARK: - App Name Mapping
 
     /// Common App name to domain mapping used for inferring which App a task
@@ -105,21 +109,24 @@ struct MemoryContextProvider {
 
     // MARK: - Fact-based Memory Context (Story 12.2)
 
-    /// Build a classified Memory context string from `MemoryFactStore` data.
+    /// Build a classified Memory context string from SDK `FactStore` data.
     ///
     /// Reads active facts for the inferred domain, groups by kind (affordance / avoid / observation),
     /// and formats them with kind-specific labels and the soft-hints declaration.
     /// Falls back to `nil` if no facts are found (safe degradation).
     func buildFactMemoryContext(
         task: String,
-        factStore: MemoryFactStore
+        factStore: AxionFactStore
     ) async -> String? {
         guard let domain = inferDomain(from: task) else { return nil }
 
         do {
             let allFacts = try await factStore.query(domain: domain)
-            let lifecycleService = MemoryLifecycleService()
-            let activeFacts = lifecycleService.selectActiveFacts(domain: domain, from: allFacts)
+            let lifecycleService = SDKMemoryLifecycleService()
+            let sdkFacts = allFacts.map { $0.toSDKFact() }
+            let sdkActiveFacts = lifecycleService.selectActiveFacts(domain: domain, from: sdkFacts)
+            let activeIds = Set(sdkActiveFacts.map(\.id))
+            let activeFacts = allFacts.filter { activeIds.contains($0.id) }
             guard !activeFacts.isEmpty else { return nil }
             return assembleFactContext(domain: domain, facts: activeFacts)
         } catch {
@@ -140,13 +147,16 @@ struct MemoryContextProvider {
     func buildSkillMemoryContext(
         skillName: String,
         task: String,
-        factStore: MemoryFactStore
+        factStore: AxionFactStore
     ) async -> String? {
         guard let domain = inferDomain(from: task) else { return nil }
         do {
             let allFacts = try await factStore.query(domain: domain)
-            let lifecycleService = MemoryLifecycleService()
-            let activeFacts = lifecycleService.selectActiveFacts(domain: domain, from: allFacts)
+            let lifecycleService = SDKMemoryLifecycleService()
+            let sdkFacts = allFacts.map { $0.toSDKFact() }
+            let sdkActiveFacts = lifecycleService.selectActiveFacts(domain: domain, from: sdkFacts)
+            let activeIds = Set(sdkActiveFacts.map(\.id))
+            let activeFacts = allFacts.filter { activeIds.contains($0.id) }
             let scopePrefix = "skill:\(skillName)"
             let skillFacts = activeFacts.filter { $0.scope?.hasPrefix(scopePrefix) == true }
             guard !skillFacts.isEmpty else { return nil }

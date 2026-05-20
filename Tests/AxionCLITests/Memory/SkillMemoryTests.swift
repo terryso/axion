@@ -15,10 +15,10 @@ struct SkillMemoryTests {
 
     // MARK: - Helpers
 
-    private func makeTempStore() -> (MemoryFactStore, URL) {
+    private func makeTempStore() -> (AxionFactStore, URL) {
         let tempDir = FileManager.default.temporaryDirectory
             .appendingPathComponent(UUID().uuidString)
-        return (MemoryFactStore(memoryDir: tempDir), tempDir)
+        return (AxionFactStore(memoryDir: tempDir), tempDir)
     }
 
     private func cleanup(_ url: URL) {

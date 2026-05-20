@@ -1,4 +1,5 @@
 import Foundation
+import OpenAgentSDK
 import Testing
 
 @testable import AxionCLI
@@ -36,10 +37,10 @@ struct MemoryLearnTakeoverCommandTests {
         let dir = try makeTempDir()
         defer { cleanup(dir) }
 
-        let store = MemoryFactStore(memoryDir: dir)
+        let store = AxionFactStore(memoryDir: dir)
         let service = TakeoverLearningService(
             factStore: store,
-            lifecycleService: MemoryLifecycleService()
+            lifecycleService: OpenAgentSDK.MemoryLifecycleService()
         )
 
         // Simulate what the CLI command does
@@ -63,10 +64,10 @@ struct MemoryLearnTakeoverCommandTests {
         let dir = try makeTempDir()
         defer { cleanup(dir) }
 
-        let store = MemoryFactStore(memoryDir: dir)
+        let store = AxionFactStore(memoryDir: dir)
         let service = TakeoverLearningService(
             factStore: store,
-            lifecycleService: MemoryLifecycleService()
+            lifecycleService: OpenAgentSDK.MemoryLifecycleService()
         )
 
         await service.recordTakeoverLearning(
@@ -90,10 +91,10 @@ struct MemoryLearnTakeoverCommandTests {
         let dir = try makeTempDir()
         defer { cleanup(dir) }
 
-        let store = MemoryFactStore(memoryDir: dir)
+        let store = AxionFactStore(memoryDir: dir)
         let service = TakeoverLearningService(
             factStore: store,
-            lifecycleService: MemoryLifecycleService()
+            lifecycleService: OpenAgentSDK.MemoryLifecycleService()
         )
 
         await service.recordTakeoverLearning(

@@ -1,6 +1,5 @@
 import Foundation
 import Testing
-import OpenAgentSDK
 
 @testable import AxionCLI
 
@@ -53,7 +52,7 @@ struct MemoryListCommandTests {
         let tempDir = try createTempMemoryDir()
         defer { try? FileManager.default.removeItem(atPath: tempDir) }
 
-        let store = MemoryFactStore(memoryDir: tempDir)
+        let store = AxionFactStore(memoryDir: tempDir)
 
         let facts: [AppMemoryFact] = [
             AppMemoryFact.create(domain: "com.apple.calculator", kind: .observation, description: "Test run", evidence: ["r1"]),
@@ -71,7 +70,7 @@ struct MemoryListCommandTests {
         let tempDir = try createTempMemoryDir()
         defer { try? FileManager.default.removeItem(atPath: tempDir) }
 
-        let store = MemoryFactStore(memoryDir: tempDir)
+        let store = AxionFactStore(memoryDir: tempDir)
         let domain = "com.apple.calculator"
 
         var facts: [AppMemoryFact] = []
@@ -99,7 +98,7 @@ struct MemoryListCommandTests {
         let tempDir = try createTempMemoryDir()
         defer { try? FileManager.default.removeItem(atPath: tempDir) }
 
-        let store = MemoryFactStore(memoryDir: tempDir)
+        let store = AxionFactStore(memoryDir: tempDir)
 
         var calcFact = AppMemoryFact.create(domain: "com.apple.calculator", kind: .affordance, description: "Calculator run", evidence: ["r1"])
         calcFact.status = .active
@@ -148,7 +147,7 @@ struct MemoryListCommandTests {
         let tempDir = try createTempMemoryDir()
         defer { try? FileManager.default.removeItem(atPath: tempDir) }
 
-        let store = MemoryFactStore(memoryDir: tempDir)
+        let store = AxionFactStore(memoryDir: tempDir)
         let domain = "com.apple.calculator"
 
         var fact = AppMemoryFact.create(
@@ -175,7 +174,7 @@ struct MemoryListCommandTests {
         let tempDir = try createTempMemoryDir()
         defer { try? FileManager.default.removeItem(atPath: tempDir) }
 
-        let store = MemoryFactStore(memoryDir: tempDir)
+        let store = AxionFactStore(memoryDir: tempDir)
         let domain = "com.apple.finder"
 
         var affordance = AppMemoryFact.create(

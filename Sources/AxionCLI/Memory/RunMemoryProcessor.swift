@@ -10,28 +10,34 @@ import AxionCore
 /// familiarity tracking, takeover learning).
 struct RunMemoryProcessor {
 
+    // Disambiguate SDK types that shadow Axion's.
+    private typealias SDKMemoryLifecycleService = OpenAgentSDK.MemoryLifecycleService
+    private typealias SDKMemoryFactStatus = OpenAgentSDK.MemoryFactStatus
+
     // MARK: - Pre-run
+
+    /// Demotion interval: 30 days in seconds.
+    private static let demotionInterval: TimeInterval = 30 * 24 * 60 * 60
 
     /// Clean up expired memory entries and demote retired facts before a run starts.
     static func preRunCleanup(memoryStore: FileBasedMemoryStore, memoryDir: String) async {
         do {
-            let cleanupService = MemoryCleanupService()
-            _ = try await cleanupService.cleanupExpired(in: memoryStore)
-        } catch {
-            fputs("[axion] warning: memory cleanup failed: \(error.localizedDescription)\n", stderr)
-        }
-
-        do {
-            let factStore = MemoryFactStore(memoryDir: memoryDir)
-            let lifecycleService = MemoryLifecycleService()
-            let cutoffDate = Date().addingTimeInterval(-MemoryLifecycleService.demotionInterval)
+            let cutoffDate = Date().addingTimeInterval(-demotionInterval)
+            let factStore = AxionFactStore(memoryDir: memoryDir)
+            let lifecycleService = SDKMemoryLifecycleService()
             let domains = try await factStore.listDomains()
             for domain in domains {
                 let facts = try await factStore.query(domain: domain)
-                let demoted = lifecycleService.demoteRetired(facts: facts, lastVerifiedBefore: cutoffDate)
-                let changed = zip(facts, demoted).filter { $0.status != $1.status }
-                for (_, demotedFact) in changed {
-                    try await factStore.save(domain: domain, fact: demotedFact)
+                let sdkFacts = facts.map { $0.toSDKFact() }
+                let demoted = lifecycleService.demoteRetired(facts: sdkFacts, lastVerifiedBefore: cutoffDate)
+                let demotedById = Dictionary(uniqueKeysWithValues: demoted.map { ($0.id, $0) })
+                for fact in facts {
+                    guard let sdkFact = demotedById[fact.id] else { continue }
+                    var updated = fact
+                    updated.status = MemoryFactStatus(rawValue: sdkFact.status.rawValue) ?? fact.status
+                    updated.confidence = sdkFact.confidence
+                    updated.updatedAt = sdkFact.lastVerifiedAt
+                    try await factStore.save(domain: domain, fact: updated)
                 }
             }
         } catch {
@@ -94,9 +100,9 @@ struct RunMemoryProcessor {
                 processedDomains.insert(domain)
             }
 
-            // Extract AppMemoryFact entries
-            let factStore = MemoryFactStore(memoryDir: memoryDir)
-            let lifecycleService = MemoryLifecycleService()
+            // Extract AppMemoryFact entries → store via AxionFactStore
+            let factStore = AxionFactStore(memoryDir: memoryDir)
+            let lifecycleService = SDKMemoryLifecycleService()
             let facts = extractor.extractFacts(
                 from: pairs,
                 task: task,
@@ -105,8 +111,30 @@ struct RunMemoryProcessor {
             for fact in facts {
                 do {
                     let existing = try await factStore.query(domain: fact.domain)
-                    let result = lifecycleService.addFact(fact, mergingWith: existing)
-                    try await factStore.save(domain: fact.domain, fact: result)
+                    let sdkExisting = existing.map { $0.toSDKFact() }
+                    let sdkResult = lifecycleService.addFact(fact.toSDKFact(), mergingWith: sdkExisting)
+
+                    // Preserve Axion-specific fields (scope, cause, evidence) lost in SDK round-trip
+                    let existingMatch = existing.first(where: { $0.id == fact.id })
+                    let mergedFact: AppMemoryFact
+                    if let existingFact = existingMatch {
+                        var updated = existingFact
+                        updated.status = MemoryFactStatus(rawValue: sdkResult.status.rawValue) ?? existingFact.status
+                        updated.confidence = sdkResult.confidence
+                        updated.evidenceCount = sdkResult.evidenceCount
+                        updated.updatedAt = sdkResult.lastVerifiedAt
+                        let newEvidenceItems = fact.evidence.filter { !existingFact.evidence.contains($0) }
+                        updated.evidence = existingFact.evidence + newEvidenceItems
+                        mergedFact = updated
+                    } else {
+                        mergedFact = AppMemoryFact.fromSDKFact(
+                            sdkResult,
+                            scope: fact.scope,
+                            cause: fact.cause,
+                            evidence: fact.evidence
+                        )
+                    }
+                    try await factStore.save(domain: fact.domain, fact: AppMemoryFact.normalizeFact(mergedFact))
                 } catch {
                     fputs("[axion] warning: memory fact save failed for \(fact.domain): \(error.localizedDescription)\n", stderr)
                 }
@@ -144,10 +172,10 @@ struct RunMemoryProcessor {
 
         // Takeover learning (independent from memory extraction failures)
         if let event = takeoverEvent, runCompleted {
-            let takeoverFactStore = MemoryFactStore(memoryDir: memoryDir)
+            let takeoverFactStore = AxionFactStore(memoryDir: memoryDir)
             let takeoverService = TakeoverLearningService(
                 factStore: takeoverFactStore,
-                lifecycleService: MemoryLifecycleService()
+                lifecycleService: SDKMemoryLifecycleService()
             )
             let domain = inferDomain(from: pairs)
             let outcome: TakeoverOutcome = runSucceeded ? .success : .failed

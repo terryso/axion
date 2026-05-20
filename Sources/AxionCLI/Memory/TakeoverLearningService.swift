@@ -1,5 +1,6 @@
 import ArgumentParser
 import Foundation
+import OpenAgentSDK
 
 /// Outcome of a takeover event — determines memory kind and confidence.
 enum TakeoverOutcome: String, Codable, Sendable, ExpressibleByArgument {
@@ -15,8 +16,8 @@ enum TakeoverOutcome: String, Codable, Sendable, ExpressibleByArgument {
 /// fails, an *avoid* fact is created instead.
 struct TakeoverLearningService {
 
-    let factStore: MemoryFactStore
-    let lifecycleService: MemoryLifecycleService
+    let factStore: AxionFactStore
+    let lifecycleService: OpenAgentSDK.MemoryLifecycleService
 
     // MARK: - Recording
 
@@ -67,8 +68,30 @@ struct TakeoverLearningService {
             )
 
             let existing = try await factStore.query(domain: bundleId)
-            let result = lifecycleService.addFact(newFact, mergingWith: existing)
-            try await factStore.save(domain: bundleId, fact: result)
+            let sdkExisting = existing.map { $0.toSDKFact() }
+            let sdkResult = lifecycleService.addFact(newFact.toSDKFact(), mergingWith: sdkExisting)
+
+            // Preserve Axion-specific fields (scope, cause, evidence) lost in SDK round-trip
+            let existingMatch = existing.first(where: { $0.id == newFact.id })
+            let mergedFact: AppMemoryFact
+            if let existingFact = existingMatch {
+                var updated = existingFact
+                updated.status = MemoryFactStatus(rawValue: sdkResult.status.rawValue) ?? existingFact.status
+                updated.confidence = sdkResult.confidence
+                updated.evidenceCount = sdkResult.evidenceCount
+                updated.updatedAt = sdkResult.lastVerifiedAt
+                let newEvidenceItems = newFact.evidence.filter { !existingFact.evidence.contains($0) }
+                updated.evidence = existingFact.evidence + newEvidenceItems
+                mergedFact = updated
+            } else {
+                mergedFact = AppMemoryFact.fromSDKFact(
+                    sdkResult,
+                    scope: newFact.scope,
+                    cause: newFact.cause,
+                    evidence: newFact.evidence
+                )
+            }
+            try await factStore.save(domain: bundleId, fact: AppMemoryFact.normalizeFact(mergedFact))
         } catch {
             fputs("[axion] warning: takeover learning record failed: \(error.localizedDescription)\n", stderr)
         }

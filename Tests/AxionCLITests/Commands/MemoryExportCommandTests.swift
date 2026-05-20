@@ -1,4 +1,5 @@
 import Foundation
+import OpenAgentSDK
 import Testing
 
 @testable import AxionCLI
@@ -8,11 +9,11 @@ import Testing
 @Suite("MemoryExportCommand")
 struct MemoryExportCommandTests {
 
-    private func makeStoreWithFacts() async throws -> (MemoryFactStore, URL) {
+    private func makeStoreWithFacts() async throws -> (AxionFactStore, URL) {
         let tmpDir = FileManager.default.temporaryDirectory
             .appendingPathComponent("axion-export-cmd-\(UUID().uuidString)")
         try FileManager.default.createDirectory(at: tmpDir, withIntermediateDirectories: true)
-        let store = MemoryFactStore(memoryDir: tmpDir)
+        let store = AxionFactStore(memoryDir: tmpDir)
 
         let factA = AppMemoryFact.create(domain: "com.apple.finder", kind: .affordance, description: "Finder tip")
         let factB = AppMemoryFact.create(domain: "com.apple.calculator", kind: .observation, description: "Calc note")
@@ -44,7 +45,7 @@ struct MemoryExportCommandTests {
         let data = try Data(contentsOf: URL(fileURLWithPath: outputFile))
         let decoder = JSONDecoder()
         decoder.dateDecodingStrategy = .iso8601
-        let bundle = try decoder.decode(MemoryBundle.self, from: data)
+        let bundle = try decoder.decode(OpenAgentSDK.MemoryBundle.self, from: data)
         #expect(bundle.memories.count == 2)
     }
 
@@ -66,7 +67,7 @@ struct MemoryExportCommandTests {
         let data = try Data(contentsOf: URL(fileURLWithPath: outputFile))
         let decoder = JSONDecoder()
         decoder.dateDecodingStrategy = .iso8601
-        let bundle = try decoder.decode(MemoryBundle.self, from: data)
+        let bundle = try decoder.decode(OpenAgentSDK.MemoryBundle.self, from: data)
         #expect(bundle.memories.count == 1)
         #expect(bundle.memories[0].domain == "com.apple.finder")
     }

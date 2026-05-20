@@ -36,7 +36,7 @@ struct MemoryListCommand: AsyncParsableCommand {
 
     /// List all Memory domains and their classified fact entries.
     static func listMemory(in memoryDir: String) async -> String {
-        let store = MemoryFactStore(memoryDir: memoryDir)
+        let store = AxionFactStore(memoryDir: memoryDir)
 
         let domains: [String]
         do {

@@ -330,7 +330,7 @@ enum AgentBuilder {
         var memoryContext: String? = nil
         if !noMemory {
             let contextProvider = MemoryContextProvider()
-            let factStore = MemoryFactStore(memoryDir: memoryDir)
+            let factStore = AxionFactStore(memoryDir: memoryDir)
             do {
                 if let factContext = await contextProvider.buildFactMemoryContext(
                     task: task,

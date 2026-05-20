@@ -1,5 +1,6 @@
 # generated: 2026-05-08
 # last_updated: 2026-05-21
+# story-21-3-review: 2026-05-21
 # story-16.1-created: 2026-05-17
 # story-15.2-created: 2026-05-17
 # story-15.1-review: 2026-05-17
@@ -280,7 +281,7 @@ development_status:
   epic-21: in-progress
   21-1-sdk-components-rebuild-http-api: done
   21-2-agentoptions-replace-cost-trace: done
-  21-3-sdk-memory-infra-replace-generic: in-progress
+  21-3-sdk-memory-infra-replace-generic: done
   21-4-sdk-output-handler-replace: backlog
   21-5-internal-refactor-toolregistrar-agentbuilder: backlog
   21-6-update-project-docs-new-architecture: backlog

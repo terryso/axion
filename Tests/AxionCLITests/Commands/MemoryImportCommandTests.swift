@@ -1,4 +1,5 @@
 import Foundation
+import OpenAgentSDK
 import Testing
 
 @testable import AxionCLI
@@ -24,9 +25,24 @@ struct MemoryImportCommandTests {
         let dir = try makeTempDir()
         defer { cleanup(dir) }
 
-        // Write a bundle file
-        let fact = AppMemoryFact.create(domain: "test.app", kind: .affordance, description: "import test")
-        let bundle = MemoryBundle(memories: [ExportedDomain(domain: "test.app", facts: [fact])])
+        // Write a bundle file with SDK-format MemoryBundle
+        let sdkFact = OpenAgentSDK.MemoryFact(
+            id: "affordance-12345",
+            domain: "test.app",
+            content: "import test",
+            status: .candidate,
+            confidence: 0.7,
+            evidenceCount: 1,
+            source: .observation,
+            kind: .affordance,
+            createdAt: Date(),
+            lastVerifiedAt: Date()
+        )
+        let bundle = OpenAgentSDK.MemoryBundle(
+            schemaVersion: 1,
+            exportedAt: Date(),
+            memories: [OpenAgentSDK.ExportedDomain(domain: "test.app", facts: [sdkFact])]
+        )
 
         let encoder = JSONEncoder()
         encoder.outputFormatting = [.sortedKeys, .prettyPrinted]
@@ -68,8 +84,8 @@ struct MemoryImportCommandTests {
         let dir = try makeTempDir()
         defer { cleanup(dir) }
 
-        // Pre-existing fact
-        let store = MemoryFactStore(memoryDir: dir)
+        // Pre-existing fact via AxionFactStore
+        let store = AxionFactStore(memoryDir: dir)
         let local = AppMemoryFact.create(
             domain: "test.app",
             kind: .affordance,
@@ -79,22 +95,24 @@ struct MemoryImportCommandTests {
         )
         try await store.save(domain: "test.app", fact: local)
 
-        // Bundle with same ID fact
-        let imported = AppMemoryFact(
+        // Bundle with same ID fact (SDK format)
+        let importedSDK = OpenAgentSDK.MemoryFact(
             id: local.id,
             domain: "test.app",
-            kind: .affordance,
+            content: "same fact",
             status: .candidate,
             confidence: 0.9,
             evidenceCount: 1,
-            source: .local,
-            scope: nil,
-            cause: nil,
-            description: "same fact",
-            updatedAt: Date(),
-            evidence: []
+            source: .observation,
+            kind: .affordance,
+            createdAt: Date(),
+            lastVerifiedAt: Date()
         )
-        let bundle = MemoryBundle(memories: [ExportedDomain(domain: "test.app", facts: [imported])])
+        let bundle = OpenAgentSDK.MemoryBundle(
+            schemaVersion: 1,
+            exportedAt: Date(),
+            memories: [OpenAgentSDK.ExportedDomain(domain: "test.app", facts: [importedSDK])]
+        )
 
         let encoder = JSONEncoder()
         encoder.outputFormatting = [.sortedKeys, .prettyPrinted]

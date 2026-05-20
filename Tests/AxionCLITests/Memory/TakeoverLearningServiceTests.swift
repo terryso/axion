@@ -1,4 +1,5 @@
 import Foundation
+import OpenAgentSDK
 import Testing
 
 @testable import AxionCLI
@@ -10,8 +11,8 @@ struct TakeoverLearningServiceTests {
 
     private func makeService(dir: URL) -> TakeoverLearningService {
         TakeoverLearningService(
-            factStore: MemoryFactStore(memoryDir: dir),
-            lifecycleService: MemoryLifecycleService()
+            factStore: AxionFactStore(memoryDir: dir),
+            lifecycleService: OpenAgentSDK.MemoryLifecycleService()
         )
     }
 
@@ -32,7 +33,7 @@ struct TakeoverLearningServiceTests {
     func successOutcomeCreatesAffordance() async throws {
         let dir = try makeTempDir()
         defer { cleanup(dir) }
-        let store = MemoryFactStore(memoryDir: dir)
+        let store = AxionFactStore(memoryDir: dir)
         let service = makeService(dir: dir)
 
         await service.recordTakeoverLearning(
@@ -59,7 +60,7 @@ struct TakeoverLearningServiceTests {
     func failedOutcomeCreatesAvoid() async throws {
         let dir = try makeTempDir()
         defer { cleanup(dir) }
-        let store = MemoryFactStore(memoryDir: dir)
+        let store = AxionFactStore(memoryDir: dir)
         let service = makeService(dir: dir)
 
         await service.recordTakeoverLearning(
@@ -83,7 +84,7 @@ struct TakeoverLearningServiceTests {
     func successDescriptionFormat() async throws {
         let dir = try makeTempDir()
         defer { cleanup(dir) }
-        let store = MemoryFactStore(memoryDir: dir)
+        let store = AxionFactStore(memoryDir: dir)
         let service = makeService(dir: dir)
 
         await service.recordTakeoverLearning(
@@ -102,7 +103,7 @@ struct TakeoverLearningServiceTests {
     func failedDescriptionFormat() async throws {
         let dir = try makeTempDir()
         defer { cleanup(dir) }
-        let store = MemoryFactStore(memoryDir: dir)
+        let store = AxionFactStore(memoryDir: dir)
         let service = makeService(dir: dir)
 
         await service.recordTakeoverLearning(
@@ -123,7 +124,7 @@ struct TakeoverLearningServiceTests {
     func evidenceArrayFiltersNil() async throws {
         let dir = try makeTempDir()
         defer { cleanup(dir) }
-        let store = MemoryFactStore(memoryDir: dir)
+        let store = AxionFactStore(memoryDir: dir)
         let service = makeService(dir: dir)
 
         await service.recordTakeoverLearning(
@@ -150,7 +151,7 @@ struct TakeoverLearningServiceTests {
     func evidenceArrayIncludesAll() async throws {
         let dir = try makeTempDir()
         defer { cleanup(dir) }
-        let store = MemoryFactStore(memoryDir: dir)
+        let store = AxionFactStore(memoryDir: dir)
         let service = makeService(dir: dir)
 
         await service.recordTakeoverLearning(
@@ -181,7 +182,7 @@ struct TakeoverLearningServiceTests {
     func duplicateTakeoverAccumulatesEvidence() async throws {
         let dir = try makeTempDir()
         defer { cleanup(dir) }
-        let store = MemoryFactStore(memoryDir: dir)
+        let store = AxionFactStore(memoryDir: dir)
         let service = makeService(dir: dir)
 
         // Record same takeover twice (same issue + summary = same description = same factId)
@@ -209,8 +210,8 @@ struct TakeoverLearningServiceTests {
     func writeFailureDoesNotThrow() async throws {
         // Use an invalid directory path to force failure
         let service = TakeoverLearningService(
-            factStore: MemoryFactStore(memoryDir: "/dev/null/impossible/path"),
-            lifecycleService: MemoryLifecycleService()
+            factStore: AxionFactStore(memoryDir: "/dev/null/impossible/path"),
+            lifecycleService: OpenAgentSDK.MemoryLifecycleService()
         )
 
         // Should not crash or throw
@@ -246,7 +247,7 @@ struct TakeoverLearningServiceTests {
     func cancelledOutcomeCreatesAvoid() async throws {
         let dir = try makeTempDir()
         defer { cleanup(dir) }
-        let store = MemoryFactStore(memoryDir: dir)
+        let store = AxionFactStore(memoryDir: dir)
         let service = makeService(dir: dir)
 
         await service.recordTakeoverLearning(

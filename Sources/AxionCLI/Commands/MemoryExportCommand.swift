@@ -1,5 +1,6 @@
 import ArgumentParser
 import Foundation
+import OpenAgentSDK
 
 /// `axion memory export [--app <domain>] <output-file>` — export Memory to JSON.
 struct MemoryExportCommand: AsyncParsableCommand {
@@ -16,43 +17,41 @@ struct MemoryExportCommand: AsyncParsableCommand {
 
     func run() async throws {
         let memoryDir = resolveMemoryDir()
-        let store = MemoryFactStore(memoryDir: memoryDir)
-        let service = MemoryBundleExportService()
-
-        let bundle: MemoryBundle
-        if let app {
-            bundle = try await service.exportDomain(store: store, domain: app)
-        } else {
-            bundle = try await service.exportAll(store: store)
-        }
-
-        let outputURL = URL(fileURLWithPath: outputFile)
-        try service.writeBundle(bundle, to: outputURL)
-
-        let domainCount = bundle.memories.count
-        let factCount = bundle.memories.reduce(0) { $0 + $1.facts.count }
-        print("Exported \(factCount) facts from \(domainCount) domain(s) to \(outputFile)")
+        let output = try await Self.performExport(memoryDir: memoryDir, outputFile: outputFile, app: app)
+        print(output)
     }
 
     // MARK: - Public Static API (for testing)
 
     static func performExport(memoryDir: String, outputFile: String, app: String?) async throws -> String {
-        let store = MemoryFactStore(memoryDir: memoryDir)
-        let service = MemoryBundleExportService()
+        let store = AxionFactStore(memoryDir: memoryDir)
 
-        let bundle: MemoryBundle
+        let domains: [String]
         if let app {
-            bundle = try await service.exportDomain(store: store, domain: app)
+            domains = [app]
         } else {
-            bundle = try await service.exportAll(store: store)
+            domains = try await store.listDomains()
         }
 
-        let outputURL = URL(fileURLWithPath: outputFile)
-        try service.writeBundle(bundle, to: outputURL)
+        var exported: [OpenAgentSDK.ExportedDomain] = []
+        for domain in domains {
+            let facts = try await store.query(domain: domain)
+            guard !facts.isEmpty else { continue }
+            let sdkFacts = facts.map { $0.toSDKFact() }
+            exported.append(OpenAgentSDK.ExportedDomain(domain: domain, facts: sdkFacts))
+        }
 
-        let factCount = bundle.memories.reduce(0) { $0 + $1.facts.count }
-        let domainCount = bundle.memories.count
-        return "Exported \(factCount) facts from \(domainCount) domain(s) to \(outputFile)"
+        let bundle = OpenAgentSDK.MemoryBundle(
+            schemaVersion: 1,
+            exportedAt: Date(),
+            memories: exported
+        )
+
+        let service = OpenAgentSDK.MemoryBundleExportService()
+        try service.writeBundle(bundle, to: URL(fileURLWithPath: outputFile))
+
+        let factCount = exported.reduce(0) { $0 + $1.facts.count }
+        return "Exported \(factCount) facts from \(exported.count) domain(s) to \(outputFile)"
     }
 
     // MARK: - Private

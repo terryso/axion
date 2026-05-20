@@ -1,5 +1,6 @@
 import ArgumentParser
 import Foundation
+import OpenAgentSDK
 
 /// `axion memory learn-takeover` — manually record a takeover experience as Memory.
 ///
@@ -31,8 +32,8 @@ struct MemoryLearnTakeoverCommand: AsyncParsableCommand {
 
     func run() async throws {
         let memoryDir = resolveMemoryDir()
-        let factStore = MemoryFactStore(memoryDir: memoryDir)
-        let lifecycleService = MemoryLifecycleService()
+        let factStore = AxionFactStore(memoryDir: memoryDir)
+        let lifecycleService = OpenAgentSDK.MemoryLifecycleService()
         let service = TakeoverLearningService(
             factStore: factStore,
             lifecycleService: lifecycleService
