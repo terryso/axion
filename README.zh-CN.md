@@ -6,7 +6,7 @@
 [![Coverage](https://img.shields.io/endpoint?url=https://gist.githubusercontent.com/terryso/3a3cc01e58819c72bf54eab52dc2a3ff/raw/coverage.json)](https://github.com/terryso/axion/actions)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue)](./LICENSE)
 
-macOS 桌面自动化平台，通过 LLM 驱动的 Plan-Execute-Verify 循环、MCP 工具协议、跨任务记忆和录制回放技能实现智能桌面操控。
+macOS AI agent，通过 LLM 驱动的 Plan-Execute-Verify 循环，结合原生桌面自动化、跨任务记忆和录制回放技能，实现智能任务执行。
 
 [English](./README.md) | [中文](#中文)
 
@@ -16,15 +16,15 @@ macOS 桌面自动化平台，通过 LLM 驱动的 Plan-Execute-Verify 循环、
 
 ## 概述
 
-Axion 是一个基于 Swift 的 macOS 桌面自动化平台，能够通过自然语言描述任务，自动规划、执行并验证桌面操作。它通过 MCP（Model Context Protocol）暴露 21 个原生工具，可被任何 MCP 客户端调用，也可以通过内置 CLI 直接使用。
+Axion 是一个基于 Swift 的 macOS AI agent，能够通过自然语言描述任务，自动规划并执行操作。它结合核心工具（Bash、文件操作、Web 搜索）与 20 个原生桌面自动化工具（MCP 协议），以及 Playwright 浏览器自动化。可直接通过 CLI 使用，也可通过 HTTP API / MCP Server 模式集成。
 
 **核心亮点：**
 
-- **跨任务记忆** — 每次任务自动学习，用得越多越聪明
+- **智能工具选择** — 自动选择合适的工具：CLI 任务用 Bash，GUI 任务用 MCP，浏览器用 Playwright，专业任务用 Skill
 - **SDK 技能系统** — Prompt 技能、录制技能和内置桌面技能，支持双轨查找和技能级记忆
 - **录制回放技能** — 录制一次操作，之后无需 LLM 即可瞬间回放
 - **HTTP API 服务** — 通过 REST + SSE 集成 CI/CD 和外部系统
-- **MCP Server 模式** — 作为外部 Agent（Claude Code、Cursor 等）的桌面操作插件
+- **MCP Server 模式** — 作为外部 Agent（Claude Code、Cursor 等）的桌面操作插件，同时独立支持 CLI、文件和 Web 任务
 - **用户接管** — 自动化受阻时可暂停，手动完成后恢复
 - **菜单栏应用** — 原生 macOS 状态栏 UI，支持全局热键
 
@@ -40,17 +40,17 @@ Axion 是一个基于 Swift 的 macOS 桌面自动化平台，能够通过自然
 ├──────────────────┬──────────────────┬────────────────────┤
 │    AxionCore     │   AxionHelper    │     AxionBar        │
 │  Models, Proto-  │  MCP Server      │  Menu Bar App       │
-│  cols, Config,   │  21 Native macOS │  Task Panel         │
+│  cols, Config,   │  20 Native macOS │  Task Panel         │
 │  Errors          │  Tools           │  Global Hotkeys     │
 └──────────────────┴──────────────────┴────────────────────┘
 ```
 
 - **AxionCLI** — 命令行入口，包含 LLM 交互、任务规划、执行引擎、记忆系统、技能系统（Prompt + 录制 + 内置）、Daemon 管理和服务器模式
 - **AxionCore** — 共享模型层（Plan, Step, RunState）和协议定义
-- **AxionHelper** — MCP 服务端进程，通过 stdio 协议提供 21 个原生 macOS 自动化工具
+- **AxionHelper** — MCP 服务端进程，通过 stdio 协议提供 20 个原生 macOS 自动化工具
 - **AxionBar** — 原生 macOS 菜单栏应用，提供任务面板、技能触发和全局热键
 
-## MCP 工具（21 个）
+## MCP 工具（20 个）
 
 ### 应用管理
 | 工具 | 说明 |
@@ -89,7 +89,6 @@ Axion 是一个基于 Swift 的 macOS 桌面自动化平台，能够通过自然
 |------|------|
 | `screenshot` | 截屏（全屏或指定窗口） |
 | `get_accessibility_tree` | 获取窗口的无障碍树 |
-| `open_url` | 在默认浏览器中打开 URL |
 
 ### 录制
 | 工具 | 说明 |
@@ -137,6 +136,11 @@ axion doctor
 ```bash
 # 执行任务（默认为实际执行模式）
 axion run "打开计算器并计算 123 + 456"
+
+# CLI 任务直接用 Bash — 无需 GUI
+axion run "用 ffmpeg 压缩 ~/Downloads/video.mp4"
+axion run "查看 ~/Documents 的磁盘占用"
+axion run "搜索今天广州天气"
 
 # 干跑模式（仅生成计划不实际执行）
 axion run --dryrun "打开计算器并计算 123 + 456"
@@ -458,7 +462,7 @@ Sources/
 │   ├── Errors/            # 错误类型
 │   └── Constants/         # 常量定义
 ├── AxionHelper/           # MCP 服务端（Helper 进程）
-│   ├── MCP/               # MCPServer 和 ToolRegistrar（21 个工具）
+│   ├── MCP/               # MCPServer 和 ToolRegistrar（20 个工具）
 │   ├── Services/          # AccessibilityEngine, Screenshot, InputSimulation, EventRecorder 等
 │   ├── Models/            # AppInfo, WindowInfo, AXElement, SelectorQuery
 │   └── Protocols/         # 服务协议定义

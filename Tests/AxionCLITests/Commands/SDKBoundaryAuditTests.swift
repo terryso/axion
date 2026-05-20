@@ -269,7 +269,7 @@ struct SDKBoundaryAuditTests {
     func toolNamesAllToolNamesContainsAllRegisteredTools() {
         let allNames = ToolNames.allToolNames
 
-        #expect(allNames.count == 24, "ToolNames.allToolNames should contain exactly 24 tool names")
+        #expect(allNames.count == 23, "ToolNames.allToolNames should contain exactly 23 tool names")
 
         let expectedTools = [
             "launch_app", "list_apps", "quit_app",
@@ -279,7 +279,7 @@ struct SDKBoundaryAuditTests {
             "type_text", "press_key", "hotkey",
             "scroll", "drag",
             "screenshot", "get_accessibility_tree",
-            "open_url", "get_file_info"
+            "get_file_info"
         ]
 
         for tool in expectedTools {
@@ -300,7 +300,7 @@ struct SDKBoundaryAuditTests {
         #expect(foregroundTools == expectedForeground,
             "foregroundToolNames should match expected set of interactive tools")
 
-        let readOnlyTools = ["launch_app", "list_apps", "screenshot", "get_accessibility_tree", "open_url"]
+        let readOnlyTools = ["launch_app", "list_apps", "screenshot", "get_accessibility_tree"]
         for tool in readOnlyTools {
             #expect(!foregroundTools.contains(tool), "'\(tool)' should NOT be in foregroundToolNames")
         }

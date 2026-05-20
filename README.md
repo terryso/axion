@@ -6,7 +6,7 @@
 [![Coverage](https://img.shields.io/endpoint?url=https://gist.githubusercontent.com/terryso/3a3cc01e58819c72bf54eab52dc2a3ff/raw/coverage.json)](https://github.com/terryso/axion/actions)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue)](./LICENSE)
 
-macOS desktop automation platform powered by an LLM-driven Plan-Execute-Verify loop, the MCP tool protocol, cross-run memory, and record-and-replay skills.
+macOS AI agent powered by an LLM-driven Plan-Execute-Verify loop, with native desktop automation, cross-run memory, and record-and-replay skills.
 
 [English](#english) | [中文](./README.zh-CN.md)
 
@@ -16,15 +16,15 @@ macOS desktop automation platform powered by an LLM-driven Plan-Execute-Verify l
 
 ## Overview
 
-Axion is a Swift-based macOS desktop automation platform that takes natural language task descriptions and autonomously plans, executes, and verifies desktop operations. It exposes 21 native tools via MCP (Model Context Protocol) that any MCP client can call, or you can use the built-in CLI directly.
+Axion is a Swift-based AI agent for macOS that takes natural language task descriptions and autonomously plans and executes actions. It combines core tools (Bash, file operations, web search) with 20 native desktop automation tools via MCP (Model Context Protocol), plus browser automation via Playwright. Use the built-in CLI directly, or integrate via HTTP API / MCP Server mode.
 
 **Key highlights:**
 
-- **Cross-run Memory** — Learns from every task; the more you use it, the smarter it gets
+- **Versatile Tool Selection** — Automatically picks the right tool: Bash for CLI tasks, MCP for GUI interactions, Playwright for browser automation, or Skills for specialized workflows
 - **SDK Skill System** — Prompt skills, recorded skills, and built-in desktop skills with dual-track lookup and skill-scoped memory
 - **Record & Replay Skills** — Record a workflow once, replay it instantly without LLM calls
 - **HTTP API Server** — Integrate with CI/CD and external systems via REST + SSE
-- **MCP Server Mode** — Act as a desktop plugin for external agents (Claude Code, Cursor, etc.)
+- **MCP Server Mode** — Act as a desktop plugin for external agents (Claude Code, Cursor, etc.), while also supporting CLI, file, and web tasks standalone
 - **User Takeover** — Pause and resume when automation gets stuck
 - **Menu Bar App** — Native macOS status bar UI with global hotkeys
 
@@ -40,17 +40,17 @@ Axion is a Swift-based macOS desktop automation platform that takes natural lang
 ├──────────────────┬──────────────────┬────────────────────┤
 │    AxionCore     │   AxionHelper    │     AxionBar        │
 │  Models, Proto-  │  MCP Server      │  Menu Bar App       │
-│  cols, Config,   │  21 Native macOS │  Task Panel         │
+│  cols, Config,   │  20 Native macOS │  Task Panel         │
 │  Errors          │  Tools           │  Global Hotkeys     │
 └──────────────────┴──────────────────┴────────────────────┘
 ```
 
 - **AxionCLI** — CLI entry point with LLM interaction, task planning, execution engine, memory, skill system (prompt + recorded + built-in), daemon management, and server modes
 - **AxionCore** — Shared model layer (Plan, Step, RunState) and protocol definitions
-- **AxionHelper** — MCP server process providing 21 native macOS automation tools via stdio
+- **AxionHelper** — MCP server process providing 20 native macOS automation tools via stdio
 - **AxionBar** — Native macOS menu bar app with task panel, skill triggers, and global hotkeys
 
-## MCP Tools (21)
+## MCP Tools (20)
 
 ### App Management
 | Tool | Description |
@@ -89,7 +89,6 @@ Axion is a Swift-based macOS desktop automation platform that takes natural lang
 |------|-------------|
 | `screenshot` | Take a screenshot (full screen or specific window) |
 | `get_accessibility_tree` | Get the accessibility tree of a window |
-| `open_url` | Open a URL in the default browser |
 
 ### Recording
 | Tool | Description |
@@ -137,6 +136,11 @@ axion doctor
 ```bash
 # Execute a task (default — runs live)
 axion run "Open Calculator and compute 123 + 456"
+
+# CLI tasks use Bash directly — no GUI needed
+axion run "Compress ~/Downloads/video.mp4 using ffmpeg"
+axion run "Check disk usage of ~/Documents"
+axion run "Search the web for Guangzhou weather today"
 
 # Dry-run mode (generates a plan without executing)
 axion run --dryrun "Open Calculator and compute 123 + 456"
@@ -467,7 +471,7 @@ Sources/
 │   ├── Errors/            # Error types
 │   └── Constants/         # Constants
 ├── AxionHelper/           # MCP server (Helper process)
-│   ├── MCP/               # MCPServer and ToolRegistrar (21 tools)
+│   ├── MCP/               # MCPServer and ToolRegistrar (20 tools)
 │   ├── Services/          # AccessibilityEngine, Screenshot, InputSimulation, EventRecorder, etc.
 │   ├── Models/            # AppInfo, WindowInfo, AXElement, SelectorQuery
 │   └── Protocols/         # Service protocol definitions

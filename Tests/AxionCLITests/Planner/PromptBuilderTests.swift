@@ -147,38 +147,42 @@ struct PromptBuilderTests {
         #expect(result == "Hello Alice, your {{unknown_var}} is ready.")
     }
 
-    @Test("planner prompt contains cross-app workflow patterns")
-    func plannerPromptContainsCrossAppWorkflowPatterns() async throws {
+    @Test("planner prompt prioritizes Bash over GUI for CLI tasks")
+    func plannerPromptPrioritizesBashOverGUI() async throws {
         let promptDir = PromptBuilder.resolvePromptDirectory()
         let content = try PromptBuilder.load(
             name: "planner-system",
             variables: ["tools": "test", "max_steps": "20"],
             fromDirectory: promptDir
         )
-        #expect(content.contains("Cross-Application Workflow Patterns"))
+        #expect(content.contains("Bash"))
+        #expect(content.contains("Terminal.app"))
     }
 
-    @Test("planner prompt contains clipboard verification")
-    func plannerPromptContainsClipboardVerification() async throws {
+    @Test("planner prompt mentions core SDK tools")
+    func plannerPromptMentionsCoreSDKTools() async throws {
         let promptDir = PromptBuilder.resolvePromptDirectory()
         let content = try PromptBuilder.load(
             name: "planner-system",
             variables: ["tools": "test", "max_steps": "20"],
             fromDirectory: promptDir
         )
-        #expect(content.contains("Clipboard verification"))
+        #expect(content.contains("Core Tools"))
+        #expect(content.contains("Read"))
+        #expect(content.contains("Write"))
+        #expect(content.contains("Edit"))
     }
 
-    @Test("planner prompt contains cross-app failure recovery")
-    func plannerPromptContainsCrossAppFailureRecovery() async throws {
+    @Test("planner prompt contains failure recovery guidance")
+    func plannerPromptContainsFailureRecovery() async throws {
         let promptDir = PromptBuilder.resolvePromptDirectory()
         let content = try PromptBuilder.load(
             name: "planner-system",
             variables: ["tools": "test", "max_steps": "20"],
             fromDirectory: promptDir
         )
-        #expect(content.contains("Cross-app failure"))
-        #expect(content.contains("Application not found"))
+        #expect(content.contains("switch your approach"))
+        #expect(content.contains("pause_for_human"))
     }
 
     @Test("planner prompt contains window layout guidance")

@@ -341,8 +341,8 @@ struct RealLLME2ETests {
         #expect(!toolCalls.isEmpty, "Agent should have called at least one tool")
         let shortNames = toolCalls.map { $0.replacingOccurrences(of: "mcp__axion-helper__", with: "") }
         #expect(
-            shortNames.contains("open_url") || shortNames.contains("launch_app"),
-            "Should use open_url or launch_app, got: \(toolCalls)"
+            shortNames.contains("launch_app"),
+            "Should use launch_app, got: \(toolCalls)"
         )
 
         if let result = finalResult {

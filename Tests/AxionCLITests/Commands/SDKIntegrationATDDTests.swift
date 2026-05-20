@@ -564,7 +564,7 @@ struct SDKIntegrationATDDTests {
         guard SDK_AGENT_INTEGRATED else { return }
 
         let allNames = ToolNames.allToolNames
-        #expect(allNames.count == 24, "Should have 24 tool names")
+        #expect(allNames.count == 23, "Should have 23 tool names")
         #expect(allNames.contains("launch_app"))
         #expect(allNames.contains("click"))
         #expect(allNames.contains("screenshot"))

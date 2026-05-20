@@ -95,12 +95,5 @@ struct ToolRegistrarMockTests {
         let json = #"{"success":true,"action":"screenshot","image_data":"base64..."}"#
         #expect(json.contains("image_data"))
     }
-
-    @Test("Open URL result JSON has expected structure")
-    func openURLResultJSONFormat() {
-        let json = #"{"success":true,"action":"open_url","url":"https://example.com"}"#
-        let data = Data(json.utf8)
-        let dict = try? JSONSerialization.jsonObject(with: data) as? [String: Any]
-        #expect(dict?["url"] as? String == "https://example.com")
-    }
 }
+

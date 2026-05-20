@@ -74,15 +74,6 @@ struct MockScreenshotCapture: @unchecked Sendable, ScreenshotCapturing {
     }
 }
 
-/// Mock implementation of `URLOpening` for unit testing.
-struct MockURLOpener: @unchecked Sendable, URLOpening {
-    var openURLHandler: @Sendable (String) throws -> Void
-
-    func openURL(_ urlString: String) throws {
-        try openURLHandler(urlString)
-    }
-}
-
 /// Mock implementation of `InputSimulating` for unit testing.
 struct MockInputSimulation: @unchecked Sendable, InputSimulating {
     var clickHandler: @Sendable (Int, Int) throws -> Void
@@ -137,7 +128,6 @@ enum ServiceContainerFixture {
         accessibilityEngine: (any WindowManaging)? = nil,
         inputSimulation: (any InputSimulating)? = nil,
         screenshotCapture: (any ScreenshotCapturing)? = nil,
-        urlOpener: (any URLOpening)? = nil,
         eventRecorder: (any EventRecording)? = nil
     ) -> @Sendable () -> Void {
         let original = ServiceContainer.shared
@@ -146,7 +136,6 @@ enum ServiceContainerFixture {
             accessibilityEngine: accessibilityEngine ?? original.accessibilityEngine,
             inputSimulation: inputSimulation ?? original.inputSimulation,
             screenshotCapture: screenshotCapture ?? original.screenshotCapture,
-            urlOpener: urlOpener ?? original.urlOpener,
             eventRecorder: eventRecorder ?? original.eventRecorder
         )
         return { ServiceContainer.shared = original }

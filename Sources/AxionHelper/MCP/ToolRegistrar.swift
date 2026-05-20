@@ -108,12 +108,6 @@ private struct ScreenshotActionResult: Codable {
     }
 }
 
-private struct OpenURLActionResult: Codable {
-    let success: Bool
-    let action: String
-    let url: String
-}
-
 /// Centralized registration of all AxionHelper MCP tools.
 ///
 /// Story 1.3 tools (launch_app, list_apps, list_windows, get_window_state)
@@ -142,7 +136,6 @@ enum ToolRegistrar {
             ScreenshotTool.self
             GetAccessibilityTreeTool.self
             ValidateWindowTool.self
-            OpenUrlTool.self
             ResizeWindowTool.self
             ArrangeWindowsTool.self
             StartRecordingTool.self
@@ -759,38 +752,6 @@ struct ValidateWindowTool {
         encoder.outputFormatting = [.sortedKeys]
         let data = try encoder.encode(result)
         return String(data: data, encoding: .utf8) ?? "{}"
-    }
-}
-
-// MARK: - URL Tools (Story 1.5)
-
-@Tool
-struct OpenUrlTool {
-    static let name = "open_url"
-    static let description = "Open a URL in the default browser"
-
-    @Parameter(description: "URL to open")
-    var url: String
-
-    func perform() async throws -> String {
-        do {
-            try ServiceContainer.shared.urlOpener.openURL(url)
-            let result = OpenURLActionResult(success: true, action: "open_url", url: url)
-            let encoder = JSONEncoder()
-            encoder.outputFormatting = [.sortedKeys]
-            let data = try encoder.encode(result)
-            return String(data: data, encoding: .utf8) ?? "{}"
-        } catch let error as URLOpenerError {
-            let payload = ToolErrorPayload(
-                error: error.errorCode,
-                message: error.localizedDescription,
-                suggestion: error.suggestion
-            )
-            let encoder = JSONEncoder()
-            encoder.outputFormatting = [.sortedKeys]
-            let data = try encoder.encode(payload)
-            return String(data: data, encoding: .utf8) ?? "{}"
-        }
     }
 }
 

@@ -33,11 +33,6 @@ struct ServiceContainerTests {
         let _ = ServiceContainer.shared.screenshotCapture
     }
 
-    @Test("shared has urlOpener")
-    func sharedHasURLOpener() {
-        let _ = ServiceContainer.shared.urlOpener
-    }
-
     // MARK: - ServiceContainerFixture
 
     @Test("fixture apply and restore")
@@ -63,11 +58,15 @@ struct ServiceContainerTests {
     func fixturePartialOverrideKeepsOthers() {
         let original = ServiceContainer.shared
 
-        let mockURLOpener = MockURLOpener(openURLHandler: { _ in })
-        let restore = ServiceContainerFixture.apply(urlOpener: mockURLOpener)
+        let restore = ServiceContainerFixture.apply(
+            screenshotCapture: MockScreenshotCapture(
+                captureWindowHandler: { _ in "" },
+                captureFullScreenHandler: { "" }
+            )
+        )
 
-        // URL opener is mocked
-        #expect(!(ServiceContainer.shared.urlOpener is URLOpenerService))
+        // Screenshot capture is mocked
+        #expect(ServiceContainer.shared.screenshotCapture is MockScreenshotCapture)
         // Others remain original
         #expect(type(of: ServiceContainer.shared.appLauncher) == type(of: original.appLauncher))
 
@@ -105,8 +104,7 @@ struct ServiceContainerTests {
             screenshotCapture: MockScreenshotCapture(
                 captureWindowHandler: { _ in "" },
                 captureFullScreenHandler: { "" }
-            ),
-            urlOpener: MockURLOpener(openURLHandler: { _ in })
+            )
         )
         defer { restore() }
 
@@ -115,7 +113,6 @@ struct ServiceContainerTests {
         #expect(ServiceContainer.shared.accessibilityEngine is MockAccessibilityEngine)
         #expect(ServiceContainer.shared.inputSimulation is MockInputSimulation)
         #expect(ServiceContainer.shared.screenshotCapture is MockScreenshotCapture)
-        #expect(ServiceContainer.shared.urlOpener is MockURLOpener)
     }
 }
 }

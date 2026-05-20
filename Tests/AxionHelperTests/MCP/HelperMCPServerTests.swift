@@ -133,7 +133,6 @@ struct HelperMCPServerTests {
             "drag",
             "screenshot",
             "get_accessibility_tree",
-            "open_url",
         ]
 
         for expected in expectedTools {
@@ -156,12 +155,11 @@ struct HelperMCPServerTests {
         #expect(toolNames.contains(ToolNames.pressKey))
         #expect(toolNames.contains(ToolNames.screenshot))
         #expect(toolNames.contains(ToolNames.getAccessibilityTree))
-        #expect(toolNames.contains(ToolNames.openUrl))
         #expect(toolNames.contains(ToolNames.listWindows))
     }
 
     // [P1] Story 1.5 实现后，screenshot 工具不再返回 stub 文本
-    // 验证所有 Story 1.5 工具（screenshot, get_accessibility_tree, open_url）已实现
+    // 验证所有 Story 1.5 工具（screenshot, get_accessibility_tree）已实现
     @Test("Story 1.5 tools do not return stub text")
     func story15ToolsDoNotReturnStubText() async throws {
         // Given: 所有工具已注册（Story 1.5 已实现）
@@ -172,10 +170,8 @@ struct HelperMCPServerTests {
             captureWindowHandler: { _ in "mockBase64" },
             captureFullScreenHandler: { "mockBase64" }
         )
-        let mockUrlOpener = MockURLOpener(openURLHandler: { _ in })
         let restore = ServiceContainerFixture.apply(
-            screenshotCapture: mockScreenshot,
-            urlOpener: mockUrlOpener
+            screenshotCapture: mockScreenshot
         )
         defer { restore() }
 

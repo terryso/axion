@@ -19,7 +19,6 @@ public enum ToolNames {
     public static let drag = "drag"
     public static let screenshot = "screenshot"
     public static let getAccessibilityTree = "get_accessibility_tree"
-    public static let openUrl = "open_url"
     public static let getFileInfo = "get_file_info"
     public static let validateWindow = "validate_window"
     public static let arrangeWindows = "arrange_windows"
@@ -31,7 +30,7 @@ public enum ToolNames {
         launchApp, listApps, quitApp, activateWindow, listWindows,
         getWindowState, moveWindow, resizeWindow, click, doubleClick,
         rightClick, typeText, pressKey, hotkey, scroll, drag,
-        screenshot, getAccessibilityTree, openUrl, getFileInfo,
+        screenshot, getAccessibilityTree, getFileInfo,
         validateWindow, arrangeWindows,
         startRecording, stopRecording
     ]

@@ -1,6 +1,6 @@
 # Axion MCP Server 集成指南
 
-Axion 可以作为 MCP (Model Context Protocol) stdio 服务器运行，将桌面自动化能力暴露给外部 AI Agent。
+Axion 可以作为 MCP (Model Context Protocol) stdio 服务器运行，将桌面操作能力暴露给外部 AI Agent。
 
 ## 启动 MCP Server
 
@@ -81,7 +81,7 @@ Axion MCP server 暴露以下工具：
 
 | 工具 | 说明 |
 |------|------|
-| `run_task` | 异步提交桌面自动化任务，返回 run_id 用于跟踪 |
+| `run_task` | 异步提交任务，返回 run_id 用于跟踪 |
 | `query_task_status` | 查询任务执行状态（running/done/failed） |
 
 ### 桌面操作
@@ -97,7 +97,6 @@ Axion MCP server 暴露以下工具：
 | `screenshot` | 截图 |
 | `get_ax_tree` | 获取无障碍树 |
 | `get_window_state` | 获取窗口状态 |
-| `open_url` | 打开 URL |
 
 ## 前提条件
 

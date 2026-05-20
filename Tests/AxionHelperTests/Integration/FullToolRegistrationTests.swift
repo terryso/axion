@@ -23,7 +23,7 @@ struct FullToolRegistrationTests {
         "launch_app", "list_apps", "list_windows", "get_window_state",
         "click", "double_click", "right_click", "type_text",
         "press_key", "hotkey", "scroll", "drag",
-        "screenshot", "get_accessibility_tree", "open_url",
+        "screenshot", "get_accessibility_tree",
     ]
 
     private let initializeRequest = """

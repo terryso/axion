@@ -58,12 +58,12 @@ struct SkillExecutorTests {
 
         let skill = makeSkill(
             parameters: [SkillParameter(name: "url", description: "URL")],
-            steps: [SkillStep(tool: "open_url", arguments: ["url": "{{url}}"])]
+            steps: [SkillStep(tool: "launch_app", arguments: ["app_name": "{{url}}"])]
         )
 
         let result = try await executor.execute(skill: skill, paramValues: ["url": "https://example.com"])
         #expect(result.success)
-        #expect(client.callLog[0].arguments["url"] == .string("https://example.com"))
+        #expect(client.callLog[0].arguments["app_name"] == .string("https://example.com"))
     }
 
     // MARK: - Parameter Default Values (7.3)
@@ -92,7 +92,7 @@ struct SkillExecutorTests {
 
         let skill = makeSkill(
             parameters: [SkillParameter(name: "url", description: "URL")],
-            steps: [SkillStep(tool: "open_url", arguments: ["url": "{{url}}"])]
+            steps: [SkillStep(tool: "launch_app", arguments: ["app_name": "{{url}}"])]
         )
 
         do {
@@ -319,7 +319,7 @@ struct SkillExecutorTests {
                 SkillParameter(name: "host", description: "host"),
                 SkillParameter(name: "path", description: "path"),
             ],
-            steps: [SkillStep(tool: "open_url", arguments: ["url": "https://{{host}}/{{path}}"])]
+            steps: [SkillStep(tool: "launch_app", arguments: ["app_name": "https://{{host}}/{{path}}"])]
         )
 
         let result = try await executor.execute(
@@ -327,7 +327,7 @@ struct SkillExecutorTests {
             paramValues: ["host": "example.com", "path": "api/v1"]
         )
         #expect(result.success)
-        #expect(client.callLog[0].arguments["url"] == .string("https://example.com/api/v1"))
+        #expect(client.callLog[0].arguments["app_name"] == .string("https://example.com/api/v1"))
     }
 
     @Test("parameter in middle of string")
@@ -337,7 +337,7 @@ struct SkillExecutorTests {
 
         let skill = makeSkill(
             parameters: [SkillParameter(name: "domain", description: "domain")],
-            steps: [SkillStep(tool: "open_url", arguments: ["url": "https://{{domain}}/api/users"])]
+            steps: [SkillStep(tool: "launch_app", arguments: ["app_name": "https://{{domain}}/api/users"])]
         )
 
         let result = try await executor.execute(
@@ -345,7 +345,7 @@ struct SkillExecutorTests {
             paramValues: ["domain": "mysite.com"]
         )
         #expect(result.success)
-        #expect(client.callLog[0].arguments["url"] == .string("https://mysite.com/api/users"))
+        #expect(client.callLog[0].arguments["app_name"] == .string("https://mysite.com/api/users"))
     }
 
     // MARK: - Failure at Non-First Step (AC5)
@@ -420,7 +420,7 @@ struct SkillExecutorTests {
                 SkillParameter(name: "url", description: "URL"),
                 SkillParameter(name: "unused", defaultValue: "x", description: "not used"),
             ],
-            steps: [SkillStep(tool: "open_url", arguments: ["url": "{{url}}"])]
+            steps: [SkillStep(tool: "launch_app", arguments: ["app_name": "{{url}}"])]
         )
 
         let result = try await executor.execute(
@@ -428,7 +428,7 @@ struct SkillExecutorTests {
             paramValues: ["url": "https://example.com"]
         )
         #expect(result.success)
-        #expect(client.callLog[0].arguments["url"] == .string("https://example.com"))
+        #expect(client.callLog[0].arguments["app_name"] == .string("https://example.com"))
     }
 
     // MARK: - Step Retry at Step 2 (AC5 extended)

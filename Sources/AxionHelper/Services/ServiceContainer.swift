@@ -9,7 +9,6 @@ struct ServiceContainer: Sendable {
     var accessibilityEngine: any WindowManaging
     var inputSimulation: any InputSimulating
     var screenshotCapture: any ScreenshotCapturing
-    var urlOpener: any URLOpening
     var eventRecorder: any EventRecording
 
     nonisolated(unsafe) static var shared = ServiceContainer(
@@ -17,7 +16,6 @@ struct ServiceContainer: Sendable {
         accessibilityEngine: AccessibilityEngineService(),
         inputSimulation: InputSimulationService(),
         screenshotCapture: ScreenshotService(),
-        urlOpener: URLOpenerService(),
         eventRecorder: EventRecorderService()
     )
 }

@@ -185,39 +185,6 @@ struct ScreenshotAndMiscToolTests {
         #expect(json["error"] as? String == "window_not_found")
     }
 
-    @Test("open URL success")
-    func openUrlSuccess() async throws {
-        let restore = ServiceContainerFixture.apply(
-            urlOpener: MockURLOpener(openURLHandler: { _ in })
-        )
-        defer { restore() }
-
-        let server = try await makeRegisteredServer()
-        let result = try await server.toolRegistry.execute(
-            "open_url", arguments: ["url": .string("https://example.com")], context: makeTestContext()
-        )
-
-        let json = try JSONSerialization.jsonObject(with: textContent(result).data(using: .utf8)!) as! [String: Any]
-        #expect(json["success"] as? Bool == true)
-        #expect(json["url"] as? String == "https://example.com")
-    }
-
-    @Test("open URL error returns error payload")
-    func openUrlErrorReturnsErrorPayload() async throws {
-        let restore = ServiceContainerFixture.apply(
-            urlOpener: MockURLOpener(openURLHandler: { _ in throw URLOpenerError.invalidURL("not-a-url") })
-        )
-        defer { restore() }
-
-        let server = try await makeRegisteredServer()
-        let result = try await server.toolRegistry.execute(
-            "open_url", arguments: ["url": .string("not-a-url")], context: makeTestContext()
-        )
-
-        let json = try JSONSerialization.jsonObject(with: textContent(result).data(using: .utf8)!) as! [String: Any]
-        #expect(json["error"] as? String == "invalid_url")
-    }
-
     @Test("activate window success with window id")
     func activateWindowSuccessWithWindowId() async throws {
         let restore = ServiceContainerFixture.apply(accessibilityEngine: mockEngine)

@@ -171,7 +171,9 @@ enum AgentBuilder {
             "axion-helper": .stdio(McpStdioConfig(command: helperPath)),
         ]
         if buildConfig.includePlaywright {
-            mcpServers["playwright"] = .stdio(McpStdioConfig(command: "npx", args: ["@playwright/mcp@latest"]))
+            if let playwrightConfig = Self.resolvePlaywrightConfig() {
+                mcpServers["playwright"] = playwrightConfig
+            }
         }
 
         // 7. Build safety hook registry
@@ -179,8 +181,16 @@ enum AgentBuilder {
             sharedSeatMode: config.sharedSeatMode && !buildConfig.allowForeground
         )
 
-        // 8. Build tools: MCP tools + pause_for_human + Skill
-        var agentTools: [ToolProtocol] = [createPauseForHumanTool()]
+        // 8. Build tools: base SDK tools + Skill
+        // Include core + specialist base tools explicitly so the streaming path
+        // (agent.stream()) sends them in the API request. The non-streaming
+        // query() path deduplicates via assembleToolPool.
+        // Exclude ToolSearch and AskUser — GLM models get confused by ToolSearch
+        // ("No deferred tools" kills the model's reasoning), and the system prompt
+        // already lists all available tools.
+        let excludedToolNames: Set<String> = ["ToolSearch", "AskUser"]
+        var agentTools: [ToolProtocol] = (getAllBaseTools(tier: .core) + getAllBaseTools(tier: .specialist))
+            .filter { !excludedToolNames.contains($0.name) }
         if !buildConfig.noSkills {
             agentTools.append(createSkillTool(registry: skillRegistry))
         }
@@ -399,5 +409,47 @@ enum AgentBuilder {
         }
 
         return registry
+    }
+
+    /// Resolves the playwright MCP server configuration.
+    ///
+    /// Uses Node directly with the installed `@playwright/mcp` module to avoid
+    /// shebang/PATH issues. Finds the newest Node 18+ version from nvm and
+    /// locates the playwright-mcp CLI entry point.
+    private static func resolvePlaywrightConfig() -> McpServerConfig? {
+        let nvmDir = ProcessInfo.processInfo.environment["NVM_DIR"]
+            ?? "\(FileManager.default.homeDirectoryForCurrentUser.path)/.nvm"
+        let nvmVersionsDir = "\(nvmDir)/versions/node"
+
+        guard let contents = try? FileManager.default.contentsOfDirectory(atPath: nvmVersionsDir) else {
+            return nil
+        }
+
+        // Find the highest Node 18+ version
+        let nodeVersions = contents.filter { $0.hasPrefix("v") }
+            .compactMap { version -> (version: String, major: Int)? in
+                let numStr = version.dropFirst() // drop "v"
+                let major = numStr.split(separator: ".").first.flatMap { Int($0) }
+                guard let major, major >= 18 else { return nil }
+                return (version, major)
+            }
+            .sorted { $0.version > $1.version }
+
+        for (version, _) in nodeVersions {
+            let nodeBin = "\(nvmVersionsDir)/\(version)/bin/node"
+            let cliPath = "\(nvmVersionsDir)/\(version)/lib/node_modules/@playwright/mcp/cli.js"
+
+            guard FileManager.default.fileExists(atPath: nodeBin),
+                  FileManager.default.fileExists(atPath: cliPath) else {
+                continue
+            }
+
+            return .stdio(McpStdioConfig(
+                command: nodeBin,
+                args: [cliPath, "--headless"]
+            ))
+        }
+
+        return nil
     }
 }

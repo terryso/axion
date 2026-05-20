@@ -49,15 +49,11 @@ struct ScreenshotUrlToolTests {
         )
     }
 
-    private func makeSuccessURLOpenerMock() -> MockURLOpener {
-        MockURLOpener(openURLHandler: { _ in })
-    }
 
     @Test("screenshot with window id returns base64 JSON")
     func screenshotWithWindowIdReturnsBase64Json() async throws {
         let restore = ServiceContainerFixture.apply(
-            screenshotCapture: makeSuccessScreenshotMock(),
-            urlOpener: makeSuccessURLOpenerMock()
+            screenshotCapture: makeSuccessScreenshotMock()
         )
         defer { restore() }
 
@@ -88,8 +84,7 @@ struct ScreenshotUrlToolTests {
             captureFullScreenHandler: { base64 }
         )
         let restore = ServiceContainerFixture.apply(
-            screenshotCapture: mock,
-            urlOpener: makeSuccessURLOpenerMock()
+            screenshotCapture: mock
         )
         defer { restore() }
 
@@ -113,9 +108,7 @@ struct ScreenshotUrlToolTests {
             captureFullScreenHandler: { base64 }
         )
         let restore = ServiceContainerFixture.apply(
-            screenshotCapture: mock,
-            urlOpener: makeSuccessURLOpenerMock()
-        )
+            screenshotCapture: mock        )
         defer { restore() }
 
         let server = try await makeRegisteredServer()
@@ -136,9 +129,7 @@ struct ScreenshotUrlToolTests {
     @Test("screenshot no window id returns full screen base64 JSON")
     func screenshotNoWindowIdReturnsFullScreenBase64Json() async throws {
         let restore = ServiceContainerFixture.apply(
-            screenshotCapture: makeSuccessScreenshotMock(),
-            urlOpener: makeSuccessURLOpenerMock()
-        )
+            screenshotCapture: makeSuccessScreenshotMock()        )
         defer { restore() }
 
         let server = try await makeRegisteredServer()
@@ -168,9 +159,7 @@ struct ScreenshotUrlToolTests {
             }
         )
         let restore = ServiceContainerFixture.apply(
-            screenshotCapture: mock,
-            urlOpener: makeSuccessURLOpenerMock()
-        )
+            screenshotCapture: mock        )
         defer { restore() }
 
         let server = try await makeRegisteredServer()
@@ -193,9 +182,7 @@ struct ScreenshotUrlToolTests {
             }
         )
         let restore = ServiceContainerFixture.apply(
-            screenshotCapture: mock,
-            urlOpener: makeSuccessURLOpenerMock()
-        )
+            screenshotCapture: mock        )
         defer { restore() }
 
         let server = try await makeRegisteredServer()
@@ -243,9 +230,7 @@ struct ScreenshotUrlToolTests {
         )
         let restore = ServiceContainerFixture.apply(
             accessibilityEngine: mockEngine,
-            screenshotCapture: makeSuccessScreenshotMock(),
-            urlOpener: makeSuccessURLOpenerMock()
-        )
+            screenshotCapture: makeSuccessScreenshotMock()        )
         defer { restore() }
 
         let server = try await makeRegisteredServer()
@@ -281,9 +266,7 @@ struct ScreenshotUrlToolTests {
         )
         let restore = ServiceContainerFixture.apply(
             accessibilityEngine: mockEngine,
-            screenshotCapture: makeSuccessScreenshotMock(),
-            urlOpener: makeSuccessURLOpenerMock()
-        )
+            screenshotCapture: makeSuccessScreenshotMock()        )
         defer { restore() }
 
         let server = try await makeRegisteredServer()
@@ -311,9 +294,7 @@ struct ScreenshotUrlToolTests {
         )
         let restore = ServiceContainerFixture.apply(
             accessibilityEngine: mockEngine,
-            screenshotCapture: makeSuccessScreenshotMock(),
-            urlOpener: makeSuccessURLOpenerMock()
-        )
+            screenshotCapture: makeSuccessScreenshotMock()        )
         defer { restore() }
 
         let server = try await makeRegisteredServer()
@@ -348,9 +329,7 @@ struct ScreenshotUrlToolTests {
         )
         let restore = ServiceContainerFixture.apply(
             accessibilityEngine: mockEngine,
-            screenshotCapture: makeSuccessScreenshotMock(),
-            urlOpener: makeSuccessURLOpenerMock()
-        )
+            screenshotCapture: makeSuccessScreenshotMock()        )
         defer { restore() }
 
         let server = try await makeRegisteredServer()
@@ -380,9 +359,7 @@ struct ScreenshotUrlToolTests {
         )
         let restore = ServiceContainerFixture.apply(
             accessibilityEngine: mockEngine,
-            screenshotCapture: makeSuccessScreenshotMock(),
-            urlOpener: makeSuccessURLOpenerMock()
-        )
+            screenshotCapture: makeSuccessScreenshotMock()        )
         defer { restore() }
 
         let server = try await makeRegisteredServer()
@@ -395,135 +372,10 @@ struct ScreenshotUrlToolTests {
         #expect(box.value == 500)
     }
 
-    @Test("open URL valid HTTPS returns success JSON")
-    func openUrlValidHttpsReturnsSuccessJson() async throws {
-        let restore = ServiceContainerFixture.apply(
-            screenshotCapture: makeSuccessScreenshotMock(),
-            urlOpener: makeSuccessURLOpenerMock()
-        )
-        defer { restore() }
-
-        let server = try await makeRegisteredServer()
-        let result = try await server.toolRegistry.execute(
-            "open_url",
-            arguments: ["url": .string("https://example.com")],
-            context: makeTestContext()
-        )
-
-        let text = textContent(result)
-        let json = try JSONSerialization.jsonObject(with: text.data(using: .utf8)!) as? [String: Any]
-
-        #expect(json?["success"] as? Bool == true)
-        #expect(json?["action"] as? String == "open_url")
-        #expect(json?["url"] as? String == "https://example.com")
-    }
-
-    @Test("open URL passes correct URL")
-    func openUrlPassesCorrectUrl() async throws {
-        let box = Box<String?>(value: nil)
-        let mock = MockURLOpener(openURLHandler: { url in
-            box.value = url
-        })
-        let restore = ServiceContainerFixture.apply(
-            screenshotCapture: makeSuccessScreenshotMock(),
-            urlOpener: mock
-        )
-        defer { restore() }
-
-        let server = try await makeRegisteredServer()
-        _ = try await server.toolRegistry.execute(
-            "open_url",
-            arguments: ["url": .string("https://example.com")],
-            context: makeTestContext()
-        )
-
-        #expect(box.value == "https://example.com")
-    }
-
-    @Test("open URL invalid URL returns error JSON")
-    func openUrlInvalidUrlReturnsErrorJson() async throws {
-        let mock = MockURLOpener(openURLHandler: { url in
-            throw URLOpenerError.invalidURL(url)
-        })
-        let restore = ServiceContainerFixture.apply(
-            screenshotCapture: makeSuccessScreenshotMock(),
-            urlOpener: mock
-        )
-        defer { restore() }
-
-        let server = try await makeRegisteredServer()
-        let result = try await server.toolRegistry.execute(
-            "open_url",
-            arguments: ["url": .string("not-a-url")],
-            context: makeTestContext()
-        )
-
-        let text = textContent(result)
-        let json = try JSONSerialization.jsonObject(with: text.data(using: .utf8)!) as? [String: Any]
-
-        #expect(json?["error"] as? String == "invalid_url")
-        #expect(json?["message"] != nil)
-        #expect(json?["suggestion"] != nil)
-    }
-
-    @Test("open URL unsupported scheme returns error JSON")
-    func openUrlUnsupportedSchemeReturnsErrorJson() async throws {
-        let mock = MockURLOpener(openURLHandler: { url in
-            throw URLOpenerError.unsupportedScheme(url)
-        })
-        let restore = ServiceContainerFixture.apply(
-            screenshotCapture: makeSuccessScreenshotMock(),
-            urlOpener: mock
-        )
-        defer { restore() }
-
-        let server = try await makeRegisteredServer()
-        let result = try await server.toolRegistry.execute(
-            "open_url",
-            arguments: ["url": .string("ftp://example.com")],
-            context: makeTestContext()
-        )
-
-        let text = textContent(result)
-        let json = try JSONSerialization.jsonObject(with: text.data(using: .utf8)!) as? [String: Any]
-
-        #expect(json?["error"] as? String == "unsupported_scheme")
-        #expect(json?["message"] != nil)
-        #expect(json?["suggestion"] != nil)
-    }
-
-    @Test("open URL failed to open returns error JSON")
-    func openUrlFailedToOpenReturnsErrorJson() async throws {
-        let mock = MockURLOpener(openURLHandler: { url in
-            throw URLOpenerError.failedToOpen(url)
-        })
-        let restore = ServiceContainerFixture.apply(
-            screenshotCapture: makeSuccessScreenshotMock(),
-            urlOpener: mock
-        )
-        defer { restore() }
-
-        let server = try await makeRegisteredServer()
-        let result = try await server.toolRegistry.execute(
-            "open_url",
-            arguments: ["url": .string("https://example.com")],
-            context: makeTestContext()
-        )
-
-        let text = textContent(result)
-        let json = try JSONSerialization.jsonObject(with: text.data(using: .utf8)!) as? [String: Any]
-
-        #expect(json?["error"] as? String == "failed_to_open")
-        #expect(json?["message"] != nil)
-        #expect(json?["suggestion"] != nil)
-    }
-
     @Test("screenshot does not return stub text")
     func screenshotDoesNotReturnStubText() async throws {
         let restore = ServiceContainerFixture.apply(
-            screenshotCapture: makeSuccessScreenshotMock(),
-            urlOpener: makeSuccessURLOpenerMock()
-        )
+            screenshotCapture: makeSuccessScreenshotMock()        )
         defer { restore() }
 
         let server = try await makeRegisteredServer()
@@ -552,34 +404,13 @@ struct ScreenshotUrlToolTests {
         )
         let restore = ServiceContainerFixture.apply(
             accessibilityEngine: mockEngine,
-            screenshotCapture: makeSuccessScreenshotMock(),
-            urlOpener: makeSuccessURLOpenerMock()
-        )
+            screenshotCapture: makeSuccessScreenshotMock()        )
         defer { restore() }
 
         let server = try await makeRegisteredServer()
         let result = try await server.toolRegistry.execute(
             "get_accessibility_tree",
             arguments: ["window_id": .int(1)],
-            context: makeTestContext()
-        )
-
-        let text = textContent(result)
-        #expect(!text.hasPrefix("Not yet implemented"))
-    }
-
-    @Test("open URL does not return stub text")
-    func openUrlDoesNotReturnStubText() async throws {
-        let restore = ServiceContainerFixture.apply(
-            screenshotCapture: makeSuccessScreenshotMock(),
-            urlOpener: makeSuccessURLOpenerMock()
-        )
-        defer { restore() }
-
-        let server = try await makeRegisteredServer()
-        let result = try await server.toolRegistry.execute(
-            "open_url",
-            arguments: ["url": .string("https://example.com")],
             context: makeTestContext()
         )
 

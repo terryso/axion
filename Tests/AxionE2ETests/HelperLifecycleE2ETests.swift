@@ -54,7 +54,7 @@ struct HelperLifecycleE2ETests {
             "type_text", "press_key", "hotkey",
             "scroll", "drag",
             "screenshot", "get_accessibility_tree",
-            "open_url", "validate_window"
+            "validate_window"
         ]
 
         for tool in expectedTools {
