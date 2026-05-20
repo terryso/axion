@@ -1,4 +1,4 @@
-Status: review
+Status: done
 
 ## Story
 
@@ -179,6 +179,27 @@ GLM-5.1
 - Tests/AxionE2ETests/RealLLME2ETests.swift
 - _bmad-output/implementation-artifacts/sprint-status.yaml
 
+## Senior Developer Review (AI)
+
+**Reviewer:** Claude (adversarial review) on 2026-05-21
+
+### Findings (4 total: 0 CRITICAL, 2 HIGH/MEDIUM, 2 LOW)
+
+**M1 (Fixed):** No test for `.errorMaxModelCalls` result subtype — handler at SDKOutputHandlers.swift:77 had no test coverage. **Fix:** Added `terminalHandlerResultMaxModelCalls` test.
+
+**M2 (Fixed):** Unicode-escaped Chinese characters in SDKOutputHandlers.swift — all Chinese text used `\u{XXXX}` escape sequences instead of literal characters, making code significantly harder to read. **Fix:** Converted all 12 escape sequences to literal Chinese characters for consistency with RecordCommand.swift and other files.
+
+**L1 (Fixed):** 8 test function names in SDKMessageOutputHandlerTests.swift still referenced old `handleMessage` API (e.g., `handleMessageToolUseWritesToolName`). **Fix:** Renamed all to use `handle` prefix.
+
+**L2 (Fixed):** Empty `Sources/AxionCLI/Output/` directory left behind after file deletions. **Fix:** Removed empty directory.
+
+### Verification
+- All 974 tests pass (was 973, +1 new test)
+- Clean build
+- No `handleMessage` references remain in codebase
+- No `TerminalOutput`/`JSONOutput` type references remain in production code
+
 ## Change Log
 
+- 2026-05-21: Review complete — fixed 4 issues (Unicode readability, missing test coverage, stale test names, empty directory). Status → done.
 - 2026-05-21: Story 21.4 implementation complete — deleted local protocol + unused wrappers, aligned with SDK's `SDKMessageOutputHandler` protocol, all tests pass

@@ -26,8 +26,8 @@ struct SDKTerminalOutputHandlerTests {
 
     // MARK: - Tool Use Message
 
-    @Test("handleMessage toolUse writes tool name")
-    func handleMessageToolUseWritesToolName() {
+    @Test("handle toolUse writes tool name")
+    func handleToolUseWritesToolName() {
         let collector = OutputCollector()
         let handler = makeHandler(collector: collector)
 
@@ -41,8 +41,8 @@ struct SDKTerminalOutputHandlerTests {
         #expect(collector.lines.contains(where: { $0.contains("launch_app") }))
     }
 
-    @Test("handleMessage toolResult success writes result snippet")
-    func handleMessageToolResultSuccessWritesSnippet() {
+    @Test("handle toolResult success writes result snippet")
+    func handleToolResultSuccessWritesSnippet() {
         let collector = OutputCollector()
         let handler = makeHandler(collector: collector)
 
@@ -55,8 +55,8 @@ struct SDKTerminalOutputHandlerTests {
         #expect(collector.lines.contains(where: { $0.contains("Calculator") }))
     }
 
-    @Test("handleMessage toolResult error writes error prefix")
-    func handleMessageToolResultErrorWritesErrorPrefix() {
+    @Test("handle toolResult error writes error prefix")
+    func handleToolResultErrorWritesErrorPrefix() {
         let collector = OutputCollector()
         let handler = makeHandler(collector: collector)
 
@@ -72,7 +72,7 @@ struct SDKTerminalOutputHandlerTests {
     // MARK: - Result Messages
 
     @Test("result success writes completion")
-    func handleMessageResultSuccessWritesCompletion() {
+    func handleResultSuccessWritesCompletion() {
         let collector = OutputCollector()
         let handler = makeHandler(collector: collector)
 
@@ -88,7 +88,7 @@ struct SDKTerminalOutputHandlerTests {
     }
 
     @Test("result cancelled writes cancellation")
-    func handleMessageResultCancelledWritesCancellation() {
+    func handleResultCancelledWritesCancellation() {
         let collector = OutputCollector()
         let handler = makeHandler(collector: collector)
 
@@ -98,7 +98,7 @@ struct SDKTerminalOutputHandlerTests {
     }
 
     @Test("result maxTurns writes limit message")
-    func handleMessageResultMaxTurnsWritesLimitMessage() {
+    func handleResultMaxTurnsWritesLimitMessage() {
         let collector = OutputCollector()
         let handler = makeHandler(collector: collector)
 
@@ -108,7 +108,7 @@ struct SDKTerminalOutputHandlerTests {
     }
 
     @Test("result budget exceeded writes budget message")
-    func handleMessageResultBudgetExceededWritesBudgetMessage() {
+    func handleResultBudgetExceededWritesBudgetMessage() {
         let collector = OutputCollector()
         let handler = makeHandler(collector: collector)
 
@@ -118,7 +118,7 @@ struct SDKTerminalOutputHandlerTests {
     }
 
     @Test("result errorDuringExecution writes error")
-    func handleMessageResultErrorDuringExecution() {
+    func handleResultErrorDuringExecution() {
         let collector = OutputCollector()
         let handler = makeHandler(collector: collector)
 
@@ -128,7 +128,7 @@ struct SDKTerminalOutputHandlerTests {
     }
 
     @Test("result structuredOutputRetries writes retry message")
-    func handleMessageResultStructuredOutputRetries() {
+    func handleResultStructuredOutputRetries() {
         let collector = OutputCollector()
         let handler = makeHandler(collector: collector)
 

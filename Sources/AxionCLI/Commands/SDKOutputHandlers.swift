@@ -20,9 +20,9 @@ final class SDKTerminalOutputHandler: OpenAgentSDK.SDKMessageOutputHandler, @unc
 
     func displayRunStart(runId: String, task: String) {
         startTime = ContinuousClock.now
-        write("[axion] \u{6A21}\u{5F0F}: \(mode)")
-        write("[axion] \u{8FD0}\u{884C} ID: \(runId)")
-        write("[axion] \u{4EFB}\u{52A1}: \(task)")
+        write("[axion] 模式: \(mode)")
+        write("[axion] 运行 ID: \(runId)")
+        write("[axion] 任务: \(task)")
     }
 
     func handle(_ message: SDKMessage) {
@@ -37,15 +37,15 @@ final class SDKTerminalOutputHandler: OpenAgentSDK.SDKMessageOutputHandler, @unc
         case .toolUse(let data):
             flushStreamBuffer()
             totalSteps += 1
-            write("[axion] \u{6267}\u{884C}: \(data.toolName)")
+            write("[axion] 执行: \(data.toolName)")
 
         case .toolResult(let data):
             flushStreamBuffer()
             if data.isError {
-                write("[axion] \u{7ED3}\u{679C}: \u{9519}\u{8BEF} \u{2014} \(String(data.content.prefix(100)))")
+                write("[axion] 结果: 错误 — \(String(data.content.prefix(100)))")
             } else {
                 let snippet = summarizeResult(data.content)
-                write("[axion] \u{7ED3}\u{679C}: \(snippet)")
+                write("[axion] 结果: \(snippet)")
             }
 
         case .result(let data):
@@ -55,27 +55,27 @@ final class SDKTerminalOutputHandler: OpenAgentSDK.SDKMessageOutputHandler, @unc
             case .success:
                 if isFast {
                     let elapsed = computeElapsedSeconds()
-                    write("[axion] Fast mode \u{5B8C}\u{6210}\u{3002}\(totalSteps) \u{6B65}\u{FF0C}\u{8017}\u{65F6} \(elapsed) \u{79D2}\u{3002}")
-                    write("[axion] \u{5982}\u{9700}\u{66F4}\u{7CBE}\u{786E}\u{6267}\u{884C}\u{FF0C}\u{53EF}\u{53BB}\u{6389} --fast \u{91CD}\u{8BD5}\u{3002}")
+                    write("[axion] Fast mode 完成。\(totalSteps) 步，耗时 \(elapsed) 秒。")
+                    write("[axion] 如需更精确执行，可去掉 --fast 重试。")
                 }
             case .errorMaxTurns:
-                write("[axion] \u{8FBE}\u{5230}\u{6700}\u{5927}\u{6B65}\u{6570}\u{9650}\u{5236} (\(data.numTurns) \u{6B65})")
+                write("[axion] 达到最大步数限制 (\(data.numTurns) 步)")
                 if isFast {
-                    write("[axion] \u{5EFA}\u{8BAE}\u{53BB}\u{6389} --fast \u{91CD}\u{65B0}\u{5C1D}\u{8BD5}\u{FF0C}\u{5141}\u{8BB8}\u{66F4}\u{591A}\u{6B65}\u{9AA4}\u{5B8C}\u{6210}\u{3002}")
+                    write("[axion] 建议去掉 --fast 重新尝试，允许更多步骤完成。")
                 }
             case .errorMaxBudgetUsd:
-                write("[axion] \u{9884}\u{7B97}\u{8D85}\u{9650}")
+                write("[axion] 预算超限")
             case .cancelled:
-                write("[axion] \u{5DF2}\u{53D6}\u{6D88}")
+                write("[axion] 已取消")
             case .errorDuringExecution:
-                write("[axion] \u{6267}\u{884C}\u{9519}\u{8BEF}")
+                write("[axion] 执行错误")
                 if isFast {
-                    write("[axion] \u{5EFA}\u{8BAE}\u{53BB}\u{6389} --fast \u{91CD}\u{65B0}\u{5C1D}\u{8BD5}\u{3002}")
+                    write("[axion] 建议去掉 --fast 重新尝试。")
                 }
             case .errorMaxStructuredOutputRetries:
-                write("[axion] \u{7ED3}\u{6784}\u{5316}\u{8F93}\u{51FA}\u{91CD}\u{8BD5}\u{8D85}\u{9650}")
+                write("[axion] 结构化输出重试超限")
             case .errorMaxModelCalls:
-                write("[axion] \u{5DF2}\u{8FBE}\u{5230}\u{6A21}\u{578B}\u{8C03}\u{7528}\u{4E0A}\u{9650}")
+                write("[axion] 已达到模型调用上限")
             }
 
         case .partialMessage(let data):
@@ -86,11 +86,11 @@ final class SDKTerminalOutputHandler: OpenAgentSDK.SDKMessageOutputHandler, @unc
             case .paused:
                 flushStreamBuffer()
                 if let pausedData = data.pausedData {
-                    write("[axion] \u{4EFB}\u{52A1}\u{6682}\u{505C}: \(pausedData.reason)")
+                    write("[axion] 任务暂停: \(pausedData.reason)")
                 }
             case .pausedTimeout:
                 flushStreamBuffer()
-                write("[axion] \u{63A5}\u{7BA1}\u{8D85}\u{65F6}\u{FF08}5 \u{5206}\u{949F}\u{65E0}\u{64CD}\u{4F5C}\u{FF09}\u{FF0C}\u{4EFB}\u{52A1}\u{7EC8}\u{6B62}\u{3002}")
+                write("[axion] 接管超时（5 分钟无操作），任务终止。")
             default:
                 break
             }
@@ -102,7 +102,7 @@ final class SDKTerminalOutputHandler: OpenAgentSDK.SDKMessageOutputHandler, @unc
 
     func displayCompletion() {
         flushStreamBuffer()
-        write("[axion] \u{8FD0}\u{884C}\u{7ED3}\u{675F}\u{3002}")
+        write("[axion] 运行结束。")
     }
 
     private func flushStreamBuffer() {
@@ -113,7 +113,7 @@ final class SDKTerminalOutputHandler: OpenAgentSDK.SDKMessageOutputHandler, @unc
     }
 
     private func summarizeResult(_ content: String) -> String {
-        if content.hasPrefix("{\"action\":\"screenshot\"") || content.contains("image_data") || content.contains("[\u{5FAE}\u{538B}\u{7F29}]") {
+        if content.hasPrefix("{\"action\":\"screenshot\"") || content.contains("image_data") || content.contains("[微压缩]") {
             return "[screenshot captured]"
         }
         if content.contains("Base64") || content.contains("base64") {

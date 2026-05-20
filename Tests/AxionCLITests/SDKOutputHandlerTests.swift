@@ -116,6 +116,15 @@ struct SDKOutputHandlerTests {
         #expect(lines.contains(where: { $0.contains("结构化输出") }))
     }
 
+    @Test("terminal handler result maxModelCalls")
+    func terminalHandlerResultMaxModelCalls() {
+        var lines: [String] = []
+        let handler = SDKTerminalOutputHandler(write: { lines.append($0) })
+
+        handler.handle(.result(.init(subtype: .errorMaxModelCalls, text: "", usage: nil, numTurns: 0, durationMs: 0)))
+        #expect(lines.contains(where: { $0.contains("模型调用") }))
+    }
+
     @Test("terminal handler partialMessage buffers until flush")
     func terminalHandlerPartialMessageBuffersUntilFlush() {
         var lines: [String] = []
