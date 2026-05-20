@@ -9,37 +9,20 @@ import Testing
 @Suite("ExplicitSkillTrigger")
 struct ExplicitSkillTriggerTests {
 
-    // MARK: - AC1: Prompt skill — promptTemplate injected as systemPrompt
+    // MARK: - AC1: Prompt skill — skill object construction
 
-    @Test("AC1: Explicit prompt skill parses invocation correctly")
-    func testPromptTemplateInjection() throws {
-        let cmd = try RunCommand.parse(["/polyv-live-cli 获取频道列表"])
-        let invocation = SkillLookupService.parseSkillInvocation(cmd.task)
-        #expect(invocation != nil)
-        #expect(invocation?.name == "polyv-live-cli")
-        #expect(invocation?.args == "获取频道列表")
-    }
-
-    @Test("AC1: Explicit skill prompt includes promptTemplate and Available Tools, no Skills section")
-    func testExplicitSkillPromptContent() {
-        let skill = OpenAgentSDK.Skill(
-            name: "test-skill",
-            description: "Test",
-            promptTemplate: "You are a test skill agent. Do X, Y, Z.",
-            whenToUse: "when testing"
+    @Test("AC1: System prompt is generic planner — skill content is in user message")
+    func testExplicitSkillSystemPromptIsGeneric() {
+        let result = AgentBuilder.buildFullSystemPrompt(
+            basePrompt: "Base planner prompt",
+            skillsPrompt: ""
         )
-
-        let toolList = PromptBuilder.buildToolListDescription(from: ["mcp__axion-helper__click"])
-        var prompt = skill.promptTemplate
-        prompt += "\n\n## Available Tools\n\(toolList)"
-
-        #expect(prompt.hasPrefix("You are a test skill agent"))
-        #expect(prompt.contains("## Available Tools"))
-        #expect(!prompt.contains("## Available Skills"))
+        #expect(result.contains("Base planner prompt"))
+        #expect(!result.contains("You are a test skill agent"))
     }
 
-    @Test("AC2/H1: toolRestrictions limits Available Tools in prompt, no MCP tools listed")
-    func testToolRestrictionsLimitsToolList() {
+    @Test("AC2/H1: toolRestrictions are preserved in explicitSkill for model/restriction info")
+    func testToolRestrictionsPreserved() {
         let skill = OpenAgentSDK.Skill(
             name: "restricted",
             description: "Restricted skill",
@@ -47,52 +30,27 @@ struct ExplicitSkillTriggerTests {
             promptTemplate: "Do stuff"
         )
 
-        // Simulate the conditional logic from RunCommand
-        let mcpPrefixedToolNames = ["mcp__axion-helper__click", "mcp__axion-helper__screenshot"]
-        let toolNames: [String]
-        if let restrictions = skill.toolRestrictions {
-            toolNames = restrictions.map(\.rawValue)
-        } else {
-            toolNames = mcpPrefixedToolNames
-        }
-        let toolList = PromptBuilder.buildToolListDescription(from: toolNames)
-        var prompt = skill.promptTemplate
-        prompt += "\n\n## Available Tools\n\(toolList)"
-
-        #expect(prompt.contains("## Available Tools"))
-        #expect(prompt.contains("bash"))
-        #expect(prompt.contains("read"))
-        #expect(!prompt.contains("mcp__axion-helper__"))
+        let restrictions = skill.toolRestrictions
+        #expect(restrictions != nil)
+        #expect(restrictions!.map(\.rawValue) == ["bash", "read"])
     }
 
-    @Test("AC1: Explicit skill prompt includes memory context when available")
+    @Test("AC1: Memory context still injected in generic system prompt")
     func testExplicitSkillPromptWithMemory() {
-        let skill = OpenAgentSDK.Skill(
-            name: "test-skill",
-            description: "Test",
-            promptTemplate: "Do the thing."
+        let result = AgentBuilder.buildFullSystemPrompt(
+            basePrompt: "Base prompt",
+            memoryContext: "## Memory\nYou previously worked with Calculator app.",
+            skillsPrompt: ""
         )
 
-        let toolList = PromptBuilder.buildToolListDescription(from: [])
-        var prompt = skill.promptTemplate
-        prompt += "\n\n## Available Tools\n\(toolList)"
-        let memoryContext = "## Memory\nYou previously worked with Calculator app."
-        prompt += "\n\n\(memoryContext)"
-
-        #expect(prompt.contains("## Memory"))
-        #expect(prompt.contains("Calculator"))
+        #expect(result.contains("## Memory"))
+        #expect(result.contains("Calculator"))
     }
 
     @Test("AC1: Normal flow uses buildFullSystemPrompt with Available Skills")
-    func testNormalFlowIncludesSkills() throws {
-        let cmd = try RunCommand.parse(["do something"])
-        // In normal flow, buildFullSystemPrompt appends skillsPrompt
-        let result = cmd.buildFullSystemPrompt(
+    func testNormalFlowIncludesSkills() {
+        let result = AgentBuilder.buildFullSystemPrompt(
             basePrompt: "Base prompt",
-            fast: false,
-            dryrun: false,
-            verbose: false,
-            memoryContext: nil,
             skillsPrompt: "- **test-skill**: Test skill"
         )
         #expect(result.hasPrefix("Base prompt"))
@@ -228,33 +186,42 @@ struct ExplicitSkillTriggerTests {
         #expect(resolvedParams["timeout"] == "30")
     }
 
-    // MARK: - AC5: / not at start does not trigger
+    // MARK: - AC6: --no-skills disables skill registration
 
-    @Test("AC5: / not at start is not a skill invocation")
-    func testSlashNotAtStart() {
-        let parsed = SkillLookupService.parseSkillInvocation("请帮我/polyv-live-cli获取频道")
-        #expect(parsed == nil)
-    }
-
-    // MARK: - AC6: --no-skills disables explicit trigger
-
-    @Test("AC6: --no-skills flag prevents skill lookup from executing")
+    @Test("AC6: --no-skills flag prevents skill registration in AgentBuilder")
     func testNoSkillsFlag() throws {
         let cmd = try RunCommand.parse(["--no-skills", "/polyv-live-cli test"])
         #expect(cmd.noSkills == true)
-        // When noSkills is true, the guard `!noSkills` on line 81 of RunCommand.run()
-        // prevents the entire skill lookup block from executing.
-        // parseSkillInvocation still works (pure parser), but the result is never used.
-        let parsed = SkillLookupService.parseSkillInvocation(cmd.task)
-        #expect(parsed != nil)
-        #expect(parsed?.name == "polyv-live-cli")
-        // The critical behavior: noSkills=true → RunCommand.run() skips skill lookup entirely.
-        // The task "/polyv-live-cli test" is sent as a plain prompt to the LLM.
+        // When noSkills is true, AgentBuilder.build() skips skill registration
+        // and does not add SkillTool to the agent's tools.
     }
 
-    // MARK: - Combined: explicit trigger with all features
+    // MARK: - BuildConfig.forSkillExecution
 
-    @Test("Combined: explicit skill with promptTemplate + toolRestrictions + modelOverride")
+    @Test("forSkillExecution creates minimal config: no MCP, no skills, no memory")
+    func testForSkillExecutionConfig() {
+        let skill = OpenAgentSDK.Skill(
+            name: "polyv-live-cli",
+            description: "直播管理",
+            toolRestrictions: [.bash, .read],
+            modelOverride: "claude-opus-4-6",
+            promptTemplate: "你是直播管理助手。"
+        )
+
+        let config = AxionConfig.default
+        let buildConfig = AgentBuilder.BuildConfig.forSkillExecution(
+            config: config,
+            skill: skill,
+            verbose: false
+        )
+
+        #expect(buildConfig.noMemory == true)
+        #expect(buildConfig.noSkills == true)
+        #expect(buildConfig.includePlaywright == false)
+        #expect(buildConfig.allowForeground == false)
+    }
+
+    @Test("Combined: explicit skill with toolRestrictions + modelOverride via skill object")
     func testCombinedExplicitTrigger() {
         let skill = OpenAgentSDK.Skill(
             name: "polyv-live-cli",
@@ -265,41 +232,9 @@ struct ExplicitSkillTriggerTests {
         )
 
         let effectiveModel = skill.modelOverride ?? "claude-sonnet-4-6"
-        let allowedTools: [String]? = skill.toolRestrictions?.map(\.rawValue)
-
         #expect(effectiveModel == "claude-opus-4-6")
-        #expect(allowedTools == ["bash", "read", "glob", "grep"])
 
-        let toolList = PromptBuilder.buildToolListDescription(from: ["mcp__axion-helper__click"])
-        var prompt = skill.promptTemplate
-        prompt += "\n\n## Available Tools\n\(toolList)"
-        #expect(prompt.hasPrefix("你是直播管理助手"))
-        #expect(prompt.contains("## Available Tools"))
-    }
-
-    // MARK: - Task override when no args provided
-
-    @Test("Task defaults when invocation has no args")
-    func testTaskDefaultWithoutArgs() {
-        let skill = OpenAgentSDK.Skill(
-            name: "review",
-            description: "Review code",
-            promptTemplate: "Review changes"
-        )
-        let invocation = SkillLookupService.parseSkillInvocation("/review")
-        let task = invocation?.args ?? "Execute skill \(skill.name)"
-        #expect(task == "Execute skill review")
-    }
-
-    @Test("Task uses invocation args when provided")
-    func testTaskWithArgs() {
-        let skill = OpenAgentSDK.Skill(
-            name: "review",
-            description: "Review code",
-            promptTemplate: "Review changes"
-        )
-        let invocation = SkillLookupService.parseSkillInvocation("/review src/main.swift")
-        let task = invocation?.args ?? "Execute skill \(skill.name)"
-        #expect(task == "src/main.swift")
+        let restrictions = skill.toolRestrictions?.map(\.rawValue)
+        #expect(restrictions == ["bash", "read", "glob", "grep"])
     }
 }

@@ -1,5 +1,5 @@
 {
-  "originHash" : "6c2b3ec8d2a12a7b17b0b0d7b081c1f58e232e990b2fea433d2ae2d93c98e273",
+  "originHash" : "60c902ae15bbeae72e07c60da7a1af8e0da5215c583673f84f060d2f1c2d726c",
   "pins" : [
     {
       "identity" : "async-http-client",
@@ -24,8 +24,8 @@
       "kind" : "remoteSourceControl",
       "location" : "https://github.com/terryso/open-agent-sdk-swift",
       "state" : {
-        "revision" : "2a9a0e69b5703a0b0cd90caafed6d1f4e17a6844",
-        "version" : "0.3.4"
+        "revision" : "91ab565db435d6d4f245306ed8442b701e4a0cf4",
+        "version" : "0.4.1"
       }
     },
     {
@@ -60,8 +60,8 @@
       "kind" : "remoteSourceControl",
       "location" : "https://github.com/apple/swift-async-algorithms.git",
       "state" : {
-        "revision" : "9d349bcc328ac3c31ce40e746b5882742a0d1272",
-        "version" : "1.1.3"
+        "revision" : "d0b4a06d0f173a2f3be27d3ea21b3c3aa18db440",
+        "version" : "1.1.4"
       }
     },
     {

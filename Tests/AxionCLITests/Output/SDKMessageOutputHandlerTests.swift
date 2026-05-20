@@ -83,7 +83,8 @@ struct SDKTerminalOutputHandlerTests {
             durationMs: 5000
         )))
 
-        #expect(collector.lines.contains(where: { $0.contains("完成") }))
+        // Success result no longer outputs text — it was already displayed via .assistant messages
+        #expect(collector.lines.isEmpty)
     }
 
     @Test("result cancelled writes cancellation")

@@ -1,4 +1,61 @@
 {
   "version": "1.0.0",
-  "presets": []
+  "presets": [
+    {
+      "name": "all-claude",
+      "createdAt": "2026-05-18T12:26:16Z",
+      "config": {
+        "complexityBased": false,
+        "uniform": {
+          "primary": "claude",
+          "fallback": "codex"
+        },
+        "low": {
+          "create": {
+            "primary": "claude",
+            "fallback": "codex"
+          },
+          "dev": {
+            "primary": "claude",
+            "fallback": "codex"
+          },
+          "review": {
+            "primary": "claude",
+            "fallback": "codex"
+          }
+        },
+        "medium": {
+          "create": {
+            "primary": "claude",
+            "fallback": "codex"
+          },
+          "dev": {
+            "primary": "claude",
+            "fallback": "codex"
+          },
+          "review": {
+            "primary": "claude",
+            "fallback": "codex"
+          }
+        },
+        "high": {
+          "create": {
+            "primary": "claude",
+            "fallback": "codex"
+          },
+          "dev": {
+            "primary": "claude",
+            "fallback": "codex"
+          },
+          "review": {
+            "primary": "claude",
+            "fallback": "codex"
+          }
+        },
+        "auto": {
+          "skip": true
+        }
+      }
+    }
+  ]
 }

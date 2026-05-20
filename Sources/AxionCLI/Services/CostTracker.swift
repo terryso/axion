@@ -5,7 +5,6 @@ import OpenAgentSDK
 
 enum BudgetCheckResult: Sendable, Equatable {
     case ok
-    case modelCallsExceeded(limit: Int)
     case screenshotsExceeded(limit: Int)
 }
 
@@ -49,31 +48,17 @@ actor CostTracker {
 
     private var modelCallCount: Int = 0
     private var screenshotCount: Int = 0
-    private let maxModelCalls: Int?
     private let maxScreenshots: Int?
     private var totalInputTokens: Int = 0
     private var totalOutputTokens: Int = 0
     private var estimatedCostUsd: Double = 0.0
     private var costBreakdown: [String: ModelCostEntry] = [:]
 
-    init(maxModelCalls: Int? = nil, maxScreenshots: Int? = nil) {
-        self.maxModelCalls = maxModelCalls
+    init(maxScreenshots: Int? = nil) {
         self.maxScreenshots = maxScreenshots
     }
 
-    /// Record an LLM model call and check budget.
-    /// Returns `.modelCallsExceeded` if the limit was reached by this call.
-    func recordModelCall(model: String) -> BudgetCheckResult {
-        modelCallCount += 1
-
-        if let limit = maxModelCalls, modelCallCount >= limit {
-            return .modelCallsExceeded(limit: limit)
-        }
-        return .ok
-    }
-
     /// Record a screenshot call and check budget.
-    /// Returns `.screenshotsExceeded` if the limit was reached by this call.
     func recordScreenshot() -> BudgetCheckResult {
         screenshotCount += 1
 
@@ -101,6 +86,16 @@ actor CostTracker {
                 estimatedCostUsd: entry.costUsd
             )
         }
+        // Derive model call count from SDK breakdown data
+        var totalCalls = 0
+        for entry in costBreakdown {
+            if entry.inputTokens > 0 || entry.outputTokens > 0 {
+                totalCalls += 1
+            }
+        }
+        if totalCalls > 0 {
+            modelCallCount = totalCalls
+        }
     }
 
     /// Return current cost summary.
@@ -125,6 +120,5 @@ actor CostTracker {
         )
     }
 
-    var currentModelCallCount: Int { modelCallCount }
     var currentScreenshotCount: Int { screenshotCount }
 }

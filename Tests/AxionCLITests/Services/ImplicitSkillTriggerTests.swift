@@ -11,13 +11,9 @@ struct ImplicitSkillTriggerTests {
     // MARK: - AC1: Skill tool usage guide in system prompt
 
     @Test("AC1: Available Skills section contains Skill tool usage guide")
-    func testSkillsSectionContainsToolGuide() throws {
-        let cmd = try RunCommand.parse(["test"])
-        let prompt = cmd.buildFullSystemPrompt(
+    func testSkillsSectionContainsToolGuide() {
+        let prompt = AgentBuilder.buildFullSystemPrompt(
             basePrompt: "Base",
-            fast: false,
-            dryrun: false,
-            verbose: false,
             skillsPrompt: "- my-skill [args]: A useful skill TRIGGER when: user needs X"
         )
 
@@ -27,13 +23,9 @@ struct ImplicitSkillTriggerTests {
     }
 
     @Test("AC1: Guide mentions skill parameter and args parameter")
-    func testGuideMentionsParameters() throws {
-        let cmd = try RunCommand.parse(["test"])
-        let prompt = cmd.buildFullSystemPrompt(
+    func testGuideMentionsParameters() {
+        let prompt = AgentBuilder.buildFullSystemPrompt(
             basePrompt: "Base",
-            fast: false,
-            dryrun: false,
-            verbose: false,
             skillsPrompt: "- my-skill [args]: A useful skill TRIGGER when: user needs X"
         )
 
@@ -45,13 +37,9 @@ struct ImplicitSkillTriggerTests {
     }
 
     @Test("AC1: Guide mentions prompt return value")
-    func testGuideMentionsPromptReturn() throws {
-        let cmd = try RunCommand.parse(["test"])
-        let prompt = cmd.buildFullSystemPrompt(
+    func testGuideMentionsPromptReturn() {
+        let prompt = AgentBuilder.buildFullSystemPrompt(
             basePrompt: "Base",
-            fast: false,
-            dryrun: false,
-            verbose: false,
             skillsPrompt: "- my-skill [args]: A useful skill TRIGGER when: user needs X"
         )
 
@@ -61,13 +49,9 @@ struct ImplicitSkillTriggerTests {
     }
 
     @Test("AC1: No Available Skills section when skillsPrompt is empty")
-    func testNoSkillsSectionWhenEmpty() throws {
-        let cmd = try RunCommand.parse(["test"])
-        let prompt = cmd.buildFullSystemPrompt(
+    func testNoSkillsSectionWhenEmpty() {
+        let prompt = AgentBuilder.buildFullSystemPrompt(
             basePrompt: "Base",
-            fast: false,
-            dryrun: false,
-            verbose: false,
             skillsPrompt: ""
         )
 
@@ -117,11 +101,8 @@ struct ImplicitSkillTriggerTests {
         #expect(cmd.noSkills == true)
         // Simulate the actual noSkills code path: noSkills → skillsPrompt = ""
         let skillsPrompt = cmd.noSkills ? "" : "dummy"
-        let prompt = cmd.buildFullSystemPrompt(
+        let prompt = AgentBuilder.buildFullSystemPrompt(
             basePrompt: "Base",
-            fast: false,
-            dryrun: false,
-            verbose: false,
             skillsPrompt: skillsPrompt
         )
         #expect(!prompt.contains("## Available Skills"))
@@ -130,13 +111,9 @@ struct ImplicitSkillTriggerTests {
     // MARK: - Guide text completeness
 
     @Test("Guide contains key tool usage info: Skill tool name and TRIGGER keyword")
-    func testGuideContentCompleteness() throws {
-        let cmd = try RunCommand.parse(["test"])
-        let prompt = cmd.buildFullSystemPrompt(
+    func testGuideContentCompleteness() {
+        let prompt = AgentBuilder.buildFullSystemPrompt(
             basePrompt: "Base",
-            fast: false,
-            dryrun: false,
-            verbose: false,
             skillsPrompt: "- demo-skill: Demo skill TRIGGER when: user needs demo"
         )
 

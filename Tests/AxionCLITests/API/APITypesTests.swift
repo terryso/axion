@@ -565,30 +565,30 @@ struct APITypesTests {
 
     @Test("inferResultKind returns answer for query tasks")
     func inferResultKindReturnsAnswerForQueryTasks() {
-        #expect(AgentRunner.inferResultKind(task: "读取最新邮件", output: "") == .answer)
-        #expect(AgentRunner.inferResultKind(task: "查询系统信息", output: "") == .answer)
-        #expect(AgentRunner.inferResultKind(task: "获取文件列表", output: "") == .answer)
-        #expect(AgentRunner.inferResultKind(task: "列出所有进程", output: "") == .answer)
-        #expect(AgentRunner.inferResultKind(task: "搜索相关文档", output: "") == .answer)
-        #expect(AgentRunner.inferResultKind(task: "告诉我时间", output: "") == .answer)
-        #expect(AgentRunner.inferResultKind(task: "显示磁盘使用", output: "") == .answer)
-        #expect(AgentRunner.inferResultKind(task: "查看当前目录", output: "") == .answer)
+        #expect(ApiRunner.inferResultKind(task: "读取最新邮件") == .answer)
+        #expect(ApiRunner.inferResultKind(task: "查询系统信息") == .answer)
+        #expect(ApiRunner.inferResultKind(task: "获取文件列表") == .answer)
+        #expect(ApiRunner.inferResultKind(task: "列出所有进程") == .answer)
+        #expect(ApiRunner.inferResultKind(task: "搜索相关文档") == .answer)
+        #expect(ApiRunner.inferResultKind(task: "告诉我时间") == .answer)
+        #expect(ApiRunner.inferResultKind(task: "显示磁盘使用") == .answer)
+        #expect(ApiRunner.inferResultKind(task: "查看当前目录") == .answer)
     }
 
     @Test("inferResultKind returns confirmation for action tasks")
     func inferResultKindReturnsConfirmationForActionTasks() {
-        #expect(AgentRunner.inferResultKind(task: "打开计算器", output: "") == .confirmation)
-        #expect(AgentRunner.inferResultKind(task: "关闭窗口", output: "") == .confirmation)
-        #expect(AgentRunner.inferResultKind(task: "移动文件到桌面", output: "") == .confirmation)
-        #expect(AgentRunner.inferResultKind(task: "删除临时文件", output: "") == .confirmation)
-        #expect(AgentRunner.inferResultKind(task: "创建新文件夹", output: "") == .confirmation)
-        #expect(AgentRunner.inferResultKind(task: "安装应用", output: "") == .confirmation)
+        #expect(ApiRunner.inferResultKind(task: "打开计算器") == .confirmation)
+        #expect(ApiRunner.inferResultKind(task: "关闭窗口") == .confirmation)
+        #expect(ApiRunner.inferResultKind(task: "移动文件到桌面") == .confirmation)
+        #expect(ApiRunner.inferResultKind(task: "删除临时文件") == .confirmation)
+        #expect(ApiRunner.inferResultKind(task: "创建新文件夹") == .confirmation)
+        #expect(ApiRunner.inferResultKind(task: "安装应用") == .confirmation)
     }
 
     @Test("inferResultKind defaults to confirmation for ambiguous tasks")
     func inferResultKindDefaultsToConfirmation() {
-        #expect(AgentRunner.inferResultKind(task: "do something", output: "") == .confirmation)
-        #expect(AgentRunner.inferResultKind(task: "处理数据", output: "") == .confirmation)
+        #expect(ApiRunner.inferResultKind(task: "do something") == .confirmation)
+        #expect(ApiRunner.inferResultKind(task: "处理数据") == .confirmation)
     }
 
     // MARK: - StandardTaskOutput Serialization Performance

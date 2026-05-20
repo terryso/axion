@@ -7,4 +7,4 @@ WORKFLOW_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
 
 export PYTHONPATH="$WORKFLOW_DIR/src${PYTHONPATH:+:$PYTHONPATH}"
 
-exec python3 -m story_automator "$@"
+exec /Users/nick/.browser-use-env/bin/python3 -m story_automator "$@"

@@ -2,6 +2,24 @@ import Testing
 import Foundation
 @testable import AxionCLI
 
+/// Serializes env var access to prevent parallel test races.
+private actor EnvGate {
+    static let shared = EnvGate()
+
+    func withSavedEnv(_ keys: [String], body: @Sendable () async throws -> Void) async throws {
+        let saved = keys.reduce(into: [String: String?]()) { result, key in
+            result[key] = ProcessInfo.processInfo.environment[key]
+        }
+        for key in keys { unsetenv(key) }
+        defer {
+            for (key, value) in saved {
+                if let value { setenv(key, value, 1) } else { unsetenv(key) }
+            }
+        }
+        try await body()
+    }
+}
+
 @Suite("HelperPathResolver")
 struct HelperPathResolverTests {
 

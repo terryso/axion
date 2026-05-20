@@ -1,3 +1,4 @@
+import AppKit
 import Foundation
 import Testing
 import MCP
@@ -58,25 +59,29 @@ struct LaunchAppIntegrationTests {
     @Test("launch_app app is running after launch")
     func launchAppAppIsRunningAfterLaunch() async throws {
         let server = try await makeRegisteredServer()
-        _ = try await server.toolRegistry.execute(
+        let launchResult = try await server.toolRegistry.execute(
             "launch_app",
             arguments: ["app_name": .string("Calculator")],
             context: makeTestContext()
         )
 
-        let listResult = try await server.toolRegistry.execute(
-            "list_apps",
-            arguments: nil,
-            context: makeTestContext()
-        )
-
-        let textContent = listResult.content.compactMap { content -> String? in
+        let launchText = launchResult.content.compactMap { content -> String? in
             if case let .text(text, _, _) = content { return text }
             return nil
         }.joined()
 
-        #expect(textContent.lowercased().contains("calculator"),
-                "Calculator should appear in running apps list after launch. Got: \(textContent)")
+        // Verify launch returned a pid
+        let launchData = launchText.data(using: .utf8)!
+        let launchJson = try JSONSerialization.jsonObject(with: launchData) as? [String: Any]
+        let pid = try #require(launchJson?["pid"] as? Int)
+        #expect(pid > 0)
+
+        // Verify Calculator is actually running via NSWorkspace (bypasses ServiceContainer.shared
+        // which may be swapped by concurrent mock-based tests)
+        try await Task.sleep(nanoseconds: 300_000_000)
+        let running = NSWorkspace.shared.runningApplications
+        let found = running.contains { $0.bundleIdentifier == "com.apple.calculator" || $0.processIdentifier == pid }
+        #expect(found, "Calculator should be running after launch (pid: \(pid))")
     }
 
     @Test("launch_app already running returns existing pid")

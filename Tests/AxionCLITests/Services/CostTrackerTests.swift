@@ -8,37 +8,6 @@ import Testing
 @Suite("CostTracker Tests")
 struct CostTrackerTests {
 
-    // MARK: - Model Call Counting
-
-    @Test("recordModelCall increments count and returns ok when under limit")
-    func test_recordModelCall_incrementsAndOk() async {
-        let tracker = CostTracker(maxModelCalls: 5)
-        let result = await tracker.recordModelCall(model: "claude-sonnet-4-6")
-        #expect(result == .ok)
-        let count = await tracker.currentModelCallCount
-        #expect(count == 1)
-    }
-
-    @Test("recordModelCall returns exceeded when limit reached")
-    func test_recordModelCall_exceeded() async {
-        let tracker = CostTracker(maxModelCalls: 2)
-        let r1 = await tracker.recordModelCall(model: "claude-sonnet-4-6")
-        #expect(r1 == .ok)
-        let r2 = await tracker.recordModelCall(model: "claude-sonnet-4-6")
-        #expect(r2 == .modelCallsExceeded(limit: 2))
-    }
-
-    @Test("recordModelCall nil limit means unlimited")
-    func test_recordModelCall_nilLimit() async {
-        let tracker = CostTracker(maxModelCalls: nil)
-        for _ in 0..<100 {
-            let result = await tracker.recordModelCall(model: "claude-sonnet-4-6")
-            #expect(result == .ok)
-        }
-        let count = await tracker.currentModelCallCount
-        #expect(count == 100)
-    }
-
     // MARK: - Screenshot Counting
 
     @Test("recordScreenshot increments count and returns ok when under limit")
@@ -83,15 +52,13 @@ struct CostTrackerTests {
         #expect(summary.costBreakdown.isEmpty)
     }
 
-    @Test("getSummary reflects recorded calls")
+    @Test("getSummary reflects recorded screenshots")
     func test_getSummary_afterCalls() async {
         let tracker = CostTracker()
-        _ = await tracker.recordModelCall(model: "claude-sonnet-4-6")
-        _ = await tracker.recordModelCall(model: "claude-sonnet-4-6")
+        _ = await tracker.recordScreenshot()
         _ = await tracker.recordScreenshot()
         let summary = await tracker.getSummary()
-        #expect(summary.modelCalls == 2)
-        #expect(summary.screenshotCount == 1)
+        #expect(summary.screenshotCount == 2)
     }
 
     // MARK: - finalizeWithSDKData
@@ -99,7 +66,6 @@ struct CostTrackerTests {
     @Test("finalizeWithSDKData updates cost data from SDK")
     func test_finalizeWithSDKData() async {
         let tracker = CostTracker()
-        _ = await tracker.recordModelCall(model: "claude-sonnet-4-6")
 
         let usage = TokenUsage(inputTokens: 1000, outputTokens: 500)
         let breakdown = [CostBreakdownEntry(model: "claude-sonnet-4-6", inputTokens: 1000, outputTokens: 500, costUsd: 0.012)]
@@ -115,19 +81,35 @@ struct CostTrackerTests {
         #expect(summary.costBreakdown["claude-sonnet-4-6"]?.outputTokens == 500)
     }
 
+    @Test("finalizeWithSDKData with multiple models counts all")
+    func test_finalizeWithSDKData_multipleModels() async {
+        let tracker = CostTracker()
+
+        let usage = TokenUsage(inputTokens: 2000, outputTokens: 1000)
+        let breakdown = [
+            CostBreakdownEntry(model: "claude-sonnet-4-6", inputTokens: 1500, outputTokens: 800, costUsd: 0.01),
+            CostBreakdownEntry(model: "claude-opus-4-6", inputTokens: 500, outputTokens: 200, costUsd: 0.02),
+        ]
+
+        await tracker.finalizeWithSDKData(usage: usage, totalCostUsd: 0.03, costBreakdown: breakdown)
+
+        let summary = await tracker.getSummary()
+        #expect(summary.modelCalls == 2)
+        #expect(summary.totalTokens == 3000)
+        #expect(summary.estimatedCostUsd == 0.03)
+    }
+
     // MARK: - CostTelemetry
 
     @Test("getTelemetry returns correct telemetry struct")
     func test_getTelemetry() async {
         let tracker = CostTracker()
-        _ = await tracker.recordModelCall(model: "claude-sonnet-4-6")
         _ = await tracker.recordScreenshot()
 
         let usage = TokenUsage(inputTokens: 500, outputTokens: 200)
         await tracker.finalizeWithSDKData(usage: usage, totalCostUsd: 0.005, costBreakdown: [])
 
         let telemetry = await tracker.getTelemetry()
-        #expect(telemetry.modelCalls == 1)
         #expect(telemetry.totalTokens == 700)
         #expect(telemetry.estimatedCostUsd == 0.005)
         #expect(telemetry.screenshotCount == 1)

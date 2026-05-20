@@ -506,8 +506,9 @@ struct SDKIntegrationATDDTests {
             .init(subtype: .success, text: "Task completed", usage: nil, numTurns: 3, durationMs: 1500)
         )
         handler.handleMessage(message)
-        #expect(captured.contains(where: { $0.contains("Task completed") }),
-            "Terminal output should display final result")
+        // Success result no longer outputs text — it was already displayed via .assistant messages
+        #expect(captured.isEmpty,
+            "Terminal output should not duplicate result text")
     }
 
     @Test("JSON output handler produces JSON")

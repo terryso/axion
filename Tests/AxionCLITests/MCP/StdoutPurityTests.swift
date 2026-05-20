@@ -60,6 +60,10 @@ struct StdoutPurityTests {
         process.arguments = ["mcp"]
         process.standardOutput = stdoutPipe
         process.standardError = stderrPipe
+        process.environment = [
+            "AXION_API_KEY": "test-key-for-stdout-purity",
+            "HOME": "/tmp/axion-test-nohome-\(UUID().uuidString.prefix(8))",
+        ]
 
         try process.run()
 
