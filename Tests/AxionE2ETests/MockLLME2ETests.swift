@@ -54,7 +54,7 @@ struct MockLLME2ETests {
             .result(.init(subtype: .success, text: "Calculator launched", usage: nil, numTurns: 1, durationMs: 1500)),
         ]
 
-        let runner = E2EPipelineRunner(outputHandler: handler, tracer: nil)
+        let runner = E2EPipelineRunner(outputHandler: handler)
         await runner.run(messages: messages)
 
         // Verify output contains expected content
@@ -83,7 +83,7 @@ struct MockLLME2ETests {
             .result(.init(subtype: .success, text: "Dryrun complete — would launch Calculator.", usage: nil, numTurns: 1, durationMs: 200)),
         ]
 
-        let runner = E2EPipelineRunner(outputHandler: handler, tracer: nil)
+        let runner = E2EPipelineRunner(outputHandler: handler)
         await runner.run(messages: messages)
 
         // Verify output
@@ -128,7 +128,7 @@ struct MockLLME2ETests {
             E2EMessages.successResult(text: "Computed 1+2=3"),
         ]
 
-        let runner = E2EPipelineRunner(outputHandler: handler, tracer: nil)
+        let runner = E2EPipelineRunner(outputHandler: handler)
         await runner.run(messages: messages)
 
         // Verify all steps appear in output
@@ -161,7 +161,7 @@ struct MockLLME2ETests {
             E2EMessages.successResult(text: "Calculator launched after retry"),
         ]
 
-        let runner = E2EPipelineRunner(outputHandler: handler, tracer: nil)
+        let runner = E2EPipelineRunner(outputHandler: handler)
         await runner.run(messages: messages)
 
         #expect(capturing.contains("错误") || capturing.contains("error") || capturing.contains("App not found"),
@@ -185,7 +185,7 @@ struct MockLLME2ETests {
             E2EMessages.successResult(text: "Done"),
         ]
 
-        let runner = E2EPipelineRunner(outputHandler: handler, tracer: nil)
+        let runner = E2EPipelineRunner(outputHandler: handler)
         await runner.run(messages: messages)
 
         guard let jsonStr = capturing.lastJSON else {
@@ -205,67 +205,5 @@ struct MockLLME2ETests {
         let steps = try #require(json["steps"] as? [[String: Any]])
         #expect(!steps.isEmpty, "Should have recorded tool steps")
         #expect(steps[0]["tool"] as? String == "launch_app")
-    }
-
-    // MARK: - 6. Trace File Integrity
-
-    @Test("E2E trace file integrity")
-    func e2eTraceFileIntegrity() async throws {
-        let runId = "e2e-trace-\(UUID().uuidString.prefix(8))"
-
-        var traceConfig = AxionConfig.default
-        traceConfig.traceEnabled = true
-
-        let tempDir = FileManager.default.temporaryDirectory
-            .appendingPathComponent("AxionE2E-\(UUID().uuidString)")
-        try FileManager.default.createDirectory(at: tempDir, withIntermediateDirectories: true)
-        defer { try? FileManager.default.removeItem(at: tempDir) }
-
-        let tracer = try TraceRecorder(runId: runId, config: traceConfig, baseURL: tempDir)
-
-        await tracer.recordRunStart(runId: runId, task: "Open Calculator", mode: "standard")
-
-        let capturing = CapturingOutput()
-        let handler = SDKTerminalOutputHandler(write: capturing.write)
-        handler.displayRunStart(runId: runId, task: "Open Calculator")
-
-        let messages: [SDKMessage] = [
-            E2EMessages.assistant("Launching Calculator"),
-            E2EMessages.toolUse("launch_app", id: "t1", input: #"{"app_name":"Calculator"}"#),
-            E2EMessages.toolResult(id: "t1", content: #"{"pid":12345}"#),
-            E2EMessages.successResult(text: "Done"),
-        ]
-
-        let runner = E2EPipelineRunner(outputHandler: handler, tracer: tracer)
-        await runner.run(messages: messages)
-
-        await tracer.recordRunDone(totalSteps: 1, durationMs: 1500, replanCount: 0)
-        await tracer.close()
-
-        // Read trace file
-        let traceFile = tempDir
-            .appendingPathComponent(runId)
-            .appendingPathComponent("trace.jsonl")
-        let traceContent = try String(contentsOf: traceFile, encoding: .utf8)
-        let lines = traceContent.components(separatedBy: "\n").filter { !$0.isEmpty }
-
-        #expect(lines.count >= 5, "Trace should have multiple events")
-
-        // Parse and verify event types
-        var eventTypes: [String] = []
-        for line in lines {
-            let data = line.data(using: .utf8)!
-            let json = try #require(JSONSerialization.jsonObject(with: data) as? [String: Any])
-            if let event = json["event"] as? String {
-                eventTypes.append(event)
-            }
-        }
-
-        #expect(eventTypes.contains("run_start"), "Trace should contain run_start")
-        #expect(eventTypes.contains("assistant_message"), "Trace should contain assistant_message")
-        #expect(eventTypes.contains("tool_use"), "Trace should contain tool_use")
-        #expect(eventTypes.contains("tool_result"), "Trace should contain tool_result")
-        #expect(eventTypes.contains("result"), "Trace should contain result")
-        #expect(eventTypes.contains("run_done"), "Trace should contain run_done")
     }
 }

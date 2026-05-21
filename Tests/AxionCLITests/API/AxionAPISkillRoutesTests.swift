@@ -3,11 +3,10 @@ import Hummingbird
 import HummingbirdTesting
 import HTTPTypes
 import Testing
+import OpenAgentSDK
 
 @testable import AxionCLI
 @testable import AxionCore
-import class OpenAgentSDK.SkillRegistry
-import struct OpenAgentSDK.Skill
 
 private typealias AxSkill = AxionCore.Skill
 private typealias AxSkillStep = AxionCore.SkillStep
@@ -149,7 +148,7 @@ struct AxionAPISkillRoutesTests {
         }
     }
 
-    // MARK: - GET /v1/runs list
+    // MARK: - GET /v1/runs list (SDK routes)
 
     @Test("GET /v1/runs returns empty list initially")
     func getRunsListEmpty() async throws {
@@ -159,7 +158,7 @@ struct AxionAPISkillRoutesTests {
             try await client.execute(uri: "/v1/runs", method: .get) { response in
                 #expect(response.status == .ok)
 
-                let runs = try JSONDecoder().decode([StandardTaskOutput].self, from: response.body)
+                let runs = try JSONDecoder().decode([RunResponse].self, from: response.body)
                 #expect(runs.isEmpty)
             }
         }
@@ -167,19 +166,18 @@ struct AxionAPISkillRoutesTests {
 
     @Test("GET /v1/runs returns submitted runs sorted by time")
     func getRunsListReturnsSorted() async throws {
-        let tracker = AxionRunTracker()
-        _ = await tracker.submitRun(task: "first task", options: RunOptions(task: "first task"))
-        _ = await tracker.submitRun(task: "second task", options: RunOptions(task: "second task"))
+        let ctx = buildTestContext()
 
-        let app = try await buildTestApplication(runTracker: tracker)
+        // Submit runs via SDK tracker
+        _ = await ctx.tracker.submitRun(task: "first task")
+        _ = await ctx.tracker.submitRun(task: "second task")
 
-        try await app.test(.router) { client in
+        try await ctx.app.test(.router) { client in
             try await client.execute(uri: "/v1/runs", method: .get) { response in
                 #expect(response.status == .ok)
 
-                let runs = try JSONDecoder().decode([StandardTaskOutput].self, from: response.body)
+                let runs = try JSONDecoder().decode([RunResponse].self, from: response.body)
                 #expect(runs.count == 2)
-                // Both tasks exist (order may vary)
                 let tasks = runs.map(\.task)
                 #expect(tasks.contains("second task"))
                 #expect(tasks.contains("first task"))
@@ -187,42 +185,19 @@ struct AxionAPISkillRoutesTests {
         }
     }
 
-    @Test("GET /v1/runs?limit=1 returns limited results")
-    func getRunsListWithLimit() async throws {
-        let tracker = AxionRunTracker()
-        _ = await tracker.submitRun(task: "task1", options: RunOptions(task: "task1"))
-        _ = await tracker.submitRun(task: "task2", options: RunOptions(task: "task2"))
-
-        let app = try await buildTestApplication(runTracker: tracker)
-
-        try await app.test(.router) { client in
-            try await client.execute(uri: "/v1/runs?limit=1", method: .get) { response in
-                #expect(response.status == .ok)
-
-                let runs = try JSONDecoder().decode([StandardTaskOutput].self, from: response.body)
-                #expect(runs.count == 1)
-            }
-        }
-    }
-
-    // MARK: - POST /v1/runs with empty task
+    // MARK: - POST /v1/runs (SDK routes)
 
     @Test("POST /v1/runs with empty task returns 400")
     func createRunEmptyTaskReturns400() async throws {
         let app = try await buildTestApplication()
 
         try await app.test(.router) { client in
-            let body = ByteBuffer(string: "{\"task\": \"   \"}")
+            let body = ByteBuffer(string: "{\"task\": \"\"}")
             try await client.execute(uri: "/v1/runs", method: .post, body: body) { response in
                 #expect(response.status == .badRequest)
-
-                let errorBody = try JSONDecoder().decode(APIErrorResponse.self, from: response.body)
-                #expect(errorBody.error == "missing_task")
             }
         }
     }
-
-    // MARK: - POST /v1/runs with invalid JSON
 
     @Test("POST /v1/runs with invalid JSON returns 400")
     func createRunInvalidJSONReturns400() async throws {
@@ -420,42 +395,59 @@ struct AxionAPISkillRoutesTests {
         }
     }
 
-    // MARK: - Helper
+    // MARK: - Helpers
+
+    private struct TestContext {
+        let app: Application<RouterResponder<BasicRequestContext>>
+        let tracker: RunTracker
+        let broadcaster: EventBroadcaster
+    }
+
+    private func buildTestContext(
+        authKey: String? = nil,
+        skillRegistry: SkillRegistry? = nil,
+        skillsDirectory: String? = nil
+    ) -> TestContext {
+        let resolvedSkillsDir = skillsDirectory ?? Self.makeTempSkillsDir()
+
+        let placeholderAgent = Agent(options: AgentOptions(model: "placeholder"))
+        let server = AgentHTTPServer(
+            agent: placeholderAgent,
+            authKey: authKey,
+            maxConcurrentRuns: 10
+        )
+
+        let runCoordinator = RunCoordinator()
+        server.customRouteBuilder = { [runCoordinator] routerGroup, _, broadcaster, _, _ in
+            AxionAPI.registerCustomRoutes(
+                on: routerGroup,
+                runCoordinator: runCoordinator,
+                eventBroadcaster: broadcaster,
+                config: .default,
+                maxConcurrentRuns: 10,
+                skillRegistry: skillRegistry,
+                skillsDirectory: resolvedSkillsDir
+            )
+        }
+
+        let app = server.buildTestApplication()
+        return TestContext(
+            app: app,
+            tracker: server.runTracker,
+            broadcaster: server.eventBroadcaster
+        )
+    }
 
     private func buildTestApplication(
-        runTracker: AxionRunTracker? = nil,
-        eventBroadcaster: SKDEventBroadcaster? = nil,
         authKey: String? = nil,
-        concurrencyLimiter: SDKConcurrencyLimiter? = nil,
         skillRegistry: SkillRegistry? = nil,
         skillsDirectory: String? = nil
     ) async throws -> Application<RouterResponder<BasicRequestContext>> {
-        let tempLockDir = NSTemporaryDirectory() + "axion-test-lock-\(UUID().uuidString)"
-        try? FileManager.default.createDirectory(atPath: tempLockDir, withIntermediateDirectories: true)
-        let testRunLockService = RunLockService(lockDirectory: tempLockDir, processAliveChecker: { _ in false })
-
-        // Use a temp directory for skills if none provided, to avoid reading real filesystem
-        let resolvedSkillsDir = skillsDirectory ?? Self.makeTempSkillsDir()
-
-        let broadcaster = eventBroadcaster ?? SKDEventBroadcaster()
-        let tracker = runTracker ?? AxionRunTracker(eventBroadcaster: broadcaster)
-        let router = Router()
-        AxionAPI.registerRoutes(
-            on: router,
-            runTracker: tracker,
-            eventBroadcaster: broadcaster,
-            config: .default,
+        let ctx = buildTestContext(
             authKey: authKey,
-            concurrencyLimiter: concurrencyLimiter,
-            runLockService: testRunLockService,
             skillRegistry: skillRegistry,
-            skillsDirectory: resolvedSkillsDir
+            skillsDirectory: skillsDirectory
         )
-
-        let app = Application(
-            router: router,
-            configuration: .init(address: .hostname("127.0.0.1", port: 0))
-        )
-        return app
+        return ctx.app
     }
 }

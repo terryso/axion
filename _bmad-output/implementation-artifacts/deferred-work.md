@@ -25,3 +25,8 @@
 
 - batch_completed 事件类型缺失 — spec AC1 列出 batch_completed 但 Dev Notes 和 Tasks 中均未定义其数据结构。当前架构中 AgentRunner 不跟踪 batch 概念。spec ambiguity, 可在未来需求出现时添加。
 - RunTracker.print() 警告未使用日志系统 — Story 5.1 遗留代码，不归本 Story 负责。应在统一日志重构时处理。
+
+## Deferred from: Epic 21 Phase 2 code review (2026-05-21)
+
+- RunCompleteContextBox (`AgentBuilder.swift:11-13`) is `@unchecked Sendable` with a mutable `var context` — onRunComplete closure writes, RunOrchestrator reads. No synchronization. Currently safe because SDK stream processing is sequential, but fragile if SDK changes concurrency model.
+- Split-brain tracker IDs in ServerCommand.runHandler — RunCoordinator generates its own runId via `submitRun()`, then passes it to SDK's `tracker.updateRun(runId:)` which doesn't know that ID. SDK and Axion track runs independently. Tests pass because SDK routes and Axion custom routes are tested separately. Should be unified by either passing SDK's runId through to RunCoordinator or eliminating dual tracking.

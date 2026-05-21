@@ -8,55 +8,41 @@ import OpenAgentSDK
 // Disambiguate: AxionCore.Skill = recorded skill model, OpenAgentSDK.Skill = prompt skill model
 typealias RecordedSkill = AxionCore.Skill
 
-/// AxionAPI — Hummingbird route definitions for the Axion HTTP API.
-/// Provides REST endpoints for task submission, status queries, health checks,
-/// and SSE event streaming (Story 5.2).
+/// AxionAPI — Hummingbird route definitions for Axion-specific HTTP API routes.
+/// SDK handles health, runs, and SSE endpoints. Axion registers only:
+/// - GET /v1/capabilities
+/// - Settings routes (GET/POST/DELETE /v1/settings/api-key)
+/// - Skills routes (GET /v1/skills, GET /v1/skills/:name, POST /v1/skills/:name/run)
 enum AxionAPI {
 
     // MARK: - Route Registration
 
-    /// Register all API routes on the given router.
+    /// Register Axion-specific custom routes on the given router.
+    /// Called via SDK's `customRouteBuilder` hook after SDK registers its standard routes.
     /// - Parameters:
-    ///   - router: The Hummingbird router to register routes on.
-    ///   - runTracker: The shared RunTracker instance for task state management.
+    ///   - router: The Hummingbird v1 router group to register routes on.
+    ///   - runCoordinator: Axion's RunCoordinator for task state management.
     ///   - eventBroadcaster: The shared EventBroadcaster for SSE streaming.
     ///   - config: The loaded AxionConfig.
-    ///   - authKey: Optional Bearer token for authentication (nil = no auth).
-    ///   - concurrencyLimiter: Optional concurrency limiter for task execution.
-    static func registerRoutes(
-        on router: Router<BasicRequestContext>,
-        runTracker: AxionRunTracker,
+    ///   - skillRegistry: Optional SkillRegistry for prompt skill support.
+    static func registerCustomRoutes(
+        on router: RouterGroup<BasicRequestContext>,
+        runCoordinator: RunCoordinator,
         eventBroadcaster: OpenAgentSDK.EventBroadcaster,
         config: AxionConfig,
-        authKey: String? = nil,
-        concurrencyLimiter: OpenAgentSDK.ConcurrencyLimiter? = nil,
-        runLockService: RunLockService? = nil,
-        maxConcurrent: Int = 10,
-        configDirectory: String = ConfigManager.defaultConfigDirectory,
+        maxConcurrentRuns: Int = 10,
         skillRegistry: SkillRegistry? = nil,
+        configDirectory: String? = nil,
         skillsDirectory: String? = nil
     ) {
+        let resolvedConfigDir = configDirectory ?? ConfigManager.defaultConfigDirectory
         let resolvedSkillsDir = skillsDirectory ?? SkillCompileCommand.skillsDirectory()
-        let v1 = router.group("v1")
 
-        // GET /v1/health — no auth required
-        v1.get("health") { _, _ in
-            EditedResponse(
-                headers: [.contentType: "application/json"],
-                response: HealthResponse(
-                    status: "ok",
-                    version: AxionVersion.current
-                )
-            )
-        }
-
-        // Authenticated route group — SDK's AuthMiddleware handles nil authKey as passthrough
-        let v1Authed = v1.group().addMiddleware {
-            OpenAgentSDK.AuthMiddleware(authKey: authKey)
-        }
+        // No need to add AuthMiddleware here — SDK's AgentHTTPServer already applies it
+        // to the root router when authKey is set. Custom routes inherit that protection.
 
         // GET /v1/capabilities — discover Axion capabilities (Story 14.2)
-        v1Authed.get("capabilities") { _, _ in
+        router.get("capabilities") { _, _ in
             EditedResponse(
                 headers: [
                     .contentType: "application/json",
@@ -67,7 +53,7 @@ enum AxionAPI {
                     supportedRunStatuses: APIRunStatus.allCases.map(\.rawValue),
                     supportedResultKinds: TaskResultKind.allCases.map(\.rawValue),
                     availableTools: ToolNames.allToolNames,
-                    maxConcurrentRuns: maxConcurrent,
+                    maxConcurrentRuns: maxConcurrentRuns,
                     features: ["memory", "takeover", "fast_mode", "skills"]
                 )
             )
@@ -76,7 +62,7 @@ enum AxionAPI {
         // MARK: - Settings API Routes (Story 14.3)
 
         // GET /v1/settings/api-key — get API key status
-        v1Authed.get("settings/api-key") { _, _ in
+        router.get("settings/api-key") { _, _ in
             let (source, effectiveKey, available) = Self.resolveApiKeySource(config: config)
 
             return EditedResponse(
@@ -94,7 +80,7 @@ enum AxionAPI {
         }
 
         // POST /v1/settings/api-key — save API key
-        v1Authed.post("settings/api-key") { request, context in
+        router.post("settings/api-key") { request, context in
             let buffer: ByteBuffer
             do {
                 buffer = try await request.body.collect(upTo: context.maxUploadSize)
@@ -134,7 +120,7 @@ enum AxionAPI {
 
             // Load current config from file, update apiKey, save back
             var fileConfig: AxionConfig
-            let configPath = (configDirectory as NSString).appendingPathComponent("config.json")
+            let configPath = (resolvedConfigDir as NSString).appendingPathComponent("config.json")
             if let fileData = FileManager.default.contents(atPath: configPath),
                let decoded = try? JSONDecoder().decode(AxionConfig.self, from: fileData) {
                 fileConfig = decoded
@@ -142,7 +128,7 @@ enum AxionAPI {
                 fileConfig = config
             }
             fileConfig.apiKey = saveRequest.apiKey
-            try ConfigManager.saveConfigFile(fileConfig, toDirectory: configDirectory)
+            try ConfigManager.saveConfigFile(fileConfig, toDirectory: resolvedConfigDir)
 
             // Return status based on effective key (env may override)
             let env = ProcessInfo.processInfo.environment
@@ -169,10 +155,10 @@ enum AxionAPI {
         }
 
         // DELETE /v1/settings/api-key — clear API key
-        v1Authed.delete("settings/api-key") { _, _ in
+        router.delete("settings/api-key") { _, _ in
             // Load current config from file, clear apiKey, save back
             var fileConfig: AxionConfig
-            let configPath = (configDirectory as NSString).appendingPathComponent("config.json")
+            let configPath = (resolvedConfigDir as NSString).appendingPathComponent("config.json")
             if let fileData = FileManager.default.contents(atPath: configPath),
                let decoded = try? JSONDecoder().decode(AxionConfig.self, from: fileData) {
                 fileConfig = decoded
@@ -180,7 +166,7 @@ enum AxionAPI {
                 fileConfig = config
             }
             fileConfig.apiKey = nil
-            try ConfigManager.saveConfigFile(fileConfig, toDirectory: configDirectory)
+            try ConfigManager.saveConfigFile(fileConfig, toDirectory: resolvedConfigDir)
 
             let (source, _, available) = Self.resolveApiKeySource(config: fileConfig)
 
@@ -194,371 +180,10 @@ enum AxionAPI {
             )
         }
 
-        // GET /v1/runs — list runs (Story 10.2)
-        v1Authed.get("runs") { request, context in
-            let limitParam = request.uri.queryParameters["limit"].map { String($0) } ?? "20"
-            let limit = Int(limitParam) ?? 20
-
-            let allRuns = await runTracker.listRuns()
-            let sortedRuns = allRuns
-                .sorted { $0.submittedAt > $1.submittedAt }
-                .prefix(limit)
-
-            let responses = sortedRuns.map { run in
-                run.toStandardOutput()
-            }
-
-            let encoder = JSONEncoder()
-            encoder.outputFormatting = [.sortedKeys]
-            let data = try encoder.encode(responses)
-            let body = ByteBuffer(data: data)
-            return Response(
-                status: .ok,
-                headers: [.contentType: "application/json"],
-                body: .init(byteBuffer: body)
-            )
-        }
-
-        // POST /v1/runs
-        v1Authed.post("runs") { request, context in
-            // Read raw body first (can only be consumed once)
-            let buffer: ByteBuffer
-            do {
-                buffer = try await request.body.collect(upTo: context.maxUploadSize)
-            } catch {
-                throw AxionAPIError(
-                    status: .badRequest,
-                    error: APIErrorResponse(
-                        error: "invalid_request",
-                        message: "Failed to read request body."
-                    )
-                )
-            }
-
-            let data = Data(buffer: buffer)
-
-            // Decode request body
-            let createRequest: CreateRunRequest
-            do {
-                createRequest = try JSONDecoder().decode(CreateRunRequest.self, from: data)
-            } catch {
-                // Check if task field is missing specifically
-                // Decode as a generic JSON object to check for task key presence
-                if let jsonObject = try? JSONSerialization.jsonObject(with: data, options: []),
-                   let dict = jsonObject as? [String: Any],
-                   dict["task"] == nil {
-                    throw AxionAPIError(
-                        status: .badRequest,
-                        error: APIErrorResponse(
-                            error: "missing_task",
-                            message: "Request body must include a 'task' field."
-                        )
-                    )
-                }
-                throw AxionAPIError(
-                    status: .badRequest,
-                    error: APIErrorResponse(
-                        error: "invalid_request",
-                        message: "Failed to parse request body."
-                    )
-                )
-            }
-
-            // Validate task field is not empty
-            guard !createRequest.task.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
-                throw AxionAPIError(
-                    status: .badRequest,
-                    error: APIErrorResponse(
-                        error: "missing_task",
-                        message: "Request body must include a 'task' field."
-                    )
-                )
-            }
-
-            // Submit run to tracker
-            let runId = await runTracker.submitRun(
-                task: createRequest.task,
-                options: RunOptions(
-                    task: createRequest.task,
-                    maxSteps: createRequest.maxSteps,
-                    maxBatches: createRequest.maxBatches,
-                    allowForeground: createRequest.allowForeground
-                )
-            )
-
-            let activeRunLockService = runLockService ?? RunLockService()
-
-            // Synchronous lock check: reject immediately if desktop lock is held
-            let currentHolder = await activeRunLockService.readExistingLock()
-            if let holder = currentHolder, await activeRunLockService.isProcessAlive(holder.pid) {
-                await runTracker.updateRun(runId: runId, status: .failed, steps: [], durationMs: 0, replanCount: 0)
-                throw AxionAPIError(
-                    status: .conflict,
-                    error: APIErrorResponse(
-                        error: "run_locked",
-                        message: "Another live run (\(holder.runId)) is currently executing (pid \(holder.pid))."
-                    )
-                )
-            }
-
-            // Check concurrency limiter — determines running vs queued response
-            if let limiter = concurrencyLimiter {
-                let acquired = await limiter.tryAcquire()
-                if acquired {
-                    // Slot available immediately — launch agent in background (waits for desktop lock internally)
-                    let capturedConfig = config
-                    _ = _Concurrency.Task.detached {
-                        let locked = await activeRunLockService.waitForLock(runId: runId)
-                        guard locked else {
-                            await runTracker.updateRun(runId: runId, status: .failed, steps: [], durationMs: 0, replanCount: 0)
-                            await limiter.release()
-                            return
-                        }
-                        let result = await ApiRunner.runAgent(
-                            config: capturedConfig,
-                            task: createRequest.task,
-                            options: RunOptions(
-                                task: createRequest.task,
-                                maxSteps: createRequest.maxSteps,
-                                maxBatches: createRequest.maxBatches,
-                                allowForeground: createRequest.allowForeground
-                            ),
-                            runId: runId,
-                            eventBroadcaster: eventBroadcaster,
-                            runTracker: runTracker,
-                            completion: { _, _, _, _, _, _, _ in }
-                        )
-                        await runTracker.updateRun(
-                            runId: runId,
-                            status: result.finalStatus,
-                            steps: result.stepSummaries,
-                            durationMs: result.durationMs,
-                            replanCount: result.replanCount,
-                            costTelemetry: result.costTelemetry
-                        )
-                        await limiter.release()
-                        await activeRunLockService.release()
-                    }
-
-                    var resp = try context.responseEncoder.encode(
-                        StandardTaskOutput(
-                            runId: runId,
-                            task: createRequest.task,
-                            status: .running,
-                            startedAt: ISO8601DateFormatter().string(from: Date())
-                        ),
-                        from: request,
-                        context: context
-                    )
-                    resp.status = .accepted
-                    return resp
-                }
-
-                // Queue full — return queued response immediately, background task will execute when slot available
-                let position = await limiter.queueDepth + 1
-                let capturedConfig = config
-                _ = _Concurrency.Task.detached {
-                    await limiter.acquire()
-                    let locked = await activeRunLockService.waitForLock(runId: runId)
-                    guard locked else {
-                        await runTracker.updateRun(runId: runId, status: .failed, steps: [], durationMs: 0, replanCount: 0)
-                        await limiter.release()
-                        return
-                    }
-                    let result = await ApiRunner.runAgent(
-                        config: capturedConfig,
-                        task: createRequest.task,
-                        options: RunOptions(
-                            task: createRequest.task,
-                            maxSteps: createRequest.maxSteps,
-                            maxBatches: createRequest.maxBatches,
-                            allowForeground: createRequest.allowForeground
-                        ),
-                        runId: runId,
-                        eventBroadcaster: eventBroadcaster,
-                        runTracker: runTracker,
-                        completion: { _, _, _, _, _, _, _ in }
-                    )
-                    await runTracker.updateRun(
-                        runId: runId,
-                        status: result.finalStatus,
-                        steps: result.stepSummaries,
-                        durationMs: result.durationMs,
-                        replanCount: result.replanCount,
-                        costTelemetry: result.costTelemetry
-                    )
-                    await limiter.release()
-                    await activeRunLockService.release()
-                }
-
-                let queuedResp = QueuedRunResponse(runId: runId, status: "queued", position: position)
-                var response = try context.responseEncoder.encode(queuedResp, from: request, context: context)
-                response.status = .accepted
-                return response
-            }
-
-            // No concurrency limiter — wait for desktop lock in background
-            let capturedConfig = config
-            _ = _Concurrency.Task.detached {
-                let locked = await activeRunLockService.waitForLock(runId: runId)
-                guard locked else {
-                    await runTracker.updateRun(runId: runId, status: .failed, steps: [], durationMs: 0, replanCount: 0)
-                    return
-                }
-                let result = await ApiRunner.runAgent(
-                    config: capturedConfig,
-                    task: createRequest.task,
-                    options: RunOptions(
-                        task: createRequest.task,
-                        maxSteps: createRequest.maxSteps,
-                        maxBatches: createRequest.maxBatches,
-                        allowForeground: createRequest.allowForeground
-                    ),
-                    runId: runId,
-                    eventBroadcaster: eventBroadcaster,
-                    runTracker: runTracker,
-                    completion: { _, _, _, _, _, _, _ in }
-                )
-                await runTracker.updateRun(
-                    runId: runId,
-                    status: result.finalStatus,
-                    steps: result.stepSummaries,
-                    durationMs: result.durationMs,
-                    replanCount: result.replanCount,
-                    costTelemetry: result.costTelemetry
-                )
-                await activeRunLockService.release()
-            }
-
-            var resp = try context.responseEncoder.encode(
-                StandardTaskOutput(
-                    runId: runId,
-                    task: createRequest.task,
-                    status: .running,
-                    startedAt: ISO8601DateFormatter().string(from: Date())
-                ),
-                from: request,
-                context: context
-            )
-            resp.status = .accepted
-            return resp
-        }
-
-        // GET /v1/runs/:runId
-        v1Authed.get("runs/:runId") { request, context in
-            guard let runId = context.parameters.get("runId") else {
-                throw AxionAPIError(
-                    status: .badRequest,
-                    error: APIErrorResponse(
-                        error: "missing_run_id",
-                        message: "Run ID is required."
-                    )
-                )
-            }
-
-            guard let run = await runTracker.getRun(runId: runId) else {
-                throw AxionAPIError(
-                    status: .notFound,
-                    error: APIErrorResponse(
-                        error: "run_not_found",
-                        message: "Run '\(runId)' not found."
-                    )
-                )
-            }
-
-            let response = run.toStandardOutput()
-
-            return EditedResponse(
-                headers: [.contentType: "application/json"],
-                response: response
-            )
-        }
-
-        // GET /v1/runs/:runId/events — SSE endpoint (Story 5.2)
-        v1Authed.get("runs/:runId/events") { request, context in
-            guard let runId = context.parameters.get("runId") else {
-                throw AxionAPIError(
-                    status: .badRequest,
-                    error: APIErrorResponse(
-                        error: "missing_run_id",
-                        message: "Run ID is required."
-                    )
-                )
-            }
-
-            let run = await runTracker.getRun(runId: runId)
-            guard run != nil else {
-                throw AxionAPIError(
-                    status: .notFound,
-                    error: APIErrorResponse(
-                        error: "run_not_found",
-                        message: "Run '\(runId)' not found."
-                    )
-                )
-            }
-
-            // Check if the run is already completed — if so, replay from buffer and close
-            let isCompleted = run?.status != .running
-
-            if isCompleted {
-                // Replay buffered events and close immediately (AC4)
-                let replayEvents = await eventBroadcaster.getReplayBuffer(runId: runId)
-                var sseOutput = ""
-                for (index, event) in replayEvents.enumerated() {
-                    do {
-                        let sseString = try event.encodeToSSE(sequenceId: index + 1)
-                        sseOutput += sseString
-                    } catch {
-                        // If a single event fails to encode, emit an error placeholder
-                        sseOutput += "event: error\ndata: {\"message\":\"Replay event encoding failed at index \(index)\"}\nid: \(index + 1)\n\n"
-                    }
-                }
-                let body = ByteBuffer(string: sseOutput)
-                return Response(
-                    status: .ok,
-                    headers: [
-                        .contentType: "text/event-stream",
-                        .cacheControl: "no-cache",
-                        .connection: "keep-alive",
-                    ],
-                    body: .init(byteBuffer: body)
-                )
-            } else {
-                // Live streaming: subscribe and stream events via AsyncStream
-                let eventStream = await eventBroadcaster.subscribe(runId: runId)
-
-                // Convert AsyncStream<AgentSSEEvent> to AsyncSequence<ByteBuffer>
-                // Use an iterator to generate sequential SSE event IDs
-                var sequenceCounter = 0
-                let bufferStream = eventStream.map { (event: AgentSSEEvent) -> ByteBuffer in
-                    sequenceCounter += 1
-                    do {
-                        let sseString = try event.encodeToSSE(sequenceId: sequenceCounter)
-                        return ByteBuffer(string: sseString)
-                    } catch {
-                        // Emit a minimal error event so the client is aware of encoding failure
-                        let fallback = "event: error\ndata: {\"message\":\"SSE encoding failed\"}\nid: \(sequenceCounter)\n\n"
-                        return ByteBuffer(string: fallback)
-                    }
-                }
-
-                let body = ResponseBody(asyncSequence: bufferStream)
-                return Response(
-                    status: .ok,
-                    headers: [
-                        .contentType: "text/event-stream",
-                        .cacheControl: "no-cache",
-                        .connection: "keep-alive",
-                    ],
-                    body: body
-                )
-            }
-        }
-
         // MARK: - Skill API Routes (Story 10.3, Story 18.3)
 
         // GET /v1/skills — list all skills (merged dual sources)
-        v1Authed.get("skills") { _, _ in
+        router.get("skills") { _, _ in
             let summaries = Self.loadAllSkillSummaries(registry: skillRegistry, skillsDir: resolvedSkillsDir)
             let encoder = JSONEncoder()
             encoder.outputFormatting = [.sortedKeys]
@@ -572,7 +197,7 @@ enum AxionAPI {
         }
 
         // GET /v1/skills/:name — skill detail (dual source lookup)
-        v1Authed.get("skills/:name") { _, context in
+        router.get("skills/:name") { _, context in
             guard let name = context.parameters.get("name") else {
                 throw AxionAPIError(
                     status: .badRequest,
@@ -618,7 +243,7 @@ enum AxionAPI {
         }
 
         // POST /v1/skills/:name/run — execute a skill (dual path: prompt vs recorded)
-        v1Authed.post("skills/:name/run") { request, context in
+        router.post("skills/:name/run") { request, context in
             guard let name = context.parameters.get("name") else {
                 throw AxionAPIError(
                     status: .badRequest,
@@ -644,118 +269,35 @@ enum AxionAPI {
                     task = "Execute skill \(promptSkill.name)"
                 }
 
-                // Submit run via RunTracker
+                // Submit run via RunCoordinator
                 let taskDescription = "技能(prompt): \(promptSkill.name) — \(task)"
-                let runId = await runTracker.submitRun(
+                let runId = await runCoordinator.submitRun(
                     task: taskDescription,
-                    options: RunOptions(task: taskDescription)
+                    request: OpenAgentSDK.CreateRunRequest(task: taskDescription)
                 )
 
-                let activeRunLockService = runLockService ?? RunLockService()
-
-                // Check concurrency limiter — determines running vs queued response
-                if let limiter = concurrencyLimiter {
-                    let acquired = await limiter.tryAcquire()
-                    if acquired {
-                        let capturedConfig = config
-                        let capturedSkill = promptSkill
-                        _ = _Concurrency.Task.detached {
-                            let locked = await activeRunLockService.waitForLock(runId: runId)
-                            guard locked else {
-                                await runTracker.updateRun(runId: runId, status: .failed, steps: [], durationMs: 0, replanCount: 0)
-                                await limiter.release()
-                                return
-                            }
-                            let result = await ApiRunner.runSkillAgent(
-                                skill: capturedSkill,
-                                task: task,
-                                config: capturedConfig,
-                                runId: runId,
-                                eventBroadcaster: eventBroadcaster,
-                                runTracker: runTracker,
-                                verbose: false,
-                                completion: { _, _, _, _, _, _, _ in }
-                            )
-                            await runTracker.updateRun(
-                                runId: runId,
-                                status: result.finalStatus,
-                                steps: result.stepSummaries,
-                                durationMs: result.durationMs,
-                                replanCount: result.replanCount,
-                                costTelemetry: result.costTelemetry
-                            )
-                            await limiter.release()
-                            await activeRunLockService.release()
-                        }
-                    } else {
-                        // Queue full — queue in background
-                        let position = await limiter.queueDepth + 1
-                        let capturedConfig = config
-                        let capturedSkill = promptSkill
-                        _ = _Concurrency.Task.detached {
-                            await limiter.acquire()
-                            let locked = await activeRunLockService.waitForLock(runId: runId)
-                            guard locked else {
-                                await runTracker.updateRun(runId: runId, status: .failed, steps: [], durationMs: 0, replanCount: 0)
-                                await limiter.release()
-                                return
-                            }
-                            let result = await ApiRunner.runSkillAgent(
-                                skill: capturedSkill,
-                                task: task,
-                                config: capturedConfig,
-                                runId: runId,
-                                eventBroadcaster: eventBroadcaster,
-                                runTracker: runTracker,
-                                verbose: false,
-                                completion: { _, _, _, _, _, _, _ in }
-                            )
-                            await runTracker.updateRun(
-                                runId: runId,
-                                status: result.finalStatus,
-                                steps: result.stepSummaries,
-                                durationMs: result.durationMs,
-                                replanCount: result.replanCount,
-                                costTelemetry: result.costTelemetry
-                            )
-                            await limiter.release()
-                            await activeRunLockService.release()
-                        }
-                        let queuedResp = QueuedRunResponse(runId: runId, status: "queued", position: position)
-                        var response = try context.responseEncoder.encode(queuedResp, from: request, context: context)
-                        response.status = .accepted
-                        return response
-                    }
-                } else {
-                    // No concurrency limiter — wait for desktop lock in background
-                    let capturedConfig = config
-                    let capturedSkill = promptSkill
-                    _ = _Concurrency.Task.detached {
-                        let locked = await activeRunLockService.waitForLock(runId: runId)
-                        guard locked else {
-                            await runTracker.updateRun(runId: runId, status: .failed, steps: [], durationMs: 0, replanCount: 0)
-                            return
-                        }
-                        let result = await ApiRunner.runSkillAgent(
-                            skill: capturedSkill,
-                            task: task,
-                            config: capturedConfig,
-                            runId: runId,
-                            eventBroadcaster: eventBroadcaster,
-                            runTracker: runTracker,
-                            verbose: false,
-                            completion: { _, _, _, _, _, _, _ in }
-                        )
-                        await runTracker.updateRun(
-                            runId: runId,
-                            status: result.finalStatus,
-                            steps: result.stepSummaries,
-                            durationMs: result.durationMs,
-                            replanCount: result.replanCount,
-                            costTelemetry: result.costTelemetry
-                        )
-                        await activeRunLockService.release()
-                    }
+                // Execute skill agent in background
+                let capturedConfig = config
+                let capturedSkill = promptSkill
+                _ = _Concurrency.Task.detached {
+                    let result = await ApiRunner.runSkillAgent(
+                        skill: capturedSkill,
+                        task: task,
+                        config: capturedConfig,
+                        runId: runId,
+                        eventBroadcaster: eventBroadcaster,
+                        runTracker: runCoordinator,
+                        verbose: false,
+                        completion: { _, _, _, _, _, _, _ in }
+                    )
+                    await runCoordinator.updateRun(
+                        runId: runId,
+                        status: result.finalStatus,
+                        steps: result.stepSummaries,
+                        durationMs: result.durationMs,
+                        replanCount: result.replanCount,
+                        costTelemetry: result.costTelemetry
+                    )
                 }
 
                 let response = SkillRunResponse(runId: runId, status: "running")
@@ -819,11 +361,11 @@ enum AxionAPI {
                 }
             }
 
-            // Submit run via RunTracker — skill execution in background
+            // Submit run via RunCoordinator — skill execution in background
             let taskDescription = "技能: \(skill.name)"
-            let runId = await runTracker.submitRun(
+            let runId = await runCoordinator.submitRun(
                 task: taskDescription,
-                options: RunOptions(task: taskDescription)
+                request: OpenAgentSDK.CreateRunRequest(task: taskDescription)
             )
 
             let capturedConfig = config
@@ -836,7 +378,7 @@ enum AxionAPI {
                     runId: runId,
                     eventBroadcaster: eventBroadcaster
                 )
-                await runTracker.updateRun(
+                await runCoordinator.updateRun(
                     runId: runId,
                     status: result.finalStatus,
                     steps: result.stepSummaries,

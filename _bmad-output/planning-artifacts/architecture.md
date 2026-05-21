@@ -109,12 +109,12 @@ axion/
 │   │   ├── main.swift               # 入口，ArgumentParser 根命令
 │   │   ├── Commands/                # 子命令：RunCommand, SetupCommand, DoctorCommand, ServerCommand, McpCommand, MemoryCommand
 │   │   ├── Planner/                 # 规划引擎：LLM 调用、plan 解析、prompt 管理
-│   │   ├── Executor/                # 执行引擎：步骤执行、MCP 调用、占位符解析
-│   │   ├── Verifier/                # 验证引擎：截图/AX 验证、stopWhen 评估 + 视觉增量检查（Epic 13）
+│   │   ├── Executor/                # [已删除 — Epic 20] 执行引擎已由 SDK Agent Loop 替换
+│   │   ├── Verifier/                # [已删除 — Epic 20] 验证引擎已由 SDK Agent Loop 替换
 │   │   ├── Services/                # 运行时服务：RunLockService, SeatActivityMonitor, AgentBuilder, RunOrchestrator, SafetyHookFactory, MCPConfigResolver
 │   │   ├── Config/                  # 配置管理：读写 ~/.axion/config.json
 │   │   ├── Trace/                   # Trace 记录器：运行轨迹持久化
-│   │   ├── Output/                  # 输出格式化：终端进度、JSON 输出
+│   │   ├── Output/                  # [已删除 — Epic 21] 输出格式化已迁移到 Commands/SDKOutputHandlers.swift
 │   │   ├── Memory/                  # App Memory 系统（Epic 4 + Epic 12 + Epic 15）：跨任务学习 + 知识生命周期 + Takeover 学习
 │   │   ├── Skills/                  # Epic 18: Axion 专有内置桌面技能定义
 │   │   ├── API/                     # Epic 5: HTTP API Server（Epic 18: Skill 触发端点 + runSkillAgent）
@@ -798,16 +798,14 @@ axion/
 │   │   │   └── VisualDeltaTracker.swift        # Epic 13: 视觉增量检查 actor
 │   │   ├── Config/
 │   │   │   ├── ConfigManager.swift            # FR4–FR5: 分层配置加载
-│   │   │   └── KeychainStore.swift            # D1: API Key 安全存储
+│   │   │   └── # KeychainStore.swift 已删除 — API Key 改用 config.json 存储
 │   │   ├── Helper/
 │   │   │   ├── HelperProcessManager.swift     # D8: Helper 进程启停管理
 │   │   │   ├── HelperMCPClientAdapter.swift   # Epic 17: Helper MCP 客户端适配器（共享）
 │   │   │   └── HelperPathResolver.swift       # Helper 二进制路径解析（PATH + Homebrew + .build）
 │   │   ├── Trace/
 │   │   │   └── TraceRecorder.swift            # D7/NFR20: JSONL trace 记录
-│   │   └── Output/
-│   │       ├── TerminalOutput.swift            # [已删除 — Epic 21] 替换为 SDKOutputHandlers.swift
-│   │       └── JSONOutput.swift               # [已删除 — Epic 21] 替换为 SDKOutputHandlers.swift
+│   │   └── Output/                  # [directory deleted — Epic 21] all output handling now in Commands/SDKOutputHandlers.swift
 │   │   ├── Memory/                              # Epic 4 + 12 + 15 + 21: App Memory 系统（8 desktop-specific files）
 │   │   │   ├── AppMemoryFact.swift              # Epic 12: 生命周期模型 + djb2 factId
 │   │   │   ├── AppMemoryExtractor.swift        # 从消息流提取 App 操作摘要（+ extractFacts + classifyKind）
@@ -821,11 +819,12 @@ axion/
 │   │   │   ├── ApiRunner.swift                # Epic 21: Agent 执行封装（+ runSkillAgent + processStream）
 │   │   │   ├── AxionRunTracker.swift          # Epic 21: wraps SDK RunTracker
 │   │   │   ├── AxionAPI.swift                 # Hummingbird 路由注册
-│   │   │   ├── EventBroadcaster.swift         # SSE 事件广播 + 事件持久化
 │   │   │   ├── AxionRunPersistence.swift      # Epic 21: wraps SDK persistence
 │   │   │   ├── AxionRunRecovery.swift         # Epic 21: wraps SDK recovery
 │   │   │   ├── SkillAPIRunner.swift           # Epic 18: skill execution via API
-│   │   │   └── Models/APITypes.swift          # API 请求/响应模型（StandardTaskOutput, CapabilitiesResponse, etc.）
+│   │   │   └── Models/
+│   │   │       ├── APITypes.swift          # API 请求/响应模型（StandardTaskOutput, CapabilitiesResponse, etc.）
+│   │   │       └── CostTypes.swift        # Epic 21: CostTelemetry type for API response compat (moved from CostTracker)
 │   │   ├── MCP/                                # Epic 6: MCP Server Mode（uses AgentBuilder.BuildResult）
 │   │   │   ├── MCPServerRunner.swift          # MCP 编排器
 │   │   │   ├── RunTaskTool.swift              # run_task 工具实现
@@ -1047,13 +1046,13 @@ AxionBar ← SwiftUI + AppKit（独立 macOS App）
 | FR68 | AgentOptions (SDK) + RunCommand.swift | --max-model-calls/--max-screenshots 精细预算控制（Epic 13，Epic 21 迁移到 SDK） |
 | FR69 | AgentOptions (SDK) + TraceRecorder.swift + ApiRunner.swift | 成本遥测：model_call trace + API cost_telemetry（Epic 13，Epic 21 迁移到 SDK） |
 | FR70 | SeatActivityMonitor.swift + RunCommand.swift + ApiRunner.swift | 桌面活动检测与学习保护（Epic 13） |
-| FR71 | APITypes.swift + AxionAPI.swift + RunTracker.swift + ApiRunner.swift | StandardTaskOutput 统一 API 输出契约（Epic 14） |
+| FR71 | APITypes.swift + AxionAPI.swift + AxionRunTracker.swift + ApiRunner.swift | StandardTaskOutput 统一 API 输出契约（Epic 14） |
 | FR72 | APITypes.swift + AxionAPI.swift | Capabilities 端点：能力发现（Epic 14） |
 | FR73 | APITypes.swift + AxionAPI.swift + DoctorCommand.swift | Settings API：HTTP 配置管理（Epic 14） |
 | FR74 | TakeoverLearningService.swift + RunCommand.swift + MemoryLearnTakeoverCommand.swift | Takeover 经验自动学习：接管经验→Memory（affordance/avoid）（Epic 15） |
 | FR75 | TakeoverMarker.swift + TakeoverIO.swift + RunCommand.swift + TraceRecorder.swift | Takeover 结构化标记：InterventionReason 分类 + 用户反馈 + duration 计时（Epic 15） |
 | FR76 | DaemonService.swift + DaemonCommand.swift + ServerCommand.swift | launchd Daemon：开机自启守护进程 + 崩溃自动重启（Epic 16） |
-| FR77 | RunPersistenceService.swift + RunRecoveryService.swift + RunTracker.swift + EventBroadcaster.swift + ServerCommand.swift | 运行状态恢复：磁盘持久化 + 启动恢复 + SSE 历史重放（Epic 16） |
+| FR77 | AxionRunPersistence.swift + AxionRunRecovery.swift + AxionRunTracker.swift + SDK EventBroadcaster + ServerCommand.swift | 运行状态恢复：磁盘持久化 + 启动恢复 + SSE 历史重放（Epic 16, Epic 21 迁移到 SDK wrappers） |
 | FR78 | RunCommand.swift + SkillRegistry + SkillLoader | Skill 加载：多目录技能发现与注册（Epic 17） |
 | FR79 | RunCommand.swift + SkillTool + SkillLookupService | 显式技能触发：`/skill-name` 语法解析 + promptTemplate/toolRestrictions/modelOverride 注入（Epic 17） |
 | FR80 | RunCommand.swift + SkillTool + formatSkillsForPrompt | 隐式技能触发：LLM 自动匹配 TRIGGER 条件（Epic 17） |
@@ -1072,7 +1071,7 @@ AxionBar ← SwiftUI + AppKit（独立 macOS App）
 | 可观测性 | AxionCLI/Trace/TraceRecorder.swift | JSONL trace |
 | 输出格式 | AxionCLI/Commands/SDKOutputHandlers.swift | SDKTerminalOutputHandler + SDKJSONOutputHandler |
 | Memory 系统 | AxionCLI/Memory/ | App 操作经验积累 + Planner 上下文注入 + Takeover 学习（Epic 15） |
-| Daemon 与持久化 | AxionCLI/Services/DaemonService.swift + AxionCLI/API/RunPersistenceService.swift + RunRecoveryService.swift | launchd 守护进程 + 任务状态持久化 + 启动恢复（Epic 16） |
+| Daemon 与持久化 | AxionCLI/Services/DaemonService.swift + AxionCLI/API/AxionRunPersistence.swift + AxionRunRecovery.swift | launchd 守护进程 + 任务状态持久化 + 启动恢复（Epic 16, Epic 21 SDK wrappers） |
 
 ### 集成点
 

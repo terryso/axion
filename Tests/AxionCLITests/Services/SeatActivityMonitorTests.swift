@@ -240,12 +240,4 @@ struct SeatActivityMonitorTests {
             #expect(desc.contains("cursor="))
         }
     }
-
-    // MARK: - Trace event constants
-
-    @Test("TraceEventType constants for seat activity events")
-    func test_traceEventType_constants() {
-        #expect(TraceRecorder.TraceEventType.externalActivityDetected == "external_activity_detected")
-        #expect(TraceRecorder.TraceEventType.seatBaseline == "seat_baseline")
-    }
 }

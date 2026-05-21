@@ -185,50 +185,15 @@ enum E2EMessages {
 // MARK: - E2E Pipeline Runner
 
 /// Runs the full message-handling pipeline (as used in RunCommand.run()) with mock agent messages.
-/// This tests the output handler + trace recording path without a real LLM.
+/// This tests the output handler path without a real LLM.
 struct E2EPipelineRunner {
     let outputHandler: SDKMessageOutputHandler
-    let tracer: TraceRecorder?
 
     func run(messages: [SDKMessage]) async {
         let stream = mockAgentStream(messages: messages)
         for await message in stream {
             outputHandler.handle(message)
-            await recordToTrace(message: message)
         }
         outputHandler.displayCompletion()
-    }
-
-    private func recordToTrace(message: SDKMessage) async {
-        guard let tracer else { return }
-        switch message {
-        case .assistant(let data):
-            await tracer.record(event: "assistant_message", payload: [
-                "text": String(data.text.prefix(200)),
-                "model": data.model,
-                "stopReason": data.stopReason,
-            ])
-        case .toolUse(let data):
-            await tracer.record(event: "tool_use", payload: [
-                "tool": data.toolName,
-                "toolUseId": data.toolUseId,
-            ])
-        case .toolResult(let data):
-            await tracer.record(event: "tool_result", payload: [
-                "toolUseId": data.toolUseId,
-                "isError": data.isError,
-                "content": String(data.content.prefix(200)),
-            ])
-        case .result(let data):
-            await tracer.record(event: "result", payload: [
-                "subtype": data.subtype.rawValue,
-                "numTurns": data.numTurns,
-                "durationMs": data.durationMs,
-            ])
-        case .partialMessage:
-            break
-        default:
-            break
-        }
     }
 }

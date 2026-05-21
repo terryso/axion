@@ -97,12 +97,12 @@ struct RunTaskToolTests {
         }
     }
 
-    private func createTool() -> (RunTaskTool, AxionRunTracker, TaskQueue) {
+    private func createTool() -> (RunTaskTool, RunCoordinator, TaskQueue) {
         let tempLockDir = NSTemporaryDirectory() + "axion-test-lock-\(UUID().uuidString)"
         try? FileManager.default.createDirectory(atPath: tempLockDir, withIntermediateDirectories: true)
         let testRunLockService = RunLockService(lockDirectory: tempLockDir, processAliveChecker: { _ in false })
 
-        let tracker = AxionRunTracker()
+        let tracker = RunCoordinator()
         let queue = TaskQueue()
         let agent = createAgent(options: AgentOptions(
             apiKey: "test-key",

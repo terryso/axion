@@ -3,8 +3,6 @@ import Foundation
 
 import AxionCore
 
-// MARK: - Check Models
-
 /// 检查结果状态
 enum CheckStatus: Equatable {
     case ok
@@ -27,8 +25,6 @@ struct DoctorReport: Equatable {
 
     var failedCount: Int { results.filter { $0.status == .fail }.count }
 }
-
-// MARK: - DoctorCommand
 
 struct DoctorCommand: ParsableCommand {
     static let configuration = CommandConfiguration(
@@ -123,8 +119,6 @@ struct DoctorCommand: ParsableCommand {
 
         return report
     }
-
-    // MARK: - Private Check Methods
 
     private static func checkConfigFile(at path: String) -> (result: CheckResult, config: AxionConfig?) {
         let fm = FileManager.default

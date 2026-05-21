@@ -14,8 +14,6 @@ struct RunMemoryProcessor {
     private typealias SDKMemoryLifecycleService = OpenAgentSDK.MemoryLifecycleService
     private typealias SDKMemoryFactStatus = OpenAgentSDK.MemoryFactStatus
 
-    // MARK: - Pre-run
-
     /// Demotion interval: 30 days in seconds.
     private static let demotionInterval: TimeInterval = 30 * 24 * 60 * 60
 
@@ -45,8 +43,6 @@ struct RunMemoryProcessor {
         }
     }
 
-    // MARK: - Post-run
-
     /// Context for a completed takeover event.
     struct TakeoverEventContext: Sendable {
         let issue: String
@@ -70,8 +66,7 @@ struct RunMemoryProcessor {
         externallyModified: Bool,
         takeoverEvent: TakeoverEventContext?,
         runSucceeded: Bool,
-        runCompleted: Bool,
-        tracer: TraceRecorder?
+        runCompleted: Bool
     ) async {
         if noMemory { return }
 
@@ -159,8 +154,23 @@ struct RunMemoryProcessor {
                         try await memoryStore.save(domain: domain, knowledge: profileEntry)
                     }
 
-                    let tracker = FamiliarityTracker()
-                    try await tracker.checkAndUpdateFamiliarity(domain: domain, store: memoryStore)
+                    // Familiarity tracking — inline from merged FamiliarityTracker
+                    if profile.isFamiliar {
+                        let existingFamiliar = try await memoryStore.query(
+                            domain: domain,
+                            filter: KnowledgeQueryFilter(tags: ["familiar"])
+                        )
+                        if existingFamiliar.isEmpty {
+                            let familiarEntry = KnowledgeEntry(
+                                id: UUID().uuidString,
+                                content: "App \(domain) 已熟悉（累计 \(profile.successfulRuns) 次成功操作）",
+                                tags: ["app:\(domain)", "familiar"],
+                                createdAt: Date(),
+                                sourceRunId: nil
+                            )
+                            try await memoryStore.save(domain: domain, knowledge: familiarEntry)
+                        }
+                    }
                 } catch {
                     fputs("[axion] warning: profile analysis failed for \(domain): \(error.localizedDescription)\n", stderr)
                 }
@@ -192,7 +202,6 @@ struct RunMemoryProcessor {
                 bundleId: domain,
                 task: task
             )
-            await tracer?.record(event: TraceRecorder.TraceEventType.takeover, payload: marker.toDictionary())
 
             await takeoverService.recordTakeoverLearning(
                 bundleId: domain,
@@ -205,8 +214,6 @@ struct RunMemoryProcessor {
             )
         }
     }
-
-    // MARK: - Helpers
 
     /// Infer the active app domain from collected tool-use pairs.
     static func inferDomain(

@@ -184,37 +184,6 @@ struct APITypesTests {
         #expect(decoded.steps.count == 1)
     }
 
-    @Test("RunOptions codable round trip preserves all fields")
-    func runOptionsCodableRoundTripPreservesAllFields() throws {
-        let options = RunOptions(
-            task: "open calculator",
-            maxSteps: 10,
-            maxBatches: 3,
-            allowForeground: true
-        )
-
-        let data = try JSONEncoder().encode(options)
-        let decoded = try JSONDecoder().decode(RunOptions.self, from: data)
-
-        #expect(decoded.task == "open calculator")
-        #expect(decoded.maxSteps == 10)
-        #expect(decoded.maxBatches == 3)
-        #expect(decoded.allowForeground == true)
-    }
-
-    @Test("RunOptions optional fields default to nil")
-    func runOptionsOptionalFieldsDefaultToNil() throws {
-        let options = RunOptions(task: "open calculator")
-
-        let data = try JSONEncoder().encode(options)
-        let decoded = try JSONDecoder().decode(RunOptions.self, from: data)
-
-        #expect(decoded.task == "open calculator")
-        #expect(decoded.maxSteps == nil)
-        #expect(decoded.maxBatches == nil)
-        #expect(decoded.allowForeground == nil)
-    }
-
     @Test("SkillSummaryResponse codable round trip")
     func skillSummaryResponseCodableRoundTrip() throws {
         let summary = SkillSummaryResponse(
@@ -495,70 +464,6 @@ struct APITypesTests {
 
         #expect(json.contains("\"available_actions\""))
         #expect(json.contains("\"blocking_issue\""))
-    }
-
-    // MARK: - TrackedRun.toStandardOutput() Tests
-
-    @Test("TrackedRun toStandardOutput maps fields correctly")
-    func trackedRunToStandardOutputMapsFieldsCorrectly() throws {
-        let run = TrackedRun(
-            runId: "20260517-abc",
-            task: "open calculator",
-            status: .completed,
-            submittedAt: "2026-05-17T10:00:00+08:00",
-            completedAt: "2026-05-17T10:00:05+08:00",
-            totalSteps: 3,
-            durationMs: 5000,
-            steps: [StepSummary(index: 0, tool: "launch_app", purpose: "Launch", success: true)],
-            allowForeground: true,
-            criteria: "open any calculator"
-        )
-        let output = run.toStandardOutput()
-
-        #expect(output.runId == "20260517-abc")
-        #expect(output.task == "open calculator")
-        #expect(output.status == .completed)
-        #expect(output.ok == true)
-        #expect(output.live == true)
-        #expect(output.allowForeground == true)
-        #expect(output.criteria == "open any calculator")
-        #expect(output.startedAt == "2026-05-17T10:00:00+08:00")
-        #expect(output.endedAt == "2026-05-17T10:00:05+08:00")
-        #expect(output.steps.count == 1)
-        #expect(output.schemaVersion == 1)
-    }
-
-    @Test("TrackedRun toStandardOutput failed run has ok false")
-    func trackedRunToStandardOutputFailedRunHasOkFalse() throws {
-        let run = TrackedRun(
-            runId: "test",
-            task: "fail task",
-            status: .failed,
-            submittedAt: "2026-05-17T10:00:00+08:00",
-            error: "something went wrong"
-        )
-        let output = run.toStandardOutput()
-
-        #expect(output.ok == false)
-        #expect(output.error == "something went wrong")
-    }
-
-    @Test("TrackedRun toStandardOutput ok is false for intervention states")
-    func trackedRunToStandardOutputOkFalseForInterventionStates() throws {
-        for status in [APIRunStatus.interventionNeeded, .userTakeover, .cancelled] {
-            let run = TrackedRun(runId: "test", task: "test", status: status, submittedAt: "2026-05-17T10:00:00+08:00")
-            let output = run.toStandardOutput()
-            #expect(output.ok == false, "Expected ok=false for status \(status)")
-        }
-    }
-
-    @Test("TrackedRun toStandardOutput ok is true for queued and resuming")
-    func trackedRunToStandardOutputOkTrueForQueuedAndResuming() throws {
-        for status in [APIRunStatus.queued, .resuming, .completed, .running] {
-            let run = TrackedRun(runId: "test", task: "test", status: status, submittedAt: "2026-05-17T10:00:00+08:00")
-            let output = run.toStandardOutput()
-            #expect(output.ok == true, "Expected ok=true for status \(status)")
-        }
     }
 
     // MARK: - Result Kind Inference Tests

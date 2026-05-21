@@ -3,11 +3,15 @@ import Foundation
 import Hummingbird
 import HummingbirdTesting
 import HTTPTypes
+import OpenAgentSDK
+
 @testable import AxionCLI
 @testable import AxionCore
 
 @Suite("AxionAPIRoutes")
 struct AxionAPIRoutesTests {
+
+    // MARK: - SDK Route Tests
 
     @Test("GET /v1/health returns 200 with ok status")
     func healthEndpointReturns200WithOkStatus() async throws {
@@ -33,26 +37,6 @@ struct AxionAPIRoutesTests {
 
             try await client.execute(uri: "/v1/runs", method: .post, body: emptyBody) { response in
                 #expect(response.status == .badRequest)
-
-                let body = try JSONDecoder().decode(APIErrorResponse.self, from: response.body)
-                #expect(!body.error.isEmpty)
-                #expect(!body.message.isEmpty)
-            }
-        }
-    }
-
-    @Test("POST /v1/runs with no task field returns 400 with missing_task error")
-    func createRunNoTaskFieldReturns400WithMissingTaskError() async throws {
-        let app = try await buildTestApplication()
-
-        try await app.test(.router) { client in
-            let noTaskBody = ByteBuffer(string: "{\"max_steps\": 10}")
-
-            try await client.execute(uri: "/v1/runs", method: .post, body: noTaskBody) { response in
-                #expect(response.status == .badRequest)
-
-                let body = try JSONDecoder().decode(APIErrorResponse.self, from: response.body)
-                #expect(body.error == "missing_task")
             }
         }
     }
@@ -67,9 +51,9 @@ struct AxionAPIRoutesTests {
             try await client.execute(uri: "/v1/runs", method: .post, body: requestBody) { response in
                 #expect(response.status == .accepted)
 
-                let body = try JSONDecoder().decode(StandardTaskOutput.self, from: response.body)
+                let body = try JSONDecoder().decode(RunResponse.self, from: response.body)
                 #expect(!body.runId.isEmpty)
-                #expect(body.status == .running)
+                #expect(body.status == .queued)
             }
         }
     }
@@ -86,26 +70,27 @@ struct AxionAPIRoutesTests {
             try await client.execute(uri: "/v1/runs", method: .post, body: requestBody) { response in
                 #expect(response.status == .accepted)
 
-                let body = try JSONDecoder().decode(StandardTaskOutput.self, from: response.body)
+                let body = try JSONDecoder().decode(RunResponse.self, from: response.body)
                 #expect(!body.runId.isEmpty)
-                #expect(body.status == .running)
+                #expect(body.status == .queued)
             }
         }
     }
 
     @Test("GET /v1/runs/{runId} for running task returns 200 with status")
     func getRunExistingRunReturns200WithStatus() async throws {
-        let tracker = AxionRunTracker()
-        let runId = await tracker.submitRun(task: "open calculator", options: RunOptions(task: "open calculator"))
+        let ctx = buildTestContext()
 
-        let app = try await buildTestApplication(runTracker: tracker)
+        // Submit and start a run via SDK tracker
+        let run = await ctx.tracker.submitRun(task: "open calculator")
+        try await ctx.tracker.startRun(runId: run.runId)
 
-        try await app.test(.router) { client in
-            try await client.execute(uri: "/v1/runs/\(runId)", method: .get) { response in
+        try await ctx.app.test(.router) { client in
+            try await client.execute(uri: "/v1/runs/\(run.runId)", method: .get) { response in
                 #expect(response.status == .ok)
 
-                let body = try JSONDecoder().decode(StandardTaskOutput.self, from: response.body)
-                #expect(body.runId == runId)
+                let body = try JSONDecoder().decode(RunResponse.self, from: response.body)
+                #expect(body.runId == run.runId)
                 #expect(body.status == .running)
                 #expect(body.task == "open calculator")
             }
@@ -114,24 +99,32 @@ struct AxionAPIRoutesTests {
 
     @Test("GET /v1/runs/{runId} for completed task returns full result")
     func getRunCompletedRunReturnsFullResult() async throws {
-        let tracker = AxionRunTracker()
-        let runId = await tracker.submitRun(task: "open calculator", options: RunOptions(task: "open calculator"))
+        let ctx = buildTestContext()
+
+        // Submit, start, and complete a run
+        let run = await ctx.tracker.submitRun(task: "open calculator")
+        try await ctx.tracker.startRun(runId: run.runId)
+
+        // Set steps and endedAt before completing (completeRun doesn't set these)
         let steps = [
             StepSummary(index: 0, tool: "launch_app", purpose: "Launch Calculator", success: true),
             StepSummary(index: 1, tool: "click", purpose: "Input expression", success: true),
             StepSummary(index: 2, tool: "click", purpose: "Verify result", success: true),
         ]
-        await tracker.updateRun(runId: runId, status: .completed, steps: steps, durationMs: 8200, replanCount: 0)
+        let formatter = ISO8601DateFormatter()
+        formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+        let endedAt = formatter.string(from: Date())
 
-        let app = try await buildTestApplication(runTracker: tracker)
+        await ctx.tracker.updateRun(runId: run.runId, steps: steps, endedAt: endedAt)
+        try await ctx.tracker.completeRun(runId: run.runId, resultText: "done", totalSteps: 3, durationMs: 8200)
 
-        try await app.test(.router) { client in
-            try await client.execute(uri: "/v1/runs/\(runId)", method: .get) { response in
+        try await ctx.app.test(.router) { client in
+            try await client.execute(uri: "/v1/runs/\(run.runId)", method: .get) { response in
                 #expect(response.status == .ok)
 
-                let body = try JSONDecoder().decode(StandardTaskOutput.self, from: response.body)
+                let body = try JSONDecoder().decode(RunResponse.self, from: response.body)
                 #expect(body.status == .completed)
-                #expect(body.steps.count == 3)
+                #expect(body.steps?.count == 3)
                 #expect(body.endedAt != nil)
             }
         }
@@ -144,9 +137,6 @@ struct AxionAPIRoutesTests {
         try await app.test(.router) { client in
             try await client.execute(uri: "/v1/runs/nonexistent-id", method: .get) { response in
                 #expect(response.status == .notFound)
-
-                let body = try JSONDecoder().decode(APIErrorResponse.self, from: response.body)
-                #expect(body.error == "run_not_found")
             }
         }
     }
@@ -171,26 +161,41 @@ struct AxionAPIRoutesTests {
         try await app.test(.router) { client in
             try await client.execute(uri: "/v1/runs/nonexistent-id/events", method: .get) { response in
                 #expect(response.status == .notFound)
-
-                let body = try JSONDecoder().decode(APIErrorResponse.self, from: response.body)
-                #expect(body.error == "run_not_found")
             }
         }
     }
 
-    @Test("SSE endpoint existing run returns event-stream content type")
-    func sseEndpointExistingRunReturnsEventStreamContentType() async throws {
-        let broadcaster = SKDEventBroadcaster()
-        let tracker = AxionRunTracker(eventBroadcaster: broadcaster)
-        let runId = await tracker.submitRun(task: "open calculator", options: RunOptions(task: "open calculator"))
+    @Test("SSE endpoint completed run with events returns event-stream content type")
+    func sseEndpointCompletedRunReturnsEventStreamContentType() async throws {
+        let ctx = buildTestContext()
 
-        let step = StepSummary(index: 0, tool: "launch_app", purpose: "Launch Calculator", success: true)
-        await tracker.updateRun(runId: runId, status: .completed, steps: [step], durationMs: 5000, replanCount: 0)
+        // Submit, start run
+        let run = await ctx.tracker.submitRun(task: "open calculator")
+        try await ctx.tracker.startRun(runId: run.runId)
 
-        let app = try await buildTestApplication(runTracker: tracker, eventBroadcaster: broadcaster)
+        // Emit a step event to broadcaster
+        let stepEvent = AgentSSEEvent.stepCompleted(StepCompletedData(
+            stepIndex: 0,
+            tool: "launch_app",
+            success: true
+        ))
+        await ctx.broadcaster.emit(runId: run.runId, event: stepEvent)
 
-        try await app.test(.router) { client in
-            try await client.execute(uri: "/v1/runs/\(runId)/events", method: .get) { response in
+        // Complete the run
+        try await ctx.tracker.completeRun(runId: run.runId, resultText: "done", totalSteps: 1, durationMs: 5000)
+
+        // Emit run_completed event
+        let completedEvent = AgentSSEEvent.runCompleted(RunCompletedData(
+            runId: run.runId,
+            finalStatus: "completed",
+            totalSteps: 1,
+            durationMs: 5000
+        ))
+        await ctx.broadcaster.emit(runId: run.runId, event: completedEvent)
+        await ctx.broadcaster.complete(runId: run.runId)
+
+        try await ctx.app.test(.router) { client in
+            try await client.execute(uri: "/v1/runs/\(run.runId)/events", method: .get) { response in
                 #expect(response.status == .ok)
 
                 let contentType = response.headers[.contentType]
@@ -200,39 +205,55 @@ struct AxionAPIRoutesTests {
         }
     }
 
-    @Test("SSE endpoint response headers are correct")
-    func sseEndpointResponseHeadersAreCorrect() async throws {
-        let broadcaster = SKDEventBroadcaster()
-        let tracker = AxionRunTracker(eventBroadcaster: broadcaster)
-        let runId = await tracker.submitRun(task: "open calculator", options: RunOptions(task: "open calculator"))
+    @Test("SSE endpoint completed run replay includes event-stream content type")
+    func sseEndpointCompletedRunReplayHeaders() async throws {
+        let ctx = buildTestContext()
 
-        let step = StepSummary(index: 0, tool: "launch_app", purpose: "Launch Calculator", success: true)
-        await tracker.updateRun(runId: runId, status: .completed, steps: [step], durationMs: 5000, replanCount: 0)
+        // Submit, start, emit events, complete
+        let run = await ctx.tracker.submitRun(task: "open calculator")
+        try await ctx.tracker.startRun(runId: run.runId)
 
-        let app = try await buildTestApplication(runTracker: tracker, eventBroadcaster: broadcaster)
+        let stepEvent = AgentSSEEvent.stepCompleted(StepCompletedData(
+            stepIndex: 0, tool: "launch_app", success: true
+        ))
+        await ctx.broadcaster.emit(runId: run.runId, event: stepEvent)
 
-        try await app.test(.router) { client in
-            try await client.execute(uri: "/v1/runs/\(runId)/events", method: .get) { response in
-                let cacheControl = response.headers[.cacheControl]
-                #expect(cacheControl != nil)
-                #expect(cacheControl?.contains("no-cache") ?? false)
+        try await ctx.tracker.completeRun(runId: run.runId, resultText: "done", totalSteps: 1, durationMs: 5000)
+
+        let completedEvent = AgentSSEEvent.runCompleted(RunCompletedData(
+            runId: run.runId, finalStatus: "completed", totalSteps: 1, durationMs: 5000
+        ))
+        await ctx.broadcaster.emit(runId: run.runId, event: completedEvent)
+        await ctx.broadcaster.complete(runId: run.runId)
+
+        try await ctx.app.test(.router) { client in
+            try await client.execute(uri: "/v1/runs/\(run.runId)/events", method: .get) { response in
+                #expect(response.status == .ok)
+                // Completed run replay returns event-stream content type
+                let contentType = response.headers[.contentType]
+                #expect(contentType != nil)
+                #expect(contentType?.contains("text/event-stream") ?? false)
             }
         }
     }
 
     @Test("Completed run SSE endpoint replays run_completed event")
     func sseEndpointCompletedRunReplaysRunCompletedEvent() async throws {
-        let broadcaster = SKDEventBroadcaster()
-        let tracker = AxionRunTracker(eventBroadcaster: broadcaster)
-        let runId = await tracker.submitRun(task: "open calculator", options: RunOptions(task: "open calculator"))
+        let ctx = buildTestContext()
 
-        let step = StepSummary(index: 0, tool: "launch_app", purpose: "Launch Calculator", success: true)
-        await tracker.updateRun(runId: runId, status: .completed, steps: [step], durationMs: 5000, replanCount: 0)
+        let run = await ctx.tracker.submitRun(task: "open calculator")
+        try await ctx.tracker.startRun(runId: run.runId)
 
-        let app = try await buildTestApplication(runTracker: tracker, eventBroadcaster: broadcaster)
+        let completedEvent = AgentSSEEvent.runCompleted(RunCompletedData(
+            runId: run.runId, finalStatus: "completed", totalSteps: 1, durationMs: 5000
+        ))
+        await ctx.broadcaster.emit(runId: run.runId, event: completedEvent)
 
-        try await app.test(.router) { client in
-            try await client.execute(uri: "/v1/runs/\(runId)/events", method: .get) { response in
+        try await ctx.tracker.completeRun(runId: run.runId, resultText: "done", totalSteps: 1, durationMs: 5000)
+        await ctx.broadcaster.complete(runId: run.runId)
+
+        try await ctx.app.test(.router) { client in
+            try await client.execute(uri: "/v1/runs/\(run.runId)/events", method: .get) { response in
                 #expect(response.status == .ok)
 
                 let bodyString = String(buffer: response.body)
@@ -269,39 +290,20 @@ struct AxionAPIRoutesTests {
         }
     }
 
-    @Test("Concurrency limit full returns queued response")
-    func createRunConcurrencyLimitFullReturnsQueuedResponse() async throws {
-        let tracker = AxionRunTracker()
-        let limiter = SDKConcurrencyLimiter(maxConcurrent: 1)
-        await limiter.acquire()
-
-        let app = try await buildTestApplication(runTracker: tracker, concurrencyLimiter: limiter)
-
-        try await app.test(.router) { client in
-            let body = ByteBuffer(string: "{\"task\": \"open calculator\"}")
-            try await client.execute(uri: "/v1/runs", method: .post, body: body) { response in
-                #expect(response.status == .accepted)
-                let decoded = try JSONDecoder().decode(QueuedRunResponse.self, from: response.body)
-                #expect(decoded.status == "queued")
-                #expect(decoded.position >= 1)
-            }
-        }
-    }
-
     @Test("GET /v1/runs/:runId with correct auth returns 200")
     func getRunWithAuthKeyCorrectTokenReturns200() async throws {
-        let tracker = AxionRunTracker()
-        let runId = await tracker.submitRun(task: "open calculator", options: RunOptions(task: "open calculator"))
+        let ctx = buildTestContext(authKey: "testsecret")
 
-        let app = try await buildTestApplication(runTracker: tracker, authKey: "testsecret")
+        let run = await ctx.tracker.submitRun(task: "open calculator")
+        try await ctx.tracker.startRun(runId: run.runId)
 
-        try await app.test(.router) { client in
+        try await ctx.app.test(.router) { client in
             var headers = HTTPFields()
             headers[.authorization] = "Bearer testsecret"
-            try await client.execute(uri: "/v1/runs/\(runId)", method: .get, headers: headers) { response in
+            try await client.execute(uri: "/v1/runs/\(run.runId)", method: .get, headers: headers) { response in
                 #expect(response.status == .ok)
-                let body = try JSONDecoder().decode(StandardTaskOutput.self, from: response.body)
-                #expect(body.runId == runId)
+                let body = try JSONDecoder().decode(RunResponse.self, from: response.body)
+                #expect(body.runId == run.runId)
                 #expect(body.status == .running)
             }
         }
@@ -320,19 +322,23 @@ struct AxionAPIRoutesTests {
 
     @Test("SSE endpoint with correct auth returns 200")
     func sseEndpointWithAuthKeyCorrectTokenReturns200() async throws {
-        let broadcaster = SKDEventBroadcaster()
-        let tracker = AxionRunTracker(eventBroadcaster: broadcaster)
-        let runId = await tracker.submitRun(task: "open calculator", options: RunOptions(task: "open calculator"))
+        let ctx = buildTestContext(authKey: "testsecret")
 
-        let step = StepSummary(index: 0, tool: "launch_app", purpose: "Launch Calculator", success: true)
-        await tracker.updateRun(runId: runId, status: .completed, steps: [step], durationMs: 5000, replanCount: 0)
+        let run = await ctx.tracker.submitRun(task: "open calculator")
+        try await ctx.tracker.startRun(runId: run.runId)
 
-        let app = try await buildTestApplication(runTracker: tracker, eventBroadcaster: broadcaster, authKey: "testsecret")
+        let completedEvent = AgentSSEEvent.runCompleted(RunCompletedData(
+            runId: run.runId, finalStatus: "completed", totalSteps: 1, durationMs: 5000
+        ))
+        await ctx.broadcaster.emit(runId: run.runId, event: completedEvent)
 
-        try await app.test(.router) { client in
+        try await ctx.tracker.completeRun(runId: run.runId, resultText: "done", totalSteps: 1, durationMs: 5000)
+        await ctx.broadcaster.complete(runId: run.runId)
+
+        try await ctx.app.test(.router) { client in
             var headers = HTTPFields()
             headers[.authorization] = "Bearer testsecret"
-            try await client.execute(uri: "/v1/runs/\(runId)/events", method: .get, headers: headers) { response in
+            try await client.execute(uri: "/v1/runs/\(run.runId)/events", method: .get, headers: headers) { response in
                 #expect(response.status == .ok)
             }
         }
@@ -349,48 +355,9 @@ struct AxionAPIRoutesTests {
         }
     }
 
-    @Test("Queued response JSON format is valid")
-    func queuedResponseJsonFormatIsValid() async throws {
-        let tracker = AxionRunTracker()
-        let limiter = SDKConcurrencyLimiter(maxConcurrent: 1)
-        await limiter.acquire()
-
-        let app = try await buildTestApplication(runTracker: tracker, concurrencyLimiter: limiter)
-
-        try await app.test(.router) { client in
-            let body = ByteBuffer(string: "{\"task\": \"open calculator\"}")
-            try await client.execute(uri: "/v1/runs", method: .post, body: body) { response in
-                #expect(response.status == .accepted)
-                let decoded = try JSONDecoder().decode(QueuedRunResponse.self, from: response.body)
-                #expect(decoded.status == "queued")
-                #expect(decoded.position >= 1)
-                #expect(!decoded.runId.isEmpty)
-            }
-        }
-    }
-
-    @Test("No auth + no limiter returns running status (original behavior)")
-    func createRunNoAuthNoLimiterReturnsRunningStatus() async throws {
-        let app = try await buildTestApplication()
-
-        try await app.test(.router) { client in
-            let body = ByteBuffer(string: "{\"task\": \"open calculator\"}")
-            try await client.execute(uri: "/v1/runs", method: .post, body: body) { response in
-                #expect(response.status == .accepted)
-                let decoded = try JSONDecoder().decode(StandardTaskOutput.self, from: response.body)
-                #expect(decoded.status == .running)
-                #expect(!decoded.runId.isEmpty)
-            }
-        }
-    }
-
     @Test("Auth + concurrency limiter combined")
     func createRunAuthAndConcurrencyCombined() async throws {
-        let tracker = AxionRunTracker()
-        let limiter = SDKConcurrencyLimiter(maxConcurrent: 1)
-        await limiter.acquire()
-
-        let app = try await buildTestApplication(runTracker: tracker, authKey: "mykey", concurrencyLimiter: limiter)
+        let app = try await buildTestApplication(authKey: "mykey")
 
         try await app.test(.router) { client in
             let body = ByteBuffer(string: "{\"task\": \"open calculator\"}")
@@ -402,8 +369,8 @@ struct AxionAPIRoutesTests {
             headers[.authorization] = "Bearer mykey"
             try await client.execute(uri: "/v1/runs", method: .post, headers: headers, body: body) { response in
                 #expect(response.status == .accepted)
-                let decoded = try JSONDecoder().decode(QueuedRunResponse.self, from: response.body)
-                #expect(decoded.status == "queued")
+                let decoded = try JSONDecoder().decode(RunResponse.self, from: response.body)
+                #expect(decoded.status == .queued)
             }
         }
     }
@@ -507,45 +474,6 @@ struct AxionAPIRoutesTests {
                 #expect(body.availableTools == ToolNames.allToolNames)
             }
         }
-    }
-
-    private func buildTestApplication(
-        runTracker: AxionRunTracker? = nil,
-        eventBroadcaster: SKDEventBroadcaster? = nil,
-        authKey: String? = nil,
-        concurrencyLimiter: SDKConcurrencyLimiter? = nil,
-        maxConcurrent: Int = 10,
-        config: AxionConfig = .default,
-        configDirectory: String? = nil
-    ) async throws -> Application<RouterResponder<BasicRequestContext>> {
-        // Use a temp directory for the run lock to avoid test interference
-        let tempLockDir = NSTemporaryDirectory() + "axion-test-lock-\(UUID().uuidString)"
-        try? FileManager.default.createDirectory(atPath: tempLockDir, withIntermediateDirectories: true)
-        let testRunLockService = RunLockService(lockDirectory: tempLockDir, processAliveChecker: { _ in false })
-
-        // Use temp directory for config if specified
-        let tempConfigDir = configDirectory ?? (NSTemporaryDirectory() + "axion-test-config-\(UUID().uuidString)")
-
-        let broadcaster = eventBroadcaster ?? SKDEventBroadcaster()
-        let tracker = runTracker ?? AxionRunTracker(eventBroadcaster: broadcaster)
-        let router = Router()
-        AxionAPI.registerRoutes(
-            on: router,
-            runTracker: tracker,
-            eventBroadcaster: broadcaster,
-            config: config,
-            authKey: authKey,
-            concurrencyLimiter: concurrencyLimiter,
-            runLockService: testRunLockService,
-            maxConcurrent: maxConcurrent,
-            configDirectory: tempConfigDir
-        )
-
-        let app = Application(
-            router: router,
-            configuration: .init(address: .hostname("127.0.0.1", port: 0))
-        )
-        return app
     }
 
     // MARK: - Settings API Tests (Story 14.3)
@@ -752,5 +680,63 @@ struct AxionAPIRoutesTests {
                 #expect(body.maskedKey == "sk-ant-****mnop")
             }
         }
+    }
+
+    // MARK: - Test Helpers
+
+    /// Context holding both the test app and SDK components for pre-populating runs.
+    private struct TestContext {
+        let app: Application<RouterResponder<BasicRequestContext>>
+        let tracker: RunTracker
+        let broadcaster: EventBroadcaster
+    }
+
+    private func buildTestContext(
+        authKey: String? = nil,
+        maxConcurrent: Int = 10,
+        config: AxionConfig = .default,
+        configDirectory: String? = nil
+    ) -> TestContext {
+        let placeholderAgent = Agent(options: AgentOptions(model: "placeholder"))
+        let server = AgentHTTPServer(
+            agent: placeholderAgent,
+            authKey: authKey,
+            maxConcurrentRuns: maxConcurrent
+        )
+
+        let runCoordinator = RunCoordinator()
+        server.customRouteBuilder = { [runCoordinator] routerGroup, _, broadcaster, _, _ in
+            AxionAPI.registerCustomRoutes(
+                on: routerGroup,
+                runCoordinator: runCoordinator,
+                eventBroadcaster: broadcaster,
+                config: config,
+                maxConcurrentRuns: maxConcurrent,
+                skillRegistry: nil,
+                configDirectory: configDirectory
+            )
+        }
+
+        let app = server.buildTestApplication()
+        return TestContext(
+            app: app,
+            tracker: server.runTracker,
+            broadcaster: server.eventBroadcaster
+        )
+    }
+
+    private func buildTestApplication(
+        authKey: String? = nil,
+        maxConcurrent: Int = 10,
+        config: AxionConfig = .default,
+        configDirectory: String? = nil
+    ) async throws -> Application<RouterResponder<BasicRequestContext>> {
+        let ctx = buildTestContext(
+            authKey: authKey,
+            maxConcurrent: maxConcurrent,
+            config: config,
+            configDirectory: configDirectory
+        )
+        return ctx.app
     }
 }

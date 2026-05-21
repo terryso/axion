@@ -699,8 +699,8 @@ daemon 模式下 server 崩溃/重启后，从磁盘恢复任务状态。
 
 **核心文件：**
 ```
-Sources/AxionCLI/API/RunPersistenceService.swift   # 磁盘读写：TrackedRun + SSEEvent
-Sources/AxionCLI/API/RunRecoveryService.swift      # 启动恢复：状态映射 + replay buffer 恢复
+Sources/AxionCLI/API/AxionRunPersistence.swift   # Epic 21: wraps SDK persistence for 磁盘读写
+Sources/AxionCLI/API/AxionRunRecovery.swift      # Epic 21: wraps SDK recovery for 启动恢复
 ```
 
 **恢复状态映射：**
@@ -712,7 +712,7 @@ Sources/AxionCLI/API/RunRecoveryService.swift      # 启动恢复：状态映射
 | completed/failed/cancelled | 不变 | 已终态，无需干预 |
 
 **关键设计决策：**
-- RunPersistenceService 是 Sendable struct（非 actor），FileManager 本身线程安全
+- AxionRunPersistence wraps SDK's RunPersistenceService (Sendable struct) with Axion-specific directory
 - api-output.json 使用原子写入（write-to-tmp + rename）
 - api-events.jsonl 使用追加写入（每行一个 JSON）
 - 持久化失败不阻塞主流程（catch + warning 日志）

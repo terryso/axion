@@ -11,8 +11,6 @@ import AxionCore
 /// All configuration is passed via parameters — no mutable state.
 enum RunOrchestrator {
 
-    // MARK: - Types
-
     struct RunConfig: Sendable {
         let task: String
         let fast: Bool
@@ -31,8 +29,6 @@ enum RunOrchestrator {
         let runSucceeded: Bool
     }
 
-    // MARK: - Main Execution
-
     /// Executes the full agent pipeline: lock → trace → stream loop → cleanup → post-run.
     static func execute(
         buildResult: AgentBuildResult,
@@ -40,6 +36,7 @@ enum RunOrchestrator {
     ) async throws -> RunResult {
         let agent = buildResult.agent
         let memoryDir = buildResult.memoryDir
+        let runCompleteBox = buildResult.runCompleteBox
         let memoryStore = buildResult.agentOptions.memoryStore as! FileBasedMemoryStore
         let config = runConfig.config
 
@@ -76,16 +73,7 @@ enum RunOrchestrator {
             }
         }
 
-        // Trace recorder
-        let tracer = try? TraceRecorder(runId: runId, config: config)
-        await tracer?.recordRunStart(runId: runId, task: runConfig.task, mode: runMode)
-
-        if !runConfig.dryrun {
-            await tracer?.record(event: TraceRecorder.TraceEventType.lockAcquired, payload: [
-                "runId": runId,
-                "pid": ProcessInfo.processInfo.processIdentifier
-            ])
-        }
+        // Trace recorder — SDK handles trace via AgentOptions.traceEnabled/traceBaseURL
 
         // Pre-run memory cleanup
         if !runConfig.noMemory {
@@ -102,24 +90,18 @@ enum RunOrchestrator {
 
         // Stream loop state
         var totalSteps = 0
-        var resultToolPairs: [SDKMessage.ToolExecutionPair] = []
         var pendingScreenshotToolUseIds: Set<String> = []
         var visualDeltaSkipped = 0
         var visualDeltaChecked = 0
         var externallyModified = false
         var takeoverEvent: (issue: String, summary: String, feedback: String?, reason: String, duration: TimeInterval?)? = nil
-        var runSucceeded = false
-        var runCompleted = false
-        var resultUsage: TokenUsage?
-        var resultTotalCostUsd: Double = 0
-        var resultCostBreakdown: [CostBreakdownEntry] = []
 
         let visualDeltaTracker = runConfig.noVisualDelta ? nil : VisualDeltaTracker()
         var screenshotCount = 0
         let seatMonitor = (config.sharedSeatMode && !runConfig.allowForeground && !runConfig.dryrun)
             ? await SeatActivityMonitor.create() : nil
         if let monitor = seatMonitor {
-            await tracer?.recordSeatBaseline(baseline: await monitor.describeBaseline())
+            _ = await monitor.describeBaseline()
         }
 
         let startTime = ContinuousClock.now
@@ -131,7 +113,6 @@ enum RunOrchestrator {
                 if _Concurrency.Task.isCancelled { break }
                 if case .toolUse = message { totalSteps += 1 }
                 outputHandler.handle(message)
-                await recordToTrace(message: message, tracer: tracer)
 
                 switch message {
                 case .assistant:
@@ -140,9 +121,6 @@ enum RunOrchestrator {
                     if data.toolName.contains("screenshot") {
                         pendingScreenshotToolUseIds.insert(data.toolUseId)
                         screenshotCount += 1
-                        if let limit = config.maxScreenshots, screenshotCount >= limit {
-                            await tracer?.recordBudgetExceeded(budgetType: "screenshots", current: screenshotCount, limit: limit)
-                        }
                     }
                 case .toolResult(let data):
                     if pendingScreenshotToolUseIds.remove(data.toolUseId) != nil,
@@ -153,12 +131,6 @@ enum RunOrchestrator {
                             visualDeltaChecked += 1
                             if vdResult.shouldSkipVerifier {
                                 visualDeltaSkipped += 1
-                                if case .unchanged(let pct) = vdResult {
-                                    await tracer?.recordVerifierSkipped(
-                                        deltaPercentage: pct,
-                                        reason: "visual_delta_low"
-                                    )
-                                }
                             }
                         }
                     }
@@ -167,9 +139,6 @@ enum RunOrchestrator {
                     case .paused:
                         guard let pausedData = data.pausedData else { break }
                         let takeoverStartTime = ContinuousClock.now
-                        await tracer?.record(event: "takeover_paused", payload: [
-                            "reason": pausedData.reason
-                        ])
                         let result = takeoverIO.displayTakeoverPrompt(
                             reason: pausedData.reason,
                             allowForeground: runConfig.allowForeground,
@@ -184,49 +153,18 @@ enum RunOrchestrator {
                             let durationSeconds = TakeoverMarker.durationToSeconds(elapsed)
                             takeoverEvent = (issue: pausedData.reason, summary: userAction, feedback: result.feedback, reason: pausedData.reason, duration: durationSeconds)
                             agent.resume(context: userAction)
-                            if let feedback = result.feedback {
-                                await tracer?.record(event: "takeover_resumed", payload: [
-                                    "context": userAction,
-                                    "method": "resume",
-                                    "feedback": feedback
-                                ])
-                            } else {
-                                await tracer?.record(event: "takeover_resumed", payload: [
-                                    "context": userAction,
-                                    "method": "resume"
-                                ])
-                            }
                         case .skip:
                             agent.resume(context: "skip")
-                            await tracer?.record(event: "takeover_resumed", payload: [
-                                "context": "skip"
-                            ])
                         case .abort:
                             agent.interrupt()
-                            await tracer?.record(event: "takeover_aborted", payload: [
-                                "completedSteps": totalSteps
-                            ])
                         }
                     case .pausedTimeout:
                         takeoverIO.displayTimeoutPrompt()
-                        await tracer?.record(event: "takeover_timeout", payload: [:])
                     default:
                         break
                     }
-                case .result(let data):
-                    resultToolPairs = data.toolPairs
-                    resultUsage = data.usage
-                    resultTotalCostUsd = data.totalCostUsd
-                    resultCostBreakdown = data.costBreakdown
-                    switch data.subtype {
-                    case .success:
-                        runSucceeded = true
-                        runCompleted = true
-                    case .errorMaxTurns, .errorMaxBudgetUsd, .errorDuringExecution, .errorMaxStructuredOutputRetries, .errorMaxModelCalls:
-                        runCompleted = true
-                    default:
-                        break
-                    }
+                case .result:
+                    break
                 default:
                     break
                 }
@@ -238,8 +176,6 @@ enum RunOrchestrator {
         // Post-stream: external desktop activity check
         if let activity = await seatMonitor?.check() {
             externallyModified = true
-            await tracer?.recordExternalActivityDetected(
-                description: activity, phase: "post_stream")
             fputs("[axion] 检测到外部桌面操作，本次运行的经验不会被记忆\n", stderr)
         }
 
@@ -257,15 +193,17 @@ enum RunOrchestrator {
             fputs("[axion] 视觉增量: 跳过 \(visualDeltaSkipped)/\(visualDeltaChecked) 次验证\n", stderr)
         }
 
-        // Cost summary — built from SDK's ResultData fields
-        let modelCalls = resultCostBreakdown.filter { $0.inputTokens > 0 || $0.outputTokens > 0 }.count
-        let totalTokens = (resultUsage?.inputTokens ?? 0) + (resultUsage?.outputTokens ?? 0)
-        fputs("[axion] LLM 调用: \(modelCalls)次, Tokens: \(totalTokens), 预估成本: $\(String(format: "%.2f", resultTotalCostUsd)), 截图: \(screenshotCount)次\n", stderr)
+        // Cost summary — from SDK's onRunComplete context
+        let runCtx = runCompleteBox.context
+        let costBreakdown = runCtx?.costBreakdown ?? []
+        let modelCalls = costBreakdown.filter { $0.inputTokens > 0 || $0.outputTokens > 0 }.count
+        let totalTokens = (runCtx?.usage.inputTokens ?? 0) + (runCtx?.usage.outputTokens ?? 0)
+        let totalCost = runCtx?.totalCostUsd ?? 0
+        fputs("[axion] LLM 调用: \(modelCalls)次, Tokens: \(totalTokens), 预估成本: $\(String(format: "%.2f", totalCost)), 截图: \(screenshotCount)次\n", stderr)
 
-        await tracer?.recordRunDone(totalSteps: totalSteps, durationMs: durationMs, replanCount: 0)
-        await tracer?.close()
-
-        // Post-run memory processing
+        // Post-run memory processing — using onRunComplete data
+        let runSucceeded = runCtx?.status == .success
+        let runCompleted = runCtx != nil
         let takeoverContext: RunMemoryProcessor.TakeoverEventContext? = takeoverEvent.map { event in
             RunMemoryProcessor.TakeoverEventContext(
                 issue: event.issue,
@@ -276,7 +214,7 @@ enum RunOrchestrator {
             )
         }
         await RunMemoryProcessor.processRunResult(
-            toolPairs: resultToolPairs,
+            toolPairs: runCtx?.toolPairs ?? [],
             task: runConfig.task,
             runId: runId,
             memoryStore: memoryStore,
@@ -285,22 +223,16 @@ enum RunOrchestrator {
             externallyModified: externallyModified,
             takeoverEvent: takeoverContext,
             runSucceeded: runSucceeded,
-            runCompleted: runCompleted,
-            tracer: tracer
+            runCompleted: runCompleted
         )
 
         // Lock release
         if !runConfig.dryrun {
-            await tracer?.record(event: TraceRecorder.TraceEventType.lockReleased, payload: [
-                "runId": runId
-            ])
             await runLockService.release()
         }
 
         return RunResult(totalSteps: totalSteps, durationMs: durationMs, runSucceeded: runSucceeded)
     }
-
-    // MARK: - Skill Direct Execution
 
     /// Executes a prompt skill directly via `executeSkillStream`, bypassing the full agent build.
     static func executeSkillDirectly(
@@ -355,8 +287,6 @@ enum RunOrchestrator {
 
         try? await agent.close()
     }
-
-    // MARK: - Shared Helpers
 
     /// Parses a skill name from a task that starts with `/`.
     static func parseSkillName(from task: String) -> String? {
@@ -457,57 +387,4 @@ enum RunOrchestrator {
         return extractBase64FromToolResult(content)
     }
 
-    // MARK: - Trace Recording
-
-    /// Records an SDKMessage to the trace file.
-    private static func recordToTrace(message: SDKMessage, tracer: TraceRecorder?) async {
-        guard let tracer else { return }
-        switch message {
-        case .assistant(let data):
-            await tracer.record(event: "assistant_message", payload: [
-                "text": String(data.text.prefix(200)),
-                "model": data.model,
-                "stopReason": data.stopReason
-            ])
-        case .toolUse(let data):
-            var payload: [String: Any] = [
-                "tool": data.toolName,
-                "toolUseId": data.toolUseId
-            ]
-            if let inputObj = try? JSONSerialization.jsonObject(with: Data(data.input.utf8)) as? [String: Any] {
-                if let windowId = inputObj["window_id"] {
-                    payload["window_id"] = windowId
-                }
-                if let pid = inputObj["pid"] {
-                    payload["pid"] = pid
-                }
-            }
-            await tracer.record(event: "tool_use", payload: payload)
-        case .toolResult(let data):
-            var payload: [String: Any] = [
-                "toolUseId": data.toolUseId,
-                "isError": data.isError,
-                "content": String(data.content.prefix(200))
-            ]
-            if let resultObj = try? JSONSerialization.jsonObject(with: Data(data.content.utf8)) as? [String: Any] {
-                if let appName = resultObj["app_name"] as? String {
-                    payload["app_name"] = appName
-                }
-                if let windowId = resultObj["window_id"] as? Int {
-                    payload["window_id"] = windowId
-                }
-            }
-            await tracer.record(event: "tool_result", payload: payload)
-        case .result(let data):
-            await tracer.record(event: "result", payload: [
-                "subtype": data.subtype.rawValue,
-                "numTurns": data.numTurns,
-                "durationMs": data.durationMs
-            ])
-        case .partialMessage:
-            break
-        default:
-            break
-        }
-    }
 }

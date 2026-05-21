@@ -103,7 +103,7 @@ struct TakeoverMarker: Codable, Equatable {
         )
     }
 
-    /// Converts to a flat dictionary suitable for ``TraceRecorder/record(event:payload:)``.
+    /// Converts to a flat dictionary representation.
     func toDictionary() -> [String: Any] {
         var result: [String: Any] = [
             "schema_version": schemaVersion,

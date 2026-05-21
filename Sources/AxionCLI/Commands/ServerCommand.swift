@@ -33,59 +33,85 @@ struct ServerCommand: AsyncParsableCommand {
     }
 
     func run() async throws {
-        // Resolve authKey: CLI flag > environment variable > nil
         let resolvedAuthKey = authKey ?? ProcessInfo.processInfo.environment["AXION_AUTH_KEY"]
 
-        // 1. Load configuration
         let config = try await ConfigManager.loadConfig()
 
-        // 2. Create SDK-based persistence, EventBroadcaster, RunTracker, and ConcurrencyLimiter
-        let persistenceService = AxionRunPersistence()
-        // Pass SDK's RunPersistenceService to EventBroadcaster so SSE events are persisted to disk.
-        // Uses Axion's base directory (~/.axion/api-runs/) instead of SDK's default.
-        let axionRunDir = persistenceService.runsDirectory()
-        let sdkEventPersistence = RunPersistenceService(baseDirectory: axionRunDir)
-        let eventBroadcaster = OpenAgentSDK.EventBroadcaster(persistenceService: sdkEventPersistence)
-        let runTracker = AxionRunTracker(
+        let sdkPersistence = RunPersistenceService(baseDirectory: nil)
+        let eventBroadcaster = OpenAgentSDK.EventBroadcaster(persistenceService: sdkPersistence)
+        let runCoordinator = RunCoordinator(
             eventBroadcaster: eventBroadcaster,
-            persistenceService: persistenceService
-        )
-        let concurrencyLimiter = OpenAgentSDK.ConcurrencyLimiter(maxConcurrent: maxConcurrent)
-
-        // 2a. Recover persisted runs from previous server instance
-        await AxionRunRecovery.recover(
-            from: runTracker,
-            persistenceService: persistenceService,
-            eventBroadcaster: eventBroadcaster
+            persistenceService: sdkPersistence
         )
 
-        // 3. Create SkillRegistry for prompt skill support
         let skillRegistry = SkillRegistry()
         AxionBuiltInSkills.registerAll(into: skillRegistry)
         skillRegistry.registerDiscoveredSkills()
 
-        // 4. Create router and register API routes
-        let router = Router()
-        AxionAPI.registerRoutes(
-            on: router,
-            runTracker: runTracker,
-            eventBroadcaster: eventBroadcaster,
-            config: config,
+        await AxionRunRecovery.recover(
+            from: runCoordinator,
+            persistenceService: sdkPersistence,
+            eventBroadcaster: eventBroadcaster
+        )
+
+        let placeholderAgent = Agent(options: AgentOptions(model: "placeholder"))
+
+        let server = AgentHTTPServer(
+            agent: placeholderAgent,
+            host: host,
+            port: port,
             authKey: resolvedAuthKey,
-            concurrencyLimiter: concurrencyLimiter,
-            maxConcurrent: maxConcurrent,
-            skillRegistry: skillRegistry
+            maxConcurrentRuns: maxConcurrent,
+            dataDir: nil
         )
 
-        // 5. Create Hummingbird Application
-        let app = Application(
-            router: router,
-            configuration: .init(
-                address: .hostname(host, port: port)
+        server.runHandler = { [runCoordinator, config] task, request, tracker, broadcaster, persistence, limiter in
+            await limiter.acquire()
+
+            let runId = await runCoordinator.submitRun(task: task, request: request)
+
+            let result = await ApiRunner.runAgent(
+                config: config,
+                task: task,
+                options: request,
+                runId: runId,
+                eventBroadcaster: broadcaster,
+                runTracker: runCoordinator,
+                verbose: false,
+                completion: { _, _, _, _, _, _, _ in }
             )
-        )
 
-        // 6. Display startup message
+            await runCoordinator.updateRun(
+                runId: runId,
+                status: result.finalStatus,
+                steps: result.stepSummaries,
+                durationMs: result.durationMs,
+                replanCount: result.replanCount,
+                costTelemetry: result.costTelemetry
+            )
+
+            let sdkStatus = OpenAgentSDK.APIRunStatus(rawValue: result.finalStatus.rawValue) ?? .failed
+            await tracker.updateRun(
+                runId: runId,
+                status: sdkStatus,
+                totalSteps: result.totalSteps,
+                durationMs: result.durationMs
+            )
+
+            await limiter.release()
+        }
+
+        server.customRouteBuilder = { [runCoordinator, eventBroadcaster, config, skillRegistry] router, _, _, _, _ in
+            AxionAPI.registerCustomRoutes(
+                on: router,
+                runCoordinator: runCoordinator,
+                eventBroadcaster: eventBroadcaster,
+                config: config,
+                maxConcurrentRuns: maxConcurrent,
+                skillRegistry: skillRegistry
+            )
+        }
+
         print("Axion API server running on port \(port)")
         print("  Listening on \(host):\(port)")
         print("  Auth: \(resolvedAuthKey != nil ? "enabled" : "disabled")")
@@ -93,33 +119,6 @@ struct ServerCommand: AsyncParsableCommand {
         print("  Press Ctrl+C to stop")
         fflush(stdout)
 
-        // 7. Start server — Hummingbird handles SIGINT/SIGTERM graceful shutdown
-        try await app.runService()
-
-        // 8. After server stops, wait for active tasks (max 30s)
-        await waitForActiveTasks(limiter: concurrencyLimiter, timeout: 30)
+        try await server.start()
     }
-}
-
-/// Wait for active tasks to complete with a timeout.
-private func waitForActiveTasks(limiter: OpenAgentSDK.ConcurrencyLimiter, timeout: Int) async {
-    let active = await limiter.activeRunCount
-    if active > 0 {
-        print("Shutting down: waiting for \(active) active task(s) to complete (max \(timeout)s)...")
-        let deadline = ContinuousClock.now + .seconds(timeout)
-        while await limiter.activeRunCount > 0 {
-            if ContinuousClock.now >= deadline {
-                print("Shutdown timeout — forcing shutdown with \(await limiter.activeRunCount) task(s) still active.")
-                break
-            }
-            try? await _Concurrency.Task.sleep(for: .milliseconds(200))
-        }
-    }
-
-    let queued = await limiter.queueDepth
-    if queued > 0 {
-        print("Dropping \(queued) queued task(s) on shutdown.")
-    }
-
-    print("Server shut down complete.")
 }

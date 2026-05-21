@@ -1,15 +1,26 @@
 import Foundation
 import OpenAgentSDK
 
-/// Actor-based run tracker that manages Axion's rich TrackedRun lifecycle,
-/// coordinates with SDK's EventBroadcaster for SSE, and persists via AxionRunPersistence.
-actor AxionRunTracker {
+/// Lightweight run coordinator that replaces AxionRunTracker + AxionRunPersistence.
+/// Stores Axion's rich TrackedRun in memory, uses SDK's RunPersistenceService for
+/// SSE event persistence, and writes Axion TrackedRun records to disk directly.
+actor RunCoordinator {
 
     private var runs: [String: TrackedRun] = [:]
     private static let maxTrackedRuns = 1000
 
-    private let eventBroadcaster: OpenAgentSDK.EventBroadcaster?
-    private let persistenceService: AxionRunPersistence?
+    private let eventBroadcaster: EventBroadcaster?
+    private let persistenceService: RunPersistenceService?
+
+    init(
+        eventBroadcaster: EventBroadcaster? = nil,
+        persistenceService: RunPersistenceService? = nil
+    ) {
+        self.eventBroadcaster = eventBroadcaster
+        self.persistenceService = persistenceService
+    }
+
+    // MARK: - Run Lifecycle
 
     private nonisolated(unsafe) static let runIdDateFormatter: DateFormatter = {
         let f = DateFormatter()
@@ -23,25 +34,8 @@ actor AxionRunTracker {
         return f
     }()
 
-    init(
-        eventBroadcaster: OpenAgentSDK.EventBroadcaster? = nil,
-        persistenceService: AxionRunPersistence? = nil
-    ) {
-        self.eventBroadcaster = eventBroadcaster
-        self.persistenceService = persistenceService
-    }
-
-    // MARK: - Run Lifecycle
-
-    func generateRunId() -> String {
-        let datePart = Self.runIdDateFormatter.string(from: Date())
-        let chars = "abcdefghijklmnopqrstuvwxyz0123456789"
-        let randomPart = String((0..<6).map { _ in chars.randomElement()! })
-        return "\(datePart)-\(randomPart)"
-    }
-
-    func submitRun(task: String, options: RunOptions) -> String {
-        let runId = generateRunId()
+    func submitRun(task: String, request: OpenAgentSDK.CreateRunRequest = OpenAgentSDK.CreateRunRequest(task: "")) -> String {
+        let runId = Self.generateRunId()
         let submittedAt = Self.isoFormatter.string(from: Date())
 
         let run = TrackedRun(
@@ -50,10 +44,10 @@ actor AxionRunTracker {
             status: .running,
             submittedAt: submittedAt,
             live: true,
-            allowForeground: options.allowForeground ?? false
+            allowForeground: request.allowForeground ?? false
         )
         runs[runId] = run
-        persistenceService?.persistRecordSafely(run)
+        persistRecordSafely(run)
 
         evictOldRuns()
         return runId
@@ -68,10 +62,7 @@ actor AxionRunTracker {
         costTelemetry: CostTelemetry? = nil,
         error: String? = nil
     ) async {
-        guard runs[runId] != nil else {
-            print("[AxionRunTracker] Warning: updateRun called with unknown runId '\(runId)'")
-            return
-        }
+        guard runs[runId] != nil else { return }
 
         let completedAt = Self.isoFormatter.string(from: Date())
 
@@ -97,29 +88,23 @@ actor AxionRunTracker {
         }
 
         if let run = runs[runId] {
-            persistenceService?.persistRecordSafely(run)
+            persistRecordSafely(run)
         }
     }
 
     func updateRunResult(runId: String, result: ApiTaskResult) {
-        guard runs[runId] != nil else {
-            print("[AxionRunTracker] Warning: updateRunResult called with unknown runId '\(runId)'")
-            return
-        }
+        guard runs[runId] != nil else { return }
         runs[runId]?.result = result
         if let run = runs[runId] {
-            persistenceService?.persistRecordSafely(run)
+            persistRecordSafely(run)
         }
     }
 
     func updateRunIntervention(runId: String, intervention: InterventionData) {
-        guard runs[runId] != nil else {
-            print("[AxionRunTracker] Warning: updateRunIntervention called with unknown runId '\(runId)'")
-            return
-        }
+        guard runs[runId] != nil else { return }
         runs[runId]?.intervention = intervention
         if let run = runs[runId] {
-            persistenceService?.persistRecordSafely(run)
+            persistRecordSafely(run)
         }
     }
 
@@ -139,6 +124,13 @@ actor AxionRunTracker {
 
     // MARK: - Private
 
+    private static func generateRunId() -> String {
+        let datePart = runIdDateFormatter.string(from: Date())
+        let chars = "abcdefghijklmnopqrstuvwxyz0123456789"
+        let randomPart = String((0..<6).map { _ in chars.randomElement()! })
+        return "\(datePart)-\(randomPart)"
+    }
+
     private func evictOldRuns() {
         if runs.count > Self.maxTrackedRuns {
             let completedKeys = runs.filter { $0.value.status != .running }
@@ -148,6 +140,18 @@ actor AxionRunTracker {
             for key in completedKeys.prefix(evictCount) {
                 runs.removeValue(forKey: key)
             }
+        }
+    }
+
+    private func persistRecordSafely(_ run: TrackedRun) {
+        guard let persistence = persistenceService else { return }
+        do {
+            let dir = persistence.runDirectory(runId: run.runId)
+            let path = (dir as NSString).appendingPathComponent("api-output.json")
+            let data = try JSONEncoder().encode(run)
+            try data.write(to: URL(fileURLWithPath: path), options: .atomic)
+        } catch {
+            print("[RunCoordinator] Warning: failed to persist record for run \(run.runId): \(error)")
         }
     }
 }

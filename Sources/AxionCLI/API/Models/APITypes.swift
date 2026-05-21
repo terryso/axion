@@ -2,51 +2,14 @@ import Foundation
 import Hummingbird
 import OpenAgentSDK
 
-// Re-export SDK SSE types for convenience within Axion
 typealias AgentSSEEvent = OpenAgentSDK.AgentSSEEvent
 typealias SKDEventBroadcaster = OpenAgentSDK.EventBroadcaster
 typealias SDKConcurrencyLimiter = OpenAgentSDK.ConcurrencyLimiter
 
-// MARK: - APIRunStatus
-
-/// External-facing run status exposed via HTTP API.
-/// Eight statuses aligned with the StandardTaskOutput contract.
-enum APIRunStatus: String, Codable, Equatable, Sendable, CaseIterable {
-    case queued
-    case running
-    case interventionNeeded = "intervention_needed"
-    case userTakeover = "user_takeover"
-    case resuming
-    case completed
-    case failed
-    case cancelled
-}
-
-// MARK: - CreateRunRequest
-
-/// Request body for `POST /v1/runs`.
-struct CreateRunRequest: Codable, Equatable, Sendable {
-    let task: String
-    let maxSteps: Int?
-    let maxBatches: Int?
-    let allowForeground: Bool?
-
-    enum CodingKeys: String, CodingKey {
-        case task
-        case maxSteps = "max_steps"
-        case maxBatches = "max_batches"
-        case allowForeground = "allow_foreground"
-    }
-
-    init(task: String, maxSteps: Int? = nil, maxBatches: Int? = nil, allowForeground: Bool? = nil) {
-        self.task = task
-        self.maxSteps = maxSteps
-        self.maxBatches = maxBatches
-        self.allowForeground = allowForeground
-    }
-}
-
-// MARK: - StandardTaskOutput
+typealias APIRunStatus = OpenAgentSDK.APIRunStatus
+typealias CreateRunRequest = OpenAgentSDK.CreateRunRequest
+typealias StepSummary = OpenAgentSDK.StepSummary
+typealias InterventionData = OpenAgentSDK.InterventionData
 
 /// Unified output contract for all run-related API responses.
 /// Replaces the previous CreateRunResponse and RunStatusResponse.
@@ -144,8 +107,6 @@ struct StandardTaskOutput: Codable, Equatable, Sendable, ResponseEncodable {
     }
 }
 
-// MARK: - TaskResultKind
-
 /// Kind of result returned by a completed task.
 /// `answer` = informational (user asked to read/query),
 /// `confirmation` = action performed (user asked to open/move/delete).
@@ -153,8 +114,6 @@ enum TaskResultKind: String, Codable, Equatable, Sendable, CaseIterable {
     case answer
     case confirmation
 }
-
-// MARK: - ApiTaskResult
 
 /// Result payload within StandardTaskOutput when a task completes successfully.
 struct ApiTaskResult: Codable, Equatable, Sendable {
@@ -170,41 +129,6 @@ struct ApiTaskResult: Codable, Equatable, Sendable {
         case createdAt = "created_at"
     }
 }
-
-// MARK: - InterventionData
-
-/// Intervention payload when a task enters takeover state.
-struct InterventionData: Codable, Equatable, Sendable {
-    let reason: String
-    let availableActions: [String]
-    let blockingIssue: String
-
-    enum CodingKeys: String, CodingKey {
-        case reason
-        case availableActions = "available_actions"
-        case blockingIssue = "blocking_issue"
-    }
-}
-
-// MARK: - StepSummary
-
-/// Summary of a single executed step within a run.
-struct StepSummary: Codable, Equatable, Sendable {
-    let index: Int
-    let tool: String
-    let purpose: String
-    let success: Bool
-}
-
-// MARK: - HealthResponse
-
-/// Response body for `GET /v1/health`.
-struct HealthResponse: Codable, Equatable, Sendable, ResponseEncodable {
-    let status: String
-    let version: String
-}
-
-// MARK: - CapabilitiesResponse
 
 /// Response body for `GET /v1/capabilities`.
 struct CapabilitiesResponse: Codable, Equatable, Sendable, ResponseEncodable {
@@ -225,8 +149,6 @@ struct CapabilitiesResponse: Codable, Equatable, Sendable, ResponseEncodable {
     }
 }
 
-// MARK: - QueuedRunResponse
-
 /// Response body for `POST /v1/runs` when the task is queued due to concurrency limits.
 struct QueuedRunResponse: Codable, Equatable, Sendable, ResponseEncodable {
     let runId: String
@@ -240,15 +162,8 @@ struct QueuedRunResponse: Codable, Equatable, Sendable, ResponseEncodable {
     }
 }
 
-// MARK: - APIErrorResponse
-
-/// Standard error response format for all API errors.
-struct APIErrorResponse: Codable, Equatable, Sendable, ResponseEncodable {
-    let error: String
-    let message: String
-}
-
-// MARK: - TrackedRun
+typealias HealthResponse = OpenAgentSDK.HealthResponse
+typealias APIErrorResponse = OpenAgentSDK.APIErrorResponse
 
 /// Internal representation of a tracked run, stored in RunTracker.
 struct TrackedRun: Codable, Equatable, Sendable {
@@ -310,48 +225,7 @@ struct TrackedRun: Codable, Equatable, Sendable {
         self.error = error
         self.schemaVersion = schemaVersion
     }
-
-    /// Convert to the external StandardTaskOutput contract.
-    func toStandardOutput() -> StandardTaskOutput {
-        StandardTaskOutput(
-            schemaVersion: schemaVersion,
-            runId: runId,
-            task: task,
-            status: status,
-            ok: ![.failed, .cancelled, .interventionNeeded, .userTakeover].contains(status),
-            live: live,
-            allowForeground: allowForeground,
-            criteria: criteria,
-            result: result,
-            intervention: intervention,
-            exitCode: exitCode,
-            error: error,
-            startedAt: submittedAt,
-            endedAt: completedAt,
-            steps: steps,
-            costTelemetry: costTelemetry
-        )
-    }
 }
-
-// MARK: - RunOptions
-
-/// Options for running an agent task, derived from CreateRunRequest.
-struct RunOptions: Codable, Equatable, Sendable {
-    let task: String
-    let maxSteps: Int?
-    let maxBatches: Int?
-    let allowForeground: Bool?
-
-    init(task: String, maxSteps: Int? = nil, maxBatches: Int? = nil, allowForeground: Bool? = nil) {
-        self.task = task
-        self.maxSteps = maxSteps
-        self.maxBatches = maxBatches
-        self.allowForeground = allowForeground
-    }
-}
-
-// MARK: - Settings API Types (Story 14.3)
 
 /// Response body for `GET /v1/settings/api-key`.
 struct ApiKeyStatusResponse: Codable, Equatable, Sendable, ResponseEncodable {
@@ -399,8 +273,6 @@ struct DeleteApiKeyResponse: Codable, Equatable, Sendable, ResponseEncodable {
     let available: Bool
     let source: String
 }
-
-// MARK: - Skill API Types (Story 10.3)
 
 /// Summary of a skill returned by `GET /v1/skills`.
 struct SkillSummaryResponse: Codable, Equatable, Sendable, ResponseEncodable {

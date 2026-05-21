@@ -26,13 +26,13 @@ struct RunTaskTool: ToolProtocol {
     // MARK: - Dependencies
 
     private let agent: Agent
-    private let runTracker: AxionRunTracker
+    private let runTracker: RunCoordinator
     private let taskQueue: TaskQueue
     private let runLockService: RunLockService?
 
     // MARK: - Init
 
-    init(agent: Agent, runTracker: AxionRunTracker, taskQueue: TaskQueue, runLockService: RunLockService? = nil) {
+    init(agent: Agent, runTracker: RunCoordinator, taskQueue: TaskQueue, runLockService: RunLockService? = nil) {
         self.agent = agent
         self.runTracker = runTracker
         self.taskQueue = taskQueue
@@ -54,7 +54,7 @@ struct RunTaskTool: ToolProtocol {
             )
         }
 
-        let runId = await runTracker.submitRun(task: task, options: RunOptions(task: task))
+        let runId = await runTracker.submitRun(task: task)
 
         // Check run lock (desktop-level exclusive access)
         let runLockService = self.runLockService ?? RunLockService()

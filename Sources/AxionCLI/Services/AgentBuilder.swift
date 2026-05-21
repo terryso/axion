@@ -8,6 +8,11 @@ import AxionCore
 /// Contains the created Agent plus all resolved configuration so callers
 /// (RunCommand, ApiRunner) can access helper paths, memory directories,
 /// and system prompts for their own post-build logic.
+/// Thread-safe box for capturing RunCompleteContext from SDK's onRunComplete callback.
+final class RunCompleteContextBox: @unchecked Sendable {
+    var context: RunCompleteContext?
+}
+
 struct AgentBuildResult: Sendable {
     let agent: Agent
     let helperPath: String
@@ -16,6 +21,7 @@ struct AgentBuildResult: Sendable {
     let agentOptions: AgentOptions
     let skillRegistry: SkillRegistry
     let skillRegisteredCount: Int
+    let runCompleteBox: RunCompleteContextBox
 }
 
 /// Single source of truth for constructing an Agent used by both CLI (RunCommand)
@@ -72,7 +78,7 @@ enum AgentBuilder {
         static func forAPI(
             config: AxionConfig,
             task: String,
-            options: RunOptions
+            request: CreateRunRequest
         ) -> BuildConfig {
             BuildConfig(
                 config: config,
@@ -80,8 +86,8 @@ enum AgentBuilder {
                 noMemory: false,
                 noSkills: false,
                 includePlaywright: false,
-                allowForeground: options.allowForeground ?? false,
-                maxSteps: options.maxSteps,
+                allowForeground: request.allowForeground ?? false,
+                maxSteps: request.maxSteps,
                 maxTokens: nil,
                 verbose: false,
                 dryrun: false,
@@ -240,6 +246,14 @@ enum AgentBuilder {
         )
         agentOptions.maxModelCalls = config.maxModelCalls
         agentOptions.runId = buildConfig.runId
+        agentOptions.traceEnabled = true
+        agentOptions.traceBaseURL = (ConfigManager.defaultConfigDirectory as NSString).appendingPathComponent("runs")
+
+        // Hook onRunComplete — captures context for post-run processing
+        let runCompleteBox = RunCompleteContextBox()
+        agentOptions.onRunComplete = { context in
+            runCompleteBox.context = context
+        }
 
         // 10. Create Agent
         let agent = createAgent(options: agentOptions)
@@ -251,7 +265,8 @@ enum AgentBuilder {
             systemPrompt: systemPrompt,
             agentOptions: agentOptions,
             skillRegistry: skillRegistry,
-            skillRegisteredCount: skillRegisteredCount
+            skillRegisteredCount: skillRegisteredCount,
+            runCompleteBox: runCompleteBox
         )
     }
 

@@ -14,7 +14,7 @@ struct AppBundleTests {
     }
 
     private var appBundleExists: Bool {
-        FileManager.default.fileExists(atPath: appBundlePath)
+        FileManager.default.fileExists(atPath: infoPlistPath)
     }
 
     private func loadInfoPlist() throws -> [String: Any] {

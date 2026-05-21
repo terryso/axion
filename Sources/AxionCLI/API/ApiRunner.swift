@@ -23,17 +23,15 @@ import AxionCore
 ///   (totalCostUsd, usage, costBreakdown).
 enum ApiRunner {
 
-    // MARK: - Public API
-
     /// Run an agent task and return execution results.
     /// Uses shared AgentBuilder.BuildConfig.forAPI() for agent construction.
     static func runAgent(
         config: AxionConfig,
         task: String,
-        options: RunOptions,
+        options: CreateRunRequest,
         runId: String = "",
         eventBroadcaster: OpenAgentSDK.EventBroadcaster? = nil,
-        runTracker: AxionRunTracker? = nil,
+        runTracker: RunCoordinator? = nil,
         verbose: Bool = false,
         completion: @escaping (String, APIRunStatus, [StepSummary], Int?, Int, CostTelemetry?, Bool) -> Void
     ) async -> (totalSteps: Int, durationMs: Int, replanCount: Int, finalStatus: APIRunStatus, stepSummaries: [StepSummary], costTelemetry: CostTelemetry?, externallyModified: Bool) {
@@ -41,7 +39,7 @@ enum ApiRunner {
         let buildConfig = AgentBuilder.BuildConfig.forAPI(
             config: config,
             task: task,
-            options: options
+            request: options
         )
 
         let buildResult: AgentBuildResult
@@ -53,15 +51,9 @@ enum ApiRunner {
         }
         let agent = buildResult.agent
 
-        // Trace recording
-        let tracer = try? TraceRecorder(runId: runId, config: config)
-
         // Seat activity monitoring (Story 13.4) — detect external desktop operations
         let seatMonitor = (config.sharedSeatMode && !(options.allowForeground ?? false))
             ? await SeatActivityMonitor.create() : nil
-        if let monitor = seatMonitor {
-            await tracer?.recordSeatBaseline(baseline: await monitor.describeBaseline())
-        }
 
         // Process the message stream via shared processor
         let result = await processStream(
@@ -73,15 +65,12 @@ enum ApiRunner {
             eventBroadcaster: eventBroadcaster,
             runTracker: runTracker,
             seatMonitor: seatMonitor,
-            tracer: tracer,
             maxScreenshots: config.maxScreenshots
         )
 
         completion("", result.finalStatus, result.stepSummaries, nil, 0, result.costTelemetry, result.externallyModified)
         return (result.totalSteps, result.durationMs, 0, result.finalStatus, result.stepSummaries, result.costTelemetry, result.externallyModified)
     }
-
-    // MARK: - Skill Agent API
 
     /// Run a prompt skill as an agent task using SDK's executeSkillStream().
     static func runSkillAgent(
@@ -90,7 +79,7 @@ enum ApiRunner {
         config: AxionConfig,
         runId: String = "",
         eventBroadcaster: OpenAgentSDK.EventBroadcaster? = nil,
-        runTracker: AxionRunTracker? = nil,
+        runTracker: RunCoordinator? = nil,
         verbose: Bool = false,
         completion: @escaping (String, APIRunStatus, [StepSummary], Int?, Int, CostTelemetry?, Bool) -> Void
     ) async -> (totalSteps: Int, durationMs: Int, replanCount: Int, finalStatus: APIRunStatus, stepSummaries: [StepSummary], costTelemetry: CostTelemetry?, externallyModified: Bool) {
@@ -121,8 +110,6 @@ enum ApiRunner {
         return (result.totalSteps, result.durationMs, 0, result.finalStatus, result.stepSummaries, result.costTelemetry, result.externallyModified)
     }
 
-    // MARK: - Shared Stream Processing
-
     /// Result of processing an agent's message stream.
     private struct StreamResult {
         let totalSteps: Int
@@ -144,9 +131,8 @@ enum ApiRunner {
         model: String,
         runId: String,
         eventBroadcaster: OpenAgentSDK.EventBroadcaster?,
-        runTracker: AxionRunTracker?,
+        runTracker: RunCoordinator?,
         seatMonitor: SeatActivityMonitor?,
-        tracer: TraceRecorder?,
         maxScreenshots: Int?
     ) async -> StreamResult {
         let messageStream = agent.stream(resolvedTask)
@@ -158,7 +144,6 @@ enum ApiRunner {
             eventBroadcaster: eventBroadcaster,
             runTracker: runTracker,
             seatMonitor: seatMonitor,
-            tracer: tracer,
             maxScreenshots: maxScreenshots,
             cleanup: { try? await agent.close() }
         )
@@ -171,9 +156,8 @@ enum ApiRunner {
         model: String,
         runId: String,
         eventBroadcaster: OpenAgentSDK.EventBroadcaster?,
-        runTracker: AxionRunTracker? = nil,
+        runTracker: RunCoordinator? = nil,
         seatMonitor: SeatActivityMonitor? = nil,
-        tracer: TraceRecorder? = nil,
         maxScreenshots: Int? = nil,
         cleanup: @escaping () async -> Void = {}
     ) async -> StreamResult {
@@ -195,8 +179,6 @@ enum ApiRunner {
                 // Seat activity check (Story 13.4)
                 if let activity = await seatMonitor?.check() {
                     externallyModified = true
-                    await tracer?.recordExternalActivityDetected(
-                        description: activity, phase: "before_llm")
                     if !seatActivityReported {
                         fputs("[axion] 检测到外部桌面操作，本次运行的经验不会被记忆\n", stderr)
                         seatActivityReported = true
@@ -283,7 +265,6 @@ enum ApiRunner {
 
         // Cleanup
         await cleanup()
-        await tracer?.close()
 
         let finalStatus: APIRunStatus
         switch resultSubtype {
@@ -304,8 +285,6 @@ enum ApiRunner {
             finalStatus: finalStatus
         )
     }
-
-    // MARK: - Private Helpers
 
     /// Extract a purpose description from a toolUse message.
     private static func extractPurpose(from data: SDKMessage.ToolUseData) -> String {

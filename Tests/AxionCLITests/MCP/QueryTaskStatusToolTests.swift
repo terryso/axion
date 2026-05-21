@@ -7,19 +7,19 @@ struct QueryTaskStatusToolTests {
 
     @Test("name is correct")
     func nameIsCorrect() {
-        let tool = createTool(tracker: AxionRunTracker())
+        let tool = createTool(tracker: RunCoordinator())
         #expect(tool.name == "query_task_status")
     }
 
     @Test("description is non-empty")
     func descriptionIsNonEmpty() {
-        let tool = createTool(tracker: AxionRunTracker())
+        let tool = createTool(tracker: RunCoordinator())
         #expect(!tool.description.isEmpty)
     }
 
     @Test("inputSchema contains run_id")
     func inputSchemaContainsRunId() {
-        let tool = createTool(tracker: AxionRunTracker())
+        let tool = createTool(tracker: RunCoordinator())
         guard let props = tool.inputSchema["properties"] as? [String: Any] else {
             Issue.record("inputSchema should have 'properties'")
             return
@@ -29,7 +29,7 @@ struct QueryTaskStatusToolTests {
 
     @Test("inputSchema requires run_id")
     func inputSchemaRequiresRunId() {
-        let tool = createTool(tracker: AxionRunTracker())
+        let tool = createTool(tracker: RunCoordinator())
         guard let required = tool.inputSchema["required"] as? [String] else {
             Issue.record("inputSchema should have 'required' array")
             return
@@ -39,14 +39,14 @@ struct QueryTaskStatusToolTests {
 
     @Test("isReadOnly is true")
     func isReadOnlyIsTrue() {
-        let tool = createTool(tracker: AxionRunTracker())
+        let tool = createTool(tracker: RunCoordinator())
         #expect(tool.isReadOnly)
     }
 
     @Test("known runId returns status")
     func knownRunIdReturnsStatus() async throws {
-        let tracker = AxionRunTracker()
-        let runId = await tracker.submitRun(task: "open calculator", options: RunOptions(task: "open calculator"))
+        let tracker = RunCoordinator()
+        let runId = await tracker.submitRun(task: "open calculator")
         let tool = createTool(tracker: tracker)
         let context = ToolContext(cwd: "/tmp", toolUseId: "test-id")
 
@@ -60,8 +60,8 @@ struct QueryTaskStatusToolTests {
 
     @Test("completed run returns completed")
     func completedRunReturnsCompleted() async throws {
-        let tracker = AxionRunTracker()
-        let runId = await tracker.submitRun(task: "open calculator", options: RunOptions(task: "open calculator"))
+        let tracker = RunCoordinator()
+        let runId = await tracker.submitRun(task: "open calculator")
         await tracker.updateRun(runId: runId, status: .completed, steps: [], durationMs: 500, replanCount: 0)
 
         let tool = createTool(tracker: tracker)
@@ -76,7 +76,7 @@ struct QueryTaskStatusToolTests {
 
     @Test("unknown runId returns not_found")
     func unknownRunIdReturnsNotFound() async throws {
-        let tracker = AxionRunTracker()
+        let tracker = RunCoordinator()
         let tool = createTool(tracker: tracker)
         let context = ToolContext(cwd: "/tmp", toolUseId: "test-id")
 
@@ -88,7 +88,7 @@ struct QueryTaskStatusToolTests {
 
     @Test("missing runId returns error")
     func missingRunIdReturnsError() async throws {
-        let tracker = AxionRunTracker()
+        let tracker = RunCoordinator()
         let tool = createTool(tracker: tracker)
         let context = ToolContext(cwd: "/tmp", toolUseId: "test-id")
 
@@ -100,7 +100,7 @@ struct QueryTaskStatusToolTests {
 
     @Test("empty runId returns error")
     func emptyRunIdReturnsError() async throws {
-        let tracker = AxionRunTracker()
+        let tracker = RunCoordinator()
         let tool = createTool(tracker: tracker)
         let context = ToolContext(cwd: "/tmp", toolUseId: "test-id")
 
@@ -110,7 +110,7 @@ struct QueryTaskStatusToolTests {
         #expect(result.content.contains("missing_run_id"))
     }
 
-    private func createTool(tracker: AxionRunTracker) -> QueryTaskStatusTool {
+    private func createTool(tracker: RunCoordinator) -> QueryTaskStatusTool {
         QueryTaskStatusTool(runTracker: tracker)
     }
 }
