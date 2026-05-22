@@ -35,7 +35,7 @@
 # - Dev moves story to 'review', then runs code-review (fresh context, different LLM recommended)
 
 generated: 2026-05-12
-last_updated: 2026-05-23
+last_updated: 2026-05-24
 project_key: NOKEY
 tracking_system: file-system
 story_location: _bmad-output/implementation-artifacts
@@ -265,6 +265,6 @@ development_status:
   # Epic 23: 高级进化 — 插件生态（可选）
   epic-23: in-progress
   23-1-self-evolution-plugin-protocol: done
-  23-2-session-search-plugin: backlog
+  23-2-session-search-plugin: done
   23-3-prompt-evolver-plugin: backlog
   epic-23-retrospective: optional

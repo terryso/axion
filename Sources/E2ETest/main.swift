@@ -174,6 +174,11 @@ await SkillUsageTrackerE2ETests.run()
 await SkillCuratorE2ETests.run()
 
 // ================================================================
+// SECTION 76-80: Session Search E2E Tests (Story 23.2: SessionSearchPlugin)
+// ================================================================
+await SessionSearchE2ETests.run()
+
+// ================================================================
 // Results Summary
 // ================================================================
 print("\n=== E2E Test Results ===")
