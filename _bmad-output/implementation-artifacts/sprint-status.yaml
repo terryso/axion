@@ -35,7 +35,7 @@
 # - Dev moves story to 'review', then runs code-review (fresh context, different LLM recommended)
 
 generated: 2026-05-12
-last_updated: 2026-05-21
+last_updated: 2026-05-22
 project_key: NOKEY
 tracking_system: file-system
 story_location: _bmad-output/implementation-artifacts
@@ -245,3 +245,26 @@ development_status:
   20-3-enhanced-memory-fact-lifecycle: done
   20-4-sdkmessage-output-formatting: done
   epic-20-retrospective: done
+
+  # Epic 21: 记忆进化 — ExperienceExtractor 与自动审查
+  epic-21: in-progress
+  21-1-experience-extractor-protocol-signal-model: done
+  21-2-llm-experience-extractor: backlog
+  21-3-memory-review-hook-session-end: backlog
+  21-4-memory-security-scan-frozen-snapshot: backlog
+  epic-21-retrospective: optional
+
+  # Epic 22: 技能进化 — SkillEvolver 与生命周期管理
+  epic-22: backlog
+  22-1-skill-signal-model-skill-evolver-protocol: backlog
+  22-2-llm-skill-evolver: backlog
+  22-3-skill-usage-tracker-lifecycle: backlog
+  22-4-skill-curator: backlog
+  epic-22-retrospective: optional
+
+  # Epic 23: 高级进化 — 插件生态（可选）
+  epic-23: backlog
+  23-1-self-evolution-plugin-protocol: backlog
+  23-2-session-search-plugin: backlog
+  23-3-prompt-evolver-plugin: backlog
+  epic-23-retrospective: optional
