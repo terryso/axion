@@ -91,6 +91,7 @@ enum RunOrchestrator {
         // Stream loop state
         var totalSteps = 0
         var pendingScreenshotToolUseIds: Set<String> = []
+        var pendingLaunchAppToolUseIds: Set<String> = []
         var visualDeltaSkipped = 0
         var visualDeltaChecked = 0
         var externallyModified = false
@@ -98,11 +99,8 @@ enum RunOrchestrator {
 
         let visualDeltaTracker = runConfig.noVisualDelta ? nil : VisualDeltaTracker()
         var screenshotCount = 0
-        let seatMonitor = (config.sharedSeatMode && !runConfig.allowForeground && !runConfig.dryrun)
-            ? await SeatActivityMonitor.create() : nil
-        if let monitor = seatMonitor {
-            _ = await monitor.describeBaseline()
-        }
+        var seatMonitor: SeatActivityMonitor? = nil
+        let shouldMonitorSeat = config.sharedSeatMode && !runConfig.allowForeground && !runConfig.dryrun
 
         let startTime = ContinuousClock.now
 
@@ -118,11 +116,24 @@ enum RunOrchestrator {
                 case .assistant:
                     break
                 case .toolUse(let data):
+                    // Lazy-init seat monitor on first Helper tool call
+                    if seatMonitor == nil, shouldMonitorSeat, data.toolName.hasPrefix("mcp__axion-helper__") {
+                        seatMonitor = SeatActivityMonitor.create()
+                    }
                     if data.toolName.contains("screenshot") {
                         pendingScreenshotToolUseIds.insert(data.toolUseId)
                         screenshotCount += 1
                     }
+                    if data.toolName.contains("launch_app") {
+                        pendingLaunchAppToolUseIds.insert(data.toolUseId)
+                    }
                 case .toolResult(let data):
+                    // Activate app after launch_app (must run from CLI process, not AxionHelper)
+                    if pendingLaunchAppToolUseIds.remove(data.toolUseId) != nil {
+                        if let bundleId = extractBundleIdFromLaunchResult(data.content) {
+                            activateAppFromCLI(bundleId: bundleId)
+                        }
+                    }
                     if pendingScreenshotToolUseIds.remove(data.toolUseId) != nil,
                        let tracker = visualDeltaTracker {
                         let base64 = extractBase64FromToolResult(data.content)
@@ -385,6 +396,28 @@ enum RunOrchestrator {
     /// Static wrapper for test backward compatibility.
     static func extractBase64FromToolResultForTest(_ content: String) -> String? {
         return extractBase64FromToolResult(content)
+    }
+
+    /// Extracts bundle_id from a launch_app tool result JSON (used for app activation).
+    static func extractBundleIdFromLaunchResult(_ content: String) -> String? {
+        guard let data = content.data(using: .utf8),
+              let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else {
+            return nil
+        }
+        return json["bundle_id"] as? String
+    }
+
+    /// Activates an app using osascript with bundle id — runs from the CLI process (terminal) where it has permission.
+    static func activateAppFromCLI(bundleId: String) {
+        let process = Process()
+        process.executableURL = URL(fileURLWithPath: "/usr/bin/osascript")
+        process.arguments = ["-e", "tell application id \"\(bundleId)\" to activate"]
+        do {
+            try process.run()
+            process.waitUntilExit()
+        } catch {
+            NSLog("[RunOrchestrator] osascript activate failed for \(bundleId): \(error)")
+        }
     }
 
 }

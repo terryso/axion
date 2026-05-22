@@ -36,6 +36,16 @@ actor RunCoordinator {
 
     func submitRun(task: String, request: OpenAgentSDK.CreateRunRequest = OpenAgentSDK.CreateRunRequest(task: "")) -> String {
         let runId = Self.generateRunId()
+        _submitRun(runId: runId, task: task, request: request)
+        return runId
+    }
+
+    /// Submit a run with a pre-assigned runId (e.g. from SDK's RunTracker).
+    func submitRunWithId(_ runId: String, task: String, request: OpenAgentSDK.CreateRunRequest = OpenAgentSDK.CreateRunRequest(task: "")) {
+        _submitRun(runId: runId, task: task, request: request)
+    }
+
+    private func _submitRun(runId: String, task: String, request: OpenAgentSDK.CreateRunRequest) {
         let submittedAt = Self.isoFormatter.string(from: Date())
 
         let run = TrackedRun(
@@ -50,7 +60,6 @@ actor RunCoordinator {
         persistRecordSafely(run)
 
         evictOldRuns()
-        return runId
     }
 
     func updateRun(

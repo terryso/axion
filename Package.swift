@@ -10,11 +10,13 @@ let package = Package(
     products: [
         .executable(name: "AxionCLI", targets: ["AxionCLI"]),
         .executable(name: "AxionHelper", targets: ["AxionHelper"]),
-        .executable(name: "AxionBar", targets: ["AxionBar"]),
         .library(name: "AxionCore", targets: ["AxionCore"]),
     ],
     dependencies: [
-        .package(path: "../open-agent-sdk-swift"),
+        .package(
+            url: "https://github.com/terryso/open-agent-sdk-swift.git",
+            from: "0.4.4"
+        ),
         .package(
             url: "https://github.com/terryso/swift-mcp.git",
             from: "2.0.0"
@@ -54,13 +56,6 @@ let package = Package(
             ],
             path: "Sources/AxionHelper"
         ),
-        .executableTarget(
-            name: "AxionBar",
-            dependencies: [
-                "AxionCore",
-            ],
-            path: "Sources/AxionBar"
-        ),
         .target(
             name: "AxionCore",
             path: "Sources/AxionCore"
@@ -69,11 +64,6 @@ let package = Package(
             name: "AxionCoreTests",
             dependencies: ["AxionCore"],
             path: "Tests/AxionCoreTests"
-        ),
-        .testTarget(
-            name: "AxionBarTests",
-            dependencies: ["AxionBar", "AxionCore"],
-            path: "Tests/AxionBarTests"
         ),
         .testTarget(
             name: "AxionCLITests",

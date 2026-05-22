@@ -10,6 +10,7 @@ struct ServiceContainer: Sendable {
     var inputSimulation: any InputSimulating
     var screenshotCapture: any ScreenshotCapturing
     var eventRecorder: any EventRecording
+    var launchDelayNs: UInt64 = 1_500_000_000 // 1.5s wait for app window to appear
 
     nonisolated(unsafe) static var shared = ServiceContainer(
         appLauncher: AppLauncherService(),

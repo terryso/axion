@@ -88,7 +88,7 @@ struct DoctorCommandTests {
     @Test("doctor reports API key missing when no config")
     func doctorReportsApiKeyMissingWhenNoConfig() throws {
         let mock = MockDoctorIO()
-        let report = DoctorCommand.runDoctor(io: mock, configDirectory: tempDir)
+        let report = DoctorCommand.runDoctor(io: mock, configDirectory: tempDir, isServerRunningOverride: { false })
 
         let apiKeyCheck = report.results.first { $0.name.contains("API Key") }
         #expect(apiKeyCheck != nil)
@@ -106,7 +106,7 @@ struct DoctorCommandTests {
         try configJSON.write(toFile: configFilePath, atomically: true, encoding: .utf8)
 
         let mock = MockDoctorIO()
-        let report = DoctorCommand.runDoctor(io: mock, configDirectory: tempDir)
+        let report = DoctorCommand.runDoctor(io: mock, configDirectory: tempDir, isServerRunningOverride: { false })
 
         let apiKeyCheck = report.results.first { $0.name.contains("API Key") }
         #expect(apiKeyCheck != nil)
@@ -121,7 +121,7 @@ struct DoctorCommandTests {
         try configJSON.write(toFile: configFilePath, atomically: true, encoding: .utf8)
 
         let mock = MockDoctorIO()
-        let report = DoctorCommand.runDoctor(io: mock, configDirectory: tempDir)
+        let report = DoctorCommand.runDoctor(io: mock, configDirectory: tempDir, isServerRunningOverride: { false })
 
         let apiKeyCheck = report.results.first { $0.name.contains("API Key") }
         #expect(apiKeyCheck != nil)
@@ -138,7 +138,7 @@ struct DoctorCommandTests {
         try configJSON.write(toFile: configFilePath, atomically: true, encoding: .utf8)
 
         let mock = MockDoctorIO()
-        let _ = DoctorCommand.runDoctor(io: mock, configDirectory: tempDir)
+        let _ = DoctorCommand.runDoctor(io: mock, configDirectory: tempDir, isServerRunningOverride: { false })
 
         let output = mock.capturedOutput.joined(separator: "\n")
         #expect(output.contains("Accessibility"), "输出应包含 Accessibility 检查结果")
@@ -154,7 +154,7 @@ struct DoctorCommandTests {
         try configJSON.write(toFile: configFilePath, atomically: true, encoding: .utf8)
 
         let mock = MockDoctorIO()
-        let _ = DoctorCommand.runDoctor(io: mock, configDirectory: tempDir)
+        let _ = DoctorCommand.runDoctor(io: mock, configDirectory: tempDir, isServerRunningOverride: { false })
 
         let output = mock.capturedOutput.joined(separator: "\n")
         #expect(output.contains("屏幕录制"), "输出应包含屏幕录制检查结果")
@@ -170,7 +170,7 @@ struct DoctorCommandTests {
         try configJSON.write(toFile: configFilePath, atomically: true, encoding: .utf8)
 
         let mock = MockDoctorIO()
-        let _ = DoctorCommand.runDoctor(io: mock, configDirectory: tempDir)
+        let _ = DoctorCommand.runDoctor(io: mock, configDirectory: tempDir, isServerRunningOverride: { false })
 
         let output = mock.capturedOutput.joined(separator: "\n")
         #expect(output.contains("macOS"), "输出应包含 macOS 版本信息")
@@ -190,7 +190,7 @@ struct DoctorCommandTests {
         try configJSON.write(toFile: configFilePath, atomically: true, encoding: .utf8)
 
         let mock = MockDoctorIO()
-        let report = DoctorCommand.runDoctor(io: mock, configDirectory: tempDir)
+        let report = DoctorCommand.runDoctor(io: mock, configDirectory: tempDir, isServerRunningOverride: { false })
 
         let macOSCheck = report.results.first { $0.name.contains("macOS") }
         #expect(macOSCheck != nil, "应包含 macOS 版本检查项")
@@ -207,7 +207,7 @@ struct DoctorCommandTests {
         try configJSON.write(toFile: configFilePath, atomically: true, encoding: .utf8)
 
         let mock = MockDoctorIO()
-        let report = DoctorCommand.runDoctor(io: mock, configDirectory: tempDir)
+        let report = DoctorCommand.runDoctor(io: mock, configDirectory: tempDir, isServerRunningOverride: { false })
 
         let output = mock.capturedOutput.joined(separator: "\n")
         let hasAllPassed = output.contains("All checks passed")
@@ -226,7 +226,7 @@ struct DoctorCommandTests {
     @Test("doctor shows fix hints for failed checks")
     func doctorShowsFixHintsForFailedChecks() throws {
         let mock = MockDoctorIO()
-        let report = DoctorCommand.runDoctor(io: mock, configDirectory: tempDir)
+        let report = DoctorCommand.runDoctor(io: mock, configDirectory: tempDir, isServerRunningOverride: { false })
 
         let failedChecks = report.results.filter { $0.status == .fail }
         #expect(!failedChecks.isEmpty, "无配置文件时应有失败项")
@@ -251,7 +251,7 @@ struct DoctorCommandTests {
         try configJSON.write(toFile: configFilePath, atomically: true, encoding: .utf8)
 
         let mock = MockDoctorIO()
-        let _ = DoctorCommand.runDoctor(io: mock, configDirectory: tempDir)
+        let _ = DoctorCommand.runDoctor(io: mock, configDirectory: tempDir, isServerRunningOverride: { false })
 
         let output = mock.capturedOutput.joined(separator: "\n")
         #expect(!output.contains(testKey), "完整 API Key 不应出现在终端输出中 (NFR9)")
@@ -266,7 +266,7 @@ struct DoctorCommandTests {
         try corruptJSON.write(toFile: configFilePath, atomically: true, encoding: .utf8)
 
         let mock = MockDoctorIO()
-        let report = DoctorCommand.runDoctor(io: mock, configDirectory: tempDir)
+        let report = DoctorCommand.runDoctor(io: mock, configDirectory: tempDir, isServerRunningOverride: { false })
 
         let configCheck = report.results.first { $0.name.contains("配置文件") }
         #expect(configCheck != nil, "应包含配置文件检查项")
@@ -281,7 +281,7 @@ struct DoctorCommandTests {
     @Test("doctor shows failure count when checks fail")
     func doctorShowsFailureCountWhenChecksFail() throws {
         let mock = MockDoctorIO()
-        let report = DoctorCommand.runDoctor(io: mock, configDirectory: tempDir)
+        let report = DoctorCommand.runDoctor(io: mock, configDirectory: tempDir, isServerRunningOverride: { false })
 
         let failedCount = report.results.filter { $0.status == .fail }.count
         if failedCount > 0 {
@@ -322,7 +322,7 @@ struct DoctorCommandTests {
         try configJSON.write(toFile: configFilePath, atomically: true, encoding: .utf8)
 
         let mock = MockDoctorIO()
-        let _ = DoctorCommand.runDoctor(io: mock, configDirectory: tempDir)
+        let _ = DoctorCommand.runDoctor(io: mock, configDirectory: tempDir, isServerRunningOverride: { false })
 
         let output = mock.capturedOutput.joined(separator: "\n")
         #expect(output.contains("Memory"), "输出应包含 Memory 检查结果")
@@ -336,7 +336,7 @@ struct DoctorCommandTests {
         try configJSON.write(toFile: configFilePath, atomically: true, encoding: .utf8)
 
         let mock = MockDoctorIO()
-        let _ = DoctorCommand.runDoctor(io: mock, configDirectory: tempDir)
+        let _ = DoctorCommand.runDoctor(io: mock, configDirectory: tempDir, isServerRunningOverride: { false })
 
         let output = mock.capturedOutput.joined(separator: "\n")
         #expect(
@@ -375,7 +375,7 @@ struct DoctorCommandTests {
         try configJSON.write(toFile: configFilePath, atomically: true, encoding: .utf8)
 
         let mock = MockDoctorIO()
-        let report = DoctorCommand.runDoctor(io: mock, configDirectory: tempDir)
+        let report = DoctorCommand.runDoctor(io: mock, configDirectory: tempDir, isServerRunningOverride: { false })
 
         let memoryCheck = report.results.first { $0.name.contains("Memory") }
         #expect(memoryCheck != nil, "应包含 Memory 检查项")
@@ -395,7 +395,7 @@ struct DoctorCommandTests {
         try configJSON.write(toFile: configFilePath, atomically: true, encoding: .utf8)
 
         let mock = MockDoctorIO()
-        let report = DoctorCommand.runDoctor(io: mock, configDirectory: tempDir)
+        let report = DoctorCommand.runDoctor(io: mock, configDirectory: tempDir, isServerRunningOverride: { false })
 
         let memoryCheck = report.results.first { $0.name.contains("Memory") }
         #expect(memoryCheck != nil, "应包含 Memory 检查项")
@@ -407,7 +407,7 @@ struct DoctorCommandTests {
     @Test("doctor output contains header")
     func doctorOutputContainsHeader() throws {
         let mock = MockDoctorIO()
-        let _ = DoctorCommand.runDoctor(io: mock, configDirectory: tempDir)
+        let _ = DoctorCommand.runDoctor(io: mock, configDirectory: tempDir, isServerRunningOverride: { false })
 
         let output = mock.capturedOutput.joined(separator: "\n")
         #expect(output.contains("Axion Doctor"), "输出应包含 Axion Doctor 标题")
@@ -421,7 +421,7 @@ struct DoctorCommandTests {
         try configJSON.write(toFile: configFilePath, atomically: true, encoding: .utf8)
 
         let mock = MockDoctorIO()
-        let _ = DoctorCommand.runDoctor(io: mock, configDirectory: tempDir)
+        let _ = DoctorCommand.runDoctor(io: mock, configDirectory: tempDir, isServerRunningOverride: { false })
 
         let output = mock.capturedOutput.joined(separator: "\n")
         #expect(

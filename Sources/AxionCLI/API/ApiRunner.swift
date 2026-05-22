@@ -51,9 +51,8 @@ enum ApiRunner {
         }
         let agent = buildResult.agent
 
-        // Seat activity monitoring (Story 13.4) — detect external desktop operations
-        let seatMonitor = (config.sharedSeatMode && !(options.allowForeground ?? false))
-            ? await SeatActivityMonitor.create() : nil
+        // Seat activity monitoring condition — monitor is created lazily inside processStream
+        let shouldMonitorSeat = config.sharedSeatMode && !(options.allowForeground ?? false)
 
         // Process the message stream via shared processor
         let result = await processStream(
@@ -64,7 +63,7 @@ enum ApiRunner {
             runId: runId,
             eventBroadcaster: eventBroadcaster,
             runTracker: runTracker,
-            seatMonitor: seatMonitor,
+            shouldMonitorSeat: shouldMonitorSeat,
             maxScreenshots: config.maxScreenshots
         )
 
@@ -132,7 +131,7 @@ enum ApiRunner {
         runId: String,
         eventBroadcaster: OpenAgentSDK.EventBroadcaster?,
         runTracker: RunCoordinator?,
-        seatMonitor: SeatActivityMonitor?,
+        shouldMonitorSeat: Bool,
         maxScreenshots: Int?
     ) async -> StreamResult {
         let messageStream = agent.stream(resolvedTask)
@@ -143,7 +142,7 @@ enum ApiRunner {
             runId: runId,
             eventBroadcaster: eventBroadcaster,
             runTracker: runTracker,
-            seatMonitor: seatMonitor,
+            shouldMonitorSeat: shouldMonitorSeat,
             maxScreenshots: maxScreenshots,
             cleanup: { try? await agent.close() }
         )
@@ -157,7 +156,7 @@ enum ApiRunner {
         runId: String,
         eventBroadcaster: OpenAgentSDK.EventBroadcaster?,
         runTracker: RunCoordinator? = nil,
-        seatMonitor: SeatActivityMonitor? = nil,
+        shouldMonitorSeat: Bool = false,
         maxScreenshots: Int? = nil,
         cleanup: @escaping () async -> Void = {}
     ) async -> StreamResult {
@@ -169,6 +168,7 @@ enum ApiRunner {
         var externallyModified = false
         var seatActivityReported = false
         var screenshotCount = 0
+        var seatMonitor: SeatActivityMonitor? = nil
         let startTime = ContinuousClock.now
 
         for await message in messageStream {
@@ -188,6 +188,11 @@ enum ApiRunner {
             case .toolUse(let data):
                 totalSteps += 1
                 pendingToolUses[data.toolUseId] = data
+
+                // Lazy-init seat monitor on first Helper tool call
+                if seatMonitor == nil, shouldMonitorSeat, data.toolName.hasPrefix("mcp__axion-helper__") {
+                    seatMonitor = SeatActivityMonitor.create()
+                }
 
                 // Track screenshot calls for cost telemetry
                 if data.toolName.contains("screenshot") {

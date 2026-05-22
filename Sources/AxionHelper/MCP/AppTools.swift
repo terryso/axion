@@ -25,8 +25,9 @@ struct LaunchAppTool {
         do {
             let appInfo = try await ServiceContainer.shared.appLauncher.launchApp(name: appName)
 
-            try? await Task.sleep(nanoseconds: 1_500_000_000) // 1.5s
+            try? await Task.sleep(nanoseconds: ServiceContainer.shared.launchDelayNs)
             let windows = ServiceContainer.shared.accessibilityEngine.listWindows(pid: appInfo.pid)
+
             let blocker = detectBlockingDialog(windows: windows, appPid: appInfo.pid)
 
             let encoder = JSONEncoder()

@@ -32,7 +32,8 @@ struct DaemonServiceTests {
     ) -> DaemonService {
         DaemonService(
             plistPath: plistPath,
-            runLaunchctl: launchctlOutput
+            runLaunchctl: launchctlOutput,
+            resolveBin: { "/usr/local/bin/axion" }
         )
     }
 
@@ -188,7 +189,8 @@ struct DaemonServiceTests {
             runLaunchctl: { args in
                 collector.append(args)
                 return ""
-            }
+            },
+            resolveBin: { "/usr/local/bin/axion" }
         )
 
         _ = try service.install(host: "0.0.0.0", port: 9999, authKey: "test-key")
@@ -223,7 +225,8 @@ struct DaemonServiceTests {
             runLaunchctl: { args in
                 collector.append(args)
                 return ""
-            }
+            },
+            resolveBin: { "/usr/local/bin/axion" }
         )
 
         try service.uninstall()
@@ -306,7 +309,8 @@ struct DaemonServiceTests {
 
         let service = DaemonService(
             plistPath: plistPath,
-            runLaunchctl: { _ in "" }
+            runLaunchctl: { _ in "" },
+            resolveBin: { "/usr/local/bin/axion" }
         )
         // Override logDir by creating a service with the temp logDir
         // Since logDir is computed from NSHomeDirectory(), we need to create the real logs
@@ -331,7 +335,8 @@ struct DaemonServiceTests {
                     throw DaemonError.bootstrapFailed("gui/501", 1)
                 }
                 return ""
-            }
+            },
+            resolveBin: { "/usr/local/bin/axion" }
         )
 
         #expect(throws: DaemonError.self) {

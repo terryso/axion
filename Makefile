@@ -1,4 +1,4 @@
-.PHONY: test test-integration test-e2e test-e2e-real test-all build
+.PHONY: test test-integration test-e2e test-e2e-real test-acceptance test-all build
 
 VERSION := $(shell cat VERSION)
 
@@ -25,6 +25,10 @@ test-e2e:
 
 test-e2e-real:
 	AXION_HELPER_PATH="$$(pwd)/.build/AxionHelper.app/Contents/MacOS/AxionHelper" swift test --filter AxionE2ETests.RealLLME2ETests
+
+test-acceptance:
+	bash Distribution/homebrew/build-helper-app.sh
+	AXION_HELPER_PATH="$$(pwd)/.build/AxionHelper.app/Contents/MacOS/AxionHelper" swift test --filter AxionE2ETests.AcceptanceE2E
 
 test-all:
 	swift test

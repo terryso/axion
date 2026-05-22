@@ -66,9 +66,20 @@ struct ServerCommand: AsyncParsableCommand {
         )
 
         server.runHandler = { [runCoordinator, config] task, request, tracker, broadcaster, persistence, limiter in
+            // Find the runId that SDK's tracker created for this task
+            let runs = await tracker.listRuns()
+            let sdkRunId = runs.first(where: { $0.task == task && $0.status == .queued })?.runId
+            guard let runId = sdkRunId else {
+                return
+            }
+
             await limiter.acquire()
 
-            let runId = await runCoordinator.submitRun(task: task, request: request)
+            // Mark as running in SDK tracker
+            await tracker.updateRun(runId: runId, status: .running)
+
+            // Track in Axion's RunCoordinator using the SDK's runId
+            await runCoordinator.submitRunWithId(runId, task: task, request: request)
 
             let result = await ApiRunner.runAgent(
                 config: config,
@@ -97,6 +108,16 @@ struct ServerCommand: AsyncParsableCommand {
                 totalSteps: result.totalSteps,
                 durationMs: result.durationMs
             )
+
+            // Emit runCompleted to SDK's broadcaster for SSE replay
+            let completedEvent = AgentSSEEvent.runCompleted(RunCompletedData(
+                runId: runId,
+                finalStatus: sdkStatus.rawValue,
+                totalSteps: result.totalSteps,
+                durationMs: result.durationMs
+            ))
+            await broadcaster.emit(runId: runId, event: completedEvent)
+            await broadcaster.complete(runId: runId)
 
             await limiter.release()
         }

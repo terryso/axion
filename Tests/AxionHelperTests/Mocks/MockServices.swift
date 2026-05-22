@@ -136,7 +136,8 @@ enum ServiceContainerFixture {
             accessibilityEngine: accessibilityEngine ?? original.accessibilityEngine,
             inputSimulation: inputSimulation ?? original.inputSimulation,
             screenshotCapture: screenshotCapture ?? original.screenshotCapture,
-            eventRecorder: eventRecorder ?? original.eventRecorder
+            eventRecorder: eventRecorder ?? original.eventRecorder,
+            launchDelayNs: 0
         )
         return { ServiceContainer.shared = original }
     }

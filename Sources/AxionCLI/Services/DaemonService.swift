@@ -51,11 +51,13 @@ final class DaemonService {
 
     private let runLaunchctl: @Sendable ([String]) throws -> String
     private let fileManager: FileManager
+    private let resolveBin: () -> String
 
     init(
         plistPath: String? = nil,
         runLaunchctl: @escaping @Sendable ([String]) throws -> String = DaemonService.defaultLaunchctl,
-        fileManager: FileManager = .default
+        fileManager: FileManager = .default,
+        resolveBin: @escaping @Sendable () -> String = { DaemonService.resolveAxionBin() }
     ) {
         let home = NSHomeDirectory()
         self.plistPath = plistPath
@@ -63,6 +65,7 @@ final class DaemonService {
         self.logDir = (home as NSString).appendingPathComponent(".axion")
         self.runLaunchctl = runLaunchctl
         self.fileManager = fileManager
+        self.resolveBin = resolveBin
     }
 
     // MARK: - Path Resolution
@@ -117,7 +120,7 @@ final class DaemonService {
     // MARK: - Plist Generation
 
     func buildPlist(host: String = defaultHost, port: Int = defaultPort, authKey: String? = nil) -> String {
-        let binPath = Self.resolveAxionBin()
+        let binPath = resolveBin()
         let logPath = (logDir as NSString).appendingPathComponent("server.log")
         let errLogPath = (logDir as NSString).appendingPathComponent("server.err.log")
 

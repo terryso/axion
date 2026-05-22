@@ -59,10 +59,8 @@ struct AppLauncherService: AppLaunching {
             )
         }
 
-        // Resolve app URL
+        // Not running — launch fresh via NSWorkspace
         let appURL = try resolveAppURL(name: name)
-
-        // Launch
         let config = NSWorkspace.OpenConfiguration()
         config.activates = true
 

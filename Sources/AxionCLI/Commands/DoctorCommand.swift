@@ -38,9 +38,11 @@ struct DoctorCommand: ParsableCommand {
     }
 
     /// 可测试的 doctor 入口 -- 注入 IO 和配置目录。
+    /// - Parameter isServerRunningOverride: 注入的 server 运行检查（测试中传 `{ false }` 避免调用 Process()）。
     static func runDoctor(
         io: DoctorIO,
-        configDirectory: String? = nil
+        configDirectory: String? = nil,
+        isServerRunningOverride: (@Sendable () -> Bool)? = nil
     ) -> DoctorReport {
         let dir = configDirectory ?? ConfigManager.defaultConfigDirectory
         let configFilePath = (dir as NSString).appendingPathComponent("config.json")
@@ -96,7 +98,7 @@ struct DoctorCommand: ParsableCommand {
         results.append(lockCheck)
 
         // Check 8: Settings API accessibility (optional, only when server is running)
-        let settingsApiCheck = checkSettingsAPI()
+        let settingsApiCheck = checkSettingsAPI(isServerRunning: isServerRunningOverride)
         results.append(settingsApiCheck)
 
         // 输出所有检查结果
@@ -333,23 +335,27 @@ struct DoctorCommand: ParsableCommand {
         )
     }
 
-    private static func checkSettingsAPI() -> CheckResult {
-        // Only check if axion server process is running
-        let pipe = Pipe()
-        let pgrep = Process()
-        pgrep.executableURL = URL(fileURLWithPath: "/usr/bin/pgrep")
-        pgrep.arguments = ["-f", "axion server"]
-        pgrep.standardOutput = pipe
-        let isServerRunning: Bool
-        do {
-            try pgrep.run()
-            pgrep.waitUntilExit()
-            isServerRunning = pgrep.terminationStatus == 0
-        } catch {
-            isServerRunning = false
+    private static func checkSettingsAPI(isServerRunning: (@Sendable () -> Bool)?) -> CheckResult {
+        // Use injected check or default pgrep-based detection
+        let serverRunning: Bool
+        if let isServerRunning {
+            serverRunning = isServerRunning()
+        } else {
+            let pipe = Pipe()
+            let pgrep = Process()
+            pgrep.executableURL = URL(fileURLWithPath: "/usr/bin/pgrep")
+            pgrep.arguments = ["-f", "axion server"]
+            pgrep.standardOutput = pipe
+            do {
+                try pgrep.run()
+                pgrep.waitUntilExit()
+                serverRunning = pgrep.terminationStatus == 0
+            } catch {
+                serverRunning = false
+            }
         }
 
-        guard isServerRunning else {
+        guard serverRunning else {
             return CheckResult(
                 name: "Settings API",
                 status: .ok,
