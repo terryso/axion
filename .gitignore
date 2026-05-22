@@ -9,3 +9,5 @@ DerivedData/
 .env
 .vscode/
 .claude/.story-automator-active
+__pycache__/
+*.pyc
