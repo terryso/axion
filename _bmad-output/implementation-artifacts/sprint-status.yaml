@@ -1,5 +1,5 @@
 # generated: 2026-05-12
-# last_updated: 2026-05-23
+# last_updated: 2026-05-24
 # project: open-agent-sdk-swift
 # project_key: NOKEY
 # tracking_system: file-system
@@ -255,16 +255,16 @@ development_status:
   epic-21-retrospective: done
 
   # Epic 22: 技能进化 — SkillEvolver 与生命周期管理
-  epic-22: in-progress
+  epic-22: done
   22-1-skill-signal-model-skill-evolver-protocol: done
   22-2-llm-skill-evolver: done
   22-3-skill-usage-tracker-lifecycle: done
   22-4-skill-curator: done
-  epic-22-retrospective: optional
+  epic-22-retrospective: done
 
   # Epic 23: 高级进化 — 插件生态（可选）
-  epic-23: backlog
-  23-1-self-evolution-plugin-protocol: backlog
+  epic-23: in-progress
+  23-1-self-evolution-plugin-protocol: done
   23-2-session-search-plugin: backlog
   23-3-prompt-evolver-plugin: backlog
   epic-23-retrospective: optional

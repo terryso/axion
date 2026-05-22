@@ -1,6 +1,6 @@
 # Epics: Agent 自进化能力
 
-> **Status:** Epic 21 Complete, Epic 22–23 Planning
+> **Status:** Epic 21–22 Complete, Epic 23 Planning
 > **Created:** 2026-05-21
 > **Motivation:** 基于 Hermes Agent 自进化机制深度解析系列的研究成果，为 OpenAgentSDK 规划分层、渐进式的自进化能力。
 
@@ -134,9 +134,9 @@
 定义技能变更信号和进化器接口。
 
 **产出：**
-- `SkillSignal` enum — create / update / archive / addFile
+- `SkillSignal` struct — 技能变更信号（skillName、signalType、content、confidence、source）
 - `SkillEvolver` protocol — 技能进化器抽象接口
-- `SkillLifecycleState` — active / stale / archived / pinned 状态机
+- `SkillLifecycleState` — active / deprecated / experimental / retired 状态机
 
 **Hermes 参考：**
 - `tools/skill_usage.py:1-100` — 技能生命周期管理
@@ -163,7 +163,7 @@
 **产出：**
 - `LLMSkillEvolver` — 基于 LLM 的 SkillEvolver 实现
 - 技能审查 prompt（类级命名约束、优先修补策略、用户偏好嵌入）
-- 技能文件操作（SKILL.md 创建/更新、references/templates/scripts 管理）
+- 内存中 Skill 字段合并（promptTemplate、description、whenToUse 等字段级别的 partial override，不涉及文件系统操作）
 
 **Hermes 参考：**
 - `agent/background_review.py:45-145` — `_SKILL_REVIEW_PROMPT` 完整内容
@@ -191,7 +191,7 @@
 
 **产出：**
 - `SkillUsageTracker` — 追踪 view_count、last_viewed_at、last_managed_at
-- 生命周期转换：active → stale（30天）→ archived（90天）
+- 生命周期转换：active → deprecated（30天）→ retired（90天）
 - Pinned 技能跳过所有自动转换
 - 使用追踪 sidecar 文件（与技能内容分离）
 

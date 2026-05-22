@@ -466,6 +466,11 @@ public struct AgentOptions: Sendable {
     /// to validate facts before they are persisted. `nil` (default) means no security scanning.
     public var securityConfig: MemorySecurityConfig?
 
+    /// Optional configurations for self-evolution plugins.
+    /// When set, indicates which evolution plugins to load at agent creation time.
+    /// `nil` (default) means no evolution plugins.
+    public var evolutionPlugins: [EvolutionPluginConfig]?
+
     // MARK: - Memberwise Init
 
     public init(
@@ -535,7 +540,8 @@ public struct AgentOptions: Sendable {
         traceEnabled: Bool = false,
         traceBaseURL: String? = nil,
         memoryReviewConfig: MemoryReviewConfig? = nil,
-        securityConfig: MemorySecurityConfig? = nil
+        securityConfig: MemorySecurityConfig? = nil,
+        evolutionPlugins: [EvolutionPluginConfig]? = nil
     ) {
         self.apiKey = apiKey
         self.model = model
@@ -604,6 +610,7 @@ public struct AgentOptions: Sendable {
         self.traceBaseURL = traceBaseURL
         self.memoryReviewConfig = memoryReviewConfig
         self.securityConfig = securityConfig
+        self.evolutionPlugins = evolutionPlugins
     }
 
     // MARK: - Auto-Discover Skills
@@ -720,6 +727,7 @@ public struct AgentOptions: Sendable {
         self.traceBaseURL = nil
         self.memoryReviewConfig = nil
         self.securityConfig = nil
+        self.evolutionPlugins = nil
     }
 
     // MARK: - Validation
