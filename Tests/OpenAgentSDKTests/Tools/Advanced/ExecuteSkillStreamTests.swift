@@ -4,6 +4,55 @@ import XCTest
 /// Tests for Agent.executeSkillStream() — streaming direct skill execution.
 final class ExecuteSkillStreamTests: XCTestCase {
 
+    override func setUp() {
+        super.setUp()
+        SkillStreamMockURLProtocol.reset()
+    }
+
+    override func tearDown() {
+        SkillStreamMockURLProtocol.reset()
+        super.tearDown()
+    }
+
+    // MARK: - Helpers
+
+    private func makeMockSession() -> URLSession {
+        let config = URLSessionConfiguration.ephemeral
+        config.protocolClasses = [SkillStreamMockURLProtocol.self]
+        return URLSession(configuration: config)
+    }
+
+    private func makeStreamingResponse(text: String = "ok") -> Data {
+        let events = """
+        event: message_start
+        data: {"type":"message_start","message":{"id":"msg_test","type":"message","role":"assistant","content":[],"model":"claude-sonnet-4-6","usage":{"input_tokens":10,"output_tokens":0}}}
+
+        event: content_block_start
+        data: {"type":"content_block_start","index":0,"content_block":{"type":"text","text":""}}
+
+        event: content_block_delta
+        data: {"type":"content_block_delta","index":0,"delta":{"type":"text_delta","text":"\(text)"}}
+
+        event: content_block_stop
+        data: {"type":"content_block_stop","index":0}
+
+        event: message_delta
+        data: {"type":"message_delta","delta":{"stop_reason":"end_turn"},"usage":{"output_tokens":\(text.count)}}
+
+        event: message_stop
+        data: {"type":"message_stop"}
+
+        """
+        return Data(events.utf8)
+    }
+
+    private func setupMockResponse() {
+        let data = makeStreamingResponse()
+        SkillStreamMockURLProtocol.mockResponses = [
+            "https://api.anthropic.com/v1/messages": (200, ["content-type": "text/event-stream"], data)
+        ]
+    }
+
     // MARK: - Helper: Create a test skill
 
     private func makeSkill(
@@ -117,17 +166,18 @@ final class ExecuteSkillStreamTests: XCTestCase {
             promptTemplate: "Do restricted things"
         ))
 
-        let agent = createAgent(options: AgentOptions(
+        setupMockResponse()
+        let client = AnthropicClient(apiKey: "test-key", urlSession: makeMockSession())
+        let agent = Agent(options: AgentOptions(
             apiKey: "test-key",
             model: "claude-sonnet-4-6",
             tools: getAllBaseTools(tier: .core),
             skillRegistry: registry,
             allowedTools: ["Bash", "Read", "Write"]
-        ))
+        ), client: client)
 
         XCTAssertEqual(agent.options.allowedTools, ["Bash", "Read", "Write"])
 
-        // Consume stream (will fail with API error since key is fake, but state should still restore)
         let stream = agent.executeSkillStream("restricted-skill")
         for await _ in stream {}
 
@@ -143,12 +193,14 @@ final class ExecuteSkillStreamTests: XCTestCase {
             promptTemplate: "Do opus things"
         ))
 
-        let agent = createAgent(options: AgentOptions(
+        setupMockResponse()
+        let client = AnthropicClient(apiKey: "test-key", urlSession: makeMockSession())
+        let agent = Agent(options: AgentOptions(
             apiKey: "test-key",
             model: "claude-sonnet-4-6",
             tools: getAllBaseTools(tier: .core),
             skillRegistry: registry
-        ))
+        ), client: client)
 
         XCTAssertEqual(agent.model, "claude-sonnet-4-6")
 
@@ -167,16 +219,46 @@ final class ExecuteSkillStreamTests: XCTestCase {
             promptTemplate: "Do basic things"
         ))
 
-        let agent = createAgent(options: AgentOptions(
+        setupMockResponse()
+        let client = AnthropicClient(apiKey: "test-key", urlSession: makeMockSession())
+        let agent = Agent(options: AgentOptions(
             apiKey: "test-key",
             model: "claude-sonnet-4-6",
             tools: getAllBaseTools(tier: .core),
             skillRegistry: registry
-        ))
+        ), client: client)
 
         XCTAssertEqual(agent.model, "claude-sonnet-4-6")
         let stream = agent.executeSkillStream("basic-skill")
         for await _ in stream {}
         XCTAssertEqual(agent.model, "claude-sonnet-4-6")
     }
+}
+
+// MARK: - Mock URL Protocol
+
+private final class SkillStreamMockURLProtocol: URLProtocol {
+    nonisolated(unsafe) static var mockResponses: [String: (Int, [String: String], Data)] = [:]
+
+    override class func canInit(with request: URLRequest) -> Bool { true }
+    override class func canonicalRequest(for request: URLRequest) -> URLRequest { request }
+
+    override func startLoading() {
+        guard let url = request.url?.absoluteString,
+              let mock = Self.mockResponses[url] else {
+            client?.urlProtocol(self, didFailWithError: NSError(
+                domain: "SkillStreamMock", code: -1,
+                userInfo: [NSLocalizedDescriptionKey: "No mock for \(request.url?.absoluteString ?? "nil")"]
+            ))
+            return
+        }
+        let response = HTTPURLResponse(url: request.url!, statusCode: mock.0, httpVersion: "HTTP/1.1", headerFields: mock.1)!
+        client?.urlProtocol(self, didReceive: response, cacheStoragePolicy: .notAllowed)
+        client?.urlProtocol(self, didLoad: mock.2)
+        client?.urlProtocolDidFinishLoading(self)
+    }
+
+    override func stopLoading() {}
+
+    static func reset() { mockResponses = [:] }
 }

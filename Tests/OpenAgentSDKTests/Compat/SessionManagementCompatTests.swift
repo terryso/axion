@@ -19,7 +19,9 @@ final class SessionManagementBuildCompatTests: XCTestCase {
 
     /// AC1 [P0]: SessionStore actor can be instantiated with default directory.
     func testSessionStore_instantiation_default() async {
-        let store = SessionStore()
+        let tmpDir = FileManager.default.temporaryDirectory
+            .appendingPathComponent("session-test-\(UUID().uuidString)").path
+        let store = SessionStore(sessionsDir: tmpDir)
         let sessions = try? await store.list()
         XCTAssertNotNil(sessions, "SessionStore() compiles and list() returns a value")
     }
