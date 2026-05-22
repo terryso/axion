@@ -31,6 +31,10 @@
 - **文件缓存与上下文** — LRU 文件缓存、Git 状态自动注入、项目文档发现（CLAUDE.md/AGENT.md）
 - **运行时控制** — 动态模型切换、查询中断并获取部分结果、会话记忆
 - **沙盒与日志** — 可配置的命令/路径沙盒限制，结构化 JSON 日志输出
+- **HTTP API Server** — 将任意 Agent 暴露为 REST + SSE 服务，支持 Run 追踪、并发限制和认证
+- **成本与追踪** — 内置 CostTracker 进行 token/成本预算控制，TraceRecorder 记录 JSONL 执行可观测性
+- **增强 Memory** — 基于 Fact 的记忆系统，支持 candidate→active→retired 生命周期、证据驱动置信度和导入导出
+- **输出格式化** — SDKMessageOutputHandler 协议，提供 Terminal 和 JSON 输出格式化器
 
 ## 快速入门（15 分钟）
 

@@ -780,7 +780,8 @@ BasicAgent → StreamingAgent → CustomTools → CustomSystemPromptExample
 10. **Advanced controls:** ModelSwitchingExample, QueryAbortExample — runtime model switching and query cancellation
 11. **Context & multi-turn:** ContextInjectionExample, MultiTurnExample — file caching, context injection, multi-turn conversations
 12. **OpenAI compat:** OpenAICompatExample — use DeepSeek, Qwen, Ollama, and other OpenAI-compatible APIs
-13. **SDK compat verification:** Compat* examples — verify TypeScript SDK API parity (for SDK contributors)
+13. **HTTP API Server:** AgentHTTPServerExample — expose an Agent as a REST + SSE HTTP service
+14. **SDK compat verification:** Compat* examples — verify TypeScript SDK API parity (for SDK contributors)
 
 ## Troubleshooting
 

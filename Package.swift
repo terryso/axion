@@ -26,18 +26,25 @@ let package = Package(
             url: "https://github.com/apple/swift-argument-parser",
             from: "1.5.0"
         ),
+        .package(
+            url: "https://github.com/hummingbird-project/hummingbird.git",
+            from: "2.0.0"
+        ),
     ],
     targets: [
         .target(
             name: "OpenAgentSDK",
             dependencies: [
                 .product(name: "MCP", package: "swift-mcp"),
+                .product(name: "Hummingbird", package: "hummingbird"),
             ],
             path: "Sources/OpenAgentSDK"
         ),
         .testTarget(
             name: "OpenAgentSDKTests",
-            dependencies: ["OpenAgentSDK"],
+            dependencies: ["OpenAgentSDK",
+                .product(name: "Hummingbird", package: "hummingbird"),
+            ],
             path: "Tests/OpenAgentSDKTests"
         ),
         .executableTarget(
@@ -232,6 +239,16 @@ let package = Package(
             name: "PauseProtocolExample",
             dependencies: ["OpenAgentSDK"],
             path: "Examples/PauseProtocolExample"
+        ),
+        .executableTarget(
+            name: "AgentHTTPServerExample",
+            dependencies: ["OpenAgentSDK"],
+            path: "Examples/AgentHTTPServerExample"
+        ),
+        .executableTarget(
+            name: "CostTrackerExample",
+            dependencies: ["OpenAgentSDK"],
+            path: "Examples/CostTrackerExample"
         ),
         .executableTarget(
             name: "ScaffoldCLI",
