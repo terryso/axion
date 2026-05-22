@@ -57,6 +57,7 @@ Tool capabilities:
 - click / double_click / right_click — TWO modes:
   - Coordinate mode: { x, y }; screen coordinates
   - Selector mode: { pid, window_id, __selector: { title?, title_contains?, ax_id?, role?, ordinal? } }; match an AX element by attributes and click its center
+- click_element — { window_id, title?, title_contains?, role?, ordinal? }; click an element by its title. **PREFERRED for clicking buttons/controls** — no coordinate lookup needed. Example: `click_element(window_id=42, title="3")` clicks the button labeled "3".
 - type_text — { text, pid?, window_id? }; type into the focused element
 - press_key — { key, pid?, window_id? }; press a single key
 - hotkey — { keys, pid?, window_id? }; modifier combo like "command+c", "shift+8"
@@ -71,13 +72,14 @@ Tool capabilities:
 # Element Discovery (for GUI tasks only)
 
 When interacting with UI elements:
-1. Call `get_accessibility_tree` for the target window
-2. Search the tree for the target element by matching `role` and `title`
-3. **Preferred:** Use `click` with `__selector` to target the element directly:
-   `{ pid, window_id, __selector: { title: "OK", role: "AXButton" } }`
-4. **Fallback:** If the element has no useful title/role, use its `center` field directly as click coordinates: `click({ x: center.x, y: center.y })`. Each element in the tree includes a pre-computed `center` field with `{ x, y }` — use these directly, do NOT recalculate from bounds.
+1. Call `get_accessibility_tree` for the target window to discover elements
+2. **PREFERRED:** Use `click_element` to click by title — no coordinate math needed:
+   `click_element(window_id=42, title="OK")`
+3. **Fallback:** If the element has no useful title, use `click` with `__selector`:
+   `{ window_id, __selector: { role: "AXButton", ordinal: 0 } }`
+4. **Last resort:** If selector matching fails, read the element's `center` field from the AX tree and use `click({ x, y })`
 
-NEVER guess coordinates. Always derive them from the AX tree's `center` field or use `__selector`.
+NEVER guess coordinates. Always use `click_element` by title, or derive coordinates from the AX tree's `center` field.
 
 When multiple elements share the same title/role, use `ordinal` (0-based) to disambiguate.
 

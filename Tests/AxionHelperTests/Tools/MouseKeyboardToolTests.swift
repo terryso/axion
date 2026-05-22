@@ -438,5 +438,72 @@ struct MouseKeyboardToolTests {
         let text = textContent(result)
         #expect(!text.hasPrefix("Not yet implemented"))
     }
+
+    @Test("click_element resolves selector and clicks center")
+    func clickElementResolvesSelectorAndClicks() async throws {
+        let mockInput = makeSuccessMock()
+        let mockEngine = MockAccessibilityEngine(
+            listWindowsHandler: { _ in [] },
+            getWindowStateHandler: { _ in WindowState(
+                windowId: 1, pid: 123, title: "Test", bounds: WindowBounds(x: 0, y: 0, width: 100, height: 100),
+                isMinimized: false, isFocused: true, axTree: nil, appName: "Test"
+            ) },
+            getAXTreeHandler: { _, _ in AXElement(role: "AXWindow", children: []) }
+        )
+
+        let restore = ServiceContainerFixture.apply(
+            accessibilityEngine: mockEngine,
+            inputSimulation: mockInput
+        )
+        defer { restore() }
+
+        let server = try await makeRegisteredServer()
+        let result = try await server.toolRegistry.execute(
+            "click_element",
+            arguments: ["window_id": .int(1), "title": .string("OK")],
+            context: makeTestContext()
+        )
+
+        let text = textContent(result)
+        let json = try JSONSerialization.jsonObject(with: text.data(using: .utf8)!) as? [String: Any]
+        #expect(json?["success"] as? Bool == true)
+        #expect(json?["action"] as? String == "click_element")
+        // Default mock resolveSelector returns center (50, 50)
+        #expect(json?["x"] as? Int == 50)
+        #expect(json?["y"] as? Int == 50)
+    }
+
+    @Test("click_element no match returns error JSON")
+    func clickElementNoMatchReturnsError() async throws {
+        let mockInput = makeSuccessMock()
+        let mockEngine = MockAccessibilityEngine(
+            listWindowsHandler: { _ in [] },
+            getWindowStateHandler: { _ in WindowState(
+                windowId: 1, pid: 123, title: "Test", bounds: WindowBounds(x: 0, y: 0, width: 100, height: 100),
+                isMinimized: false, isFocused: true, axTree: nil, appName: "Test"
+            ) },
+            getAXTreeHandler: { _, _ in AXElement(role: "AXWindow", children: []) },
+            resolveSelectorHandler: { _, query in
+                throw AccessibilityEngineService.SelectorError.noMatch(query: query)
+            }
+        )
+
+        let restore = ServiceContainerFixture.apply(
+            accessibilityEngine: mockEngine,
+            inputSimulation: mockInput
+        )
+        defer { restore() }
+
+        let server = try await makeRegisteredServer()
+        let result = try await server.toolRegistry.execute(
+            "click_element",
+            arguments: ["window_id": .int(1), "title": .string("NonExistent")],
+            context: makeTestContext()
+        )
+
+        let text = textContent(result)
+        let json = try JSONSerialization.jsonObject(with: text.data(using: .utf8)!) as? [String: Any]
+        #expect(json?["error"] as? String == "selector_no_match")
+    }
 }
 }

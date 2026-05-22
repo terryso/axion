@@ -10,6 +10,7 @@ public enum ToolNames {
     public static let moveWindow = "move_window"
     public static let resizeWindow = "resize_window"
     public static let click = "click"
+    public static let clickElement = "click_element"
     public static let doubleClick = "double_click"
     public static let rightClick = "right_click"
     public static let typeText = "type_text"
@@ -28,7 +29,7 @@ public enum ToolNames {
     /// All available tool names for prompt building.
     public static let allToolNames: [String] = [
         launchApp, listApps, quitApp, activateWindow, listWindows,
-        getWindowState, moveWindow, resizeWindow, click, doubleClick,
+        getWindowState, moveWindow, resizeWindow, click, clickElement, doubleClick,
         rightClick, typeText, pressKey, hotkey, scroll, drag,
         screenshot, getAccessibilityTree, getFileInfo,
         validateWindow, arrangeWindows,
@@ -37,7 +38,7 @@ public enum ToolNames {
 
     /// Tools that require foreground interaction and are blocked in shared seat mode.
     public static let foregroundToolNames: Set<String> = [
-        click, doubleClick, rightClick,
+        click, clickElement, doubleClick, rightClick,
         typeText, pressKey, hotkey,
         scroll, drag
     ]
