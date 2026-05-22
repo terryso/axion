@@ -24,6 +24,9 @@ public struct MemoryReviewHook: Sendable {
     /// Configuration for this hook.
     public let config: MemoryReviewConfig
 
+    /// Optional security scanner. When nil, no scanning occurs (backward compatible).
+    public let securityScanner: MemorySecurityScanner?
+
     /// Closure providing the agent's current message history.
     public let messageProvider: MessageHistoryProvider
 
@@ -31,11 +34,13 @@ public struct MemoryReviewHook: Sendable {
         extractor: any ExperienceExtractor,
         factStore: FactStore,
         config: MemoryReviewConfig,
+        securityScanner: MemorySecurityScanner? = nil,
         messageProvider: @escaping MessageHistoryProvider
     ) {
         self.extractor = extractor
         self.factStore = factStore
         self.config = config
+        self.securityScanner = securityScanner
         self.messageProvider = messageProvider
     }
 
@@ -46,7 +51,7 @@ public struct MemoryReviewHook: Sendable {
     public func makeHandler() -> @Sendable (HookInput) async -> HookOutput? {
         let tracker = IntervalTracker()
 
-        return { [extractor, factStore, config, messageProvider] _ in
+        return { [extractor, factStore, config, securityScanner, messageProvider] _ in
             guard config.enabled else { return nil }
 
             let messages = await messageProvider()
@@ -71,6 +76,7 @@ public struct MemoryReviewHook: Sendable {
             var savedDomains = Set<String>()
             var totalSaved = 0
             var domainFiltered = 0
+            var rejectedCount = 0
             for signal in result.signals {
                 let domain = signal.domain
 
@@ -81,6 +87,15 @@ public struct MemoryReviewHook: Sendable {
                 }
 
                 let fact = signal.toFact()
+
+                // Security scan: skip rejected facts
+                if let scanner = securityScanner {
+                    let scanResult = scanner.scan(fact: fact)
+                    if case .rejected = scanResult {
+                        rejectedCount += 1
+                        continue
+                    }
+                }
 
                 // Interval check per domain
                 if let interval = config.reviewInterval {
@@ -109,7 +124,10 @@ public struct MemoryReviewHook: Sendable {
             }
 
             let domainList = savedDomains.sorted().joined(separator: ", ")
-            let filteredTotal = result.skippedCount + domainFiltered
+            var filteredTotal = result.skippedCount + domainFiltered
+            if rejectedCount > 0 {
+                filteredTotal += rejectedCount
+            }
             let summary = "Memory review: extracted \(totalSaved) experience signals (\(filteredTotal) filtered) from \(messages.count) messages. Domains: \(domainList)."
             return HookOutput(additionalContext: summary)
         }

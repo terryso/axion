@@ -251,7 +251,7 @@ development_status:
   21-1-experience-extractor-protocol-signal-model: done
   21-2-llm-experience-extractor: done
   21-3-memory-review-hook-session-end: done
-  21-4-memory-security-scan-frozen-snapshot: backlog
+  21-4-memory-security-scan-frozen-snapshot: done
   epic-21-retrospective: optional
 
   # Epic 22: 技能进化 — SkillEvolver 与生命周期管理

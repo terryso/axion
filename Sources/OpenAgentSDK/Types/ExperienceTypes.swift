@@ -246,6 +246,89 @@ public struct MemoryReviewConfig: Sendable, Codable, Equatable {
     }
 }
 
+// MARK: - FrozenSnapshot
+
+/// An immutable point-in-time copy of a domain's facts.
+///
+/// Created by ``FactStore.snapshot(domain:)``. Can be used to roll back
+/// the ``FactStore`` to a known-good state via ``FactStore/rollback(to:)``.
+public struct FrozenSnapshot: Sendable, Codable, Equatable {
+
+    /// The domain this snapshot captures.
+    public let domain: String
+
+    /// A deep copy of the domain's facts at the time of snapshot creation.
+    public let facts: [MemoryFact]
+
+    /// When this snapshot was created.
+    public let frozenAt: Date
+
+    /// Deterministic identifier (djb2 hash of domain + frozenAt ISO string).
+    public let snapshotId: String
+
+    public init(domain: String, facts: [MemoryFact], frozenAt: Date = Date()) {
+        self.domain = domain
+        self.facts = facts
+        self.frozenAt = frozenAt
+        self.snapshotId = Self.computeSnapshotId(domain: domain, frozenAt: frozenAt)
+    }
+
+    private static func computeSnapshotId(domain: String, frozenAt: Date) -> String {
+        let formatter = ISO8601DateFormatter()
+        formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+        let input = domain + ":" + formatter.string(from: frozenAt)
+        var hash: UInt64 = 5381
+        for byte in input.utf8 {
+            hash = ((hash &<< 5) &+ hash) &+ UInt64(byte)
+        }
+        return String(hash, radix: 16)
+    }
+}
+
+// MARK: - MemorySecurityConfig
+
+/// Configuration for the memory security scanner.
+///
+/// Controls validation rules applied to experience signals and memory facts
+/// before they are persisted. Prevents prompt-injection-driven fact poisoning.
+public struct MemorySecurityConfig: Sendable, Codable, Equatable {
+
+    /// Maximum allowed content length in characters. Defaults to 500.
+    public let maxContentLength: Int
+
+    /// Regex patterns that indicate injection attempts (case-insensitive match).
+    public let blockedPatterns: [String]
+
+    /// Domain names that are not allowed to store facts (case-insensitive match).
+    public let blockedDomains: [String]
+
+    /// Maximum confidence allowed. Facts above this are rejected as suspicious.
+    /// Defaults to 1.0 (no rejection).
+    public let maxConfidence: Double
+
+    public init(
+        maxContentLength: Int = 500,
+        blockedPatterns: [String] = [],
+        blockedDomains: [String] = [],
+        maxConfidence: Double = 1.0
+    ) {
+        self.maxContentLength = maxContentLength
+        self.blockedPatterns = blockedPatterns
+        self.blockedDomains = blockedDomains
+        self.maxConfidence = maxConfidence
+    }
+}
+
+// MARK: - SecurityScanResult
+
+/// Result of a security scan on an experience signal or memory fact.
+public enum SecurityScanResult: Sendable, Equatable {
+    /// The item passed all security checks.
+    case passed
+    /// The item was rejected with a reason describing which rule was violated.
+    case rejected(reason: String)
+}
+
 // MARK: - MessageHistoryProvider
 
 /// A closure that provides the agent's current message history.

@@ -220,10 +220,12 @@ public class Agent: CustomStringConvertible, CustomDebugStringConvertible, @unch
             let factStore = FactStore()
             let agent = self
             let messageProvider: MessageHistoryProvider = { agent.getMessages() }
+            let scanner: MemorySecurityScanner? = mergedOptions.securityConfig.map { MemorySecurityScanner(config: $0) }
             let hook = MemoryReviewHook(
                 extractor: extractor,
                 factStore: factStore,
                 config: memoryConfig,
+                securityScanner: scanner,
                 messageProvider: messageProvider
             )
             let handler = hook.makeHandler()

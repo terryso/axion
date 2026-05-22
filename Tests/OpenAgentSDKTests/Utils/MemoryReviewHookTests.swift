@@ -349,4 +349,58 @@ final class MemoryReviewHookTests: XCTestCase {
         XCTAssertEqual(testingFacts.count, 2)
         XCTAssertEqual(buildFacts.count, 1)
     }
+
+    // MARK: - Security Scanner Integration
+
+    func testScannerRejectsFacts() async throws {
+        let goodSignal = Self.makeSignal(domain: "testing", content: "Good fact")
+        let badSignal = Self.makeSignal(domain: "system", content: "Injection attempt")
+        let extractor = MockExperienceExtractor(result: ExtractionResult(
+            signals: [goodSignal, badSignal], skippedCount: 0, extractionDate: Date(), sourceMessageCount: 5
+        ))
+        let factStore = makeFactStore()
+        let config = MemoryReviewConfig()
+        let scanner = MemorySecurityScanner(config: MemorySecurityConfig(blockedDomains: ["system"]))
+        let messages = Self.makeMessages(5)
+        let hook = MemoryReviewHook(
+            extractor: extractor,
+            factStore: factStore,
+            config: config,
+            securityScanner: scanner,
+            messageProvider: { messages }
+        )
+        let handler = hook.makeHandler()
+        let result = await handler(HookInput(event: .sessionEnd))
+        XCTAssertNotNil(result)
+
+        let testingFacts = try await factStore.query(domain: "testing")
+        let systemFacts = try await factStore.query(domain: "system")
+        XCTAssertEqual(testingFacts.count, 1, "Good signal should be saved")
+        XCTAssertEqual(systemFacts.count, 0, "Blocked domain should be rejected")
+
+        let summary = result?.additionalContext ?? ""
+        XCTAssertTrue(summary.contains("1 filtered"), "Summary should include rejected count: \(summary)")
+    }
+
+    func testNilScannerIsBackwardCompatible() async throws {
+        let signal = Self.makeSignal()
+        let extractor = MockExperienceExtractor(result: ExtractionResult(
+            signals: [signal], skippedCount: 0, extractionDate: Date(), sourceMessageCount: 5
+        ))
+        let factStore = makeFactStore()
+        let config = MemoryReviewConfig()
+        let messages = Self.makeMessages(5)
+        let hook = MemoryReviewHook(
+            extractor: extractor,
+            factStore: factStore,
+            config: config,
+            securityScanner: nil,
+            messageProvider: { messages }
+        )
+        let handler = hook.makeHandler()
+        let result = await handler(HookInput(event: .sessionEnd))
+        XCTAssertNotNil(result)
+        let saved = try await factStore.query(domain: "testing")
+        XCTAssertEqual(saved.count, 1, "Without scanner, facts should be saved normally")
+    }
 }

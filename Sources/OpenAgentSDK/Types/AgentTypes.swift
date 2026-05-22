@@ -461,6 +461,11 @@ public struct AgentOptions: Sendable {
     /// `nil` (default) means no automatic memory review.
     public var memoryReviewConfig: MemoryReviewConfig?
 
+    /// Optional security configuration for the memory scanner.
+    /// When set, a ``MemorySecurityScanner`` is created and passed to the ``MemoryReviewHook``
+    /// to validate facts before they are persisted. `nil` (default) means no security scanning.
+    public var securityConfig: MemorySecurityConfig?
+
     // MARK: - Memberwise Init
 
     public init(
@@ -529,7 +534,8 @@ public struct AgentOptions: Sendable {
         runId: String? = nil,
         traceEnabled: Bool = false,
         traceBaseURL: String? = nil,
-        memoryReviewConfig: MemoryReviewConfig? = nil
+        memoryReviewConfig: MemoryReviewConfig? = nil,
+        securityConfig: MemorySecurityConfig? = nil
     ) {
         self.apiKey = apiKey
         self.model = model
@@ -597,6 +603,7 @@ public struct AgentOptions: Sendable {
         self.traceEnabled = traceEnabled
         self.traceBaseURL = traceBaseURL
         self.memoryReviewConfig = memoryReviewConfig
+        self.securityConfig = securityConfig
     }
 
     // MARK: - Auto-Discover Skills
@@ -712,6 +719,7 @@ public struct AgentOptions: Sendable {
         self.traceEnabled = false
         self.traceBaseURL = nil
         self.memoryReviewConfig = nil
+        self.securityConfig = nil
     }
 
     // MARK: - Validation
