@@ -535,6 +535,10 @@ struct AccessibilityEngineService: WindowManaging {
             height: size.height.isFinite ? Int(size.height) : 0
         )
 
+        let center: ElementCenter? = (bounds.width > 0 && bounds.height > 0)
+            ? ElementCenter(x: bounds.x + bounds.width / 2, y: bounds.y + bounds.height / 2)
+            : nil
+
         var children: [AXElement] = []
         if depth > 0, budget.remaining > 0 {
             ref = nil
@@ -552,7 +556,7 @@ struct AccessibilityEngineService: WindowManaging {
             }
         }
 
-        return AXElement(role: role, title: title, value: value, identifier: identifier, bounds: bounds, children: children)
+        return AXElement(role: role, title: title, value: value, identifier: identifier, bounds: bounds, center: center, children: children)
     }
 
     private func extractAppName(from bundleId: String) -> String? {

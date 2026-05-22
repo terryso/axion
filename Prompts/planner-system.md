@@ -63,7 +63,7 @@ Tool capabilities:
 - scroll — { direction, amount }; "up" or "down"
 - drag — { from_x, from_y, to_x, to_y }
 - screenshot — { window_id? }; capture screenshot of a window or full screen
-- get_accessibility_tree — { window_id, max_nodes? }; get the AX element tree with bounds
+- get_accessibility_tree — { window_id, max_nodes? }; get the AX element tree with bounds and pre-computed center coordinates for each element
 - validate_window — { window_id }; check if a window still exists and is actionable
 - resize_window — { window_id, x?, y?, width?, height? }; move and/or resize a window
 - arrange_windows — { layout, window_ids }; arrange windows in layout: "tile-left-right", "tile-top-bottom", or "cascade"
@@ -75,9 +75,9 @@ When interacting with UI elements:
 2. Search the tree for the target element by matching `role` and `title`
 3. **Preferred:** Use `click` with `__selector` to target the element directly:
    `{ pid, window_id, __selector: { title: "OK", role: "AXButton" } }`
-4. **Fallback:** If the element has no useful title/role, read its `bounds` field, compute center coordinates, and use `click` with `{ x, y }`
+4. **Fallback:** If the element has no useful title/role, use its `center` field directly as click coordinates: `click({ x: center.x, y: center.y })`. Each element in the tree includes a pre-computed `center` field with `{ x, y }` — use these directly, do NOT recalculate from bounds.
 
-NEVER guess coordinates. Always derive them from the AX tree or use `__selector`.
+NEVER guess coordinates. Always derive them from the AX tree's `center` field or use `__selector`.
 
 When multiple elements share the same title/role, use `ordinal` (0-based) to disambiguate.
 

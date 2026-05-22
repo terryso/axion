@@ -51,7 +51,7 @@ struct ScreenshotTool {
 @Tool
 struct GetAccessibilityTreeTool {
     static let name = "get_accessibility_tree"
-    static let description = "Get the accessibility tree for a window"
+    static let description = "Get the accessibility tree for a window. Each element includes bounds and a pre-computed center point ({x, y}) for direct use as click coordinates."
 
     @Parameter(key: "window_id", description: "Window identifier")
     var windowId: Int

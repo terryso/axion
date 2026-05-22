@@ -64,6 +64,7 @@ struct AXElementTests {
             title: "OK",
             value: "confirm",
             bounds: WindowBounds(x: 10, y: 20, width: 100, height: 40),
+            center: ElementCenter(x: 60, y: 40),
             children: []
         )
         let data = try JSONEncoder().encode(element)
@@ -73,6 +74,10 @@ struct AXElementTests {
         #expect(json["title"] as? String == "OK")
         #expect(json["value"] as? String == "confirm")
         #expect(json["bounds"] != nil)
+        #expect(json["center"] != nil)
+        let center = json["center"] as! [String: Any]
+        #expect(center["x"] as? Int == 60)
+        #expect(center["y"] as? Int == 40)
         #expect((json["children"] as? [Any])?.count == 0)
     }
 
@@ -86,6 +91,7 @@ struct AXElementTests {
         #expect(json["title"] == nil)
         #expect(json["value"] == nil)
         #expect(json["bounds"] == nil)
+        #expect(json["center"] == nil)
     }
 
     // MARK: - Equality Edge Cases
