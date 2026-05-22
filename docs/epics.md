@@ -1,6 +1,6 @@
 # Epics: Agent 自进化能力
 
-> **Status:** Planning
+> **Status:** Epic 21 Complete, Epic 22–23 Planning
 > **Created:** 2026-05-21
 > **Motivation:** 基于 Hermes Agent 自进化机制深度解析系列的研究成果，为 OpenAgentSDK 规划分层、渐进式的自进化能力。
 
@@ -349,9 +349,9 @@
 | 自进化能力 | Hermes 实现 | SDK 现状 | Epic |
 |-----------|------------|---------|------|
 | 持久记忆存储 | MEMORY.md + USER.md | `FactStore` + `MemoryFact` ✅ | 21 |
-| 经验提取引擎 | background_review.py | 缺 ❌ | 21 |
-| 记忆安全扫描 | memory_tool.py threat patterns | 缺 ❌ | 21 |
-| 冻结快照模式 | 会话开始注入、中途不刷新 | 缺 ❌ | 21 |
+| 经验提取引擎 | background_review.py | `LLMExperienceExtractor` + `ExperienceExtractor` protocol ✅ | 21 |
+| 记忆安全扫描 | memory_tool.py threat patterns | `MemorySecurityScanner` + `SecurityScanResult` ✅ | 21 |
+| 冻结快照模式 | 会话开始注入、中途不刷新 | `FrozenSnapshot` + `FactStore.snapshot/rollback` ✅ | 21 |
 | 技能定义与加载 | SKILL.md + SkillLoader | `Skill` + `SkillRegistry` ✅ | 22 |
 | 技能自动创建/更新 | skill_manage + background review | 缺 ❌ | 22 |
 | 技能使用追踪 | skill_usage.py sidecar | 缺 ❌ | 22 |
