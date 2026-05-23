@@ -4730,7 +4730,281 @@ Epic 21–23 构建了自进化的"砖块"（类型、协议、工具）。Epic 
 | 会话搜索 | SQLite FTS5 | `SessionSearchPlugin` + `SessionSearchEngine` ✅ | 23 |
 | Prompt 进化 | Darwinian Evolver（种群变异） | `PromptEvolverPlugin`（单次 LLM 分析）⚠️ | 23 |
 | 上下文压缩 | 结构化摘要（75% 阈值） | `Compact.swift` + auto-compact ✅ | 核心SDK |
-| **后台审查 Agent** | **fork + 工具白名单 + 前缀缓存共享** | **缺 ❌** | **24** |
-| **审查专用工具** | **memory/skill tools** | **缺 ❌** | **24** |
-| **审查调度间隔** | **nudge_interval** | **缺 ❌** | **24** |
-| **前缀缓存共享** | **_cached_system_prompt 继承** | **缺 ❌** | **24** |
+| **后台审查 Agent** | **fork + 工具白名单 + 前缀缓存共享** | **ReviewAgentFactory + bypassPermissions** ✅ | **24** |
+| **审查专用工具** | **memory/skill tools** | **4 个 review_* tools** ✅ | **24** |
+| **审查调度间隔** | **nudge_interval** | **ReviewScheduleConfig** ✅ | **24** |
+| **前缀缓存共享** | **_cached_system_prompt 继承** | **ReviewAgentFactory 共享 LLMClient** ✅ | **24** |
+| **智能策展（LLM 合并/修补）** | **curator.py fork review agent** | **缺 ❌** | **25** |
+| **策展报告与结构化输出** | **REPORT.md + YAML summary** | **缺 ❌** | **25** |
+| **策展 prompt（umbrella-building）** | **CURATOR_REVIEW_PROMPT** | **缺 ❌** | **25** |
+| **策展专用工具（archive/merge）** | **skill_manage action=delete/patch** | **部分 ✅（review_update_skill 可 patch，缺 archive/merge）** | **25** |
+
+---
+
+## Epic 25: 智能策展 — LLM 驱动的技能库维护
+
+> **状态：规划中**
+> **优先级：P1**
+> **依赖：** Epic 24（ReviewAgentFactory + ReviewTools）、Epic 22（SkillCurator + SkillUsageTracker + SkillRegistry）
+
+### 背景与动机
+
+Epic 22 的 `SkillCurator` 实现了**机械式生命周期管理**——基于时间阈值做状态转换（active→deprecated→retired）。这是必要的，但不够。
+
+Hermes 的 Curator（`/Users/nick/CascadeProjects/hermes-agent/agent/curator.py`）在机械式管理之上还有一个**LLM 驱动的智能策展**阶段：fork 一个 review agent，让它审查整个技能库，合并重叠技能、创建 umbrella 技能、修补技能内容、归档窄技能。这是 Hermes 技能库不会退化为垃圾堆的关键机制。
+
+SDK 目前缺失的正是这个**智能策展**层。应用方（Axion）如果自己做，等于每个消费者都要重新组装 SDK 已经有的零件（ReviewAgentFactory、ReviewTools、SkillRegistry）。
+
+### Epic 25 的目标
+
+在 SDK 中实现 LLM 驱动的智能策展，作为 `SkillCurator` 的增强或独立组件。应用方只需决定**何时触发**和**数据存在哪里**，策展的执行逻辑完全由 SDK 提供。
+
+### Hermes Curator 参考实现
+
+**核心文件：** `/Users/nick/CascadeProjects/hermes-agent/agent/curator.py`
+
+**两阶段执行（`run_curator_review()`, L1369-1535）：**
+
+1. **机械式阶段（无 LLM）**：`apply_automatic_transitions()` — 基于 usage 时间戳做状态转换。SDK Epic 22 的 `SkillCurator.run()` 已实现此阶段。
+
+2. **智能策展阶段（LLM 驱动）**：fork `AIAgent`，注入 `CURATOR_REVIEW_PROMPT`（L330-445）+ 技能库快照，让 review agent 用 skill_manage 工具操作技能库。
+
+**关键设计决策：**
+- Curator fork 的 agent 使用 `max_iterations=9999`（L1702）——策展可能需要 50-100 次 API 调用
+- 禁用递归 nudges（`_memory_nudge_interval=0`, `_skill_nudge_interval=0`，L1709-1710）——curator 不能触发自己的 review
+- 使用独立的辅助模型（`_resolve_review_runtime()`，L1671）——策展可用便宜模型
+- 支持 dry-run（`CURATOR_DRY_RUN_BANNER`，L303）——预览不执行
+- 策展前创建备份快照（`curator_backup.snapshot_skills()`，L1412-1418）
+
+**Curator Prompt 核心逻辑（`CURATOR_REVIEW_PROMPT`，L330-445）：**
+- 目标：UMBRELLA-BUILDING — 把窄技能合并为类级（class-level）技能
+- 反模式：一个 session 一个 skill 是失败，不是一个 feature
+- 三种合并策略：
+  - a. MERGE INTO EXISTING UMBRELLA — 已有技能足够广，patch 它吸收兄弟
+  - b. CREATE A NEW UMBRELLA — 没有成员足够广，创建新的类级技能
+  - c. DEMOTE TO REFERENCES/TEMPLATES/SCRIPTS — 窄但有价值，移入 umbrella 的 support 目录
+- 结构化输出：YAML 格式的 consolidations + prunings 列表
+
+### Story 25.1: CuratorPromptBuilder — 策展 Prompt 定义
+
+As a SDK 开发者,
+I want SDK 提供策展专用的 prompt，翻译自 Hermes 的 CURATOR_REVIEW_PROMPT,
+So that 应用方不需要自己写策展逻辑的 prompt.
+
+**Hermes 参考：**
+- `/Users/nick/CascadeProjects/hermes-agent/agent/curator.py:330-445` — `CURATOR_REVIEW_PROMPT` 完整 prompt
+- `/Users/nick/CascadeProjects/hermes-agent/agent/curator.py:303-328` — `CURATOR_DRY_RUN_BANNER`
+
+**实施：**
+- 创建 `Sources/OpenAgentSDK/Utils/CuratorPromptBuilder.swift`
+- 翻译 Hermes `CURATOR_REVIEW_PROMPT` 为 SDK 版本：
+  - 将 `skill_manage action=patch/create/delete/write_file` 替换为 SDK 的 `review_update_skill`/`review_create_skill`/`review_add_skill_file`
+  - 将 `terminal` 命令替换为 SDK 的 archive 工具
+  - 保留核心逻辑：UMBRELLA-BUILDING、三种合并策略、硬性规则
+- 翻译 `CURATOR_DRY_RUN_BANNER`
+- 翻译 `_render_candidate_list()` 逻辑——将 SkillRegistry 中 agent_created 技能格式化为候选列表
+
+**Acceptance Criteria:**
+
+**Given** SkillRegistry 中有 10 个 agent_created 技能
+**When** `CuratorPromptBuilder.buildCandidateList(skillRegistry:)` 被调用
+**Then** 返回格式化的技能列表（每个技能包含 name、description、lifecycleState、viewCount、pinned）
+
+**Given** 调用 `CuratorPromptBuilder.curationPrompt()`
+**When** 检查 prompt 内容
+**Then** 包含 UMBRELLA-BUILDING 目标描述
+**And** 包含三种合并策略（merge into existing / create new / demote to support）
+**And** 包含硬性规则（不碰 bundled/hub/pinned，不删除只归档）
+**And** 引用 SDK review 工具名（review_update_skill、review_create_skill、review_add_skill_file）
+
+**Given** 调用 `CuratorPromptBuilder.dryRunPrompt()`
+**When** 检查 prompt 内容
+**Then** 在 curationPrompt 基础上附加 DRY_RUN_BANNER，指示只报告不执行
+
+### Story 25.2: CuratorArchiveTool — 策展专用归档工具
+
+As a 策展 Agent,
+I want 有一个工具可以归档技能并记录合并关系,
+So that 归档是可追溯的——每个被归档的技能都有记录说明它的内容去向.
+
+**Hermes 参考：**
+- `/Users/nick/CascadeProjects/hermes-agent/agent/curator.py:409-412` — `skill_manage action=delete` 需传 `absorbed_into=<umbrella>` 参数记录合并关系
+- `/Users/nick/CascadeProjects/hermes-agent/agent/curator.py:350` — 硬性规则"DO NOT delete any skill. Archiving is the maximum destructive action"
+
+**实施：**
+- 创建 `Sources/OpenAgentSDK/Tools/Review/CuratorArchiveTool.swift`
+- 工具名：`curator_archive_skill`
+- 参数：`skillName`（必填）、`absorbedInto`（可选，归档原因——合并到哪个 umbrella）
+- 行为：
+  - 验证技能存在且为 agent_created provenance
+  - 将技能的 lifecycleState 设为 `.retired`
+  - 更新 SkillUsageStore 记录 `absorbed_into` 关系
+  - 不删除技能文件（只标记状态）
+
+**Acceptance Criteria:**
+
+**Given** 策展 agent 调用 `curator_archive_skill(skillName: "debug-login-issue", absorbedInto: "debugging-workflow")`
+**When** 工具执行
+**Then** "debug-login-issue" 的 lifecycleState 变为 `.retired`
+**And** usage 数据中记录 `absorbed_into: "debugging-workflow"`
+
+**Given** 策展 agent 调用 `curator_archive_skill(skillName: "truly-stale-skill", absorbedInto: "")`
+**When** absorbedInto 为空
+**Then** 技能归档为 pruned（无合并目标），lifecycleState 变为 `.retired`
+
+**Given** 策展 agent 尝试归档 bundled 技能
+**When** provenance != .agentCreated
+**Then** 返回 `{"success": false, "error": "Cannot archive non-agent-created skill"}`
+
+**Given** 策展 agent 尝试归档 pinned 技能
+**When** pinned == true
+**Then** 返回 `{"success": false, "error": "Cannot archive pinned skill"}`
+
+### Story 25.3: IntelligentCurator — LLM 驱动的策展执行器
+
+As a SDK 开发者,
+I want SDK 提供 LLM 驱动的智能策展执行器,
+So that 应用方只需调用一个方法就能执行完整的策展流程（机械式状态转换 + LLM 智能策展）。
+
+**Hermes 参考：**
+- `/Users/nick/CascadeProjects/hermes-agent/agent/curator.py:1369-1535` — `run_curator_review()` 两阶段执行
+- `/Users/nick/CascadeProjects/hermes-agent/agent/curator.py:1623-1756` — `_run_llm_review()` fork AIAgent
+- `/Users/nick/CascadeProjects/hermes-agent/agent/curator.py:1691-1720` — fork agent 配置：max_iterations=9999, quiet_mode=True, skip_context_files=True, skip_memory=True
+
+**实施：**
+- 创建 `Sources/OpenAgentSDK/Utils/IntelligentCurator.swift`
+- `IntelligentCurator` struct，依赖：
+  - `parentAgent: Agent` — 用于 fork curator agent
+  - `skillCurator: SkillCurator` — 机械式策展（已实现）
+  - `factStore: FactStore` — review tool 依赖
+  - `skillRegistry: SkillRegistry` — 技能库操作
+  - `skillEvolver: any SkillEvolver` — review tool 依赖
+  - `usageStore: SkillUsageStore` — 使用数据
+  - `curatorStore: SkillCuratorStore` — 策展状态
+- `execute()` 方法执行两阶段：
+  1. **阶段一（机械式）**：调用 `skillCurator.run()` — 状态转换、跳过非 agent_created
+  2. **阶段二（智能策展）**：
+     - 用 `CuratorPromptBuilder` 构建 prompt + candidate list
+     - Fork curator agent（复用 `parentAgent.createReviewAgent()`）
+     - 注入策展工具（4 个 review tools + curator_archive_skill）
+     - 设置 `maxTurns: 200`（策展需要多轮）
+     - 禁用递归 review（curator agent 不应触发自己的 review）
+     - 执行策展，收集结果
+     - 解析结构化输出（YAML consolidations + prunings）
+- 返回 `IntelligentCuratorResult`（包含机械式结果 + LLM 策展结果 + 工具调用记录）
+
+**Acceptance Criteria:**
+
+**Given** 调用 `IntelligentCurator.execute()`
+**When** 执行
+**Then** 先运行 `skillCurator.run()`（机械式状态转换）
+**Then** 再 fork curator agent 执行 LLM 策展
+**And** 两阶段结果合并返回
+
+**Given** SkillRegistry 中没有 agent_created 技能
+**When** 智能策展阶段
+**Then** 跳过 LLM 策展（无候选），只返回机械式结果
+
+**Given** curator agent 执行了合并操作
+**When** 检查结果
+**Then** `IntelligentCuratorResult.consolidations` 列出所有合并（from → into + reason）
+**And** `IntelligentCuratorResult.prunings` 列出所有无目标归档
+
+**Given** dry-run 模式启用
+**When** 执行
+**Then** 机械式阶段不应用状态转换
+**And** LLM 策展使用 dry-run prompt，curator agent 的工具调用被拦截不实际执行
+
+**Given** curator agent LLM 调用失败
+**When** 异常发生
+**Then** 机械式结果仍然返回（不丢失），LLM 策展标记为 error
+
+**Given** fork 的 curator agent
+**When** 检查配置
+**Then** maxTurns 设为 200（策展需要多轮）
+**And** 递归 review 被禁用（不会触发 review schedule）
+**And** 所有 stores/hooks/MCP 为 nil（隔离运行）
+
+### Story 25.4: CuratorRunReport — 策展报告与结构化输出
+
+As a 应用方,
+I want 策展执行后获得结构化的报告,
+So that 我可以向用户展示策展做了什么，以及追踪技能合并/归档历史.
+
+**Hermes 参考：**
+- `/Users/nick/CascadeProjects/hermes-agent/agent/curator.py:427-444` — 结构化 YAML 输出格式（consolidations + prunings）
+- `/Users/nick/CascadeProjects/hermes-agent/agent/curator.py:1520-1532` — `_write_run_report()` 写入 REPORT.md
+
+**实施：**
+- 定义 `CuratorRunReport` struct：
+  - `startedAt: Date`
+  - `durationMs: Int`
+  - `autoTransitions: [SkillLifecycleTransition]` — 机械式状态转换
+  - `consolidations: [CuratorConsolidation]` — LLM 合并（from, into, reason）
+  - `prunings: [CuratorPruning]` — LLM 归档（name, reason）
+  - `toolCalls: [CuratorToolCall]` — 所有工具调用记录
+  - `error: String?`
+  - `dryRun: Bool`
+- `CuratorConsolidation`：`from: String`、`into: String`、`reason: String`
+- `CuratorPruning`：`name: String`、`reason: String`
+- 提供 `renderMarkdown()` 方法生成人类可读的报告
+- 提供 `renderYAML()` 方法生成结构化输出（与 Hermes 格式兼容）
+
+**Acceptance Criteria:**
+
+**Given** 策展完成
+**When** 检查 `CuratorRunReport.renderMarkdown()`
+**Then** 输出包含：摘要行、状态转换数、合并数、归档数、详细列表
+
+**Given** 策展完成
+**When** 检查 `CuratorRunReport.renderYAML()`
+**Then** 输出格式与 Hermes 的 YAML 结构一致：
+  ```yaml
+  consolidations:
+    - from: debug-login-issue
+      into: debugging-workflow
+      reason: "login debugging is a subsection of general debugging"
+  prunings:
+    - name: temp-analysis-2026
+      reason: "one-off analysis, no reusable pattern"
+  ```
+
+**Given** 策展为 dry-run
+**When** 检查报告
+**Then** `dryRun: true`，所有操作标注为"would have"
+
+---
+
+### Story 间的依赖关系
+
+```
+25.1 CuratorPromptBuilder（P0）
+  │
+  ├──► 25.2 CuratorArchiveTool（P0）— 策展工具需要 prompt 引用
+  │
+  └──► 25.3 IntelligentCurator（P1）— 依赖 25.1 prompt + 25.2 工具 + Epic 24 ReviewAgentFactory
+        │
+        └──► 25.4 CuratorRunReport（P2）— 解析 25.3 的结果，生成报告
+```
+
+建议实施顺序：25.1 → 25.2 → 25.3 → 25.4。25.1 和 25.2 可并行（prompt 和工具独立），25.3 依赖两者，25.4 最后。
+
+### 实现优先级
+
+| Story | 优先级 | 理由 |
+|-------|--------|------|
+| 25.1 CuratorPromptBuilder | P0 | 核心策展逻辑——prompt 决定策展质量 |
+| 25.2 CuratorArchiveTool | P0 | 策展 agent 必须能归档技能 |
+| 25.3 IntelligentCurator | P1 | 组装执行器——把 prompt、工具、agent fork 串起来 |
+| 25.4 CuratorRunReport | P2 | 报告是增强，不影响策展执行 |
+
+### 关键设计约束
+
+- **复用 Epic 24 的 ReviewAgentFactory** — curator agent 与 review agent 使用相同的 fork 机制（共享 LLMClient、prefix cache、bypassPermissions）
+- **策展工具集** = 4 个 review tools（来自 Epic 24）+ 1 个 curator_archive_skill（新）= 5 个工具
+- **禁用递归策展** — curator agent 不能触发自己的 review schedule（设置 `memoryReviewConfig: nil`、`reviewScheduleConfig: nil`）
+- **策展 prompt 强调 UMBRELLA-BUILDING** — 目标是类级技能，不是一个 session 一个 skill
+- **永不删除** — 最大破坏性操作是归档（lifecycleState → .retired），不删除技能文件
+- **与 Epic 22 的 SkillCurator 互补** — `IntelligentCurator` 先调 `SkillCurator.run()`（机械式），再调 LLM 策展（智能式）
+- **应用方职责** — 应用方只提供：何时触发（空闲/run完成/cron）、持久化实现（SkillUsageStore、CuratorStore）、config 值
+- **策展结果不影响 parent agent** — 策展在 detached task 中运行，失败不影响正在执行的任务

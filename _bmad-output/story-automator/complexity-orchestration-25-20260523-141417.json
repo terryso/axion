@@ -1,0 +1,36 @@
+{
+  "stories": [
+    {
+      "storyId": "25.1",
+      "title": "CuratorPromptBuilder",
+      "complexity": {
+        "level": "Low",
+        "score": 2
+      }
+    },
+    {
+      "storyId": "25.2",
+      "title": "CuratorArchiveTool",
+      "complexity": {
+        "level": "Low",
+        "score": 2
+      }
+    },
+    {
+      "storyId": "25.3",
+      "title": "IntelligentCurator",
+      "complexity": {
+        "level": "Low",
+        "score": 2
+      }
+    },
+    {
+      "storyId": "25.4",
+      "title": "CuratorRunReport",
+      "complexity": {
+        "level": "Low",
+        "score": 2
+      }
+    }
+  ]
+}
