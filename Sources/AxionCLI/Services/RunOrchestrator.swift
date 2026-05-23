@@ -98,6 +98,7 @@ enum RunOrchestrator {
         var takeoverEvent: (issue: String, summary: String, feedback: String?, reason: String, duration: TimeInterval?)? = nil
 
         let visualDeltaTracker = runConfig.noVisualDelta ? nil : VisualDeltaTracker()
+        var resultText: String?
         var screenshotCount = 0
         var seatMonitor: SeatActivityMonitor? = nil
         let shouldMonitorSeat = config.sharedSeatMode && !runConfig.allowForeground && !runConfig.dryrun
@@ -174,8 +175,8 @@ enum RunOrchestrator {
                     default:
                         break
                     }
-                case .result:
-                    break
+                case .result(let data):
+                    resultText = data.text
                 default:
                     break
                 }
@@ -246,9 +247,15 @@ enum RunOrchestrator {
         // Skip in JSON mode (programmatic use doesn't need desktop notifications)
         if !runConfig.json {
             let statusText = runSucceeded ? "完成" : (runCompleted ? "失败" : "已取消")
-            let elapsedSec = durationMs / 1000
-            let taskPreview = String(runConfig.task.prefix(60))
-            sendDesktopNotification(title: "Axion \(statusText)", message: "\(taskPreview) (\(elapsedSec)s)")
+            let elapsedSec = Int(elapsed.components.seconds)
+            let stats = "耗时 \(elapsedSec)s · LLM \(modelCalls)次 · $\(String(format: "%.2f", totalCost))"
+            let summary = extractSummary(from: resultText) ?? "无结果摘要"
+            sendDesktopNotification(title: "Axion \(statusText)", subtitle: stats, message: summary)
+
+            // Bring terminal back to foreground after UI operations
+            if totalSteps > 0 {
+                activateTerminal()
+            }
         }
 
         return RunResult(totalSteps: totalSteps, durationMs: durationMs, runSucceeded: runSucceeded)
@@ -292,12 +299,14 @@ enum RunOrchestrator {
 
         let startTime = ContinuousClock.now
         var totalSteps = 0
+        var skillResultText: String?
 
         let skillStream = agent.executeSkillStream(skill.name, args: args)
 
         for await message in skillStream {
             if _Concurrency.Task.isCancelled { break }
             if case .toolUse = message { totalSteps += 1 }
+            if case .result(let data) = message { skillResultText = data.text }
             outputHandler.handle(message)
         }
 
@@ -307,9 +316,9 @@ enum RunOrchestrator {
 
         try? await agent.close()
 
-        let elapsedSec = durationMs / 1000
-        let taskPreview = String(task.prefix(60))
-        sendDesktopNotification(title: "Axion 完成", message: "\(taskPreview) (\(elapsedSec)s)")
+        let elapsedSec = Int(elapsed.components.seconds)
+        let summary = extractSummary(from: skillResultText) ?? "无结果摘要"
+        sendDesktopNotification(title: "Axion 完成", subtitle: "耗时 \(elapsedSec)s", message: summary)
     }
 
     /// Parses a skill name from a task that starts with `/`.
@@ -433,16 +442,55 @@ enum RunOrchestrator {
         }
     }
 
+    /// Extracts the summary from AI result text by finding the [结果] marker.
+    /// Returns nil if no marker found or text is empty.
+    static func extractSummary(from text: String?) -> String? {
+        guard let text, !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return nil }
+        let marker = "[结果]"
+        // Find the last occurrence — AI may reference earlier content with the marker
+        if let range = text.range(of: marker, options: .backwards) {
+            let after = text[range.upperBound...].trimmingCharacters(in: .whitespacesAndNewlines)
+            if !after.isEmpty {
+                return String(after.prefix(100))
+            }
+        }
+        return nil
+    }
+
+    /// Brings the terminal app back to the foreground after UI automation.
+    /// Uses TERM_PROGRAM env var to identify the terminal and activate it by bundle ID.
+    static func activateTerminal() {
+        let termProgram = ProcessInfo.processInfo.environment["TERM_PROGRAM"] ?? ""
+        let bundleId: String
+        switch termProgram {
+        case "Apple_Terminal":
+            bundleId = "com.apple.Terminal"
+        case "iTerm.app":
+            bundleId = "com.googlecode.iterm2"
+        case "WarpTerminal":
+            bundleId = "dev.warp.Warp-Stable"
+        case "vscode":
+            bundleId = "com.microsoft.VSCode"
+        default:
+            return
+        }
+        activateAppFromCLI(bundleId: bundleId)
+    }
+
     /// Sends a macOS desktop notification via osascript.
     /// Uses `display notification` which works without any entitlements or bundle ID.
     /// Blocks briefly (~50ms) to ensure the notification fires before process exit.
-    static func sendDesktopNotification(title: String, message: String) {
+    static func sendDesktopNotification(title: String, subtitle: String? = nil, message: String) {
         let process = Process()
         process.executableURL = URL(fileURLWithPath: "/usr/bin/osascript")
-        // Escape backslashes first, then double quotes for AppleScript
         let escapedTitle = title.replacingOccurrences(of: "\\", with: "\\\\").replacingOccurrences(of: "\"", with: "\\\"")
         let escapedMessage = message.replacingOccurrences(of: "\\", with: "\\\\").replacingOccurrences(of: "\"", with: "\\\"")
-        process.arguments = ["-e", "display notification \"\(escapedMessage)\" with title \"\(escapedTitle)\""]
+        var script = "display notification \"\(escapedMessage)\" with title \"\(escapedTitle)\""
+        if let subtitle {
+            let escapedSubtitle = subtitle.replacingOccurrences(of: "\\", with: "\\\\").replacingOccurrences(of: "\"", with: "\\\"")
+            script += " subtitle \"\(escapedSubtitle)\""
+        }
+        process.arguments = ["-e", script]
         if let pipe = try? Pipe() {
             process.standardOutput = pipe
             process.standardError = pipe

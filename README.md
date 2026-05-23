@@ -16,7 +16,7 @@ macOS AI agent powered by an LLM-driven Plan-Execute-Verify loop, with native de
 
 ## Overview
 
-Axion is a Swift-based AI agent for macOS that takes natural language task descriptions and autonomously plans and executes actions. It combines core tools (Bash, file operations, web search) with 20 native desktop automation tools via MCP (Model Context Protocol), plus browser automation via Playwright. Use the built-in CLI directly, or integrate via HTTP API / MCP Server mode.
+Axion is a Swift-based AI agent for macOS that takes natural language task descriptions and autonomously plans and executes actions. It combines core tools (Bash, file operations, web search) with 21 native desktop automation tools via MCP (Model Context Protocol), plus browser automation via Playwright. Use the built-in CLI directly, or integrate via HTTP API / MCP Server mode.
 
 **Key highlights:**
 
@@ -26,7 +26,7 @@ Axion is a Swift-based AI agent for macOS that takes natural language task descr
 - **HTTP API Server** — Integrate with CI/CD and external systems via REST + SSE
 - **MCP Server Mode** — Act as a desktop plugin for external agents (Claude Code, Cursor, etc.), while also supporting CLI, file, and web tasks standalone
 - **User Takeover** — Pause and resume when automation gets stuck
-- **Menu Bar App** — Native macOS status bar UI with global hotkeys
+- **Completion Notifications** — macOS desktop notification with AI-generated summary when tasks finish
 
 ## Architecture
 
@@ -34,29 +34,27 @@ Axion is a Swift-based AI agent for macOS that takes natural language task descr
 ┌───────────────────────────────────────────────────────────┐
 │                          AxionCLI                          │
 │  run / setup / doctor / server / mcp / record / skill     │
-│  daemon / Plan → Execute → Verify → Replan Loop           │
-│  Memory · Fast Mode · Takeover · Daemon · Persistence     │
+│  daemon / Agent Stream Loop · Memory · Takeover           │
 │  Skill System · Built-in Skills · Skill + Memory Context  │
-├──────────────────┬──────────────────┬────────────────────┤
-│    AxionCore     │   AxionHelper    │     AxionBar        │
-│  Models, Proto-  │  MCP Server      │  Menu Bar App       │
-│  cols, Config,   │  20 Native macOS │  Task Panel         │
-│  Errors          │  Tools           │  Global Hotkeys     │
-└──────────────────┴──────────────────┴────────────────────┘
+├──────────────────────┬────────────────────────────────────┤
+│      AxionCore       │           AxionHelper              │
+│  Models, Protocols,  │  MCP Server                        │
+│  Config, Errors      │  21 Native macOS Automation Tools  │
+└──────────────────────┴────────────────────────────────────┘
 ```
 
-- **AxionCLI** — CLI entry point with LLM interaction, task planning, execution engine, memory, skill system (prompt + recorded + built-in), daemon management, and server modes
-- **AxionCore** — Shared model layer (Plan, Step, RunState) and protocol definitions
-- **AxionHelper** — MCP server process providing 20 native macOS automation tools via stdio
-- **AxionBar** — Native macOS menu bar app with task panel, skill triggers, and global hotkeys
+- **AxionCLI** — CLI entry point with agent stream loop, memory, skill system (prompt + recorded + built-in), daemon management, server modes, and completion notifications
+- **AxionCore** — Shared model layer (RunConfig, AxionConfig) and protocol definitions
+- **AxionHelper** — MCP server process providing 21 native macOS automation tools via stdio
 
-## MCP Tools (20)
+## MCP Tools (21)
 
 ### App Management
 | Tool | Description |
 |------|-------------|
 | `launch_app` | Launch a macOS app by name (detects blocking dialogs) |
 | `list_apps` | List all running applications |
+| `quit_app` | Quit a running application |
 | `activate_window` | Activate (bring to front) a specific window |
 
 ### Window Management
@@ -64,6 +62,7 @@ Axion is a Swift-based AI agent for macOS that takes natural language task descr
 |------|-------------|
 | `list_windows` | List windows (filterable by process ID) |
 | `get_window_state` | Get the state of a specific window |
+| `move_window` | Move a window to a new position |
 | `resize_window` | Move and/or resize a window |
 | `validate_window` | Check if a window exists and is actionable |
 | `arrange_windows` | Arrange multiple windows (tile, cascade) |
@@ -72,6 +71,7 @@ Axion is a Swift-based AI agent for macOS that takes natural language task descr
 | Tool | Description |
 |------|-------------|
 | `click` | Click at coordinates or by AX selector |
+| `click_element` | Click an element by title/role — no coordinate lookup needed |
 | `double_click` | Double-click at coordinates or by AX selector |
 | `right_click` | Right-click at coordinates or by AX selector |
 | `drag` | Drag from one point to another |
@@ -89,6 +89,7 @@ Axion is a Swift-based AI agent for macOS that takes natural language task descr
 |------|-------------|
 | `screenshot` | Take a screenshot (full screen or specific window) |
 | `get_accessibility_tree` | Get the accessibility tree of a window |
+| `get_file_info` | Get file metadata (size, dates, permissions) |
 
 ### Recording
 | Tool | Description |
@@ -154,33 +155,19 @@ axion run --max-steps 10 "Create a new note in Notes"
 
 ## Core Features
 
-### Plan-Execute-Verify Loop
+### Completion Notifications
 
-Axion's execution engine follows this loop:
+When a task finishes, Axion sends a macOS desktop notification with three lines:
 
-1. **Planning** — The LLM generates a step plan from the task description
-2. **Executing** — Each step in the plan is executed sequentially
-3. **Verifying** — Results are checked against expectations
-4. **Replanning** — On verification failure, the plan is regenerated automatically (up to 3 retries)
+1. **Status** — completed / failed / cancelled
+2. **AI Summary** — auto-generated one-line result summary (max 100 chars)
+3. **Stats** — elapsed time, LLM calls, estimated cost
 
-Run states: `planning` → `executing` → `verifying` → `replanning` → `done`
+If the task involved UI operations (desktop automation), Axion automatically brings the terminal window back to the foreground so you can immediately see the results.
 
-### Cross-run Memory (Phase 2)
+Notifications are skipped in JSON mode for programmatic use.
 
-Axion learns from every task execution. After each run, it automatically extracts app operation patterns (menu paths, control positions, operation sequences) and persists them. On subsequent runs involving the same app, the Planner injects this experience for more accurate plans.
-
-```bash
-# Memory is enabled by default — view accumulated knowledge
-axion memory list
-
-# Clear memory for a specific app
-axion memory clear --app com.apple.calculator
-
-# Disable memory for a single run
-axion run --no-memory "Open Calculator"
-```
-
-### User Takeover (Phase 2)
+### User Takeover
 
 When automation gets stuck, Axion pauses and lets you take over manually. Complete the action yourself, then press Enter to resume. Imperfect automation beats no automation.
 
@@ -198,7 +185,22 @@ axion memory learn-takeover --bundle-id com.apple.finder \
   --summary "used Cmd+Shift+G to enter path directly"
 ```
 
-### HTTP API Server (Phase 2)
+### Cross-run Memory
+
+Axion learns from every task execution. After each run, it automatically extracts app operation patterns (menu paths, control positions, operation sequences) and persists them. On subsequent runs involving the same app, the Planner injects this experience for more accurate plans.
+
+```bash
+# Memory is enabled by default — view accumulated knowledge
+axion memory list
+
+# Clear memory for a specific app
+axion memory clear --app com.apple.calculator
+
+# Disable memory for a single run
+axion run --no-memory "Open Calculator"
+```
+
+### HTTP API Server
 
 Run Axion as a service for external integrations:
 
@@ -221,11 +223,11 @@ API endpoints:
 | `POST` | `/v1/runs` | Submit a task (`{"task": "..."}`) |
 | `GET` | `/v1/runs/{id}` | Query task status |
 | `GET` | `/v1/runs/{id}/events` | SSE real-time event stream |
-| `GET` | `/v1/skills` | List all skills (Phase 5) |
-| `GET` | `/v1/skills/{name}` | Get skill detail (Phase 5) |
-| `POST` | `/v1/skills/{name}/run` | Execute a skill (Phase 5) |
+| `GET` | `/v1/skills` | List all skills |
+| `GET` | `/v1/skills/{name}` | Get skill detail |
+| `POST` | `/v1/skills/{name}/run` | Execute a skill |
 
-### MCP Server Mode (Phase 2)
+### MCP Server Mode
 
 Axion can act as an MCP server for external agents:
 
@@ -247,7 +249,7 @@ Add to your Claude Code MCP configuration:
 }
 ```
 
-### Record and Replay Skills (Phase 3)
+### Record and Replay Skills
 
 Record a workflow once, replay it anytime without LLM planning:
 
@@ -272,7 +274,7 @@ axion skill delete open_calculator
 
 Skills are stored as JSON in `~/.axion/skills/` and can be parameterized with `--param`.
 
-### Multi-window Workflows (Phase 3)
+### Multi-window Workflows
 
 Coordinate operations across multiple applications — copy data from browser to spreadsheet, extract attachments from mail to Finder, and chain end-to-end workflows across apps.
 
@@ -283,19 +285,7 @@ axion run "Put Safari and TextEdit side by side, Safari on the left"
 
 The `arrange_windows` tool supports layouts: `tile-left-right`, `tile-top-bottom`, `cascade`.
 
-### Menu Bar App (Phase 3)
-
-AxionBar is a native macOS menu bar app that provides quick access to Axion without opening a terminal:
-
-- **Quick Run** — Submit tasks from the menu bar
-- **Task Panel** — Real-time execution progress via SSE
-- **Skill Triggers** — One-click skill execution
-- **Global Hotkeys** — Bind keyboard shortcuts to skills
-- **Run History** — View recent task results
-
-AxionBar communicates with the CLI backend via the HTTP API.
-
-### Third-party SDK Ecosystem (Phase 3)
+### Third-party SDK Ecosystem
 
 Axion serves as the flagship reference implementation of [OpenAgentSDK](https://github.com/terryso/open-agent-sdk-swift). Third-party developers can:
 
@@ -304,12 +294,12 @@ Axion serves as the flagship reference implementation of [OpenAgentSDK](https://
 - Integrate with Axion's desktop capabilities via `axion mcp`
 - Build on the same MCP + Agent Loop architecture
 
-### SDK Skill System (Phase 5)
+### SDK Skill System
 
 Axion integrates with [OpenAgentSDK](https://github.com/terryso/open-agent-sdk-swift)'s Skill system, supporting two types of skills:
 
 - **Prompt Skills** — Discovered from `~/.claude/skills/*/SKILL.md` files, each defining a `promptTemplate`, optional `toolRestrictions`, and `modelOverride`
-- **Recorded Skills** — JSON files in `~/.axion/skills/` compiled from user recordings (Phase 3)
+- **Recorded Skills** — JSON files in `~/.axion/skills/` compiled from user recordings
 
 **Dual-track lookup** — When a skill name is referenced, Axion checks prompt skills first, then falls back to recorded skills. Same-name skills always resolve to the prompt version.
 
@@ -359,7 +349,7 @@ axion run --no-skills "Open Calculator"
 | `GET` | `/v1/skills/{name}` | Get skill detail (type, step_count, parameter_count) |
 | `POST` | `/v1/skills/{name}/run` | Execute a skill via API (`{"task": "..."}`) |
 
-### Daemon Mode & Crash Recovery (Phase 4)
+### Daemon Mode & Crash Recovery
 
 Run Axion as a persistent launchd daemon that survives reboots and auto-restarts on crashes. All running task state is persisted to disk, so in-flight tasks are automatically recovered after an unexpected server termination.
 
@@ -424,9 +414,7 @@ Config file located at `~/.config/axion/config.json`:
   "apiKey": "sk-...",
   "model": "claude-sonnet-4-20250514",
   "maxSteps": 20,
-  "maxBatches": 6,
-  "maxReplanRetries": 3,
-  "traceEnabled": true
+  "maxModelCalls": 50
 }
 ```
 
@@ -454,32 +442,26 @@ Sources/
 ├── AxionCLI/              # CLI entry point and commands
 │   ├── Commands/          # run, setup, doctor, server, mcp, record, skill, daemon subcommands
 │   ├── Config/            # Configuration management
-│   ├── Permissions/       # Permission checks
-│   ├── Engine/            # RunEngine state machine
-│   ├── Planner/           # LLMPlanner, PlanParser, PromptBuilder
-│   ├── Executor/          # StepExecutor, SafetyChecker, PlaceholderResolver
-│   ├── Verifier/          # TaskVerifier, StopConditionEvaluator
-│   ├── Memory/            # AppMemoryExtractor, AppProfileAnalyzer, MemoryContextProvider
-│   ├── Trace/             # TraceRecorder (JSONL)
+│   ├── Checks/            # Environment and permission checks
+│   ├── Constants/         # CLI-specific constants
+│   ├── IO/                # Output handlers and takeover I/O
 │   ├── MCP/               # MCPServerRunner (Agent-as-MCP-Server)
 │   ├── API/               # HTTP API server, SSE events
+│   ├── Memory/            # MemoryContextProvider, RunMemoryProcessor
+│   ├── Planner/           # PromptBuilder
+│   ├── Skills/            # SkillRegistry, AxionBuiltInSkills
 │   ├── Helper/            # HelperProcessManager (stdio lifecycle)
-│   └── Services/          # SkillExecutor and shared services
+│   └── Services/          # RunOrchestrator, AgentBuilder, shared services
 ├── AxionCore/             # Shared core layer
-│   ├── Models/            # Plan, Step, RunState, AxionConfig
-│   ├── Protocols/         # Planner, Executor, Verifier protocols
+│   ├── Models/            # RunConfig, AxionConfig, AppProfile
+│   ├── Protocols/         # Service protocols
 │   ├── Errors/            # Error types
-│   └── Constants/         # Constants
+│   └── Constants/         # ToolNames and shared constants
 ├── AxionHelper/           # MCP server (Helper process)
-│   ├── MCP/               # MCPServer and ToolRegistrar (20 tools)
-│   ├── Services/          # AccessibilityEngine, Screenshot, InputSimulation, EventRecorder, etc.
+│   ├── MCP/               # MCPServer and ToolRegistrar (21 tools)
+│   ├── Services/          # AccessibilityEngine, Screenshot, InputSimulation, EventRecorder
 │   ├── Models/            # AppInfo, WindowInfo, AXElement, SelectorQuery
 │   └── Protocols/         # Service protocol definitions
-└── AxionBar/              # macOS menu bar app
-    ├── Views/             # QuickRunWindow, TaskDetailPanel, RunHistoryWindow, SettingsWindow
-    ├── MenuBar/           # MenuBarBuilder
-    ├── Services/          # BackendHealthChecker, SSEEventClient, GlobalHotkeyService, etc.
-    └── Models/            # Bar-specific models
 
 Tests/
 ├── AxionCoreTests/        # Core model unit tests

@@ -124,6 +124,17 @@ When multiple windows must be visible simultaneously:
 2. `arrange_windows` with layout: "tile-left-right", "tile-top-bottom", or "cascade"
 3. Refresh AX tree after any layout change — old coordinates are invalid
 
+# Task Summary — MANDATORY
+
+EVERY response MUST end with exactly one summary line in this format:
+[结果] <one-line summary, max 100 chars>
+
+This is NOT optional. Even if the task failed, you MUST include this line.
+Examples:
+- [结果] 已在Safari中打开GitHub并登录成功
+- [结果] 文件已压缩为output.mp4，从120MB减小到45MB
+- [结果] 失败：无法找到登录按钮
+
 # State Reset
 
 For exact stateful input tasks (calculations, forms, search boxes), clear stale input before entering new content. Use `command+a` then `delete` to clear a field.
