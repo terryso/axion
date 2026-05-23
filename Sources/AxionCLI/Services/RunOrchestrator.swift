@@ -242,6 +242,15 @@ enum RunOrchestrator {
             await runLockService.release()
         }
 
+        // macOS desktop notification — user can't see terminal when AI operates a fullscreen app
+        // Skip in JSON mode (programmatic use doesn't need desktop notifications)
+        if !runConfig.json {
+            let statusText = runSucceeded ? "完成" : (runCompleted ? "失败" : "已取消")
+            let elapsedSec = durationMs / 1000
+            let taskPreview = String(runConfig.task.prefix(60))
+            sendDesktopNotification(title: "Axion \(statusText)", message: "\(taskPreview) (\(elapsedSec)s)")
+        }
+
         return RunResult(totalSteps: totalSteps, durationMs: durationMs, runSucceeded: runSucceeded)
     }
 
@@ -297,6 +306,10 @@ enum RunOrchestrator {
         fputs("[axion] 运行结束。步数: \(totalSteps), 耗时: \(String(format: "%.1f", Double(durationMs) / 1000))s\n", stderr)
 
         try? await agent.close()
+
+        let elapsedSec = durationMs / 1000
+        let taskPreview = String(task.prefix(60))
+        sendDesktopNotification(title: "Axion 完成", message: "\(taskPreview) (\(elapsedSec)s)")
     }
 
     /// Parses a skill name from a task that starts with `/`.
@@ -418,6 +431,26 @@ enum RunOrchestrator {
         } catch {
             NSLog("[RunOrchestrator] osascript activate failed for \(bundleId): \(error)")
         }
+    }
+
+    /// Sends a macOS desktop notification via osascript.
+    /// Uses `display notification` which works without any entitlements or bundle ID.
+    /// Blocks briefly (~50ms) to ensure the notification fires before process exit.
+    static func sendDesktopNotification(title: String, message: String) {
+        let process = Process()
+        process.executableURL = URL(fileURLWithPath: "/usr/bin/osascript")
+        // Escape backslashes first, then double quotes for AppleScript
+        let escapedTitle = title.replacingOccurrences(of: "\\", with: "\\\\").replacingOccurrences(of: "\"", with: "\\\"")
+        let escapedMessage = message.replacingOccurrences(of: "\\", with: "\\\\").replacingOccurrences(of: "\"", with: "\\\"")
+        process.arguments = ["-e", "display notification \"\(escapedMessage)\" with title \"\(escapedTitle)\""]
+        if let pipe = try? Pipe() {
+            process.standardOutput = pipe
+            process.standardError = pipe
+        }
+        do {
+            try process.run()
+            process.waitUntilExit()
+        } catch {}
     }
 
 }
