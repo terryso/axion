@@ -281,6 +281,6 @@ development_status:
   epic-25: in-progress
   25-1-curator-prompt-builder: done
   25-2-curator-archive-tool: done
-  25-3-intelligent-curator: backlog
+  25-3-intelligent-curator: done
   25-4-curator-run-report: backlog
   epic-25-retrospective: optional
