@@ -266,5 +266,5 @@ development_status:
   epic-23: in-progress
   23-1-self-evolution-plugin-protocol: done
   23-2-session-search-plugin: done
-  23-3-prompt-evolver-plugin: backlog
+  23-3-prompt-evolver-plugin: review
   epic-23-retrospective: optional

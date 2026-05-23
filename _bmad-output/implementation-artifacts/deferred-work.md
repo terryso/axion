@@ -124,3 +124,9 @@
 
 - **ATDD tautological assertions** -- `Story18_11_ATDDTests.swift` `testAC4_compatReport_completeFieldLevelCoverage()` compares local variables to their own literals (e.g., `let expectedPass = 32; XCTAssertEqual(expectedPass, 32)`). Pre-existing ATDD design pattern used consistently across all Stories 18-1 through 18-10. [Tests/OpenAgentSDKTests/Compat/Story18_11_ATDDTests.swift]
 - **testEffortThinkingInteraction_pass does not verify computeThinkingConfig() priority chain** -- Test only verifies field coexistence on AgentOptions, not the runtime priority chain `thinking > effort > nil` via `computeThinkingConfig()`. Out of scope for compat verification story; runtime behavior requires E2E tests. [Tests/OpenAgentSDKTests/Compat/ThinkingModelCompatTests.swift:195]
+
+## Deferred from: code review of 23-3-prompt-evolver-plugin (2026-05-23)
+
+- **PromptEvolutionResult lacks Codable conformance** — Not mandated by AC4 (spec only requires Sendable, Equatable). Consistency concern with sibling Result types (SkillEvolutionResult, CuratorRunResult are Codable). Engine/consumer can handle serialization if needed. [Sources/OpenAgentSDK/Types/PromptEvolutionTypes.swift:105]
+- **shouldEvolve/evolvedPrompt inconsistent state not prevented** — shouldEvolve: false with non-nil evolvedPrompt is contradictory but not validated. PromptEvolverEngine (AC5) is the sole producer and will enforce the invariant at the call site. [Sources/OpenAgentSDK/Types/PromptEvolutionTypes.swift:107-109]
+- **Date() makes Equatable non-deterministic** — Two structurally identical results created at different times compare as not-equal due to evolvedAt. Pre-existing SDK pattern (SkillEvolutionResult has same issue). Tests handle via field-level comparison. [Sources/OpenAgentSDK/Types/PromptEvolutionTypes.swift:119,126]
