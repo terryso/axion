@@ -20,7 +20,7 @@ public struct ReviewAgentConfig: Sendable, Codable, Equatable {
         didSet { precondition(maxTurns > 0, "ReviewAgentConfig.maxTurns must be greater than zero") }
     }
 
-    /// Tool names the review agent is allowed to use. Defaults to the four review tools.
+    /// Tool names the review agent is allowed to use. Defaults to the five review tools.
     /// Must be non-empty.
     public var allowedTools: [String] {
         didSet { precondition(!allowedTools.isEmpty, "ReviewAgentConfig.allowedTools must not be empty") }
@@ -35,6 +35,7 @@ public struct ReviewAgentConfig: Sendable, Codable, Equatable {
             "review_update_skill",
             "review_create_skill",
             "review_add_skill_file",
+            "curator_archive_skill",
         ]
     ) {
         precondition(maxTurns > 0, "ReviewAgentConfig.maxTurns must be greater than zero")

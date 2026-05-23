@@ -15,6 +15,7 @@ final class ReviewAgentTypesTests: XCTestCase {
             "review_update_skill",
             "review_create_skill",
             "review_add_skill_file",
+            "curator_archive_skill",
         ])
     }
 

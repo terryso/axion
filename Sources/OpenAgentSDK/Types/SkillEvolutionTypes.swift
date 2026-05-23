@@ -314,6 +314,8 @@ public struct SkillUsageData: Codable, Sendable, Equatable {
     public var pinned: Bool
     /// How this skill originated.
     public var provenance: SkillProvenance
+    /// Name of the umbrella skill that absorbed this skill's content, or nil if never archived.
+    public var absorbedInto: String?
 
     public init(
         skillName: String,
@@ -321,7 +323,8 @@ public struct SkillUsageData: Codable, Sendable, Equatable {
         lastViewedAt: Date? = nil,
         lastManagedAt: Date? = nil,
         pinned: Bool = false,
-        provenance: SkillProvenance = .userDefined
+        provenance: SkillProvenance = .userDefined,
+        absorbedInto: String? = nil
     ) {
         self.skillName = skillName
         self.viewCount = viewCount
@@ -329,6 +332,7 @@ public struct SkillUsageData: Codable, Sendable, Equatable {
         self.lastManagedAt = lastManagedAt
         self.pinned = pinned
         self.provenance = provenance
+        self.absorbedInto = absorbedInto
     }
 
     /// Derives the current lifecycle state from usage data.

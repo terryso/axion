@@ -20,11 +20,13 @@ final class ReviewOrchestratorTests: XCTestCase {
         scheduleConfig: ReviewScheduleConfig = ReviewScheduleConfig(),
         skillEvolver: any SkillEvolver = MockSkillEvolver()
     ) -> ReviewOrchestrator {
-        ReviewOrchestrator(
+        let tempDir = (NSTemporaryDirectory() as NSString).appendingPathComponent("ReviewOrchestratorTests-\(UUID().uuidString)")
+        return ReviewOrchestrator(
             scheduleConfig: scheduleConfig,
             factStore: FactStore(),
             skillRegistry: SkillRegistry(),
-            skillEvolver: skillEvolver
+            skillEvolver: skillEvolver,
+            usageStore: SkillUsageStore(skillsDir: tempDir)
         )
     }
 
@@ -301,6 +303,21 @@ final class ReviewOrchestratorTests: XCTestCase {
         ]
         let result = ReviewOrchestrator.summarizeActions(messages, priorSnapshot: [])
         XCTAssertEqual(result.count, 2)
+    }
+
+    func testSummarizeActionsExtractsArchivedMessages() {
+        let messages: [SDKMessage] = [
+            .toolResult(SDKMessage.ToolResultData(
+                toolUseId: "tu-1",
+                content: """
+                {"success": true, "message": "Skill 'old-skill' archived", "absorbedInto": "umbrella"}
+                """,
+                isError: false
+            ))
+        ]
+        let result = ReviewOrchestrator.summarizeActions(messages, priorSnapshot: [])
+        XCTAssertEqual(result.count, 1)
+        XCTAssertTrue(result[0].contains("archived"))
     }
 
     // MARK: - AgentOptions Integration

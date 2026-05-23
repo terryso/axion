@@ -45,7 +45,8 @@ final class ReviewToolsE2ETests: XCTestCase {
         let factStore = FactStore(memoryDir: tmpDir.appendingPathComponent("facts").path)
         let registry = SkillRegistry()
         let evolver = E2EEvolver(evolvedSkill: evolvedSkill)
-        let tools = createReviewTools(factStore: factStore, skillRegistry: registry, skillEvolver: evolver)
+        let usageStore = SkillUsageStore(skillsDir: tmpDir.appendingPathComponent("usage").path)
+        let tools = createReviewTools(factStore: factStore, skillRegistry: registry, skillEvolver: evolver, usageStore: usageStore)
         return (tools, factStore, registry, tmpDir)
     }
 
@@ -379,5 +380,204 @@ final class ReviewToolsE2ETests: XCTestCase {
             XCTAssertFalse(result.isError, "Should accept prefix: \(prefix)")
             XCTAssertTrue(result.content.contains("\"success\":true"))
         }
+    }
+
+    // MARK: - CuratorArchiveTool E2E Tests (Story 25.2)
+
+    func testE2E_ArchiveSkill_RetiresInRegistry() async throws {
+        let (_, _, registry, tmpDir) = makeToolSet()
+        let usageStore = SkillUsageStore(skillsDir: tmpDir.appendingPathComponent("archive-usage").path)
+
+        registry.register(Skill(
+            name: "archive-target",
+            description: "Skill to archive",
+            promptTemplate: "template"
+        ))
+        try await usageStore.setUsage(skillName: "archive-target", data: SkillUsageData(
+            skillName: "archive-target",
+            provenance: .agentCreated
+        ))
+
+        // Re-create tools with the same usageStore so the archive tool can see the usage data
+        let evolver = E2EEvolver(evolvedSkill: nil)
+        let factStore = FactStore(memoryDir: tmpDir.appendingPathComponent("facts").path)
+        let toolsWithStore = createReviewTools(factStore: factStore, skillRegistry: registry, skillEvolver: evolver, usageStore: usageStore)
+
+        let result = await callTool(toolsWithStore, name: "curator_archive_skill", input: [
+            "skillName": "archive-target",
+        ])
+
+        XCTAssertFalse(result.isError)
+        XCTAssertTrue(result.content.contains("\"success\":true"))
+        XCTAssertTrue(result.content.contains("archive-target"))
+        XCTAssertTrue(result.content.contains("archived"))
+
+        let archived = registry.find("archive-target")
+        XCTAssertEqual(archived?.lifecycleState, .retired)
+    }
+
+    func testE2E_ArchiveSkill_RecordsAbsorbedInto() async throws {
+        let (_, _, registry, tmpDir) = makeToolSet()
+        let usageStore = SkillUsageStore(skillsDir: tmpDir.appendingPathComponent("absorbed-usage").path)
+
+        registry.register(Skill(
+            name: "old-skill",
+            description: "Old skill to merge",
+            promptTemplate: "template"
+        ))
+        try await usageStore.setUsage(skillName: "old-skill", data: SkillUsageData(
+            skillName: "old-skill",
+            provenance: .agentCreated
+        ))
+
+        let evolver = E2EEvolver(evolvedSkill: nil)
+        let factStore = FactStore(memoryDir: tmpDir.appendingPathComponent("facts").path)
+        let toolsWithStore = createReviewTools(factStore: factStore, skillRegistry: registry, skillEvolver: evolver, usageStore: usageStore)
+
+        let result = await callTool(toolsWithStore, name: "curator_archive_skill", input: [
+            "skillName": "old-skill",
+            "absorbedInto": "umbrella-skill",
+        ])
+
+        XCTAssertFalse(result.isError)
+        XCTAssertTrue(result.content.contains("\"success\":true"))
+        XCTAssertTrue(result.content.contains("umbrella-skill"))
+
+        let usage = await usageStore.getUsage(skillName: "old-skill")
+        XCTAssertEqual(usage.absorbedInto, "umbrella-skill")
+        XCTAssertNotNil(usage.lastManagedAt)
+    }
+
+    func testE2E_ArchiveSkill_PruningWithoutTarget() async throws {
+        let (_, _, registry, tmpDir) = makeToolSet()
+        let usageStore = SkillUsageStore(skillsDir: tmpDir.appendingPathComponent("prune-usage").path)
+
+        registry.register(Skill(
+            name: "prune-me",
+            description: "Skill to prune",
+            promptTemplate: "template"
+        ))
+        try await usageStore.setUsage(skillName: "prune-me", data: SkillUsageData(
+            skillName: "prune-me",
+            provenance: .agentCreated
+        ))
+
+        let evolver = E2EEvolver(evolvedSkill: nil)
+        let factStore = FactStore(memoryDir: tmpDir.appendingPathComponent("facts").path)
+        let toolsWithStore = createReviewTools(factStore: factStore, skillRegistry: registry, skillEvolver: evolver, usageStore: usageStore)
+
+        let result = await callTool(toolsWithStore, name: "curator_archive_skill", input: [
+            "skillName": "prune-me",
+            "absorbedInto": "",
+        ])
+
+        XCTAssertFalse(result.isError)
+        XCTAssertTrue(result.content.contains("\"success\":true"))
+
+        let usage = await usageStore.getUsage(skillName: "prune-me")
+        XCTAssertNil(usage.absorbedInto)
+    }
+
+    func testE2E_ArchiveSkill_RejectsBundled() async throws {
+        let (_, _, registry, tmpDir) = makeToolSet()
+        let usageStore = SkillUsageStore(skillsDir: tmpDir.appendingPathComponent("bundled-usage").path)
+
+        registry.register(Skill(
+            name: "bundled-skill",
+            description: "Bundled skill",
+            promptTemplate: "template"
+        ))
+        try await usageStore.setUsage(skillName: "bundled-skill", data: SkillUsageData(
+            skillName: "bundled-skill",
+            provenance: .bundled
+        ))
+
+        let evolver = E2EEvolver(evolvedSkill: nil)
+        let factStore = FactStore(memoryDir: tmpDir.appendingPathComponent("facts").path)
+        let toolsWithStore = createReviewTools(factStore: factStore, skillRegistry: registry, skillEvolver: evolver, usageStore: usageStore)
+
+        let result = await callTool(toolsWithStore, name: "curator_archive_skill", input: [
+            "skillName": "bundled-skill",
+        ])
+
+        XCTAssertTrue(result.content.contains("\"success\":false"))
+        XCTAssertTrue(result.content.contains("Cannot archive non-agent-created skill"))
+
+        let skill = registry.find("bundled-skill")
+        XCTAssertNotEqual(skill?.lifecycleState, .retired)
+    }
+
+    func testE2E_ArchiveSkill_RejectsPinned() async throws {
+        let (_, _, registry, tmpDir) = makeToolSet()
+        let usageStore = SkillUsageStore(skillsDir: tmpDir.appendingPathComponent("pinned-usage").path)
+
+        registry.register(Skill(
+            name: "pinned-skill",
+            description: "Pinned skill",
+            promptTemplate: "template"
+        ))
+        try await usageStore.setUsage(skillName: "pinned-skill", data: SkillUsageData(
+            skillName: "pinned-skill",
+            pinned: true,
+            provenance: .agentCreated
+        ))
+
+        let evolver = E2EEvolver(evolvedSkill: nil)
+        let factStore = FactStore(memoryDir: tmpDir.appendingPathComponent("facts").path)
+        let toolsWithStore = createReviewTools(factStore: factStore, skillRegistry: registry, skillEvolver: evolver, usageStore: usageStore)
+
+        let result = await callTool(toolsWithStore, name: "curator_archive_skill", input: [
+            "skillName": "pinned-skill",
+        ])
+
+        XCTAssertTrue(result.content.contains("\"success\":false"))
+        XCTAssertTrue(result.content.contains("Cannot archive pinned skill"))
+    }
+
+    func testE2E_CreateThenArchiveWorkflow() async throws {
+        let (_, _, registry, tmpDir) = makeToolSet()
+        let usageStore = SkillUsageStore(skillsDir: tmpDir.appendingPathComponent("workflow-usage").path)
+
+        // Step 1: Create a skill
+        let evolver = E2EEvolver(evolvedSkill: nil)
+        let factStore = FactStore(memoryDir: tmpDir.appendingPathComponent("facts").path)
+        let toolsWithStore = createReviewTools(factStore: factStore, skillRegistry: registry, skillEvolver: evolver, usageStore: usageStore)
+
+        let createResult = await callTool(toolsWithStore, name: "review_create_skill", input: [
+            "name": "disposable-skill",
+            "description": "Skill to be archived",
+            "promptTemplate": "Analyze {{content}}",
+        ], toolUseId: "toolu_create_1")
+        XCTAssertFalse(createResult.isError)
+        XCTAssertTrue(createResult.content.contains("\"success\":true"))
+
+        // review_create_skill registers the skill but does not write usage data.
+        // The archive tool requires usage data with provenance .agentCreated.
+        let created = registry.find("disposable-skill")
+        XCTAssertNotNil(created)
+        XCTAssertEqual(created?.lifecycleState, .active)
+
+        // Set up usage data as the curator pipeline would
+        try await usageStore.setUsage(skillName: "disposable-skill", data: SkillUsageData(
+            skillName: "disposable-skill",
+            provenance: .agentCreated
+        ))
+
+        // Step 2: Archive the skill
+        let archiveResult = await callTool(toolsWithStore, name: "curator_archive_skill", input: [
+            "skillName": "disposable-skill",
+            "absorbedInto": "better-skill",
+        ], toolUseId: "toolu_archive_1")
+        XCTAssertFalse(archiveResult.isError)
+        XCTAssertTrue(archiveResult.content.contains("\"success\":true"))
+        XCTAssertTrue(archiveResult.content.contains("better-skill"))
+
+        // Verify lifecycle changed
+        let archived = registry.find("disposable-skill")
+        XCTAssertEqual(archived?.lifecycleState, .retired)
+
+        // Verify absorbedInto recorded
+        let usage = await usageStore.getUsage(skillName: "disposable-skill")
+        XCTAssertEqual(usage.absorbedInto, "better-skill")
     }
 }

@@ -65,16 +65,21 @@ public struct ReviewOrchestrator: Sendable {
     /// Skill evolver for applying skill updates.
     public let skillEvolver: any SkillEvolver
 
+    /// Usage store for skill usage data.
+    public let usageStore: SkillUsageStore
+
     public init(
         scheduleConfig: ReviewScheduleConfig,
         factStore: FactStore,
         skillRegistry: SkillRegistry,
-        skillEvolver: any SkillEvolver
+        skillEvolver: any SkillEvolver,
+        usageStore: SkillUsageStore
     ) {
         self.scheduleConfig = scheduleConfig
         self.factStore = factStore
         self.skillRegistry = skillRegistry
         self.skillEvolver = skillEvolver
+        self.usageStore = usageStore
     }
 
     // MARK: - shouldReview
@@ -120,7 +125,8 @@ public struct ReviewOrchestrator: Sendable {
         let reviewTools = createReviewTools(
             factStore: factStore,
             skillRegistry: skillRegistry,
-            skillEvolver: skillEvolver
+            skillEvolver: skillEvolver,
+            usageStore: usageStore
         )
         reviewAgent.options.tools = reviewTools
 
@@ -207,7 +213,7 @@ public struct ReviewOrchestrator: Sendable {
 
             // Look for action keywords
             let lower = message.lowercased()
-            if lower.contains("created") || lower.contains("updated") || lower.contains("saved") {
+            if lower.contains("created") || lower.contains("updated") || lower.contains("saved") || lower.contains("archived") {
                 if !seen.contains(message) {
                     seen.insert(message)
                     actions.append(message)

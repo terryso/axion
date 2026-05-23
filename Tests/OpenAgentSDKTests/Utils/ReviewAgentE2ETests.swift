@@ -148,6 +148,7 @@ final class ReviewAgentE2ETests: XCTestCase {
         XCTAssertEqual(review.options.allowedTools, [
             "review_save_memory", "review_update_skill",
             "review_create_skill", "review_add_skill_file",
+            "curator_archive_skill",
         ])
         XCTAssertEqual(review.options.agentName, "review-agent")
 
@@ -252,12 +253,11 @@ final class ReviewAgentE2ETests: XCTestCase {
         XCTAssertEqual(review.options.allowedTools, [
             "review_save_memory", "review_update_skill",
             "review_create_skill", "review_add_skill_file",
+            "curator_archive_skill",
         ])
     }
 
     // MARK: - Prompt Structural Fidelity
-
-    /// The skill prompt's preference order sections appear in the correct sequence.
     func testSkillPrompt_preferenceOrderSections_inCorrectSequence() {
         let prompt = ReviewPromptBuilder.skillReviewPrompt()
 
