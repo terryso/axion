@@ -236,6 +236,52 @@ public class Agent: CustomStringConvertible, CustomDebugStringConvertible, @unch
                 await hookRegistry.register(.sessionEnd, definition: HookDefinition(handler: handler))
             }
         }
+
+        // Register ReviewOrchestrator on sessionEnd when schedule config is provided.
+        // Only supported with Anthropic provider (review agent uses Anthropic API).
+        if let scheduleConfig = mergedOptions.reviewScheduleConfig,
+           let hookRegistry = mergedOptions.hookRegistry,
+           mergedOptions.provider == .anthropic {
+            let orchestrator = ReviewOrchestrator(
+                scheduleConfig: scheduleConfig,
+                factStore: FactStore(),
+                skillRegistry: mergedOptions.skillRegistry ?? SkillRegistry(),
+                skillEvolver: LLMSkillEvolver(client: self.client)
+            )
+            let agent = self
+            let handler: @Sendable (HookInput) async -> HookOutput? = { _ in
+                let messages = agent.getMessages()
+                let defaultConfig = ReviewAgentConfig()
+                let (doMemory, doSkill) = orchestrator.shouldReview(
+                    sessionId: agent.getSessionId() ?? "",
+                    messageCount: messages.count,
+                    config: defaultConfig
+                )
+                guard doMemory || doSkill else { return nil }
+
+                let reviewConfig = ReviewAgentConfig(
+                    reviewMemory: doMemory,
+                    reviewSkills: doSkill
+                )
+                // Fire-and-forget in detached task — non-blocking
+                _Concurrency.Task.detached {
+                    let result = await orchestrator.executeReview(
+                        parentAgent: agent,
+                        messages: messages,
+                        config: reviewConfig
+                    )
+                    if let result {
+                        Logger.shared.info("ReviewOrchestrator", "review_completed", data: [
+                            "summary": result.summary,
+                        ])
+                    }
+                }
+                return nil
+            }
+            _Concurrency.Task { [hookRegistry] in
+                await hookRegistry.register(.sessionEnd, definition: HookDefinition(handler: handler))
+            }
+        }
     }
 
     // MARK: - Dynamic Permission Switching

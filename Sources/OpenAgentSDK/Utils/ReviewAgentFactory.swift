@@ -48,6 +48,7 @@ extension Agent {
         reviewOptions.memoryReviewConfig = nil
         reviewOptions.securityConfig = nil
         reviewOptions.evolutionPlugins = nil
+        reviewOptions.reviewScheduleConfig = nil
 
         return Agent(options: reviewOptions, client: client)
     }

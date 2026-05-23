@@ -471,6 +471,11 @@ public struct AgentOptions: Sendable {
     /// `nil` (default) means no evolution plugins.
     public var evolutionPlugins: [EvolutionPluginConfig]?
 
+    /// Optional configuration for automatic background review scheduling.
+    /// When set with `hookRegistry` and Anthropic provider, a sessionEnd hook
+    /// is registered to trigger review agents at configurable intervals.
+    public var reviewScheduleConfig: ReviewScheduleConfig?
+
     // MARK: - Memberwise Init
 
     public init(
@@ -541,7 +546,8 @@ public struct AgentOptions: Sendable {
         traceBaseURL: String? = nil,
         memoryReviewConfig: MemoryReviewConfig? = nil,
         securityConfig: MemorySecurityConfig? = nil,
-        evolutionPlugins: [EvolutionPluginConfig]? = nil
+        evolutionPlugins: [EvolutionPluginConfig]? = nil,
+        reviewScheduleConfig: ReviewScheduleConfig? = nil
     ) {
         self.apiKey = apiKey
         self.model = model
@@ -611,6 +617,7 @@ public struct AgentOptions: Sendable {
         self.memoryReviewConfig = memoryReviewConfig
         self.securityConfig = securityConfig
         self.evolutionPlugins = evolutionPlugins
+        self.reviewScheduleConfig = reviewScheduleConfig
     }
 
     // MARK: - Auto-Discover Skills
@@ -728,6 +735,7 @@ public struct AgentOptions: Sendable {
         self.memoryReviewConfig = nil
         self.securityConfig = nil
         self.evolutionPlugins = nil
+        self.reviewScheduleConfig = nil
     }
 
     // MARK: - Validation

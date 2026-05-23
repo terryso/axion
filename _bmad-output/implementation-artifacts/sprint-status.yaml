@@ -273,6 +273,6 @@ development_status:
   epic-24: in-progress
   24-1-review-agent-factory: done
   24-2-review-tools: done
-  24-3-review-orchestrator: backlog
+  24-3-review-orchestrator: done
   24-4-prefix-cache-sharing: backlog
   epic-24-retrospective: optional

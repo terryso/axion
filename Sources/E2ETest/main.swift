@@ -179,6 +179,11 @@ await SkillCuratorE2ETests.run()
 await SessionSearchE2ETests.run()
 
 // ================================================================
+// SECTION 81-86: ReviewOrchestrator E2E Tests (Story 24.3: ReviewOrchestrator)
+// ================================================================
+await ReviewOrchestratorE2ETests.run(apiKey: apiKey, model: model, baseURL: baseURL)
+
+// ================================================================
 // Results Summary
 // ================================================================
 print("\n=== E2E Test Results ===")
