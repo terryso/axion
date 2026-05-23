@@ -44,6 +44,63 @@ final class ReviewAgentE2ETests: XCTestCase {
         }
     }
 
+    // MARK: - System-Prompt-Capturing Mock (Story 24.4 E2E)
+
+    private static let captureState = PromptCaptureState()
+
+    final class PromptCaptureState: @unchecked Sendable {
+        var capturedSystem: String?
+        private let lock = NSLock()
+
+        func record(_ system: String?) {
+            lock.lock()
+            capturedSystem = system
+            lock.unlock()
+        }
+
+        func reset() {
+            lock.lock()
+            capturedSystem = nil
+            lock.unlock()
+        }
+    }
+
+    private struct CapturingMockClient: LLMClient, Sendable {
+        let state: PromptCaptureState
+
+        nonisolated func sendMessage(
+            model: String,
+            messages: [[String: Any]],
+            maxTokens: Int,
+            system: String?,
+            tools: [[String: Any]]?,
+            toolChoice: [String: Any]?,
+            thinking: [String: Any]?,
+            temperature: Double?
+        ) async throws -> [String: Any] {
+            state.record(system)
+            return [
+                "content": [["type": "text", "text": "response"]],
+                "stop_reason": "end_turn",
+                "usage": ["input_tokens": 10, "output_tokens": 5],
+            ]
+        }
+
+        nonisolated func streamMessage(
+            model: String,
+            messages: [[String: Any]],
+            maxTokens: Int,
+            system: String?,
+            tools: [[String: Any]]?,
+            toolChoice: [String: Any]?,
+            thinking: [String: Any]?,
+            temperature: Double?
+        ) async throws -> AsyncThrowingStream<SSEEvent, Error> {
+            state.record(system)
+            return AsyncThrowingStream { $0.finish() }
+        }
+    }
+
     // MARK: - Helpers
 
     private func makeParentAgent(
@@ -81,7 +138,7 @@ final class ReviewAgentE2ETests: XCTestCase {
 
         // Inherited
         XCTAssertEqual(review.model, "claude-sonnet-4-6")
-        XCTAssertEqual(review.systemPrompt, "You are a helpful coding assistant.")
+        XCTAssertEqual(review.systemPrompt, parent.cachedSystemPrompt)
         XCTAssertEqual(review.options.maxBudgetUsd, 10.0)
 
         // Overridden
@@ -158,7 +215,7 @@ final class ReviewAgentE2ETests: XCTestCase {
         XCTAssertEqual(memoryAgent.model, parent.model)
         XCTAssertEqual(skillAgent.model, parent.model)
         XCTAssertEqual(combinedAgent.model, parent.model)
-        XCTAssertEqual(memoryAgent.systemPrompt, parent.systemPrompt)
+        XCTAssertEqual(memoryAgent.systemPrompt, parent.cachedSystemPrompt)
 
         // Different maxTurns from their configs
         XCTAssertEqual(memoryAgent.maxTurns, 4)
@@ -437,5 +494,141 @@ final class ReviewAgentE2ETests: XCTestCase {
 
         let toolCount = review.options.tools?.count ?? 0
         XCTAssertEqual(toolCount, 0, "Review agent should start with no tools")
+    }
+
+    // MARK: - Story 24.4: Prefix Cache Sharing E2E
+
+    /// E2E: Review agent's prompt() returns costBreakdown entries with label "review".
+    func testReviewAgent_promptReturnsCostBreakdownWithLabel() async {
+        let client = MockLLMClient()
+        let parent = Agent(
+            options: AgentOptions(
+                apiKey: "test-key",
+                model: "claude-sonnet-4-6",
+                systemPrompt: "You are a helpful assistant.",
+                agentLabel: "review"
+            ),
+            client: client
+        )
+        let result = await parent.prompt("hello")
+        XCTAssertEqual(result.costBreakdown.count, 1)
+        XCTAssertEqual(result.costBreakdown.first?.label, "review")
+    }
+
+    /// E2E: Parent agent (no agentLabel) produces costBreakdown entries with nil label.
+    func testParentAgent_promptReturnsCostBreakdownWithNilLabel() async {
+        let client = MockLLMClient()
+        let parent = Agent(
+            options: AgentOptions(
+                apiKey: "test-key",
+                model: "claude-sonnet-4-6",
+                systemPrompt: "You are a helpful assistant."
+            ),
+            client: client
+        )
+        let result = await parent.prompt("hello")
+        XCTAssertEqual(result.costBreakdown.count, 1)
+        XCTAssertNil(result.costBreakdown.first?.label)
+    }
+
+    /// E2E: Review agent receives byte-identical system prompt as parent via LLM client.
+    func testReviewAgent_systemPromptMatchesParentViaClient() async {
+        ReviewAgentE2ETests.captureState.reset()
+
+        let capturingClient = CapturingMockClient(state: ReviewAgentE2ETests.captureState)
+
+        let parent = Agent(
+            options: AgentOptions(
+                apiKey: "test-key",
+                model: "claude-sonnet-4-6",
+                systemPrompt: "Unique prefix cache test prompt."
+            ),
+            client: capturingClient
+        )
+
+        // Parent call — captures system prompt
+        _ = await parent.prompt("hello parent")
+        let parentSystem = ReviewAgentE2ETests.captureState.capturedSystem
+
+        ReviewAgentE2ETests.captureState.reset()
+
+        // Create review agent — inherits cached system prompt
+        let config = ReviewAgentConfig()
+        let review = parent.createReviewAgent(config: config)
+
+        // Review call — captures system prompt
+        _ = await review.prompt("hello review")
+        let reviewSystem = ReviewAgentE2ETests.captureState.capturedSystem
+
+        // Byte-identical system prompts = prefix cache hit
+        XCTAssertEqual(parentSystem, reviewSystem,
+            "Review agent must send byte-identical system prompt to the LLM client for prefix cache sharing")
+        XCTAssertNotNil(parentSystem)
+        XCTAssertTrue(parentSystem?.contains("Unique prefix cache test prompt.") == true)
+    }
+
+    /// E2E: Multiple review agents from the same parent all send identical system prompts.
+    func testMultipleReviewAgents_sendIdenticalSystemPrompts() async {
+        ReviewAgentE2ETests.captureState.reset()
+
+        let capturingClient = CapturingMockClient(state: ReviewAgentE2ETests.captureState)
+
+        let parent = Agent(
+            options: AgentOptions(
+                apiKey: "test-key",
+                model: "claude-sonnet-4-6",
+                systemPrompt: "Shared parent prompt for cache test."
+            ),
+            client: capturingClient
+        )
+
+        _ = await parent.prompt("warm up")
+        let parentSystem = ReviewAgentE2ETests.captureState.capturedSystem
+
+        var reviewSystems: [String?] = []
+        for _ in 0..<3 {
+            ReviewAgentE2ETests.captureState.reset()
+            let config = ReviewAgentConfig(maxTurns: 2)
+            let review = parent.createReviewAgent(config: config)
+            _ = await review.prompt("review call")
+            reviewSystems.append(ReviewAgentE2ETests.captureState.capturedSystem)
+        }
+
+        for (index, reviewSystem) in reviewSystems.enumerated() {
+            XCTAssertEqual(reviewSystem, parentSystem,
+                "Review agent #\(index) system prompt must match parent's")
+        }
+    }
+
+    /// E2E: Review agent created from parent that hasn't called prompt() still gets valid system prompt.
+    func testReviewAgent_createdBeforeParentPrompt_stillMatchesCache() async {
+        ReviewAgentE2ETests.captureState.reset()
+
+        let capturingClient = CapturingMockClient(state: ReviewAgentE2ETests.captureState)
+
+        let parent = Agent(
+            options: AgentOptions(
+                apiKey: "test-key",
+                model: "claude-sonnet-4-6",
+                systemPrompt: "Pre-prompt cache test."
+            ),
+            client: capturingClient
+        )
+
+        // Create review agent BEFORE parent's first prompt
+        let review = parent.createReviewAgent(config: ReviewAgentConfig())
+
+        // Now run parent
+        _ = await parent.prompt("parent call")
+        let parentSystem = ReviewAgentE2ETests.captureState.capturedSystem
+
+        ReviewAgentE2ETests.captureState.reset()
+
+        // Run review agent — its system prompt should match parent's
+        _ = await review.prompt("review call")
+        let reviewSystem = ReviewAgentE2ETests.captureState.capturedSystem
+
+        XCTAssertEqual(parentSystem, reviewSystem,
+            "Review agent created before parent's first prompt must still share prefix cache")
     }
 }

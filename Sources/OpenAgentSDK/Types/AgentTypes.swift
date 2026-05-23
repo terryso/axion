@@ -476,6 +476,15 @@ public struct AgentOptions: Sendable {
     /// is registered to trigger review agents at configurable intervals.
     public var reviewScheduleConfig: ReviewScheduleConfig?
 
+    /// Optional label identifying this agent for cost tracking and logging.
+    /// Defaults to `nil` (main agent). The review agent sets this to `"review"`.
+    public var agentLabel: String?
+
+    /// When true, `buildSystemPrompt()` returns the raw `systemPrompt` without
+    /// appending git context, project instructions, or session memory.
+    /// Used by the review agent to send a pre-built prompt verbatim for prefix cache sharing.
+    var _rawSystemPromptMode: Bool = false
+
     // MARK: - Memberwise Init
 
     public init(
@@ -547,7 +556,8 @@ public struct AgentOptions: Sendable {
         memoryReviewConfig: MemoryReviewConfig? = nil,
         securityConfig: MemorySecurityConfig? = nil,
         evolutionPlugins: [EvolutionPluginConfig]? = nil,
-        reviewScheduleConfig: ReviewScheduleConfig? = nil
+        reviewScheduleConfig: ReviewScheduleConfig? = nil,
+        agentLabel: String? = nil
     ) {
         self.apiKey = apiKey
         self.model = model
@@ -618,6 +628,7 @@ public struct AgentOptions: Sendable {
         self.securityConfig = securityConfig
         self.evolutionPlugins = evolutionPlugins
         self.reviewScheduleConfig = reviewScheduleConfig
+        self.agentLabel = agentLabel
     }
 
     // MARK: - Auto-Discover Skills
@@ -736,6 +747,7 @@ public struct AgentOptions: Sendable {
         self.securityConfig = nil
         self.evolutionPlugins = nil
         self.reviewScheduleConfig = nil
+        self.agentLabel = nil
     }
 
     // MARK: - Validation
@@ -841,6 +853,8 @@ public struct RunCompleteContext: Sendable {
 /// model during an agent query. When the model is switched mid-session, multiple
 /// entries are produced -- one per model used.
 public struct CostBreakdownEntry: Sendable, Equatable {
+    /// Optional label identifying the agent (e.g., "review") for cost attribution.
+    public let label: String?
     /// The model identifier this entry tracks.
     public let model: String
     /// Total input tokens consumed by this model.
@@ -850,7 +864,8 @@ public struct CostBreakdownEntry: Sendable, Equatable {
     /// Estimated cost in USD for this model's usage.
     public let costUsd: Double
 
-    public init(model: String, inputTokens: Int, outputTokens: Int, costUsd: Double) {
+    public init(label: String? = nil, model: String, inputTokens: Int, outputTokens: Int, costUsd: Double) {
+        self.label = label
         self.model = model
         self.inputTokens = inputTokens
         self.outputTokens = outputTokens

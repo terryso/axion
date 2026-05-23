@@ -113,4 +113,78 @@ final class CostTrackerTests: XCTestCase {
         // Expected: 1M * 3/1M + 1M * 15/1M = 3.0 + 15.0 = 18.0
         XCTAssertEqual(summary.estimatedCostUsd, 18.0, accuracy: 0.001)
     }
+
+    // MARK: - Label tracking
+
+    func testLabelDefaultsToNil() {
+        let tracker = CostTracker(model: "claude-sonnet-4-6")
+        XCTAssertNil(tracker.label)
+        let summary = tracker.getSummary()
+        XCTAssertNil(summary.label)
+    }
+
+    func testLabelIncludedInSummary() {
+        var tracker = CostTracker(model: "claude-sonnet-4-6", label: "review")
+        tracker.recordUsage(model: "claude-sonnet-4-6", usage: TokenUsage(inputTokens: 100, outputTokens: 50))
+
+        let summary = tracker.getSummary()
+        XCTAssertEqual(summary.label, "review")
+    }
+
+    func testCostBreakdownEntryLabel() {
+        let entry = CostBreakdownEntry(label: "review", model: "claude-sonnet-4-6", inputTokens: 100, outputTokens: 50, costUsd: 0.001)
+        XCTAssertEqual(entry.label, "review")
+
+        let noLabelEntry = CostBreakdownEntry(model: "claude-sonnet-4-6", inputTokens: 100, outputTokens: 50, costUsd: 0.001)
+        XCTAssertNil(noLabelEntry.label)
+    }
+
+    // MARK: - Label with multi-model breakdown
+
+    func testLabelPersistsAcrossMultiModelBreakdown() {
+        var tracker = CostTracker(model: "claude-sonnet-4-6", label: "review")
+        tracker.recordUsage(model: "claude-sonnet-4-6", usage: TokenUsage(inputTokens: 1000, outputTokens: 500))
+        tracker.recordUsage(model: "claude-opus-4-6", usage: TokenUsage(inputTokens: 500, outputTokens: 200))
+
+        let summary = tracker.getSummary()
+        XCTAssertEqual(summary.label, "review")
+        XCTAssertEqual(summary.costBreakdown.count, 2)
+
+        // Both model entries in the CostSummary should reflect the tracker's label context
+        // (Note: ModelCostEntry doesn't carry label — that's in CostBreakdownEntry via Agent)
+        XCTAssertEqual(summary.modelCalls, 2)
+    }
+
+    func testLabelPreservedAfterBudgetExceeded() {
+        var tracker = CostTracker(model: "claude-sonnet-4-6", maxBudgetUsd: 0.001, label: "review")
+        tracker.recordUsage(model: "claude-sonnet-4-6", usage: TokenUsage(inputTokens: 100_000, outputTokens: 50_000))
+
+        let result = tracker.checkBudget()
+        if case .budgetExceeded = result {
+            // good
+        } else {
+            XCTFail("Expected budget exceeded")
+        }
+
+        // Label is preserved even after budget exceeded
+        let summary = tracker.getSummary()
+        XCTAssertEqual(summary.label, "review")
+        XCTAssertEqual(summary.modelCalls, 1)
+    }
+
+    func testDifferentLabelsProduceDistinctSummaries() {
+        var mainTracker = CostTracker(model: "claude-sonnet-4-6")
+        var reviewTracker = CostTracker(model: "claude-sonnet-4-6", label: "review")
+
+        mainTracker.recordUsage(model: "claude-sonnet-4-6", usage: TokenUsage(inputTokens: 1000, outputTokens: 500))
+        reviewTracker.recordUsage(model: "claude-sonnet-4-6", usage: TokenUsage(inputTokens: 500, outputTokens: 200))
+
+        let mainSummary = mainTracker.getSummary()
+        let reviewSummary = reviewTracker.getSummary()
+
+        XCTAssertNil(mainSummary.label)
+        XCTAssertEqual(reviewSummary.label, "review")
+        XCTAssertEqual(mainSummary.totalTokens, 1500)
+        XCTAssertEqual(reviewSummary.totalTokens, 700)
+    }
 }

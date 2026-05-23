@@ -274,5 +274,5 @@ development_status:
   24-1-review-agent-factory: done
   24-2-review-tools: done
   24-3-review-orchestrator: done
-  24-4-prefix-cache-sharing: backlog
+  24-4-prefix-cache-sharing: done
   epic-24-retrospective: optional

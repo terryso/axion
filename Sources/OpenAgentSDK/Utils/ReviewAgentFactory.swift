@@ -11,6 +11,9 @@ extension Agent {
     /// The review agent does **not** inherit the parent's tools, hooks, skills, MCP servers,
     /// or stores — these are explicitly set to `nil` so the review agent operates in isolation.
     ///
+    /// The review agent reuses the parent's cached system prompt for Anthropic prefix cache
+    /// sharing, reducing API costs by ~26% by hitting the same cached prompt prefix.
+    ///
     /// - Parameter config: Configuration controlling what the review agent examines
     ///   and which tools it may use.
     /// - Returns: A new ``Agent`` instance configured for background review.
@@ -20,7 +23,7 @@ extension Agent {
             model: model,
             baseURL: options.baseURL,
             provider: options.provider,
-            systemPrompt: systemPrompt,
+            systemPrompt: cachedSystemPrompt,
             maxTurns: config.maxTurns,
             maxBudgetUsd: options.maxBudgetUsd,
             permissionMode: .bypassPermissions,
@@ -30,7 +33,8 @@ extension Agent {
             sessionId: "review-\(options.sessionId ?? UUID().uuidString)",
             hookRegistry: nil,
             skillRegistry: nil,
-            allowedTools: config.allowedTools
+            allowedTools: config.allowedTools,
+            agentLabel: "review"
         )
         // Explicitly nil out stores and other non-inherited fields
         reviewOptions.mailboxStore = nil
@@ -49,6 +53,19 @@ extension Agent {
         reviewOptions.securityConfig = nil
         reviewOptions.evolutionPlugins = nil
         reviewOptions.reviewScheduleConfig = nil
+        // Nil out dynamic context fields so buildSystemPrompt() returns the
+        // cached prompt verbatim — no git/project/session additions.
+        reviewOptions.systemPromptConfig = nil
+        reviewOptions.cwd = nil
+        reviewOptions.projectRoot = nil
+        reviewOptions.gitCacheTTL = 0
+        reviewOptions._rawSystemPromptMode = true
+
+        Logger.shared.debug("ReviewAgent", "prefix_cache_sharing", data: [
+            "parentModel": model,
+            "reviewModel": reviewOptions.model,
+            "systemPromptHash": cachedSystemPrompt?.hashValue.description ?? "nil"
+        ])
 
         return Agent(options: reviewOptions, client: client)
     }

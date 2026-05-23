@@ -67,7 +67,8 @@ final class ReviewAgentFactoryTests: XCTestCase {
         let parent = makeParentAgent()
         let config = ReviewAgentConfig()
         let review = parent.createReviewAgent(config: config)
-        XCTAssertEqual(review.systemPrompt, "You are a helpful assistant.")
+        // Review agent uses parent's cachedSystemPrompt (fully-built prompt)
+        XCTAssertEqual(review.systemPrompt, parent.cachedSystemPrompt)
     }
 
     func testCreateReviewAgentInheritsMaxBudgetUsd() {
@@ -217,5 +218,30 @@ final class ReviewAgentFactoryTests: XCTestCase {
             "review_create_skill",
             "review_add_skill_file",
         ])
+    }
+
+    // MARK: - Prefix Cache Sharing
+
+    func testCreateReviewAgentUsesCachedSystemPrompt() {
+        let parent = makeParentAgent()
+        let review = parent.createReviewAgent(config: ReviewAgentConfig())
+        // Review agent's systemPrompt should be the parent's cachedSystemPrompt
+        XCTAssertEqual(review.systemPrompt, parent.cachedSystemPrompt)
+    }
+
+    func testCreateReviewAgentAgentLabelIsReview() {
+        let parent = makeParentAgent()
+        let review = parent.createReviewAgent(config: ReviewAgentConfig())
+        XCTAssertEqual(review.options.agentLabel, "review")
+    }
+
+    func testCreateReviewAgentNilsOutDynamicContext() {
+        let parent = makeParentAgent()
+        let review = parent.createReviewAgent(config: ReviewAgentConfig())
+        XCTAssertNil(review.options.systemPromptConfig)
+        XCTAssertNil(review.options.cwd)
+        XCTAssertNil(review.options.projectRoot)
+        XCTAssertEqual(review.options.gitCacheTTL, 0)
+        XCTAssertTrue(review.options._rawSystemPromptMode)
     }
 }
