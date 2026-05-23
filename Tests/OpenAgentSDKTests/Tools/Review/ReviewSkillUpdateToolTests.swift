@@ -77,7 +77,7 @@ final class ReviewSkillUpdateToolTests: XCTestCase {
             reason: "Improved instructions"
         )
 
-        XCTAssertTrue(output.contains("\"success\": true"))
+        XCTAssertTrue(output.contains("\"success\":true"))
         XCTAssertTrue(output.contains("test-skill"))
 
         let updated = registry.find("test-skill")
@@ -102,7 +102,7 @@ final class ReviewSkillUpdateToolTests: XCTestCase {
             reason: "test"
         )
 
-        XCTAssertTrue(output.contains("\"success\": false"))
+        XCTAssertTrue(output.contains("\"success\":false"))
         XCTAssertTrue(output.contains("not found"))
     }
 
@@ -123,7 +123,7 @@ final class ReviewSkillUpdateToolTests: XCTestCase {
             reason: "test"
         )
 
-        XCTAssertTrue(output.contains("\"success\": false"))
+        XCTAssertTrue(output.contains("\"success\":false"))
         XCTAssertTrue(output.contains("Invalid JSON"))
     }
 
@@ -139,7 +139,7 @@ final class ReviewSkillUpdateToolTests: XCTestCase {
             reason: "test"
         )
 
-        XCTAssertTrue(output.contains("\"success\": false"))
+        XCTAssertTrue(output.contains("\"success\":false"))
         XCTAssertTrue(output.contains("Evolution failed"))
     }
 
@@ -160,7 +160,7 @@ final class ReviewSkillUpdateToolTests: XCTestCase {
             reason: "no change needed"
         )
 
-        XCTAssertTrue(output.contains("\"success\": true"))
+        XCTAssertTrue(output.contains("\"success\":true"))
         XCTAssertTrue(output.contains("no changes applied"))
     }
 
@@ -188,7 +188,7 @@ final class ReviewSkillUpdateToolTests: XCTestCase {
             reason: "multiple changes"
         )
 
-        XCTAssertTrue(output.contains("\"success\": true"))
+        XCTAssertTrue(output.contains("\"success\":true"))
         // Verify changes is a valid JSON array with 2 separate elements
         XCTAssertTrue(output.contains("\"Updated promptTemplate\""))
         XCTAssertTrue(output.contains("\"Changed description\""))
@@ -210,7 +210,7 @@ final class ReviewSkillUpdateToolTests: XCTestCase {
             reason: "test"
         )
 
-        XCTAssertTrue(output.contains("\"success\": false"))
+        XCTAssertTrue(output.contains("\"success\":false"))
         XCTAssertTrue(output.contains("must not be empty"))
     }
 }

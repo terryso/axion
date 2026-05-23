@@ -37,15 +37,18 @@ public func createReviewSkillUpdateTool(
         ]
     ) { (input: ReviewSkillUpdateInput, _: ToolContext) async -> String in
         guard !input.skillName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
-            return "{\"success\": false, \"error\": \"'skillName' must not be empty\"}"
+            return reviewJSONResponse(["success": false, "error": "'skillName' must not be empty"] as [String: Any])
         }
         guard let skill = skillRegistry.find(input.skillName) else {
-            return "{\"success\": false, \"error\": \"Skill '\(input.skillName)' not found\"}"
+            return reviewJSONResponse([
+                "success": false,
+                "error": "Skill '\(input.skillName)' not found"
+            ] as [String: Any])
         }
 
         guard let updatesData = input.updates.data(using: .utf8),
               let _ = try? JSONSerialization.jsonObject(with: updatesData) as? [String: Any] else {
-            return "{\"success\": false, \"error\": \"Invalid JSON in updates field\"}"
+            return reviewJSONResponse(["success": false, "error": "Invalid JSON in updates field"] as [String: Any])
         }
 
         let signal = SkillSignal.create(
@@ -68,20 +71,22 @@ public func createReviewSkillUpdateTool(
             let result = try await skillEvolver.evolve(skill: skill, signals: [signal], config: config)
             if let evolved = result.evolvedSkill {
                 skillRegistry.replace(evolved)
-                let changesJSON: String
-                if result.changes.isEmpty {
-                    changesJSON = "[]"
-                } else if let data = try? JSONEncoder().encode(result.changes),
-                          let encoded = String(data: data, encoding: .utf8) {
-                    changesJSON = encoded
-                } else {
-                    changesJSON = "[]"
-                }
-                return "{\"success\": true, \"message\": \"Skill '\(input.skillName)' updated\", \"changes\": \(changesJSON)}"
+                return reviewJSONResponse([
+                    "success": true,
+                    "message": "Skill '\(input.skillName)' updated",
+                    "changes": result.changes
+                ] as [String: Any])
             }
-            return "{\"success\": true, \"message\": \"Skill '\(input.skillName)' evaluated but no changes applied\", \"changes\": []}"
+            return reviewJSONResponse([
+                "success": true,
+                "message": "Skill '\(input.skillName)' evaluated but no changes applied",
+                "changes": [] as [String]
+            ] as [String: Any])
         } catch {
-            return "{\"success\": false, \"error\": \"\(error.localizedDescription)\"}"
+            return reviewJSONResponse([
+                "success": false,
+                "error": error.localizedDescription
+            ] as [String: Any])
         }
     }
 }

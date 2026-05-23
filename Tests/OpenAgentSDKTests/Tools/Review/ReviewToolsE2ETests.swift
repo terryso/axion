@@ -87,7 +87,7 @@ final class ReviewToolsE2ETests: XCTestCase {
         ])
 
         XCTAssertFalse(result.isError)
-        XCTAssertTrue(result.content.contains("\"success\": true"))
+        XCTAssertTrue(result.content.contains("\"success\":true"))
         XCTAssertTrue(result.content.contains("testing"))
 
         let facts = try await factStore.query(domain: "testing")
@@ -110,7 +110,7 @@ final class ReviewToolsE2ETests: XCTestCase {
         ])
 
         XCTAssertFalse(result.isError)
-        XCTAssertTrue(result.content.contains("\"success\": true"))
+        XCTAssertTrue(result.content.contains("\"success\":true"))
 
         let skill = registry.find("review-e2e-skill")
         XCTAssertNotNil(skill)
@@ -147,7 +147,7 @@ final class ReviewToolsE2ETests: XCTestCase {
             "reason": "E2E workflow test update",
         ], toolUseId: "toolu_step2")
         XCTAssertFalse(updateResult.isError)
-        XCTAssertTrue(updateResult.content.contains("\"success\": true"))
+        XCTAssertTrue(updateResult.content.contains("\"success\":true"))
 
         // Verify skill was replaced by evolver result
         let evolved = registry.find("workflow-skill")
@@ -161,7 +161,7 @@ final class ReviewToolsE2ETests: XCTestCase {
             "content": "# Workflow Guide\n\nThis guide documents the E2E workflow.",
         ], toolUseId: "toolu_step3")
         XCTAssertFalse(fileResult.isError)
-        XCTAssertTrue(fileResult.content.contains("\"success\": true"))
+        XCTAssertTrue(fileResult.content.contains("\"success\":true"))
     }
 
     // MARK: - Cross-Tool Workflow: Save Memory + Create Skill
@@ -218,7 +218,7 @@ final class ReviewToolsE2ETests: XCTestCase {
 
         // Tool returns domain error JSON, but the tool framework doesn't set isError
         // because the execute closure returns a string (not throws). The error is in the content.
-        XCTAssertTrue(result.content.contains("\"success\": false"))
+        XCTAssertTrue(result.content.contains("\"success\":false"))
         XCTAssertTrue(result.content.contains("Invalid kind"))
         XCTAssertTrue(result.content.contains("bad_kind"))
     }
@@ -246,7 +246,7 @@ final class ReviewToolsE2ETests: XCTestCase {
             "reason": "testing nonexistent",
         ])
 
-        XCTAssertTrue(result.content.contains("\"success\": false"))
+        XCTAssertTrue(result.content.contains("\"success\":false"))
         XCTAssertTrue(result.content.contains("not found"))
     }
 
@@ -259,7 +259,7 @@ final class ReviewToolsE2ETests: XCTestCase {
             "content": "content",
         ])
 
-        XCTAssertTrue(result.content.contains("\"success\": false"))
+        XCTAssertTrue(result.content.contains("\"success\":false"))
         XCTAssertTrue(result.content.contains("not found"))
     }
 
@@ -334,7 +334,7 @@ final class ReviewToolsE2ETests: XCTestCase {
             "content": "evil",
         ])
 
-        XCTAssertTrue(result.content.contains("\"success\": false"))
+        XCTAssertTrue(result.content.contains("\"success\":false"))
         XCTAssertTrue(result.content.contains("Invalid file path"))
     }
 
@@ -355,7 +355,7 @@ final class ReviewToolsE2ETests: XCTestCase {
             "content": "evil",
         ])
 
-        XCTAssertTrue(result.content.contains("\"success\": false"))
+        XCTAssertTrue(result.content.contains("\"success\":false"))
         XCTAssertTrue(result.content.contains("Path traversal"))
     }
 
@@ -377,7 +377,7 @@ final class ReviewToolsE2ETests: XCTestCase {
             ], toolUseId: "toolu_prefix_\(prefix)")
 
             XCTAssertFalse(result.isError, "Should accept prefix: \(prefix)")
-            XCTAssertTrue(result.content.contains("\"success\": true"))
+            XCTAssertTrue(result.content.contains("\"success\":true"))
         }
     }
 }

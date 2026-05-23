@@ -34,16 +34,19 @@ public func createReviewSkillCreateTool(skillRegistry: SkillRegistry) -> ToolPro
         ]
     ) { (input: ReviewSkillCreateInput, _: ToolContext) -> String in
         guard !input.name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
-            return "{\"success\": false, \"error\": \"'name' must not be empty\"}"
+            return reviewJSONResponse(["success": false, "error": "'name' must not be empty"] as [String: Any])
         }
         guard !input.description.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
-            return "{\"success\": false, \"error\": \"'description' must not be empty\"}"
+            return reviewJSONResponse(["success": false, "error": "'description' must not be empty"] as [String: Any])
         }
         guard !input.promptTemplate.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
-            return "{\"success\": false, \"error\": \"'promptTemplate' must not be empty\"}"
+            return reviewJSONResponse(["success": false, "error": "'promptTemplate' must not be empty"] as [String: Any])
         }
         if skillRegistry.has(input.name) {
-            return "{\"success\": false, \"error\": \"Skill '\(input.name)' already exists\"}"
+            return reviewJSONResponse([
+                "success": false,
+                "error": "Skill '\(input.name)' already exists"
+            ] as [String: Any])
         }
 
         let skill = Skill(
@@ -57,6 +60,9 @@ public func createReviewSkillCreateTool(skillRegistry: SkillRegistry) -> ToolPro
         )
         skillRegistry.register(skill)
 
-        return "{\"success\": true, \"message\": \"Skill '\(input.name)' created\"}"
+        return reviewJSONResponse([
+            "success": true,
+            "message": "Skill '\(input.name)' created"
+        ] as [String: Any])
     }
 }

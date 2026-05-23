@@ -59,7 +59,7 @@ final class ReviewSkillFileToolTests: XCTestCase {
             content: "# Guide\n\nThis is a reference guide."
         )
 
-        XCTAssertTrue(output.contains("\"success\": true"))
+        XCTAssertTrue(output.contains("\"success\":true"))
         XCTAssertTrue(output.contains("file-skill"))
 
         let filePath = dir.appendingPathComponent("references/guide.md").path
@@ -79,7 +79,7 @@ final class ReviewSkillFileToolTests: XCTestCase {
             content: "content"
         )
 
-        XCTAssertTrue(output.contains("\"success\": false"))
+        XCTAssertTrue(output.contains("\"success\":false"))
         XCTAssertTrue(output.contains("Invalid file path"))
     }
 
@@ -104,7 +104,7 @@ final class ReviewSkillFileToolTests: XCTestCase {
                 content: "content for \(prefix)"
             )
 
-            XCTAssertTrue(output.contains("\"success\": true"), "Failed for prefix: \(prefix)")
+            XCTAssertTrue(output.contains("\"success\":true"), "Failed for prefix: \(prefix)")
         }
     }
 
@@ -118,7 +118,7 @@ final class ReviewSkillFileToolTests: XCTestCase {
             content: "content"
         )
 
-        XCTAssertTrue(output.contains("\"success\": false"))
+        XCTAssertTrue(output.contains("\"success\":false"))
         XCTAssertTrue(output.contains("not found"))
     }
 
@@ -142,7 +142,7 @@ final class ReviewSkillFileToolTests: XCTestCase {
             content: "malicious"
         )
 
-        XCTAssertTrue(output.contains("\"success\": false"))
+        XCTAssertTrue(output.contains("\"success\":false"))
         XCTAssertTrue(output.contains("Path traversal"))
     }
 
@@ -162,7 +162,7 @@ final class ReviewSkillFileToolTests: XCTestCase {
             content: "content"
         )
 
-        XCTAssertTrue(output.contains("\"success\": false"))
+        XCTAssertTrue(output.contains("\"success\":false"))
         XCTAssertTrue(output.contains("no base directory"))
     }
 
@@ -176,7 +176,7 @@ final class ReviewSkillFileToolTests: XCTestCase {
             content: "content"
         )
 
-        XCTAssertTrue(output.contains("\"success\": false"))
+        XCTAssertTrue(output.contains("\"success\":false"))
         XCTAssertTrue(output.contains("must not be empty"))
     }
 
@@ -196,7 +196,7 @@ final class ReviewSkillFileToolTests: XCTestCase {
             content: "content"
         )
 
-        XCTAssertTrue(output.contains("\"success\": false"))
+        XCTAssertTrue(output.contains("\"success\":false"))
         XCTAssertTrue(output.contains("must not be empty"))
     }
 }

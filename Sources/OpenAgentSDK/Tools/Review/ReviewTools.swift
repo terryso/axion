@@ -1,5 +1,14 @@
 import Foundation
 
+/// Builds a JSON response string using JSONSerialization for safe encoding of user-provided values.
+func reviewJSONResponse(_ fields: [String: Any]) -> String {
+    guard let data = try? JSONSerialization.data(withJSONObject: fields),
+          let result = String(data: data, encoding: .utf8) else {
+        return "{\"success\": false, \"error\": \"JSON encoding failed\"}"
+    }
+    return result
+}
+
 // MARK: - createReviewTools
 
 /// Creates all four review tools for injection into a forked review agent.

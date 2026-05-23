@@ -323,9 +323,6 @@ open-agent-sdk-swift/
 ├── README.md
 ├── LICENSE
 ├── .gitignore
-├── .github/
-│   └── workflows/
-│       └── ci.yml
 ├── Sources/
 │   └── OpenAgentSDK/
 │       ├── OpenAgentSDK.swift          # 模块入口点，重新导出公共 API
@@ -333,30 +330,51 @@ open-agent-sdk-swift/
 │       ├── Types/
 │       │   ├── SDKMessage.swift        # SDKMessage 枚举 + 所有事件类型
 │       │   ├── TokenUsage.swift        # Token 使用跟踪
+│       │   ├── CostTypes.swift         # CostSummary, CostBreakdownEntry
 │       │   ├── ToolTypes.swift         # ToolProtocol, ToolResult, ToolContext, ToolInputSchema
 │       │   ├── PermissionTypes.swift   # PermissionMode, CanUseToolResult, CanUseToolFn
 │       │   ├── ThinkingConfig.swift    # Thinking 配置枚举
 │       │   ├── AgentTypes.swift        # AgentDefinition, AgentOptions, QueryResult
 │       │   ├── MCPConfig.swift         # McpStdioConfig, McpSseConfig, McpHttpConfig, McpSdkServerConfig
+│       │   ├── MCPTypes.swift          # MCP 协议类型
+│       │   ├── MCPResourceTypes.swift  # MCP 资源类型
 │       │   ├── SessionTypes.swift      # SessionMetadata, SessionData
 │       │   ├── HookTypes.swift         # HookEvent 枚举, HookInput, HookOutput, HookDefinition
 │       │   ├── ErrorTypes.swift        # SDKError 枚举及关联值
-│       │   └── ModelInfo.swift         # ModelInfo, MODEL_PRICING 字典
+│       │   ├── ModelInfo.swift         # ModelInfo, MODEL_PRICING 字典
+│       │   ├── SandboxSettings.swift   # 沙盒配置
+│       │   ├── TaskTypes.swift         # 任务系统类型
+│       │   ├── SkillTypes.swift        # Skill, SkillLoader 类型
+│       │   ├── SkillEvolutionTypes.swift # SkillSignal, SkillEvolver 协议, SkillEvolutionResult
+│       │   ├── ExperienceTypes.swift   # ExperienceSignal, ExperienceExtractor 协议
+│       │   ├── MemoryFact.swift        # MemoryFact, FactStatus
+│       │   ├── MemoryTypes.swift       # 记忆系统类型
+│       │   ├── MemoryBundle.swift      # 记忆打包/导入导出
+│       │   ├── ReviewAgentTypes.swift  # ReviewAgentConfig, ReviewAgentResult
+│       │   ├── SessionSearchTypes.swift # 会话搜索类型
+│       │   ├── PluginEvolutionTypes.swift # 插件进化类型
+│       │   ├── PromptEvolutionTypes.swift # Prompt 进化类型
+│       │   ├── LogOutput.swift         # 日志输出类型
+│       │   ├── SDKConfiguration.swift  # SDK 配置
+│       │   ├── SDKControlInitializeResponse.swift
+│       │   └── RewindResult.swift
 │       │
 │       ├── API/
-│       │   ├── AnthropicClient.swift   # Actor: 自定义基于 URLSession 的 API 客户端
+│       │   ├── LLMClient.swift         # LLMClient 协议
+│       │   ├── AnthropicClient.swift   # Actor: Anthropic API 客户端
+│       │   ├── OpenAIClient.swift      # OpenAI 兼容客户端
 │       │   ├── APIModels.swift         # API 请求/响应结构体（ContentBlock 类型）
 │       │   └── Streaming.swift         # SSE/流式响应解析
 │       │
 │       ├── Core/
-│       │   ├── QueryEngine.swift       # Actor: 核心代理循环
-│       │   ├── Agent.swift             # Agent 类 + createAgent() + query()
-│       │   ├── SystemPromptBuilder.swift # 从上下文构建系统提示
+│       │   ├── Agent.swift             # Agent 类 + prompt()/stream() + createReviewAgent()
+│       │   ├── DefaultSubAgentSpawner.swift  # 默认子代理生成器
 │       │   └── ToolExecutor.swift      # 工具分派（并发/串行分区）
 │       │
 │       ├── Tools/
 │       │   ├── ToolRegistry.swift      # getAllBaseTools(), filterTools(), assembleToolPool()
 │       │   ├── ToolBuilder.swift       # defineTool<Input: Codable>() 工厂函数
+│       │   ├── SkillRegistry.swift     # Skill 注册、查找、替换
 │       │   ├── Core/
 │       │   │   ├── BashTool.swift
 │       │   │   ├── FileReadTool.swift
@@ -367,7 +385,8 @@ open-agent-sdk-swift/
 │       │   │   ├── WebFetchTool.swift
 │       │   │   ├── WebSearchTool.swift
 │       │   │   ├── AskUserTool.swift
-│       │   │   └── ToolSearchTool.swift
+│       │   │   ├── ToolSearchTool.swift
+│       │   │   └── PauseForHumanTool.swift
 │       │   ├── Advanced/
 │       │   │   ├── AgentTool.swift
 │       │   │   ├── SendMessageTool.swift
@@ -379,7 +398,8 @@ open-agent-sdk-swift/
 │       │   │   ├── TaskOutputTool.swift
 │       │   │   ├── TeamCreateTool.swift
 │       │   │   ├── TeamDeleteTool.swift
-│       │   │   └── NotebookEditTool.swift
+│       │   │   ├── NotebookEditTool.swift
+│       │   │   └── SkillTool.swift
 │       │   ├── Specialist/
 │       │   │   ├── WorktreeTools.swift
 │       │   │   ├── PlanTools.swift
@@ -390,6 +410,12 @@ open-agent-sdk-swift/
 │       │   │   ├── TodoWriteTool.swift
 │       │   │   ├── ListMcpResourcesTool.swift
 │       │   │   └── ReadMcpResourceTool.swift
+│       │   ├── Review/                  # [Epic 24] 审查专用工具
+│       │   │   ├── ReviewMemoryTool.swift
+│       │   │   ├── ReviewSkillUpdateTool.swift
+│       │   │   ├── ReviewSkillCreateTool.swift
+│       │   │   ├── ReviewSkillFileTool.swift
+│       │   │   └── ReviewTools.swift    # createReviewTools() 便利函数
 │       │   └── MCP/
 │       │       ├── MCPClientManager.swift    # Actor: 管理 MCP 服务器连接
 │       │       └── InProcessMCPServer.swift  # 进程内 MCP 工具托管
@@ -402,58 +428,99 @@ open-agent-sdk-swift/
 │       │   ├── PlanStore.swift          # Actor: 计划状态管理
 │       │   ├── CronStore.swift          # Actor: 定时任务管理
 │       │   ├── TodoStore.swift          # Actor: 待办事项管理
-│       │   └── AgentRegistry.swift     # Actor: 子代理注册
+│       │   ├── WorktreeStore.swift      # Actor: 工作树管理
+│       │   ├── AgentRegistry.swift     # Actor: 子代理注册
+│       │   ├── MemoryStore.swift        # Actor: 跨会话记忆持久化
+│       │   ├── FactStore.swift          # Actor: 记忆事实存储
+│       │   ├── SkillUsageStore.swift    # Actor: 技能使用数据
+│       │   └── SkillCuratorStore.swift  # Actor: 技能策展数据
 │       │
 │       ├── Hooks/
 │       │   ├── HookRegistry.swift       # 事件注册 + 执行
+│       │   ├── PluginRegistry.swift     # [Epic 23] 插件注册 + 调度
 │       │   └── ShellHookExecutor.swift # 基于进程的 shell 钩子执行
+│       │
+│       ├── Skills/
+│       │   └── SkillLoader.swift        # 技能加载器（从文件系统）
+│       │
+│       ├── MCP/
+│       │   └── AgentMCPServer.swift     # [Epic 19] Agent 作为 MCP 服务器
+│       │
+│       ├── HTTP/                         # [Epic 20] HTTP API Server
+│       │   ├── AgentHTTPServer.swift    # HTTP 服务器
+│       │   ├── APITypes.swift           # API 路由/请求/响应类型
+│       │   ├── AuthMiddleware.swift     # 认证中间件
+│       │   ├── ConcurrencyLimiter.swift # 并发限制
+│       │   ├── EventBroadcaster.swift   # SSE 事件广播
+│       │   ├── RunPersistenceService.swift
+│       │   ├── RunRecoveryService.swift
+│       │   └── RunTracker.swift
 │       │
 │       └── Utils/
 │           ├── Compact.swift           # 自动压缩 + 微压缩
-│           ├── Context.swift           # 系统/用户上下文提取（git、项目文件）
+│           ├── GitContextCollector.swift # Git 状态注入
+│           ├── ProjectDocumentDiscovery.swift # 项目文档发现
 │           ├── FileCache.swift         # LRU 文件状态缓存
-│           ├── Messages.swift          # 消息创建、规范化、辅助函数
+│           ├── SessionMemory.swift     # 会话记忆格式化
+│           ├── CostTracker.swift       # 成本跟踪 + 标签
+│           ├── TokenEstimator.swift    # Token 估算
 │           ├── Retry.swift             # withRetry, 指数退避, 错误分类
-│           ├── Tokens.swift             # estimateTokens, estimateCost, MODEL_PRICING, 阈值
-│           └── Shell.swift              # POSIX shell 执行辅助函数
+│           ├── Tokens.swift            # MODEL_PRICING, 阈值
+│           ├── Logger.swift            # 结构化日志
+│           ├── EnvUtils.swift          # 环境变量工具
+│           ├── SandboxChecker.swift    # 沙盒路径检查
+│           ├── SandboxPathNormalizer.swift
+│           ├── JSONOutputHandler.swift  # JSON 输出处理
+│           ├── TerminalOutputHandler.swift
+│           ├── TraceRecorder.swift      # Trace 事件记录
+│           ├── TraceEventMapping.swift
+│           ├── MemoryReviewHook.swift   # [Epic 21] sessionEnd 记忆审查 Hook
+│           ├── LLMExperienceExtractor.swift # [Epic 21] LLM 驱动的经验提取
+│           ├── MemoryLifecycleService.swift # 记忆生命周期管理
+│           ├── MemorySecurityScanner.swift  # 记忆安全扫描
+│           ├── MemoryContextProvider.swift
+│           ├── MemoryBundleExportService.swift
+│           ├── MemoryBundleImportService.swift
+│           ├── LLMSkillEvolver.swift    # [Epic 22] LLM 驱动的技能进化
+│           ├── SkillUsageTracker.swift  # [Epic 22] 技能使用跟踪
+│           ├── SkillCurator.swift       # [Epic 22] 自动技能策展
+│           ├── SessionSearchEngine.swift # [Epic 23] 会话全文搜索
+│           ├── SessionSearchPlugin.swift # [Epic 23] 搜索插件
+│           ├── PromptEvolverEngine.swift # [Epic 23] Prompt 进化引擎
+│           ├── PromptEvolverPlugin.swift # [Epic 23] Prompt 进化插件
+│           ├── ReviewAgentFactory.swift # [Epic 24] 审查 Agent 工厂
+│           ├── ReviewPromptBuilder.swift # [Epic 24] 审查 Prompt 构建器
+│           └── ReviewOrchestrator.swift # [Epic 24] 审查调度 + 间隔控制
 │
 ├── Tests/
 │   └── OpenAgentSDKTests/
-│       ├── Core/
-│       │   ├── QueryEngineTests.swift
-│       │   ├── AgentTests.swift
-│       │   └── ToolExecutorTests.swift
-│       ├── Tools/
-│       │   ├── CoreToolTests.swift
-│       │   ├── AdvancedToolTests.swift
-│       │   └── SpecialistToolTests.swift
-│       ├── Stores/
-│       │   └── StoreTests.swift
-│       ├── API/
-│       │   └── AnthropicClientTests.swift
-│       ├── Hooks/
-│       │   └── HookRegistryTests.swift
-│       ├── MCP/
-│       │   └── MCPClientTests.swift
-│       └── Utils/
-│           ├── CompactTests.swift
-│           ├── RetryTests.swift
-│           └── TokensTests.swift
+│       ├── Core/         # Agent, ToolExecutor, PrefixCache tests
+│       ├── Tools/        # Core/, Advanced/, Specialist/, Review/ tests
+│       ├── Stores/       # All store tests
+│       ├── API/          # AnthropicClient, OpenAIClient tests
+│       ├── Hooks/        # HookRegistry, PluginRegistry tests
+│       ├── MCP/          # MCPClient, AgentMCPServer tests
+│       ├── Skills/       # SkillLoader tests
+│       ├── HTTP/         # HTTP server tests
+│       └── Utils/        # All util tests (experience, skill, review, etc.)
 │
-├── Docs/
-│   └── (Swift-DocC 生成的文档)
+├── Examples/
+│   ├── BasicAgent/
+│   ├── StreamingAgent/
+│   ├── CustomTools/
+│   ├── MCPIntegration/
+│   ├── SessionsAndHooks/
+│   ├── SkillsExample/
+│   ├── SandboxExample/
+│   ├── LoggerExample/
+│   ├── ModelSwitchingExample/
+│   ├── QueryAbortExample/
+│   ├── ContextInjectionExample/
+│   ├── MultiTurnExample/
+│   └── OpenAICompatExample/
 │
-└── Examples/
-    ├── BasicAgent/
-    │   └── main.swift
-    ├── StreamingAgent/
-    │   └── main.swift
-    ├── CustomTools/
-    │   └── main.swift
-    ├── MCPIntegration/
-    │   └── main.swift
-    └── SessionsAndHooks/
-        └── main.swift
+└── docs/
+    └── (Swift-DocC 生成的文档)
 ```
 
 ### 需求到结构映射
@@ -488,19 +555,31 @@ _将每个 FR 映射到实现它的文件。_
 | FR39-FR41 | `Types/AgentTypes.swift`, `Core/Agent.swift` |
 | FR42-FR48 | `Stores/*.swift` (6 个 actor 存储) |
 | FR49-FR51 | Swift-DocC, README, Examples/ |
+| FR52-FR53 | `Stores/MemoryStore.swift`, `Utils/MemoryLifecycleService.swift` |
+| FR54 | `MCP/AgentMCPServer.swift` |
+| FR55 | `Core/Agent.swift` (PauseForHumanTool 集成) |
+| FR56-FR59 | `HTTP/AgentHTTPServer.swift`, `HTTP/APITypes.swift` |
+| FR60-FR62 | `Utils/CostTracker.swift`, `Utils/TraceRecorder.swift`, `Types/CostTypes.swift` |
+| FR63-FR65 | `Stores/MemoryStore.swift`, `Utils/LLMExperienceExtractor.swift`, `Utils/MemoryReviewHook.swift` |
+| FR66-FR68 | `Utils/LLMSkillEvolver.swift`, `Utils/SkillUsageTracker.swift`, `Utils/SkillCurator.swift` |
+| FR69-FR71 | `Hooks/PluginRegistry.swift`, `Utils/SessionSearchEngine.swift`, `Utils/PromptEvolverEngine.swift` |
+| FR72-FR77 | `Types/ExperienceTypes.swift`, `Types/SkillEvolutionTypes.swift`, `Types/SessionSearchTypes.swift`, `Types/PluginEvolutionTypes.swift`, `Types/PromptEvolutionTypes.swift` |
+| FR78 | `Utils/ReviewAgentFactory.swift`, `Utils/ReviewOrchestrator.swift`, `Tools/Review/*.swift` |
 
 ### 架构边界
 **模块边界：**
 - `Types/` -> 无出站依赖（叶节点）
 - `API/` -> 依赖 `Types/`
 - `Core/` -> 依赖 `Types/`、`API/`、`Utils/`
-- `Tools/` -> 依赖 `Types/`、`Utils/`（从不导入 `Core/`）
+- `Tools/` -> 依赖 `Types/`、`Stores/`（`Tools/Review/` 依赖 `Types/`, `Stores/`, `Tools/`）。从不导入 `Core/`
 - `Stores/` -> 依赖 `Types/`（从不导入 `Core/`）
 - `Hooks/` -> 依赖 `Types/`（从不导入 `Core/` 或 `Tools/`）
 - `MCP/` -> 依赖 `Types/`、外部 mcp-swift-sdk
-- `Utils/` -> 无出站依赖（叶节点，除了 `Compact` 可能会临时调用 `API/AnthropicClient` 进行压缩 LLM 调用）
+- `HTTP/` -> 依赖 `Types/`、`Core/`、`API/`
+- `Skills/` -> 依赖 `Types/`
+- `Utils/` -> 可以依赖 `Types/`、`Stores/`、`API/`、`Tools/`、`Core/Agent`（扩展）。Epic 21-24 的进化组件（LLMExperienceExtractor、LLMSkillEvolver、ReviewAgentFactory、ReviewOrchestrator 等）都位于 `Utils/`
 
-**关键规则：** `Core/` 是唯一的编排器。`Tools/`、`Stores/` 和 `Hooks/` 独立于核心循环 — 它们只定义行为，从不驱动它。
+**关键规则：** `Core/` 是唯一的编排器。`Tools/`、`Stores/` 和 `Hooks/` 独立于核心循环 — 它们只定义行为，从不驱动它。`Utils/` 可以扩展 `Core/Agent`（例如 `ReviewAgentFactory`），但不能替代 `Core/` 的编排职责。
 
 ---
 

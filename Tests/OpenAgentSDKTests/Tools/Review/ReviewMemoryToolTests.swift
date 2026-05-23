@@ -45,7 +45,7 @@ final class ReviewMemoryToolTests: XCTestCase {
             confidence: 0.9
         )
 
-        XCTAssertTrue(output.contains("\"success\": true"))
+        XCTAssertTrue(output.contains("\"success\":true"))
         XCTAssertTrue(output.contains("testing"))
 
         let facts = try? await store.query(domain: "testing")
@@ -66,7 +66,7 @@ final class ReviewMemoryToolTests: XCTestCase {
             kind: "invalid_kind"
         )
 
-        XCTAssertTrue(output.contains("\"success\": false"))
+        XCTAssertTrue(output.contains("\"success\":false"))
         XCTAssertTrue(output.contains("Invalid kind"))
         XCTAssertTrue(output.contains("invalid_kind"))
     }
@@ -83,7 +83,7 @@ final class ReviewMemoryToolTests: XCTestCase {
             confidence: nil
         )
 
-        XCTAssertTrue(output.contains("\"success\": true"))
+        XCTAssertTrue(output.contains("\"success\":true"))
 
         let facts = try? await store.query(domain: "navigation")
         XCTAssertEqual(facts?.first?.confidence, 0.7)
@@ -100,7 +100,7 @@ final class ReviewMemoryToolTests: XCTestCase {
                 content: "\(kind) content",
                 kind: kind
             )
-            XCTAssertTrue(output.contains("\"success\": true"), "Failed for kind: \(kind)")
+            XCTAssertTrue(output.contains("\"success\":true"), "Failed for kind: \(kind)")
         }
     }
 
@@ -114,7 +114,7 @@ final class ReviewMemoryToolTests: XCTestCase {
             kind: "affordance"
         )
 
-        XCTAssertTrue(output.contains("\"success\": false"), "Expected failure when FactStore.save throws")
+        XCTAssertTrue(output.contains("\"success\":false"), "Expected failure when FactStore.save throws")
     }
 
     func testEmptyDomain() async {
@@ -128,7 +128,7 @@ final class ReviewMemoryToolTests: XCTestCase {
             kind: "affordance"
         )
 
-        XCTAssertTrue(output.contains("\"success\": false"))
+        XCTAssertTrue(output.contains("\"success\":false"))
         XCTAssertTrue(output.contains("must not be empty"))
     }
 
@@ -143,7 +143,7 @@ final class ReviewMemoryToolTests: XCTestCase {
             kind: "affordance"
         )
 
-        XCTAssertTrue(output.contains("\"success\": false"))
+        XCTAssertTrue(output.contains("\"success\":false"))
         XCTAssertTrue(output.contains("must not be empty"))
     }
 }

@@ -34,6 +34,7 @@ Also available in **TypeScript**: [open-agent-sdk-typescript](https://github.com
 - **HTTP API Server** — Expose any Agent as a REST + SSE service with run tracking, concurrency limits, and auth
 - **Cost & Trace** — Built-in CostTracker for token/cost budgeting, TraceRecorder for JSONL execution observability
 - **Enhanced Memory** — Fact-based memory with candidate→active→retired lifecycle, evidence-driven confidence, and import/export
+- **Self-Evolution** — Background review agent that forks after each session to extract memories and evolve skills automatically
 - **Output Formatting** — SDKMessageOutputHandler protocol with Terminal and JSON output formatters
 
 ## Quick Start (15 minutes)

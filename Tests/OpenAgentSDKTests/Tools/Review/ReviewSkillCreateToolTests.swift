@@ -35,7 +35,7 @@ final class ReviewSkillCreateToolTests: XCTestCase {
             whenToUse: "When reviewing content"
         )
 
-        XCTAssertTrue(output.contains("\"success\": true"))
+        XCTAssertTrue(output.contains("\"success\":true"))
         XCTAssertTrue(output.contains("my-review-skill"))
 
         let skill = registry.find("my-review-skill")
@@ -63,7 +63,7 @@ final class ReviewSkillCreateToolTests: XCTestCase {
             promptTemplate: "new template"
         )
 
-        XCTAssertTrue(output.contains("\"success\": false"))
+        XCTAssertTrue(output.contains("\"success\":false"))
         XCTAssertTrue(output.contains("already exists"))
     }
 
@@ -77,7 +77,7 @@ final class ReviewSkillCreateToolTests: XCTestCase {
             promptTemplate: "Do something"
         )
 
-        XCTAssertTrue(output.contains("\"success\": true"))
+        XCTAssertTrue(output.contains("\"success\":true"))
 
         let skill = registry.find("minimal-skill")
         XCTAssertNotNil(skill)
@@ -94,7 +94,7 @@ final class ReviewSkillCreateToolTests: XCTestCase {
             promptTemplate: "template"
         )
 
-        XCTAssertTrue(output.contains("\"success\": false"))
+        XCTAssertTrue(output.contains("\"success\":false"))
         XCTAssertTrue(output.contains("must not be empty"))
     }
 
@@ -108,7 +108,7 @@ final class ReviewSkillCreateToolTests: XCTestCase {
             promptTemplate: "template"
         )
 
-        XCTAssertTrue(output.contains("\"success\": false"))
+        XCTAssertTrue(output.contains("\"success\":false"))
         XCTAssertTrue(output.contains("must not be empty"))
     }
 
@@ -122,7 +122,7 @@ final class ReviewSkillCreateToolTests: XCTestCase {
             promptTemplate: "  "
         )
 
-        XCTAssertTrue(output.contains("\"success\": false"))
+        XCTAssertTrue(output.contains("\"success\":false"))
         XCTAssertTrue(output.contains("must not be empty"))
     }
 }
