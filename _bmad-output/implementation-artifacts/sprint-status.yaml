@@ -72,6 +72,7 @@
 
 generated: 2026-05-08
 last_updated: 2026-05-24
+# story-22.3-created: 2026-05-24
 # story-22.2-created: 2026-05-24
 # story-22.1-created: 2026-05-24
 # epic-22-started: 2026-05-24
@@ -308,7 +309,7 @@ development_status:
   22-2-skillevolver-integration: done
   22-5-skill-usage-tracking: backlog
   22-1-revieworchestrator-integration: done
-  22-3-revieworchestrator-dependency-injection: backlog
+  22-3-revieworchestrator-dependency-injection: done
   22-4-intelligentcurator-integration: backlog
   epic-22-retrospective: optional
 

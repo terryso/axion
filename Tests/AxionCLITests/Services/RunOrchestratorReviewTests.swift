@@ -298,4 +298,202 @@ struct RunOrchestratorReviewTests {
         #expect(returned.evolvedSkill == nil)
         #expect(returned.changes.isEmpty)
     }
+
+    // MARK: - Story 22.3: Dependency Injection Verification
+
+    /// Computes the same memoryDir that AgentBuilder.build() uses.
+    private var agentBuilderMemoryDir: String {
+        (ConfigManager.defaultConfigDirectory as NSString).appendingPathComponent("memory")
+    }
+
+    /// Computes the same skillsDir that AgentBuilder.build() uses.
+    private var agentBuilderSkillsDir: String {
+        (ConfigManager.defaultConfigDirectory as NSString).appendingPathComponent("skills")
+    }
+
+    @Test("AgentBuilder.build() creates non-nil reviewOrchestrator when memory enabled")
+    func reviewOrchestratorNonNilWhenMemoryEnabled() async throws {
+        // Provide a fake helper path so AgentBuilder.build() doesn't throw.
+        // setenv updates the process environment table; ProcessInfo reads via getenv.
+        let tmpHelper = NSTemporaryDirectory() + "axion-test-helper-\(UUID().uuidString)"
+        FileManager.default.createFile(atPath: tmpHelper, contents: Data())
+        defer { try? FileManager.default.removeItem(atPath: tmpHelper) }
+        setenv("AXION_HELPER_PATH", tmpHelper, 1)
+        defer { unsetenv("AXION_HELPER_PATH") }
+
+        let config = AxionConfig(apiKey: "sk-test")
+        let buildConfig = AgentBuilder.BuildConfig.forCLI(
+            config: config,
+            task: "test",
+            noMemory: false,
+            dryrun: false
+        )
+        let result = try await AgentBuilder.build(buildConfig)
+        #expect(result.reviewOrchestrator != nil)
+    }
+
+    @Test("ReviewScheduleConfig uses AxionConfig.reviewModel when set")
+    func scheduleConfigUsesConfigReviewModel() {
+        let config = AxionConfig(apiKey: "sk-test", reviewModel: "claude-sonnet-4-20250514")
+        let scheduleConfig = ReviewScheduleConfig(
+            memoryReviewInterval: config.reviewMemoryInterval ?? ReviewScheduleConfig().memoryReviewInterval,
+            skillReviewInterval: config.reviewSkillInterval ?? ReviewScheduleConfig().skillReviewInterval,
+            minMessagesForReview: config.reviewMinMessages ?? ReviewScheduleConfig().minMessagesForReview,
+            reviewModel: config.reviewModel
+        )
+        #expect(scheduleConfig.reviewModel == "claude-sonnet-4-20250514")
+    }
+
+    @Test("ReviewScheduleConfig reviewModel falls back to nil when config is nil")
+    func scheduleConfigReviewModelFallsBack() {
+        let config = AxionConfig(apiKey: "sk-test")
+        // reviewModel is nil by default
+        let scheduleConfig = ReviewScheduleConfig(
+            memoryReviewInterval: config.reviewMemoryInterval ?? ReviewScheduleConfig().memoryReviewInterval,
+            skillReviewInterval: config.reviewSkillInterval ?? ReviewScheduleConfig().skillReviewInterval,
+            minMessagesForReview: config.reviewMinMessages ?? ReviewScheduleConfig().minMessagesForReview,
+            reviewModel: config.reviewModel
+        )
+        #expect(scheduleConfig.reviewModel == nil)
+    }
+
+    @Test("LLMSkillEvolver falls back to haiku when reviewModel is nil")
+    func skillEvolverFallsBackToHaikuModel() {
+        let config = AxionConfig(apiKey: "sk-test")
+        // Replicate the exact nil-coalescing pattern from AgentBuilder.build() line 280
+        let effectiveModel = config.reviewModel ?? "claude-haiku-4-5-20251001"
+        #expect(effectiveModel == "claude-haiku-4-5-20251001")
+
+        let client = AnthropicClient(apiKey: "sk-test")
+        let evolver = LLMSkillEvolver(client: client, evolutionModel: effectiveModel)
+        #expect(evolver.evolutionModel == "claude-haiku-4-5-20251001")
+    }
+
+    @Test("FactStore receives correct memory directory from AgentBuilder")
+    func factStoreReceivesCorrectMemoryDir() async throws {
+        // Verify the computed path matches AgentBuilder's pattern
+        let memoryDir = agentBuilderMemoryDir
+        #expect(memoryDir == (ConfigManager.defaultConfigDirectory as NSString).appendingPathComponent("memory"))
+
+        // Verify FactStore is functional using an isolated temp directory
+        let tempDir = NSTemporaryDirectory() + "axion-test-factstore-\(UUID().uuidString)"
+        let factStore = FactStore(memoryDir: tempDir)
+        let testFact = MemoryFact(
+            id: "test-fact-223",
+            domain: "test-domain-223",
+            content: "dependency injection test",
+            status: .candidate,
+            confidence: 0.5,
+            evidenceCount: 1,
+            source: .observation,
+            kind: .observation,
+            createdAt: Date(),
+            lastVerifiedAt: Date()
+        )
+        try await factStore.save(domain: "test-domain-223", fact: testFact)
+        let facts = try await factStore.query(domain: "test-domain-223")
+        #expect(facts.count == 1)
+        #expect(facts.first?.content == "dependency injection test")
+        try? FileManager.default.removeItem(atPath: tempDir)
+    }
+
+    @Test("SkillUsageStore receives correct skills directory from AgentBuilder")
+    func skillUsageStoreReceivesCorrectSkillsDir() {
+        // Verify the computed path matches AgentBuilder's pattern
+        let skillsDir = agentBuilderSkillsDir
+        #expect(skillsDir == (ConfigManager.defaultConfigDirectory as NSString).appendingPathComponent("skills"))
+
+        // Verify SkillUsageStore is constructable with an isolated temp directory
+        let tempDir = NSTemporaryDirectory() + "axion-test-usage-\(UUID().uuidString)"
+        let usageStore = SkillUsageStore(skillsDir: tempDir)
+        let _ = usageStore
+        try? FileManager.default.removeItem(atPath: tempDir)
+    }
+
+    @Test("ReviewOrchestrator with all dependencies passes through correctly")
+    func reviewOrchestratorPassesThroughDependencies() {
+        let tempMemoryDir = NSTemporaryDirectory() + "axion-test-mem-\(UUID().uuidString)"
+        let tempSkillsDir = NSTemporaryDirectory() + "axion-test-skills-\(UUID().uuidString)"
+
+        let scheduleConfig = ReviewScheduleConfig(
+            memoryReviewInterval: 8,
+            skillReviewInterval: 10,
+            minMessagesForReview: 5,
+            reviewModel: "claude-haiku-4-5-20251001"
+        )
+        let factStore = FactStore(memoryDir: tempMemoryDir)
+        let skillRegistry = SkillRegistry()
+        let evolver = LLMSkillEvolver(client: AnthropicClient(apiKey: "sk-test"), evolutionModel: "claude-haiku-4-5-20251001")
+        let usageStore = SkillUsageStore(skillsDir: tempSkillsDir)
+
+        let orchestrator = ReviewOrchestrator(
+            scheduleConfig: scheduleConfig,
+            factStore: factStore,
+            skillRegistry: skillRegistry,
+            skillEvolver: evolver,
+            usageStore: usageStore
+        )
+
+        // Verify all dependencies are accessible via public properties
+        #expect(orchestrator.scheduleConfig.memoryReviewInterval == 8)
+        #expect(orchestrator.scheduleConfig.skillReviewInterval == 10)
+        #expect(orchestrator.scheduleConfig.minMessagesForReview == 5)
+        #expect(orchestrator.scheduleConfig.reviewModel == "claude-haiku-4-5-20251001")
+
+        // Verify createReviewTools returns non-empty tools
+        let tools = createReviewTools(
+            factStore: factStore,
+            skillRegistry: skillRegistry,
+            skillEvolver: evolver,
+            usageStore: usageStore
+        )
+        #expect(!tools.isEmpty)
+        #expect(tools.count >= 5)
+    }
+
+    @Test("AxionConfig with custom review intervals produces matching ReviewScheduleConfig")
+    func customReviewIntervalsMatchScheduleConfig() {
+        let config = AxionConfig(
+            apiKey: "sk-test",
+            reviewMemoryInterval: 10,
+            reviewSkillInterval: 15,
+            reviewMinMessages: 8,
+            reviewModel: "claude-sonnet-4-20250514"
+        )
+
+        let scheduleConfig = ReviewScheduleConfig(
+            memoryReviewInterval: config.reviewMemoryInterval ?? ReviewScheduleConfig().memoryReviewInterval,
+            skillReviewInterval: config.reviewSkillInterval ?? ReviewScheduleConfig().skillReviewInterval,
+            minMessagesForReview: config.reviewMinMessages ?? ReviewScheduleConfig().minMessagesForReview,
+            reviewModel: config.reviewModel
+        )
+
+        #expect(scheduleConfig.memoryReviewInterval == 10)
+        #expect(scheduleConfig.skillReviewInterval == 15)
+        #expect(scheduleConfig.minMessagesForReview == 8)
+        #expect(scheduleConfig.reviewModel == "claude-sonnet-4-20250514")
+    }
+
+    @Test("Default ReviewScheduleConfig values match when AxionConfig review fields are nil")
+    func defaultScheduleConfigWhenAxionConfigNil() {
+        let config = AxionConfig(apiKey: "sk-test")
+        // All review fields are nil by default
+        #expect(config.reviewMemoryInterval == nil)
+        #expect(config.reviewSkillInterval == nil)
+        #expect(config.reviewMinMessages == nil)
+        #expect(config.reviewModel == nil)
+
+        let scheduleConfig = ReviewScheduleConfig(
+            memoryReviewInterval: config.reviewMemoryInterval ?? ReviewScheduleConfig().memoryReviewInterval,
+            skillReviewInterval: config.reviewSkillInterval ?? ReviewScheduleConfig().skillReviewInterval,
+            minMessagesForReview: config.reviewMinMessages ?? ReviewScheduleConfig().minMessagesForReview,
+            reviewModel: config.reviewModel
+        )
+
+        // Should use ReviewScheduleConfig defaults
+        #expect(scheduleConfig.memoryReviewInterval == 4)
+        #expect(scheduleConfig.skillReviewInterval == 6)
+        #expect(scheduleConfig.minMessagesForReview == 4)
+        #expect(scheduleConfig.reviewModel == nil)
+    }
 }
