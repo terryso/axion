@@ -113,6 +113,22 @@ public class Agent: CustomStringConvertible, CustomDebugStringConvertible, @unch
     /// Set after the first call to ``assembleFullToolPool()`` or ``setMcpServers(_:)``.
     private var mcpClientManager: MCPClientManager?
 
+    /// Cached result of the last `buildSystemPrompt()` call.
+    /// Populated on first build and reused by `cachedSystemPrompt` for prefix cache sharing.
+    private var lastBuiltSystemPrompt: String?
+
+    /// The last fully-built system prompt, or `nil` if none has been built yet.
+    ///
+    /// Returns the cached prompt from the most recent `buildSystemPrompt()` call.
+    /// If no prompt has been built yet, builds one on demand as a fallback.
+    /// Used by the review agent to share the parent's prefix cache.
+    public var cachedSystemPrompt: String? {
+        if let lastBuiltSystemPrompt {
+            return lastBuiltSystemPrompt
+        }
+        return buildSystemPrompt()
+    }
+
     // MARK: - Initialization
 
     /// Create an Agent with the given options.
@@ -208,6 +224,79 @@ public class Agent: CustomStringConvertible, CustomDebugStringConvertible, @unch
                     apiKey: apiKey,
                     baseURL: mergedOptions.baseURL
                 )
+            }
+        }
+
+        // Register MemoryReviewHook on sessionEnd when config is provided.
+        // Only supported with Anthropic provider (LLMExperienceExtractor uses Anthropic API).
+        if let memoryConfig = mergedOptions.memoryReviewConfig,
+           let hookRegistry = mergedOptions.hookRegistry,
+           mergedOptions.provider == .anthropic {
+            let extractor = LLMExperienceExtractor(client: self.client)
+            let factStore = FactStore()
+            let agent = self
+            let messageProvider: MessageHistoryProvider = { agent.getMessages() }
+            let scanner: MemorySecurityScanner? = mergedOptions.securityConfig.map { MemorySecurityScanner(config: $0) }
+            let hook = MemoryReviewHook(
+                extractor: extractor,
+                factStore: factStore,
+                config: memoryConfig,
+                securityScanner: scanner,
+                messageProvider: messageProvider
+            )
+            let handler = hook.makeHandler()
+            // Registration requires await since HookRegistry is an actor.
+            // Using nonisolated(unsafe) to defer registration to first prompt/stream
+            // is safer; here we register synchronously via a detached Task.
+            _Concurrency.Task { [hookRegistry] in
+                await hookRegistry.register(.sessionEnd, definition: HookDefinition(handler: handler))
+            }
+        }
+
+        // Register ReviewOrchestrator on sessionEnd when schedule config is provided.
+        // Only supported with Anthropic provider (review agent uses Anthropic API).
+        if let scheduleConfig = mergedOptions.reviewScheduleConfig,
+           let hookRegistry = mergedOptions.hookRegistry,
+           mergedOptions.provider == .anthropic {
+            let orchestrator = ReviewOrchestrator(
+                scheduleConfig: scheduleConfig,
+                factStore: FactStore(),
+                skillRegistry: mergedOptions.skillRegistry ?? SkillRegistry(),
+                skillEvolver: LLMSkillEvolver(client: self.client),
+                usageStore: SkillUsageStore()
+            )
+            let agent = self
+            let handler: @Sendable (HookInput) async -> HookOutput? = { _ in
+                let messages = agent.getMessages()
+                let defaultConfig = ReviewAgentConfig()
+                let (doMemory, doSkill) = orchestrator.shouldReview(
+                    sessionId: agent.getSessionId() ?? "",
+                    messageCount: messages.count,
+                    config: defaultConfig
+                )
+                guard doMemory || doSkill else { return nil }
+
+                let reviewConfig = ReviewAgentConfig(
+                    reviewMemory: doMemory,
+                    reviewSkills: doSkill
+                )
+                // Fire-and-forget in detached task — non-blocking
+                _Concurrency.Task.detached {
+                    let result = await orchestrator.executeReview(
+                        parentAgent: agent,
+                        messages: messages,
+                        config: reviewConfig
+                    )
+                    if let result {
+                        Logger.shared.info("ReviewOrchestrator", "review_completed", data: [
+                            "summary": result.summary,
+                        ])
+                    }
+                }
+                return nil
+            }
+            _Concurrency.Task { [hookRegistry] in
+                await hookRegistry.register(.sessionEnd, definition: HookDefinition(handler: handler))
             }
         }
     }
@@ -934,6 +1023,13 @@ public class Agent: CustomStringConvertible, CustomDebugStringConvertible, @unch
     /// If no system prompt is set but Git context exists, returns the Git context alone.
     /// If neither is available, returns `nil`.
     func buildSystemPrompt() -> String? {
+        // Raw mode: return systemPrompt verbatim (used by review agent for prefix cache sharing)
+        if options._rawSystemPromptMode {
+            let result = options.systemPrompt
+            lastBuiltSystemPrompt = result
+            return result
+        }
+
         // Resolve base prompt: systemPromptConfig takes priority over systemPrompt (AC7)
         let basePrompt: String?
         if let config = options.systemPromptConfig {
@@ -978,9 +1074,12 @@ public class Agent: CustomStringConvertible, CustomDebugStringConvertible, @unch
         }
 
         if parts.isEmpty {
+            lastBuiltSystemPrompt = nil
             return nil
         }
-        return parts.joined(separator: "\n")
+        let result = parts.joined(separator: "\n")
+        lastBuiltSystemPrompt = result
+        return result
     }
 
     /// Build the messages array for an API request from a user prompt.
@@ -1286,7 +1385,7 @@ public class Agent: CustomStringConvertible, CustomDebugStringConvertible, @unch
         )
 
         // CostTracker: structured cost accumulation (additive layer alongside existing inline tracking)
-        var costTracker = CostTracker(model: model, maxBudgetUsd: options.maxBudgetUsd)
+        var costTracker = CostTracker(model: model, maxBudgetUsd: options.maxBudgetUsd, label: options.agentLabel)
 
         // TraceRecorder: opt-in execution trace (JSONL)
         var traceRecorder: TraceRecorder? = nil
@@ -1386,6 +1485,7 @@ public class Agent: CustomStringConvertible, CustomDebugStringConvertible, @unch
                             totalCostUsd += turnCost
                             costTracker.recordUsage(model: fallbackModel, usage: turnUsage)
                             costByModel[fallbackModel] = CostBreakdownEntry(
+                                label: options.agentLabel,
                                 model: fallbackModel,
                                 inputTokens: turnUsage.inputTokens,
                                 outputTokens: turnUsage.outputTokens,
@@ -1511,6 +1611,7 @@ public class Agent: CustomStringConvertible, CustomDebugStringConvertible, @unch
                     let newOutput = existing.outputTokens + turnUsage.outputTokens
                     let newCost = existing.costUsd + turnCost
                     costByModel[currentModel] = CostBreakdownEntry(
+                        label: options.agentLabel,
                         model: currentModel,
                         inputTokens: newInput,
                         outputTokens: newOutput,
@@ -1518,6 +1619,7 @@ public class Agent: CustomStringConvertible, CustomDebugStringConvertible, @unch
                     )
                 } else {
                     costByModel[currentModel] = CostBreakdownEntry(
+                        label: options.agentLabel,
                         model: currentModel,
                         inputTokens: turnUsage.inputTokens,
                         outputTokens: turnUsage.outputTokens,
@@ -1828,6 +1930,7 @@ public class Agent: CustomStringConvertible, CustomDebugStringConvertible, @unch
         let capturedRunId = options.runId
         let capturedTraceEnabled = options.traceEnabled
         let capturedTraceBaseURL = options.traceBaseURL
+        let capturedAgentLabel = options.agentLabel
 
         // Build tool definitions for API call
         let capturedApiTools: [[String: Any]]? = {
@@ -2004,7 +2107,7 @@ public class Agent: CustomStringConvertible, CustomDebugStringConvertible, @unch
                 var modelCallCount = 0
 
                 // CostTracker: structured cost accumulation (additive layer alongside existing inline tracking)
-                var streamCostTracker = CostTracker(model: capturedModel, maxBudgetUsd: capturedMaxBudgetUsd)
+                var streamCostTracker = CostTracker(model: capturedModel, maxBudgetUsd: capturedMaxBudgetUsd, label: capturedAgentLabel)
 
                 // TraceRecorder: opt-in execution trace (JSONL)
                 var streamTraceRecorder: TraceRecorder? = nil
@@ -2140,6 +2243,7 @@ public class Agent: CustomStringConvertible, CustomDebugStringConvertible, @unch
                                     let modelKey = currentModel
                                     if var existing = costByModel[modelKey] {
                                         costByModel[modelKey] = CostBreakdownEntry(
+                                            label: capturedAgentLabel,
                                             model: modelKey,
                                             inputTokens: existing.inputTokens + inputTokens,
                                             outputTokens: existing.outputTokens,
@@ -2147,6 +2251,7 @@ public class Agent: CustomStringConvertible, CustomDebugStringConvertible, @unch
                                         )
                                     } else {
                                         costByModel[modelKey] = CostBreakdownEntry(
+                                            label: capturedAgentLabel,
                                             model: modelKey,
                                             inputTokens: inputTokens,
                                             outputTokens: 0,
@@ -2271,6 +2376,7 @@ public class Agent: CustomStringConvertible, CustomDebugStringConvertible, @unch
                                 let modelKey = currentModel
                                 if var existing = costByModel[modelKey] {
                                     costByModel[modelKey] = CostBreakdownEntry(
+                                        label: capturedAgentLabel,
                                         model: modelKey,
                                         inputTokens: existing.inputTokens + turnUsage.inputTokens,
                                         outputTokens: existing.outputTokens + turnUsage.outputTokens,
@@ -2278,6 +2384,7 @@ public class Agent: CustomStringConvertible, CustomDebugStringConvertible, @unch
                                     )
                                 } else {
                                     costByModel[modelKey] = CostBreakdownEntry(
+                                        label: capturedAgentLabel,
                                         model: modelKey,
                                         inputTokens: turnUsage.inputTokens,
                                         outputTokens: turnUsage.outputTokens,

@@ -18,7 +18,7 @@ import Foundation
 ///     }
 /// }
 /// ```
-public enum SDKMessage: Sendable {
+public enum SDKMessage: Sendable, Equatable {
     /// An assistant response with text, model info, and stop reason.
     case assistant(AssistantData)
     /// A tool invocation request from the LLM.

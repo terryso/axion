@@ -9,7 +9,7 @@ import Foundation
 /// all tools are available (no restrictions).
 ///
 /// The raw value of each case matches the tool name string used internally.
-public enum ToolRestriction: String, Sendable, CaseIterable {
+public enum ToolRestriction: String, Codable, Sendable, CaseIterable {
     case bash
     case read
     case write
@@ -53,7 +53,7 @@ public enum ToolRestriction: String, Sendable, CaseIterable {
 ///     toolRestrictions: [.bash, .read, .write]
 /// )
 /// ```
-public struct Skill: Sendable {
+public struct Skill: Sendable, Equatable {
     /// Unique skill name (e.g., "commit", "review").
     public let name: String
 
@@ -102,6 +102,9 @@ public struct Skill: Sendable {
     /// The agent uses Read/Bash tools to access these files on-demand.
     public let supportingFiles: [String]
 
+    /// Lifecycle state of the skill. `nil` means `.active` for backward compatibility.
+    public let lifecycleState: SkillLifecycleState?
+
     /// Creates a new skill definition.
     ///
     /// - Parameters:
@@ -117,6 +120,7 @@ public struct Skill: Sendable {
     ///   - argumentHint: Hint for expected arguments.
     ///   - baseDir: Absolute path to the skill directory on disk. Defaults to `nil`.
     ///   - supportingFiles: Relative paths of supporting files. Defaults to `[]`.
+    ///   - lifecycleState: Lifecycle state of the skill. Defaults to `nil` (treated as `.active`).
     public init(
         name: String,
         description: String = "",
@@ -129,7 +133,8 @@ public struct Skill: Sendable {
         whenToUse: String? = nil,
         argumentHint: String? = nil,
         baseDir: String? = nil,
-        supportingFiles: [String] = []
+        supportingFiles: [String] = [],
+        lifecycleState: SkillLifecycleState? = nil
     ) {
         self.name = name
         self.description = description
@@ -143,6 +148,22 @@ public struct Skill: Sendable {
         self.argumentHint = argumentHint
         self.baseDir = baseDir
         self.supportingFiles = supportingFiles
+        self.lifecycleState = lifecycleState
+    }
+
+    public static func == (lhs: Skill, rhs: Skill) -> Bool {
+        lhs.name == rhs.name &&
+        lhs.description == rhs.description &&
+        lhs.aliases == rhs.aliases &&
+        lhs.userInvocable == rhs.userInvocable &&
+        lhs.toolRestrictions == rhs.toolRestrictions &&
+        lhs.modelOverride == rhs.modelOverride &&
+        lhs.promptTemplate == rhs.promptTemplate &&
+        lhs.whenToUse == rhs.whenToUse &&
+        lhs.argumentHint == rhs.argumentHint &&
+        lhs.baseDir == rhs.baseDir &&
+        lhs.supportingFiles == rhs.supportingFiles &&
+        lhs.lifecycleState == rhs.lifecycleState
     }
 }
 

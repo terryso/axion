@@ -33,7 +33,7 @@ _本文档包含 AI 代理在实现代码时必须遵循的关键规则和模式
 
 ### Swift 语言规则
 
-1. **Actor 用于共享可变状态**：所有存储（SessionStore, TaskStore, TeamStore, MailboxStore, PlanStore, CronStore, TodoStore, AgentRegistry, ConfigStore, FactStore）、QueryEngine、MCPClientManager、HookRegistry、RunTracker、EventBroadcaster、TraceRecorder、ConcurrencyLimiter 必须是 `actor`。不可变数据类型（SDKMessage, ToolResult, TokenUsage, ConversationMessage）和配置类型（SDKConfiguration, AgentOptions）使用 `struct`。无状态计算服务（MemoryLifecycleService, TraceEventMapping）也使用 `struct`。
+1. **Actor 用于共享可变状态**：所有存储（SessionStore, TaskStore, TeamStore, MailboxStore, PlanStore, CronStore, TodoStore, AgentRegistry, FactStore, WorktreeStore）、MCPClientManager、HookRegistry、RunTracker、EventBroadcaster、TraceRecorder、ConcurrencyLimiter 必须是 `actor`。不可变数据类型（SDKMessage, ToolResult, TokenUsage, ConversationMessage）和配置类型（SDKConfiguration, AgentOptions）使用 `struct`。无状态计算服务（MemoryLifecycleService, TraceEventMapping, LLMExperienceExtractor, MemorySecurityScanner）也使用 `struct`。
 
 2. **结构化并发**：工具执行使用 `TaskGroup`（只读工具，上限 10 个并发）+ 串行 `for` 循环（变更操作）。使用 `AsyncStream<SDKMessage>` 进行流式传输。
 
@@ -52,7 +52,7 @@ _本文档包含 AI 代理在实现代码时必须遵循的关键规则和模式
 
 7. **模块边界严格单向依赖**：
    - `Types/` → 无出站依赖（叶节点）
-   - `Utils/` → 无出站依赖（叶节点，Compact 例外可临时调用 API/AnthropicClient）
+   - `Utils/` → 依赖 `Types/`、`Stores/`（FactStore），`API/`（LLMClient protocol — 用于 LLMExperienceExtractor 等LLM驱动服务）
    - `API/` → 依赖 `Types/`
    - `HTTP/` → 依赖 `Types/`、`Core/`（Agent），使用 Hummingbird 2.x（SwiftNIO）
    - `Core/` → 依赖 `Types/`、`API/`、`Utils/`
@@ -89,9 +89,10 @@ _本文档包含 AI 代理在实现代码时必须遵循的关键规则和模式
 ### 测试规则
 
 23. **测试框架**：XCTest，测试目录结构镜像源码结构
-24. **测试组织**：`Tests/OpenAgentSDKTests/{Core,Tools,Stores,API,HTTP,Hooks,MCP,Utils,Types}/`
+24. **测试组织**：`Tests/OpenAgentSDKTests/{Core,Tools,Stores,API,HTTP,Hooks,MCP,Utils,Types,Skills,Compat,Documentation}/`
 25. **工具测试**：按层级分组 — `CoreToolTests.swift`、`AdvancedToolTests.swift`、`SpecialistToolTests.swift`
 26. **Actor 测试**：使用 `await` 访问 actor 隔离方法
+26b. **Swift 6 并发 Mock 模式**：需要可变状态的 mock 使用 `final class SharedMockState<T>: @unchecked Sendable` 包装器，通过共享引用在闭包中捕获可变状态。对于简单的可变标志，使用 `nonisolated(unsafe)`。
 27. **无 mock 外部 API**：AnthropicClient 测试使用自定义的 mock URL 协议或 URLProtocol 子类
 28. **错误路径测试**：每个 actor 存储和 QueryEngine 必须测试错误传播路径
 29. **故事完成后必须补充 E2E 测试**：每个故事实现完成后，必须在 `Sources/E2ETest/`（29 个测试文件）中补充对应的 E2E 测试，至少包含 happy path 的验收测试
@@ -106,7 +107,7 @@ _本文档包含 AI 代理在实现代码时必须遵循的关键规则和模式
 
 ### 开发工作流规则
 
-35. **项目结构**：`Sources/OpenAgentSDK/` 为主源码目录（90+ 个 Swift 文件），子目录为 Types/（20+ 文件）、API/（5 文件）、Core/（3 文件）、HTTP/（8 文件）、Tools/（36 文件，含 Core/、Advanced/、Specialist/、MCP/ 四个子目录）、Stores/（10 文件）、Hooks/（2 文件）、Utils/（15+ 文件）、MCP/（预留空目录）、Documentation.docc/（DocC 文档）、Skills/（技能系统）
+35. **项目结构**：`Sources/OpenAgentSDK/` 为主源码目录（160+ 个 Swift 文件），子目录为 Types/（28+ 文件）、API/（5 文件）、Core/（3 文件）、HTTP/（8 文件）、Tools/（36 文件，含 Core/、Advanced/、Specialist/、MCP/ 四个子目录）、Stores/（10+ 文件）、Hooks/（2 文件）、Utils/（24+ 文件，含 LLMExperienceExtractor、MemoryReviewHook、MemorySecurityScanner 等LLM驱动服务）、Skills/（技能加载器）、Documentation.docc/（DocC 文档）
 36. **不使用 Apple 专属框架**：代码必须同时在 macOS 和 Linux 上运行。使用 Foundation 和 POSIX API。
 37. **POSIX shell 执行**：使用 `Process`（macOS Foundation）/ `posix_spawn`（Linux）执行 shell 钩子，通过 stdin JSON 输入、stdout JSON 输出。
 38. **会话存储路径**：`~/.open-agent-sdk/sessions/{sessionId}/transcript.json`

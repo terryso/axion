@@ -34,6 +34,7 @@ Also available in **TypeScript**: [open-agent-sdk-typescript](https://github.com
 - **HTTP API Server** — Expose any Agent as a REST + SSE service with run tracking, concurrency limits, and auth
 - **Cost & Trace** — Built-in CostTracker for token/cost budgeting, TraceRecorder for JSONL execution observability
 - **Enhanced Memory** — Fact-based memory with candidate→active→retired lifecycle, evidence-driven confidence, and import/export
+- **Self-Evolution** — ExperienceExtractor for memory auto-extraction, SkillEvolver for skill adaptation, ReviewAgent background pipeline, and IntelligentCurator for LLM-driven skill library curation with Markdown/YAML reports
 - **Output Formatting** — SDKMessageOutputHandler protocol with Terminal and JSON output formatters
 
 ## Quick Start (15 minutes)
@@ -467,6 +468,82 @@ let result = json.finalize()  // [String: Any] dictionary
 | **ListMcpResources** | List available MCP server resources                  |
 | **ReadMcpResource**  | Read a specific MCP resource                         |
 
+### Self-Evolution
+
+The SDK can automatically learn from conversations and evolve its behavior over time:
+
+**Memory Extraction** — Extract structured experience signals from conversations:
+
+```swift
+let extractor = LLMExperienceExtractor(client: myLLMClient)
+let result = try await extractor.extract(
+    from: messages,
+    config: ExtractionConfig()
+)
+for signal in result.signals {
+    // Save to FactStore for cross-session knowledge
+    try await factStore.save(signal: signal)
+}
+```
+
+**Skill Evolution** — Adapt skills based on usage signals:
+
+```swift
+let evolver = LLMSkillEvolver(client: myLLMClient)
+let evolved = try await evolver.evolve(
+    skill: mySkill,
+    signals: usageSignals,
+    config: SkillEvolutionConfig()
+)
+```
+
+**Background Review Agent** — Fork a review agent after each session:
+
+```swift
+let orchestrator = ReviewOrchestrator(
+    scheduleConfig: ReviewScheduleConfig(),
+    factStore: factStore,
+    skillRegistry: skillRegistry,
+    skillEvolver: evolver,
+    usageStore: usageStore
+)
+
+// Check if review is due and execute
+let (doMemory, doSkills) = orchestrator.shouldReview(
+    sessionId: session.id,
+    messageCount: messages.count,
+    config: ReviewAgentConfig()
+)
+if doMemory || doSkills {
+    let reviewResult = await orchestrator.executeReview(
+        parentAgent: agent,
+        messages: messages,
+        config: ReviewAgentConfig()
+    )
+}
+```
+
+**Intelligent Curation** — LLM-driven skill library maintenance:
+
+```swift
+let curator = IntelligentCurator(
+    skillCurator: SkillCurator(usageStore: usageStore, curatorStore: curatorStore),
+    factStore: factStore,
+    skillRegistry: skillRegistry,
+    skillEvolver: evolver,
+    usageStore: usageStore,
+    curatorStore: curatorStore
+)
+
+// Run two-phase curation: mechanical transitions + LLM consolidation
+let result = try await curator.execute(parentAgent: agent)
+
+// Generate reports
+let report = CuratorRunReport(from: result)
+print(report.renderMarkdown())  // Human-readable
+print(report.renderYAML())      // Machine-readable
+```
+
 ## Architecture
 
 ```mermaid
@@ -480,6 +557,7 @@ graph TD
     C --> H
     C --> I
     C --> J
+    C --> K
     D["<b>LLMClient Protocol</b><br/>AnthropicClient &middot; OpenAIClient"]
     E["<b>34 Built-in Tools</b><br/>Core 10 &middot; Advanced 11 &middot; Specialist 13"]
     F["<b>MCP Servers</b><br/>stdio &middot; SSE &middot; HTTP &middot; In-Process"]
@@ -487,6 +565,7 @@ graph TD
     H["<b>Hook Registry</b><br/>20+ Lifecycle Events"]
     I["<b>HTTP API Server</b><br/>REST + SSE &middot; Run Tracking"]
     J["<b>Cost &amp; Trace</b><br/>Budget Control &middot; JSONL Traces"]
+    K["<b>Self-Evolution</b><br/>ExperienceExtractor &middot; SkillEvolver<br/>ReviewOrchestrator &middot; IntelligentCurator"]
 
     style A fill:#0277bd,stroke:#01579b,color:#fff,stroke-width:2px
     style B fill:#ef6c00,stroke:#e65100,color:#fff,stroke-width:2px
@@ -498,6 +577,7 @@ graph TD
     style H fill:#e65100,stroke:#bf360c,color:#fff,stroke-width:2px
     style I fill:#1565c0,stroke:#0d47a1,color:#fff,stroke-width:2px
     style J fill:#880e4f,stroke:#560027,color:#fff,stroke-width:2px
+    style K fill:#00695c,stroke:#004d40,color:#fff,stroke-width:2px
 ```
 
 ## Environment Variables
@@ -516,7 +596,7 @@ API documentation and guides are available via Swift-DocC:
 - [Tool System](Sources/OpenAgentSDK/Documentation.docc/ToolSystem.md) — Tool protocol, custom tools, tiers
 - [Multi-Agent Orchestration](Sources/OpenAgentSDK/Documentation.docc/MultiAgent.md) — Sub-agents, teams, tasks
 - [MCP, Sessions & Hooks](Sources/OpenAgentSDK/Documentation.docc/MCPSessionHooks.md) — MCP integration, persistence, hook system
-- [Cookbook](docs/cookbook.md) — 16 real-world scenarios with runnable code (structured output, sandbox, multi-agent, etc.)
+- [Cookbook](docs/cookbook.md) — 17 real-world scenarios with runnable code (structured output, sandbox, multi-agent, self-evolution, etc.)
 - [Runnable Examples](Examples/README.md) — 31 complete examples with step-by-step tutorial (19 feature demos + 12 compat verification)
 
 ## Requirements

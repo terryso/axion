@@ -21,6 +21,8 @@ public struct ModelCostEntry: Sendable, Equatable {
 
 /// Aggregated cost summary returned by ``CostTracker/getSummary()``.
 public struct CostSummary: Sendable, Equatable {
+    /// Optional label identifying the agent (e.g., "review") for cost attribution.
+    public let label: String?
     /// Total number of LLM API calls across all models.
     public let modelCalls: Int
     /// Total tokens (input + output) across all models.
@@ -30,7 +32,8 @@ public struct CostSummary: Sendable, Equatable {
     /// Per-model cost breakdown.
     public let costBreakdown: [ModelCostEntry]
 
-    public init(modelCalls: Int, totalTokens: Int, estimatedCostUsd: Double, costBreakdown: [ModelCostEntry]) {
+    public init(label: String? = nil, modelCalls: Int, totalTokens: Int, estimatedCostUsd: Double, costBreakdown: [ModelCostEntry]) {
+        self.label = label
         self.modelCalls = modelCalls
         self.totalTokens = totalTokens
         self.estimatedCostUsd = estimatedCostUsd

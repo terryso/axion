@@ -726,6 +726,7 @@ swift run CompatSandbox
 | ContextInjectionExample  | 否                     | 无                        |
 | MultiTurnExample         | 否                     | 无                        |
 | OpenAICompatExample      | 否                     | 无                        |
+| SelfEvolutionExample     | 否                     | 无                        |
 | PolyvLiveExample         | 否                     | 包含 SKILL.md 的技能目录  |
 | CompatCoreQuery          | 否                     | 无                        |
 | CompatToolSystem         | 否                     | 无                        |
@@ -753,6 +754,7 @@ swift run CompatSandbox
 | 3 | **MCP 集成** — 外部工具服务器 | `MCPIntegration/`、`AdvancedMCPExample/`、`AgentMCPServerExample/` | `swift run MCPIntegration` |
 | 4 | **Session 管理** — save、load、fork | `CompatSessions/`、`SessionsAndHooks/`、`MultiTurnExample/` | `swift run SessionsAndHooks` |
 | 5 | **Memory（跨任务学习）** — store、query、domain | `MemoryStoreExample/` | `swift run MemoryStoreExample` |
+| 6 | **自进化** — 经验提取、技能进化、智能策展 | `SelfEvolutionExample/` | `swift run SelfEvolutionExample` |
 
 > **提示：** 从场景 1（BasicAgent）开始，按顺序探索每个场景。下方的完整学习路径覆盖全部 30+ 示例。
 

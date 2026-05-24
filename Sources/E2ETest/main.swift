@@ -159,6 +159,31 @@ await MCPAgentE2ETests.run(apiKey: apiKey, model: model, baseURL: baseURL)
 await ThinkingConfigE2ETests.run(apiKey: apiKey, model: model, baseURL: baseURL)
 
 // ================================================================
+// SECTION 62-66: Skill Evolution E2E Tests (Story 22.2: LLMSkillEvolver)
+// ================================================================
+await SkillEvolutionE2ETests.run(apiKey: apiKey, model: model, baseURL: baseURL)
+
+// ================================================================
+// SECTION 67-70: Skill Usage Tracker E2E Tests (Story 22.3: SkillUsageTracker)
+// ================================================================
+await SkillUsageTrackerE2ETests.run()
+
+// ================================================================
+// SECTION 71-75: Skill Curator E2E Tests (Story 22.4: SkillCurator)
+// ================================================================
+await SkillCuratorE2ETests.run()
+
+// ================================================================
+// SECTION 76-80: Session Search E2E Tests (Story 23.2: SessionSearchPlugin)
+// ================================================================
+await SessionSearchE2ETests.run()
+
+// ================================================================
+// SECTION 81-86: ReviewOrchestrator E2E Tests (Story 24.3: ReviewOrchestrator)
+// ================================================================
+await ReviewOrchestratorE2ETests.run(apiKey: apiKey, model: model, baseURL: baseURL)
+
+// ================================================================
 // Results Summary
 // ================================================================
 print("\n=== E2E Test Results ===")

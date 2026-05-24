@@ -753,6 +753,7 @@ Five essential scenarios every developer should understand. Each links to the re
 | 3 | **MCP Integration** — external tool servers | `MCPIntegration/`, `AdvancedMCPExample/`, `AgentMCPServerExample/` | `swift run MCPIntegration` |
 | 4 | **Session Management** — save, load, fork | `CompatSessions/`, `SessionsAndHooks/`, `MultiTurnExample/` | `swift run SessionsAndHooks` |
 | 5 | **Memory (Cross-Task Learning)** — store, query, domain-based | `MemoryStoreExample/` | `swift run MemoryStoreExample` |
+| 6 | **Self-Evolution** — experience extraction, skill evolution, curation | `SelfEvolutionExample/` | `swift run SelfEvolutionExample` |
 
 > **Tip:** Start with scenario 1 (BasicAgent), then explore each scenario in order. The full learning path below covers all 30+ examples.
 

@@ -1,5 +1,5 @@
 # generated: 2026-05-12
-# last_updated: 2026-05-20
+# last_updated: 2026-05-24
 # project: open-agent-sdk-swift
 # project_key: NOKEY
 # tracking_system: file-system
@@ -35,7 +35,7 @@
 # - Dev moves story to 'review', then runs code-review (fresh context, different LLM recommended)
 
 generated: 2026-05-12
-last_updated: 2026-05-21
+last_updated: 2026-05-24
 project_key: NOKEY
 tracking_system: file-system
 story_location: _bmad-output/implementation-artifacts
@@ -245,3 +245,42 @@ development_status:
   20-3-enhanced-memory-fact-lifecycle: done
   20-4-sdkmessage-output-formatting: done
   epic-20-retrospective: done
+
+  # Epic 21: 记忆进化 — ExperienceExtractor 与自动审查
+  epic-21: done
+  21-1-experience-extractor-protocol-signal-model: done
+  21-2-llm-experience-extractor: done
+  21-3-memory-review-hook-session-end: done
+  21-4-memory-security-scan-frozen-snapshot: done
+  epic-21-retrospective: done
+
+  # Epic 22: 技能进化 — SkillEvolver 与生命周期管理
+  epic-22: done
+  22-1-skill-signal-model-skill-evolver-protocol: done
+  22-2-llm-skill-evolver: done
+  22-3-skill-usage-tracker-lifecycle: done
+  22-4-skill-curator: done
+  epic-22-retrospective: done
+
+  # Epic 23: 高级进化 — 插件生态（可选）
+  epic-23: done
+  23-1-self-evolution-plugin-protocol: done
+  23-2-session-search-plugin: done
+  23-3-prompt-evolver-plugin: done
+  epic-23-retrospective: optional
+
+  # Epic 24: 后台审查代理 — 闭环学习核心引擎
+  epic-24: done
+  24-1-review-agent-factory: done
+  24-2-review-tools: done
+  24-3-review-orchestrator: done
+  24-4-prefix-cache-sharing: done
+  epic-24-retrospective: done
+
+  # Epic 25: 智能策展 — LLM 驱动的技能库维护
+  epic-25: done
+  25-1-curator-prompt-builder: done
+  25-2-curator-archive-tool: done
+  25-3-intelligent-curator: done
+  25-4-curator-run-report: done
+  epic-25-retrospective: done

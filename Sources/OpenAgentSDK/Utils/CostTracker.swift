@@ -16,6 +16,8 @@ public struct CostTracker: Sendable {
     public let model: String
     /// Optional budget limit in USD.
     public let maxBudgetUsd: Double?
+    /// Optional label identifying this tracker (e.g., "review") for cost attribution.
+    public let label: String?
 
     // Internal accumulation state
     private var totalInputTokens: Int = 0
@@ -24,9 +26,10 @@ public struct CostTracker: Sendable {
     private var modelCalls: Int = 0
     private var costBreakdown: [String: ModelCostEntry] = [:]
 
-    public init(model: String, maxBudgetUsd: Double? = nil) {
+    public init(model: String, maxBudgetUsd: Double? = nil, label: String? = nil) {
         self.model = model
         self.maxBudgetUsd = maxBudgetUsd
+        self.label = label
     }
 
     /// Record token usage from an LLM API response.
@@ -69,6 +72,7 @@ public struct CostTracker: Sendable {
     /// Return a snapshot of all tracked cost data.
     public func getSummary() -> CostSummary {
         CostSummary(
+            label: label,
             modelCalls: modelCalls,
             totalTokens: totalInputTokens + totalOutputTokens,
             estimatedCostUsd: estimatedCostUsd,

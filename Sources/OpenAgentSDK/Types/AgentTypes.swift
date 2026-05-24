@@ -455,6 +455,36 @@ public struct AgentOptions: Sendable {
     /// `{traceBaseURL}/{runId}/trace.jsonl`. When `nil`, defaults to `~/.open-agent-sdk/traces/`.
     public var traceBaseURL: String?
 
+    /// Optional configuration for automatic memory review at session end.
+    /// When set, a ``MemoryReviewHook`` is registered on `.sessionEnd` to extract
+    /// experience from conversations and persist facts to the ``FactStore``.
+    /// `nil` (default) means no automatic memory review.
+    public var memoryReviewConfig: MemoryReviewConfig?
+
+    /// Optional security configuration for the memory scanner.
+    /// When set, a ``MemorySecurityScanner`` is created and passed to the ``MemoryReviewHook``
+    /// to validate facts before they are persisted. `nil` (default) means no security scanning.
+    public var securityConfig: MemorySecurityConfig?
+
+    /// Optional configurations for self-evolution plugins.
+    /// When set, indicates which evolution plugins to load at agent creation time.
+    /// `nil` (default) means no evolution plugins.
+    public var evolutionPlugins: [EvolutionPluginConfig]?
+
+    /// Optional configuration for automatic background review scheduling.
+    /// When set with `hookRegistry` and Anthropic provider, a sessionEnd hook
+    /// is registered to trigger review agents at configurable intervals.
+    public var reviewScheduleConfig: ReviewScheduleConfig?
+
+    /// Optional label identifying this agent for cost tracking and logging.
+    /// Defaults to `nil` (main agent). The review agent sets this to `"review"`.
+    public var agentLabel: String?
+
+    /// When true, `buildSystemPrompt()` returns the raw `systemPrompt` without
+    /// appending git context, project instructions, or session memory.
+    /// Used by the review agent to send a pre-built prompt verbatim for prefix cache sharing.
+    var _rawSystemPromptMode: Bool = false
+
     // MARK: - Memberwise Init
 
     public init(
@@ -522,7 +552,12 @@ public struct AgentOptions: Sendable {
         onRunComplete: (@Sendable (RunCompleteContext) -> Void)? = nil,
         runId: String? = nil,
         traceEnabled: Bool = false,
-        traceBaseURL: String? = nil
+        traceBaseURL: String? = nil,
+        memoryReviewConfig: MemoryReviewConfig? = nil,
+        securityConfig: MemorySecurityConfig? = nil,
+        evolutionPlugins: [EvolutionPluginConfig]? = nil,
+        reviewScheduleConfig: ReviewScheduleConfig? = nil,
+        agentLabel: String? = nil
     ) {
         self.apiKey = apiKey
         self.model = model
@@ -589,6 +624,11 @@ public struct AgentOptions: Sendable {
         self.runId = runId
         self.traceEnabled = traceEnabled
         self.traceBaseURL = traceBaseURL
+        self.memoryReviewConfig = memoryReviewConfig
+        self.securityConfig = securityConfig
+        self.evolutionPlugins = evolutionPlugins
+        self.reviewScheduleConfig = reviewScheduleConfig
+        self.agentLabel = agentLabel
     }
 
     // MARK: - Auto-Discover Skills
@@ -703,6 +743,11 @@ public struct AgentOptions: Sendable {
         self.runId = nil
         self.traceEnabled = false
         self.traceBaseURL = nil
+        self.memoryReviewConfig = nil
+        self.securityConfig = nil
+        self.evolutionPlugins = nil
+        self.reviewScheduleConfig = nil
+        self.agentLabel = nil
     }
 
     // MARK: - Validation
@@ -808,6 +853,8 @@ public struct RunCompleteContext: Sendable {
 /// model during an agent query. When the model is switched mid-session, multiple
 /// entries are produced -- one per model used.
 public struct CostBreakdownEntry: Sendable, Equatable {
+    /// Optional label identifying the agent (e.g., "review") for cost attribution.
+    public let label: String?
     /// The model identifier this entry tracks.
     public let model: String
     /// Total input tokens consumed by this model.
@@ -817,7 +864,8 @@ public struct CostBreakdownEntry: Sendable, Equatable {
     /// Estimated cost in USD for this model's usage.
     public let costUsd: Double
 
-    public init(model: String, inputTokens: Int, outputTokens: Int, costUsd: Double) {
+    public init(label: String? = nil, model: String, inputTokens: Int, outputTokens: Int, costUsd: Double) {
+        self.label = label
         self.model = model
         self.inputTokens = inputTokens
         self.outputTokens = outputTokens

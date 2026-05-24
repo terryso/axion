@@ -135,6 +135,27 @@ public actor FactStore {
         return domainSet.sorted()
     }
 
+    /// Create an immutable snapshot of the current facts for a domain.
+    ///
+    /// Returns a deep copy — subsequent mutations to the FactStore do not
+    /// affect the snapshot. If the domain does not exist, returns a snapshot
+    /// with an empty facts array.
+    public func snapshot(domain: String) throws -> FrozenSnapshot {
+        try validateDomainName(domain)
+        try migrateLegacyIfNeeded(domain: domain)
+        let facts = cache[domain] ?? []
+        return FrozenSnapshot(domain: domain, facts: facts.map { $0 })
+    }
+
+    /// Restore a domain's facts from a snapshot, overwriting current state.
+    ///
+    /// Throws if the snapshot's domain contains path traversal characters.
+    public func rollback(to snapshot: FrozenSnapshot) throws {
+        try validateDomainName(snapshot.domain)
+        cache[snapshot.domain] = snapshot.facts.map { $0 }
+        try flushDomainToDisk(snapshot.domain)
+    }
+
     // MARK: - Private: Upsert
 
     private func upsert(domain: String, facts: [MemoryFact]) throws {
