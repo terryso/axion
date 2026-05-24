@@ -3019,3 +3019,460 @@ So that 代码库更清晰, 新贡献者不会被死代码误导.
 - 每个 Story 完成后运行 `swift test --filter "AxionHelperTests.Tools" --filter "AxionHelperTests.Models" --filter "AxionHelperTests.MCP" --filter "AxionHelperTests.Services" --filter "AxionCoreTests" --filter "AxionCLITests"` 确保不破坏现有功能
 - API 响应格式（`StandardTaskOutput`）不变——AxionBar 依赖此格式
 - 详细规格参照 `_bmad-output/implementation-artifacts/spec-axion-deep-analysis-sdk-extraction.md`
+
+---
+
+# Phase 8 — SDK 自进化能力集成
+
+> Phase 7（Epic 21）SDK 提取完成后，Axion 消费了 SDK 的底层组件（HTTP、Cost、Trace、Memory 基础设施）。Phase 8 将 SDK 的自进化能力（SDK Epic 21-24）接入 Axion 的运行生命周期，实现 Hermes 级别的闭环学习：每次 `axion run` 完成后，后台 review agent 自动审查对话、提取 memory、演化 skills。
+>
+> **核心理念：** Axion 不只是「每次都思考」——用得越多越聪明，background review 让每次运行的经验自动沉淀为持久记忆和可复用技能。
+>
+> **SDK 依赖：** OpenAgentSDK Epic 21-25（ExperienceSignal、SkillSignal、SkillEvolver、ReviewOrchestrator、ReviewAgentFactory、ReviewTools、IntelligentCurator、CuratorPromptBuilder、CuratorArchiveTool、CuratorRunReport），均已完成。
+>
+> **SDK 本地引用：** SDK 尚未发布正式版本，Axion 通过本地路径引用。在 `Package.swift` 中：
+> ```swift
+> .package(path: "../open-agent-sdk-swift")
+> ```
+> 实施 Story 前先 `git pull` SDK 仓库获取 Epic 25 最新代码。
+>
+> **SDK 组件映射：**
+>
+> | SDK 组件 | SDK 文件 | Axion 用途 |
+> |---------|---------|-----------|
+> | `ReviewOrchestrator` | `Sources/OpenAgentSDK/Utils/ReviewOrchestrator.swift` | 调度 + 执行 review pipeline |
+> | `ReviewAgentFactory` | `Agent.createReviewAgent(config:)` in `Agent.swift` | 从 parent agent fork review agent |
+> | `ReviewPromptBuilder` | `Sources/OpenAgentSDK/Utils/ReviewPromptBuilder.swift` | 3 种 review prompt（memory/skill/combined） |
+> | `ReviewTools` | `Sources/OpenAgentSDK/Tools/Review/*.swift` | 5 个工具（4 review_* + curator_archive_skill） |
+> | `ReviewAgentConfig` | `Sources/OpenAgentSDK/Types/ReviewAgentTypes.swift` | 配置 review 范围（memory/skills/both） |
+> | `ReviewScheduleConfig` | `ReviewOrchestrator.swift:9-44` | 调度间隔配置 |
+> | `LLMSkillEvolver` | `Sources/OpenAgentSDK/Utils/LLMSkillEvolver.swift` | SDK 内置 SkillEvolver 实现（LLM 分析信号→演化技能），Axion 直接使用 |
+> | `FactStore` | `Sources/OpenAgentSDK/Stores/FactStore.swift` | SDK 内置 actor，持久化 MemoryFact 到 JSON 文件 |
+> | `SkillCuratorStore` | `Sources/OpenAgentSDK/Stores/SkillCuratorStore.swift` | SDK 内置 actor，持久化 CuratorState 到 JSON 文件 |
+> | `IntelligentCurator` | `Sources/OpenAgentSDK/Utils/IntelligentCurator.swift` | 两阶段策展执行器（机械式+LLM） |
+> | `CuratorPromptBuilder` | `Sources/OpenAgentSDK/Utils/CuratorPromptBuilder.swift` | UMBRELLA-BUILDING 策展 prompt |
+> | `CuratorArchiveTool` | `Sources/OpenAgentSDK/Tools/Review/CuratorArchiveTool.swift` | 策展专用归档工具 |
+> | `CuratorRunReport` | `Sources/OpenAgentSDK/Utils/CuratorRunReport.swift` | 策展报告（Markdown + YAML） |
+> | `ExperienceSignal` | `Sources/OpenAgentSDK/Types/ExperienceTypes.swift` | Memory 提取的信号模型 |
+> | `SkillSignal` | `Sources/OpenAgentSDK/Types/SkillEvolutionTypes.swift` | Skill 演化的信号模型 |
+
+## Phase 8 Epic List
+
+### Epic 22: Background Review Agent 集成
+
+将 SDK 的 ReviewOrchestrator、ReviewAgentFactory、ReviewTools 接入 Axion 的运行生命周期。每次 `axion run` 完成后，RunOrchestrator 检查是否需要 review（基于消息数和调度间隔），需要时在 detached task 中 fork review agent，自动审查对话内容、提取 memory、演化 skills。
+
+**核心价值：** 实现 Hermes 级别的闭环学习——每次运行的经验自动沉淀，不需要用户手动操作。
+**依赖：** Epic 21（SDK 提取完成，Axion 使用 SDK FactStore 和 SkillRegistry）、SDK Epic 21-24
+**SDK 参考：**
+- `/Users/nick/CascadeProjects/open-agent-sdk-swift/Sources/OpenAgentSDK/Utils/ReviewOrchestrator.swift` — `ReviewOrchestrator.executeReview()` 完整 pipeline
+- `/Users/nick/CascadeProjects/open-agent-sdk-swift/Sources/OpenAgentSDK/Utils/ReviewAgentFactory.swift` — `Agent.createReviewAgent(config:)` fork 方法
+- `/Users/nick/CascadeProjects/open-agent-sdk-swift/Sources/OpenAgentSDK/Tools/Review/ReviewTools.swift` — `createReviewTools()` 入口
+
+### Epic 23: Review 配置与 Axion 专属适配
+
+为 Axion 配置 ReviewScheduleConfig，适配桌面自动化的 review 需求（桌面操作的 review 信号与代码开发不同）。包括 config.json 配置支持、`--no-review` CLI 标志、review 结果日志和通知。
+
+**核心价值：** Review 行为可配置，适配桌面自动化场景的信号模式。
+**依赖：** Epic 22（Review 基础设施）
+
+---
+
+## Epic 22: Background Review Agent 集成
+
+### Story 22.1: ReviewOrchestrator 接入 RunOrchestrator
+
+As a 系统,
+I want 每次 `axion run` 完成后自动检查是否需要 background review,
+So that review 在合适的时机自动触发, 不阻塞用户也不遗漏.
+
+**SDK 参考：**
+- `ReviewOrchestrator.swift:86-101` — `shouldReview(sessionId:messageCount:config:)` 方法：messageCount >= minMessagesForReview 且 messageCount % interval == 0 时触发
+- `ReviewOrchestrator.swift:108-164` — `executeReview(parentAgent:messages:config:)` 方法：fork agent → inject tools → prompt → summarize
+- `ReviewAgentFactory.swift:20-71` — `createReviewAgent(config:)` 方法：共享 parent 的 LLMClient 和 cachedSystemPrompt，实现 prefix cache sharing
+
+**实施：**
+- 在 `RunOrchestrator` 中，agent run 完成后获取消息数
+- 调用 `ReviewOrchestrator.shouldReview()` 检查是否需要 review
+- 如需要，在 `Task.detached` 中调用 `ReviewOrchestrator.executeReview()`（非阻塞）
+- Review agent 复用 parent agent 的 `cachedSystemPrompt`（SDK 通过共享 LLMClient 实现 prefix cache）
+- Review 结果写入 trace 和日志
+
+**Acceptance Criteria:**
+
+**Given** `axion run "打开计算器"` 完成，对话消息数 >= 4
+**When** RunOrchestrator 检查 review 条件
+**Then** 调用 `ReviewOrchestrator.shouldReview()`，根据 ReviewScheduleConfig 判断是否触发
+
+**Given** review 条件满足
+**When** 触发 review
+**Then** 在 detached task 中执行 `ReviewOrchestrator.executeReview()`，不阻塞终端输出
+**And** review agent 使用与 parent agent 共享的 LLMClient（prefix cache sharing）
+
+**Given** review 完成
+**When** 结果返回
+**Then** ReviewAgentResult 写入 trace（review_summary、memory_changes、skill_changes）
+**And** Logger 记录 review 结果摘要
+
+**Given** review 条件不满足（消息数 < minMessagesForReview）
+**When** RunOrchestrator 检查
+**Then** 跳过 review，无额外操作
+
+**Given** review agent 执行失败
+**When** executeReview() 返回 nil
+**Then** 记录 warning 日志，不影响 parent run 的成功状态
+
+### Story 22.2: SkillEvolver 集成 — 直接使用 SDK LLMSkillEvolver
+
+As a 系统,
+I want review agent 的 `review_update_skill` 工具能通过 SkillEvolver 演化技能,
+So that review 发现的技能改进信号可以自动应用到技能定义.
+
+**SDK 参考：**
+- `Sources/OpenAgentSDK/Utils/LLMSkillEvolver.swift` — SDK 内置的 `SkillEvolver` 实现
+  - `LLMSkillEvolver(client: LLMClient, evolutionModel: String = "claude-haiku-4-5-20251001")` — 用 LLM 分析信号并演化技能
+  - `evolve(skill:signals:config:) async throws -> SkillEvolutionResult` — 过滤信号→调用 LLM→解析响应→构建演化后的 Skill
+  - 内置逻辑：按 confidence 过滤、按 signalType 路由（refinement/deprecation/merge/split/newSkill）、dryRun 支持
+- `Tools/Review/ReviewSkillUpdateTool.swift:63-71` — 构造 `SkillSignal.create(signalType: .refinement, ...)` 并调用 `skillEvolver.evolve()`
+- `Tools/Review/ReviewSkillUpdateTool.swift:72-74` — evolve 成功后调用 `skillRegistry.replace(evolved)`
+
+**实施：**
+- **不需要 Axion 自己实现 SkillEvolver**。SDK 的 `LLMSkillEvolver` 已经是完整的 LLM 驱动实现
+- 在 `AgentBuilder` 中创建 `LLMSkillEvolver(client: agentClient, evolutionModel: config.reviewModel ?? "claude-haiku-4-5-20251001")`
+- 注入到 `ReviewOrchestrator` 的 `skillEvolver` 参数
+- Review agent 的 `review_update_skill` 工具会自动构造 `SkillSignal` 并调用 `evolve()`
+
+**Acceptance Criteria:**
+
+**Given** review agent 调用 `review_update_skill` 工具
+**When** 工具执行
+**Then** SkillSignal 构造正确（type: refinement, confidence: 0.8, source: conversation）
+**And** LLMSkillEvolver.evolve() 被调用，使用 Haiku 模型分析信号
+
+**Given** skill 演化成功
+**When** result.evolvedSkill 非 nil
+**Then** SkillRegistry.replace() 更新 skill（Skill 是值类型，原始 skill 自然保留）
+
+**Given** skill 演化失败（如 LLM 返回无法解析的 JSON）
+**When** evolve() 返回 shouldEvolve=false
+**Then** review_update_skill 返回 `{"success": true, "message": "No evolution warranted"}`
+
+### Story 22.3: ReviewOrchestrator 依赖注入
+
+As a 开发者,
+I want ReviewOrchestrator 的依赖通过 AgentBuilder 正确注入,
+So that review pipeline 在 Axion 的完整上下文中运行.
+
+**SDK 参考：**
+- `ReviewOrchestrator.swift` — init 参数：`scheduleConfig`、`factStore`、`skillRegistry`、`skillEvolver`、`usageStore`
+- `ReviewTools.swift` — `createReviewTools()` 参数：`factStore`、`skillRegistry`、`skillEvolver`、`usageStore`
+- `Agent.swift` — `Agent.createReviewAgent(config:)` 从 parent agent 创建，自动共享 LLMClient
+- `FactStore.swift` — SDK 内置 `actor FactStore`，Axion 可直接使用（或继续使用现有 `AxionFactStore` 作为 Memory 层，SDK `FactStore` 作为 Review 层）
+- `LLMSkillEvolver.swift` — SDK 内置 `SkillEvolver` 实现，Axion 直接使用 `LLMSkillEvolver(client:)`
+
+**实施：**
+- 在 `AgentBuilder` 中创建 `ReviewOrchestrator` 实例（注入 SDK `FactStore`、`SkillRegistry`、`LLMSkillEvolver`、`SkillUsageStore`）
+- 将 orchestrator 挂载到 `RunOrchestrator` 的 post-run 流程（在 `RunMemoryProcessor.processRunResult()` 之后）
+- 配置 `ReviewScheduleConfig`（默认值或从 config.json 读取）
+- `FactStore` 选择：Review agent 需要注入 SDK 的 `FactStore`（用于 `review_save_memory`），但 Axion 已有 `AxionFactStore`（用于现有 Memory 处理）。两者共存：`AxionFactStore` 处理 Axion 专有字段（scope/cause/evidence），SDK `FactStore` 处理 review agent 的标准 `MemoryFact`
+- `SkillEvolver` 选择：直接使用 SDK 的 `LLMSkillEvolver(client: evolutionModel:)`，不需要 Axion 自己实现
+
+**Acceptance Criteria:**
+
+**Given** AgentBuilder 构建 agent
+**When** 检查 ReviewOrchestrator 初始化
+**Then** orchestrator 的 factStore 指向 SDK `FactStore` 实例
+**And** orchestrator 的 skillRegistry 指向 SDK `SkillRegistry` 实例
+**And** orchestrator 的 skillEvolver 指向 `LLMSkillEvolver` 实例
+**And** orchestrator 的 usageStore 指向 `SkillUsageStore` 实例
+
+**Given** ReviewOrchestrator 执行 review
+**When** createReviewTools() 创建工具
+**Then** 5 个 review 工具的依赖正确注入（factStore、skillRegistry、skillEvolver、usageStore）
+**And** review agent 可以成功调用这些工具
+
+**Given** config.json 包含 review 配置
+**When** AgentBuilder 读取配置
+**Then** ReviewScheduleConfig 使用配置值（memoryReviewInterval、skillReviewInterval、minMessagesForReview、reviewModel）
+
+### Story 22.4: IntelligentCurator 接入 — 智能策展（机械式 + LLM 策展）
+
+As a 系统,
+I want 定期自动清理技能库，合并重叠技能为 umbrella 技能，归档过期技能，保持技能库健康,
+So that 技能库不会随时间退化为一个 session 一个 skill 的垃圾堆，而是维护为类级（class-level）技能库.
+
+**Hermes 参考：**
+- `/Users/nick/CascadeProjects/terryso.github.com/_posts/2026-05-21-hermes-self-evolution-4-skills.md` — Curator 策展人：空闲触发 + 每 7 天运行，合并重叠、归档过期、修补技能、更新生命周期状态
+- Hermes 触发条件：agent 空闲 > 2 小时 + 距上次策展 > 7 天
+- Hermes 安全边界：只操作 agent_created 技能，不碰 bundled/hub_installed/pinned，永远只归档不删除
+
+**SDK 参考（Epic 25 已实现）：**
+- `Sources/OpenAgentSDK/Utils/IntelligentCurator.swift` — `IntelligentCurator` struct：两阶段策展执行器
+  - 依赖注入：`skillCurator`（机械式）、`factStore`、`skillRegistry`、`skillEvolver`、`usageStore`、`curatorStore`
+  - `execute(parentAgent:dryRun:) async throws -> IntelligentCuratorResult` — 执行两阶段策展
+- `Sources/OpenAgentSDK/Utils/CuratorPromptBuilder.swift` — `CuratorPromptBuilder` enum：策展 prompt 构建
+  - `curationPrompt() -> String` — UMBRELLA-BUILDING 全量策展 prompt
+  - `dryRunPrompt() -> String` — dry-run 版本
+  - `buildCandidateList(usageData:) -> String` — 从 usage data 构建 agent_created 技能候选列表
+- `Sources/OpenAgentSDK/Tools/Review/CuratorArchiveTool.swift` — `createCuratorArchiveTool()`：策展专用归档工具
+  - 参数：`skillName`（必填）、`absorbedInto`（可选，合并到的 umbrella 技能名）
+  - 行为：验证 provenance==agentCreated 且 !pinned → lifecycleState→.retired → 记录 absorbedInto 关系
+- `Sources/OpenAgentSDK/Utils/CuratorRunReport.swift` — `CuratorRunReport` struct：策展报告
+  - `init(from: IntelligentCuratorResult)` — 从执行结果自动构建
+  - `renderMarkdown() -> String` — 人类可读报告
+  - `renderYAML() -> String` — 结构化 YAML（与 Hermes 格式兼容）
+- `Sources/OpenAgentSDK/Utils/SkillCurator.swift` — `SkillCurator`（机械式阶段，Epic 22 已实现）
+- `Sources/OpenAgentSDK/Types/SkillEvolutionTypes.swift` — `SkillUsageData.absorbedInto: String?`（Epic 25 新增字段）
+
+**两阶段策展流程（SDK `IntelligentCurator.execute()` 已实现）：**
+1. **阶段一（机械式，无 LLM）**：`SkillCurator.run()` — 基于 usage 时间戳做状态转换（active→deprecated→retired）
+2. **阶段二（智能策展，LLM 驱动）**：fork curator agent，注入 CuratorPromptBuilder 的 UMBRELLA-BUILDING prompt + 5 个工具（4 个 review tools + curator_archive_skill），让 LLM 审查技能库并执行合并/归档
+
+**实施：**
+- 在 Axion 中创建 `CuratorScheduler`，管理 Curator 的触发时机
+- Axion 是 CLI 工具（非常驻进程），不适合 Hermes 的"空闲触发"模式，改用以下策略：
+  - **每次 `onRunComplete` 检查** — 如果距上次策展 > intervalHours，触发 `IntelligentCurator.execute(parentAgent:dryRun:)`
+  - 可选：新增 `axion curator run` 命令，手动/CI 定时触发
+- 在 `AgentBuilder` 中初始化 `IntelligentCurator`，注入 6 个依赖：
+  - `skillCurator: SkillCurator` — 需创建（注入 `SkillUsageTracker`、`SkillCuratorStore`、`SkillCuratorConfig`）
+  - `factStore: FactStore` — SDK 内置，`FactStore(memoryDir: "~/.axion/memory")` 初始化
+  - `skillRegistry: SkillRegistry` — 已存在于 AgentBuilder
+  - `skillEvolver: LLMSkillEvolver` — SDK 内置，`LLMSkillEvolver(client:)` 初始化
+  - `usageStore: SkillUsageStore` — Axion 需创建 `FileBasedSkillUsageStore` 实现
+  - `curatorStore: SkillCuratorStore` — SDK 内置，`SkillCuratorStore(skillsDir: "~/.axion/skills")` 初始化
+- 提供 `SkillUsageStore` 和 `SkillCuratorStore` 的持久化实现：
+  - `SkillUsageStore`：Axion 需创建 `FileBasedSkillUsageStore` 实现 protocol（`bumpView()`、`bumpManage()`、`getUsage()`、`allUsage()`、`setUsage()`），存储到 `~/.axion/skills/.usage.json`
+  - `SkillCuratorStore`：SDK 已提供内置 `actor SkillCuratorStore(skillsDir:)`，支持 `loadState() -> CuratorState`、`saveState(_ state:) throws`，自动持久化到 `{skillsDir}/.curator-state.json`。Axion 只需 `SkillCuratorStore(skillsDir: "~/.axion/skills")` 初始化即可，不需要自己实现
+- Curator 执行后，用 `CuratorRunReport(from: result).renderMarkdown()` 生成报告，记录 trace 事件
+
+**Acceptance Criteria:**
+
+**Given** 技能超过 30 天未被使用
+**When** Curator 运行（阶段一：机械式）
+**Then** `SkillUsageTracker.checkLifecycle()` 返回 active→deprecated 转换
+**And** Curator 将该技能标记为 deprecated（stale），仍可用但标注需关注
+
+**Given** 技能超过 90 天未被使用（已为 deprecated 状态）
+**When** Curator 运行（阶段一：机械式）
+**Then** 转换为 retired（archived），从技能索引中移除
+
+**Given** 技能库中有多个重叠的 agent_created 技能（如 debug-login、debug-crash、debug-timeout）
+**When** Curator 运行（阶段二：LLM 策展）
+**Then** curator agent 创建/找到 umbrella 技能（如 debugging-workflow）
+**And** 将兄弟技能的独有内容合并进 umbrella
+**And** 兄弟技能通过 `curator_archive_skill` 归档，`absorbedInto` 记录为 umbrella 名
+
+**Given** curator agent 归档了一个技能
+**When** 查看 `SkillUsageData`
+**Then** `absorbedInto` 字段记录了目标 umbrella 技能名
+
+**Given** 技能被用户置顶（pinned=true）或来源为 bundled/hub_installed
+**When** Curator 检查
+**Then** 跳过该技能（两阶段都跳过）
+
+**Given** 距上次 Curator 运行不足 intervalHours（默认 168h=7天）
+**When** `onRunComplete` 检查
+**Then** 跳过 Curator 运行
+
+**Given** Curator 运行完成
+**When** 查看 `IntelligentCuratorResult`
+**Then** 包含 `mechanicalResult`（阶段一结果）和可选的 `llmResult`（阶段二结果）
+**And** `consolidations` 列出所有合并（from → into + reason）
+**And** `prunings` 列出所有无目标归档（name + reason）
+**And** `CuratorRunReport.renderMarkdown()` 生成完整报告
+
+**Given** `axion run "任务"` 完成
+**When** Curator 条件满足（距上次 > 7 天）
+**Then** 在 detached task 中执行 `IntelligentCurator.execute(parentAgent:)`，不阻塞终端输出
+**And** 记录 `curator_completed` trace 事件（含 consolidations、prunings、transitionsApplied）
+
+**Given** config.json 中 `"curator": {"dryRun": true}`
+**When** Curator 运行
+**Then** `IntelligentCurator.execute(parentAgent:dryRun:true)` — 机械式阶段评估不执行，LLM 阶段使用 dry-run prompt
+**And** `CuratorRunReport` 中 `dryRun: true`，所有操作标注为"would have"
+
+**Given** 阶段二（LLM 策展）失败
+**When** 异常发生
+**Then** 阶段一（机械式）结果仍然返回（不丢失），`IntelligentCuratorResult.error` 记录错误信息
+
+### Story 22.5: Skill 使用追踪集成
+
+As a 系统,
+I want 技能的每次使用都被追踪，为 Curator 的生命周期管理提供数据,
+So that Curator 能基于真实使用数据做决策，而非盲目归档.
+
+**SDK 参考：**
+- `SkillUsageTracker.recordView(skillName:)` — 记录技能查看/调用
+- `SkillUsageTracker.recordManage(skillName:)` — 记录技能编辑/配置
+- `SkillUsageStore` protocol — `bumpView()`、`bumpManage()`、`getUsage()`、`allUsage()`、`setUsage()`
+
+**实施：**
+- 创建 `FileBasedSkillUsageStore` 实现 `SkillUsageStore` protocol
+- 存储路径：`~/.axion/skills/.usage.json`
+- 在以下场景调用 `recordView()`：
+  - 用户通过 `/skill-name` 显式触发技能时
+  - LLM 通过隐式匹配调用 SkillTool 时
+  - `axion skill list` 或 `axion skill run` 查看技能时
+- 在以下场景调用 `recordManage()`：
+  - review agent 创建/更新技能时
+  - 用户通过 CLI 编辑技能时
+
+**Acceptance Criteria:**
+
+**Given** 用户运行 `axion run "/screenshot-analyze 分析屏幕"`
+**When** 技能被触发
+**Then** `SkillUsageTracker.recordView("screenshot-analyze")` 被调用
+**And** `.usage.json` 中 `screenshot-analyze` 的 view_count +1，last_viewed_at 更新
+
+**Given** review agent 调用 `review_update_skill` 更新了某技能
+**When** 更新成功
+**Then** `SkillUsageTracker.recordManage("skill-name")` 被调用
+**And** last_managed_at 更新
+
+**Given** `~/.axion/skills/.usage.json` 不存在
+**When** 首次使用追踪
+**Then** 自动创建文件，初始化为空 JSON
+
+**Given** `.usage.json` 文件损坏
+**When** 加载
+**Then** 跳过损坏条目，记录 warning 日志，不阻塞技能使用
+
+---
+
+## Epic 23: Review 配置与 Axion 专属适配
+
+### Story 23.1: Review 配置项与 CLI 标志
+
+As a 用户,
+I want 通过 config.json 和 CLI 标志控制 review 行为,
+So that 我可以根据需要调整 review 频率或完全禁用.
+
+**实施：**
+- 在 `~/.axion/config.json` 中增加 review + curator 配置段：
+  ```json
+  {
+    "review": {
+      "enabled": true,
+      "memoryInterval": 4,
+      "skillInterval": 6,
+      "minMessages": 4,
+      "model": null
+    },
+    "curator": {
+      "enabled": true,
+      "intervalHours": 168,
+      "staleAfterDays": 30,
+      "archiveAfterDays": 90,
+      "dryRun": false
+    }
+  }
+  ```
+- 添加 `--no-review` CLI 标志跳过本次运行的 review
+- 添加 `--review-model` CLI 标志覆盖 review agent 的模型
+- 添加 `axion curator run/status/pause/resume` 命令手动控制 Curator
+
+**Acceptance Criteria:**
+
+**Given** config.json 包含 `"review": {"enabled": false}`
+**When** 运行任务
+**Then** 不触发任何 background review
+
+**Given** 运行 `axion run "任务" --no-review`
+**When** 任务完成
+**Then** 跳过 review，无论 config.json 配置如何
+
+**Given** 运行 `axion run "任务" --review-model claude-haiku-4-5-20251001`
+**When** review 触发
+**Then** review agent 使用 haiku 模型（节省成本），而非 parent agent 的模型
+
+**Given** config.json 未包含 review 配置
+**When** 加载配置
+**Then** 使用默认值：memoryInterval=4, skillInterval=6, minMessages=4, model=nil（继承 parent）
+
+### Story 23.2: Review 结果日志与通知
+
+As a 用户,
+I want 看到 review agent 的工作成果,
+So that 我知道 Axion 在背后学到了什么.
+
+**实施：**
+- Review 完成后，在 trace 中记录 `review_completed` 事件（含 summary、memoryChanges、skillChanges）
+- 如果 review 有 memory 或 skill 变更，在终端输出一行提示（如 "[axion] Review: 新增 1 条记忆, 更新 1 个技能"）
+- 将 ReviewAgentResult 暴露给 `onRunComplete` 回调，供 API 层使用
+
+**Acceptance Criteria:**
+
+**Given** review 完成并产生了 memory 变更
+**When** 查看终端输出
+**Then** 显示一行 review 摘要，如 "[axion] Review: 保存了 2 条记忆"
+
+**Given** review 完成并产生了 skill 变更
+**When** 查看 trace
+**Then** 包含 `review_completed` 事件，skillChanges 列表非空
+
+**Given** review 未产生任何变更
+**When** 查看 trace
+**Then** 包含 `review_completed` 事件，summary = "Review completed. No actions taken."
+
+**Given** HTTP API 模式下 review 完成
+**When** 查询 run status
+**Then** StandardTaskOutput 包含 review_summary 字段
+
+---
+
+## Phase 8 FR 追溯
+
+| FR | 来源 | Epic | SDK 依赖 | 说明 |
+|----|------|------|----------|------|
+| FR81 (Background Review) | Phase 8 新增 | Epic 22 | ReviewOrchestrator, ReviewAgentFactory, ReviewTools | 自动后台审查 |
+| FR82 (SkillEvolver 集成) | Phase 8 新增 | Epic 22 | LLMSkillEvolver (SDK 内置) | 技能演化管道，直接使用 SDK 内置 LLM 实现 |
+| FR83 (Review 依赖注入) | Phase 8 新增 | Epic 22 | FactStore, SkillRegistry | Review 与 Memory/Skill 联动 |
+| FR84 (智能策展接入) | Phase 8 新增 | Epic 22 | IntelligentCurator, CuratorPromptBuilder, CuratorArchiveTool, CuratorRunReport | 智能策展（机械式+LLM UMBRELLA-BUILDING） |
+| FR85 (Skill 使用追踪) | Phase 8 新增 | Epic 22 | SkillUsageStore, SkillUsageTracker | 技能使用数据采集 |
+| FR86 (Review+Curator 配置) | Phase 8 新增 | Epic 23 | ReviewScheduleConfig, SkillCuratorConfig | 可配置 review/curator 行为 |
+| FR87 (Review 结果反馈) | Phase 8 新增 | Epic 23 | ReviewAgentResult, CuratorRunResult | 用户可见的 review/curator 成果 |
+
+## Phase 8 新增 NFR
+
+- NFR57: Review agent 不阻塞 parent run 的返回——detached task 执行
+- NFR58: Review agent 利用 prefix cache sharing，API 成本增加 ≤ 30%（相比无 cache）
+- NFR59: Review 配置变更不需要重启 Axion（config.json 热加载）
+- NFR60: Review agent 使用的模型可通过 config.json 覆盖（如用 haiku 节省成本）
+
+## Phase 8 优先级与依赖
+
+| 优先级 | Epic | Story | 依赖 | 理由 |
+|--------|------|-------|------|------|
+| P0 | Epic 22 | 22.1 (ReviewOrchestrator 接入) | Epic 21, SDK Epic 21-24 | 核心 pipeline，先跑通 |
+| P0 | Epic 22 | 22.2 (SkillEvolver 集成) | SDK LLMSkillEvolver | review_update_skill 的必要依赖，直接用 SDK 内置实现 |
+| P1 | Epic 22 | 22.3 (依赖注入) | 22.1, 22.2 | 将各组件串起来 |
+| P1 | Epic 22 | 22.5 (使用追踪) | SDK SkillUsageStore | Curator 的数据基础，尽早开始采集 |
+| P2 | Epic 22 | 22.4 (智能策展接入) | 22.5, SDK Epic 25 (IntelligentCurator) | 智能策展（机械式+LLM） |
+| P2 | Epic 23 | 23.1 (配置项) | 22.3 | 可配置化 |
+| P2 | Epic 23 | 23.2 (结果反馈) | 22.3, 22.4 | 用户可见的 review/curator 成果 |
+
+**实施建议顺序：22.2（SkillEvolver 集成）→ 22.5（使用追踪）→ 22.1（Orchestrator 接入）→ 22.3（依赖注入）→ 22.4（智能策展接入）→ 23.1（配置）→ 23.2（结果反馈）**
+
+**理由：**
+- 22.2 先行——只需创建 `LLMSkillEvolver(client:)` 并验证 `review_update_skill` 能调用，工作量小
+- 22.5 紧随其后——使用追踪是 Curator 的数据基础，越早开始采集越好（否则 Curator 无数据可用）。需实现 `FileBasedSkillUsageStore`
+- 22.1 是核心——接入 ReviewOrchestrator 让 review pipeline 跑通
+- 22.3 串联——在 AgentBuilder 中完成所有依赖注入（Review + Curator）
+- 22.4 在追踪数据积累后——Curator 需要使用数据才有意义
+- 23.1/23.2 是增强——配置和用户反馈不影响核心 pipeline
+
+**关键设计约束：**
+- Review agent 继承 parent agent 的 `cachedSystemPrompt`，通过共享 `LLMClient` 实现 Anthropic prefix cache sharing（约 26% 成本节省）
+- Review agent 以 `permissionMode: .bypassPermissions` 运行（内部操作，不需用户授权）
+- Review agent 的所有 stores/hooks/MCP/skills 均为 nil（隔离运行）
+- Review 触发条件：`messageCount >= minMessagesForReview` 且 `messageCount % interval == 0`（SDK ReviewOrchestrator 已实现）
+- `--no-review` 标志完全跳过 review，不创建 review agent
+- Review 结果不影响 parent run 的状态（review 失败不导致 run failed）
+- **Curator 两阶段策略**：SDK `IntelligentCurator.execute()` 先运行 `SkillCurator.run()`（机械式状态转换），再 fork curator agent 执行 LLM 策展（UMBRELLA-BUILDING）
+- **Curator 触发策略**：Axion 是非常驻 CLI 进程，不能像 Hermes 那样"空闲触发"，改为每次 `onRunComplete` 检查距上次 Curator 运行是否 > intervalHours（默认 7 天）
+- **Curator 安全边界**：只操作 `agent_created` 技能，跳过 bundled/hub_installed/pinned，永远只归档不删除（与 Hermes 一致）
+- **Curator agent 配置**：maxTurns=200，递归 review 禁用，所有 stores/hooks/MCP 为 nil
+- **Curator 工具集**：5 个工具（4 个 review_* tools + curator_archive_skill）
+- **Curator 报告**：`CuratorRunReport(from: result).renderMarkdown()` 生成报告，`renderYAML()` 生成结构化输出
+- **使用追踪尽早启动**：Story 22.5（使用追踪）应在 Curator 之前实施，否则 Curator 没有数据做决策
+- **Curator 与 Review 的区别**：Review 是每次 run 后的短期学习（提取 memory、演化 skill），Curator 是长期维护（归档过期、合并重叠技能、UMBRELLA-BUILDING）。两者互补，不重叠

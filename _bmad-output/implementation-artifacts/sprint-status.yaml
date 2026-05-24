@@ -1,5 +1,5 @@
 # generated: 2026-05-08
-# last_updated: 2026-05-21
+# last_updated: 2026-05-24
 # retro-epic-21: 2026-05-21
 # story-21.6-created: 2026-05-21
 # story-21-5-started: 2026-05-21
@@ -71,7 +71,9 @@
 # - Dev moves story to 'review', then runs code-review (fresh context, different LLM recommended)
 
 generated: 2026-05-08
-last_updated: 2026-05-21
+last_updated: 2026-05-24
+# story-22.1-created: 2026-05-24
+# epic-22-started: 2026-05-24
 # story-21-6-done: 2026-05-21
 # story-21-3-created: 2026-05-21
 # story-21-2-review: 2026-05-21
@@ -103,6 +105,9 @@ last_updated: 2026-05-21
 # story-16-1-started: 2026-05-17
 # retro-epic-15: 2026-05-17
 # retro-epic-16: 2026-05-17
+# phase-8-added: 2026-05-24
+# epic-22-added: 2026-05-24
+# epic-23-added: 2026-05-24
 
 project_key: NOKEY
 tracking_system: file-system
@@ -292,3 +297,22 @@ development_status:
   21-5-internal-refactor-toolregistrar-agentbuilder: done
   21-6-update-project-docs-new-architecture: done
   epic-21-retrospective: done
+
+  # ============================================================
+  # Phase 8 — SDK 自进化能力集成
+  # ============================================================
+
+  # Epic 22: Background Review Agent 集成
+  epic-22: in-progress
+  22-2-skillevolver-integration: backlog
+  22-5-skill-usage-tracking: backlog
+  22-1-revieworchestrator-integration: done
+  22-3-revieworchestrator-dependency-injection: backlog
+  22-4-intelligentcurator-integration: backlog
+  epic-22-retrospective: optional
+
+  # Epic 23: Review 配置与 Axion 专属适配
+  epic-23: backlog
+  23-1-review-config-cli-flags: backlog
+  23-2-review-result-logging-notification: backlog
+  epic-23-retrospective: optional

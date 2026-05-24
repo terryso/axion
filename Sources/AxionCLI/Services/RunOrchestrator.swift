@@ -1,4 +1,5 @@
 import Foundation
+import os
 import OpenAgentSDK
 
 import AxionCore
@@ -237,6 +238,49 @@ enum RunOrchestrator {
             runSucceeded: runSucceeded,
             runCompleted: runCompleted
         )
+
+        // Background review trigger — after memory processing, before lock release
+        if let orchestrator = buildResult.reviewOrchestrator, !runConfig.dryrun, !runConfig.noMemory {
+            let messages = agent.getMessages()
+            let reviewConfig = ReviewAgentConfig()
+            let (doMemory, doSkill) = orchestrator.shouldReview(
+                sessionId: runId,
+                messageCount: messages.count,
+                config: reviewConfig
+            )
+            if doMemory || doSkill {
+                let tunedConfig = ReviewAgentConfig(
+                    reviewMemory: doMemory,
+                    reviewSkills: doSkill
+                )
+                _Concurrency.Task.detached {
+                    let result = await orchestrator.executeReview(
+                        parentAgent: agent,
+                        messages: messages,
+                        config: tunedConfig
+                    )
+                    if let result {
+                        let logger = Logger(subsystem: "com.axion.cli", category: "ReviewOrchestrator")
+                        logger.info("Review completed: \(result.summary)")
+                        TraceRecorder.recordReviewCompleted(
+                            runId: runId,
+                            reviewSummary: result.summary,
+                            memoryChanges: result.memoryChanges,
+                            skillChanges: result.skillChanges,
+                            traceDir: (ConfigManager.defaultConfigDirectory as NSString).appendingPathComponent("runs")
+                        )
+                    } else {
+                        let logger = Logger(subsystem: "com.axion.cli", category: "ReviewOrchestrator")
+                        logger.warning("Review agent returned nil for run \(runId)")
+                        TraceRecorder.recordReviewFailed(
+                            runId: runId,
+                            error: "review agent returned nil",
+                            traceDir: (ConfigManager.defaultConfigDirectory as NSString).appendingPathComponent("runs")
+                        )
+                    }
+                }
+            }
+        }
 
         // Lock release
         if !runConfig.dryrun {

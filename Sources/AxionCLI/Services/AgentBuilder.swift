@@ -22,6 +22,7 @@ struct AgentBuildResult: Sendable {
     let skillRegistry: SkillRegistry
     let skillRegisteredCount: Int
     let runCompleteBox: RunCompleteContextBox
+    let reviewOrchestrator: ReviewOrchestrator?
 }
 
 /// Single source of truth for constructing an Agent used by both CLI (RunCommand)
@@ -258,6 +259,30 @@ enum AgentBuilder {
         // 10. Create Agent
         let agent = createAgent(options: agentOptions)
 
+        // 11. Create ReviewOrchestrator (when review is enabled and memory is on)
+        let reviewOrchestrator: ReviewOrchestrator?
+        if !buildConfig.noMemory, !buildConfig.dryrun {
+            let scheduleConfig = ReviewScheduleConfig(
+                memoryReviewInterval: config.reviewMemoryInterval ?? ReviewScheduleConfig().memoryReviewInterval,
+                skillReviewInterval: config.reviewSkillInterval ?? ReviewScheduleConfig().skillReviewInterval,
+                minMessagesForReview: config.reviewMinMessages ?? ReviewScheduleConfig().minMessagesForReview,
+                reviewModel: config.reviewModel
+            )
+            let reviewFactStore = FactStore(memoryDir: memoryDir)
+            let skillsDir = (ConfigManager.defaultConfigDirectory as NSString).appendingPathComponent("skills")
+            let usageStore = SkillUsageStore(skillsDir: skillsDir)
+            let skillEvolver = NoOpSkillEvolver()
+            reviewOrchestrator = ReviewOrchestrator(
+                scheduleConfig: scheduleConfig,
+                factStore: reviewFactStore,
+                skillRegistry: skillRegistry,
+                skillEvolver: skillEvolver,
+                usageStore: usageStore
+            )
+        } else {
+            reviewOrchestrator = nil
+        }
+
         return AgentBuildResult(
             agent: agent,
             helperPath: helperPath,
@@ -266,7 +291,8 @@ enum AgentBuilder {
             agentOptions: agentOptions,
             skillRegistry: skillRegistry,
             skillRegisteredCount: skillRegisteredCount,
-            runCompleteBox: runCompleteBox
+            runCompleteBox: runCompleteBox,
+            reviewOrchestrator: reviewOrchestrator
         )
     }
 

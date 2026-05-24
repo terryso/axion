@@ -17,6 +17,10 @@ public struct AxionConfig: Equatable, Sendable {
     public var sharedSeatMode: Bool
     public var maxModelCalls: Int?
     public var maxScreenshots: Int?
+    public var reviewMemoryInterval: Int?
+    public var reviewSkillInterval: Int?
+    public var reviewMinMessages: Int?
+    public var reviewModel: String?
 
     public static let `default` = AxionConfig(
         apiKey: nil,
@@ -29,7 +33,11 @@ public struct AxionConfig: Equatable, Sendable {
         traceEnabled: true,
         sharedSeatMode: false,
         maxModelCalls: nil,
-        maxScreenshots: nil
+        maxScreenshots: nil,
+        reviewMemoryInterval: nil,
+        reviewSkillInterval: nil,
+        reviewMinMessages: nil,
+        reviewModel: nil
     )
 
     public init(
@@ -43,7 +51,11 @@ public struct AxionConfig: Equatable, Sendable {
         traceEnabled: Bool = true,
         sharedSeatMode: Bool = false,
         maxModelCalls: Int? = nil,
-        maxScreenshots: Int? = nil
+        maxScreenshots: Int? = nil,
+        reviewMemoryInterval: Int? = nil,
+        reviewSkillInterval: Int? = nil,
+        reviewMinMessages: Int? = nil,
+        reviewModel: String? = nil
     ) {
         self.apiKey = apiKey
         self.provider = provider
@@ -56,12 +68,17 @@ public struct AxionConfig: Equatable, Sendable {
         self.sharedSeatMode = sharedSeatMode
         self.maxModelCalls = maxModelCalls
         self.maxScreenshots = maxScreenshots
+        self.reviewMemoryInterval = reviewMemoryInterval
+        self.reviewSkillInterval = reviewSkillInterval
+        self.reviewMinMessages = reviewMinMessages
+        self.reviewModel = reviewModel
     }
 }
 
 extension AxionConfig: Codable {
     public enum CodingKeys: String, CodingKey {
         case apiKey, provider, baseURL, model, maxSteps, maxBatches, maxReplanRetries, traceEnabled, sharedSeatMode, maxModelCalls, maxScreenshots
+        case reviewMemoryInterval, reviewSkillInterval, reviewMinMessages, reviewModel
     }
 
     public init(from decoder: Decoder) throws {
@@ -77,5 +94,9 @@ extension AxionConfig: Codable {
         sharedSeatMode = try c.decodeIfPresent(Bool.self, forKey: .sharedSeatMode) ?? Self.default.sharedSeatMode
         maxModelCalls = try c.decodeIfPresent(Int.self, forKey: .maxModelCalls) ?? Self.default.maxModelCalls
         maxScreenshots = try c.decodeIfPresent(Int.self, forKey: .maxScreenshots) ?? Self.default.maxScreenshots
+        reviewMemoryInterval = try c.decodeIfPresent(Int.self, forKey: .reviewMemoryInterval)
+        reviewSkillInterval = try c.decodeIfPresent(Int.self, forKey: .reviewSkillInterval)
+        reviewMinMessages = try c.decodeIfPresent(Int.self, forKey: .reviewMinMessages)
+        reviewModel = try c.decodeIfPresent(String.self, forKey: .reviewModel)
     }
 }
