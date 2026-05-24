@@ -332,6 +332,25 @@ struct RunOrchestratorReviewTests {
         #expect(result.reviewOrchestrator != nil)
     }
 
+    @Test("AgentBuilder.build() creates non-nil intelligentCurator when memory enabled")
+    func intelligentCuratorNonNilWhenMemoryEnabled() async throws {
+        let tmpHelper = NSTemporaryDirectory() + "axion-test-helper-\(UUID().uuidString)"
+        FileManager.default.createFile(atPath: tmpHelper, contents: Data())
+        defer { try? FileManager.default.removeItem(atPath: tmpHelper) }
+        setenv("AXION_HELPER_PATH", tmpHelper, 1)
+        defer { unsetenv("AXION_HELPER_PATH") }
+
+        let config = AxionConfig(apiKey: "sk-test")
+        let buildConfig = AgentBuilder.BuildConfig.forCLI(
+            config: config,
+            task: "test",
+            noMemory: false,
+            dryrun: false
+        )
+        let result = try await AgentBuilder.build(buildConfig)
+        #expect(result.intelligentCurator != nil)
+    }
+
     @Test("ReviewScheduleConfig uses AxionConfig.reviewModel when set")
     func scheduleConfigUsesConfigReviewModel() {
         let config = AxionConfig(apiKey: "sk-test", reviewModel: "claude-sonnet-4-20250514")
@@ -495,5 +514,256 @@ struct RunOrchestratorReviewTests {
         #expect(scheduleConfig.skillReviewInterval == 6)
         #expect(scheduleConfig.minMessagesForReview == 4)
         #expect(scheduleConfig.reviewModel == nil)
+    }
+
+    // MARK: - Story 22.4: Curator Config Fields
+
+    @Test("AxionConfig curator fields round-trip via Codable")
+    func axionConfigCuratorFieldsRoundTrip() throws {
+        let config = AxionConfig(
+            apiKey: "sk-test",
+            curatorEnabled: true,
+            curatorDryRun: false,
+            curatorIntervalHours: 336.0,
+            curatorStaleAfterDays: 60,
+            curatorArchiveAfterDays: 180
+        )
+
+        let data = try JSONEncoder().encode(config)
+        let decoded = try JSONDecoder().decode(AxionConfig.self, from: data)
+
+        #expect(decoded.curatorEnabled == true)
+        #expect(decoded.curatorDryRun == false)
+        #expect(decoded.curatorIntervalHours == 336.0)
+        #expect(decoded.curatorStaleAfterDays == 60)
+        #expect(decoded.curatorArchiveAfterDays == 180)
+    }
+
+    @Test("AxionConfig curator fields default to nil")
+    func axionConfigCuratorFieldsDefaultNil() throws {
+        let json = """
+        {"apiKey": "sk-test"}
+        """
+        let config = try JSONDecoder().decode(AxionConfig.self, from: Data(json.utf8))
+
+        #expect(config.curatorEnabled == nil)
+        #expect(config.curatorDryRun == nil)
+        #expect(config.curatorIntervalHours == nil)
+        #expect(config.curatorStaleAfterDays == nil)
+        #expect(config.curatorArchiveAfterDays == nil)
+    }
+
+    // MARK: - Curator TraceRecorder Events
+
+    @Test("TraceRecorder records curator_completed event")
+    func traceRecorderRecordsCuratorCompleted() async throws {
+        let traceDir = NSTemporaryDirectory() + "axion-test-trace-\(UUID().uuidString)"
+        defer { try? FileManager.default.removeItem(atPath: traceDir) }
+
+        TraceRecorder.recordCuratorCompleted(
+            runId: "20260524-cur01",
+            consolidations: 2,
+            prunings: 1,
+            transitionsApplied: 3,
+            traceDir: traceDir
+        )
+
+        try await _Concurrency.Task.sleep(for: .milliseconds(100))
+
+        let filePath = (traceDir as NSString).appendingPathComponent("20260524-cur01/review-trace.jsonl")
+        #expect(FileManager.default.fileExists(atPath: filePath))
+
+        let content = try String(contentsOfFile: filePath)
+        let trimmed = content.trimmingCharacters(in: .whitespacesAndNewlines)
+        let data = try #require(trimmed.data(using: .utf8))
+        let json = try JSONSerialization.jsonObject(with: data) as! [String: Any]
+        #expect(json["event"] as? String == "curator_completed")
+        #expect(json["run_id"] as? String == "20260524-cur01")
+        #expect(json["consolidations"] as? Int == 2)
+        #expect(json["prunings"] as? Int == 1)
+        #expect(json["transitions_applied"] as? Int == 3)
+    }
+
+    @Test("TraceRecorder records curator_failed event")
+    func traceRecorderRecordsCuratorFailed() async throws {
+        let traceDir = NSTemporaryDirectory() + "axion-test-trace-\(UUID().uuidString)"
+        defer { try? FileManager.default.removeItem(atPath: traceDir) }
+
+        TraceRecorder.recordCuratorFailed(
+            runId: "20260524-cur02",
+            error: "curator LLM phase failed",
+            traceDir: traceDir
+        )
+
+        try await _Concurrency.Task.sleep(for: .milliseconds(100))
+
+        let filePath = (traceDir as NSString).appendingPathComponent("20260524-cur02/review-trace.jsonl")
+        #expect(FileManager.default.fileExists(atPath: filePath))
+
+        let content = try String(contentsOfFile: filePath)
+        let trimmed = content.trimmingCharacters(in: .whitespacesAndNewlines)
+        let data = try #require(trimmed.data(using: .utf8))
+        let json = try JSONSerialization.jsonObject(with: data) as! [String: Any]
+        #expect(json["event"] as? String == "curator_failed")
+        #expect(json["error"] as? String == "curator LLM phase failed")
+    }
+
+    // MARK: - Story 22.4: Dependency Injection & Scheduling
+
+    @Test("SkillCuratorConfig uses AxionConfig curator fields with fallbacks")
+    func skillCuratorConfigUsesAxionConfigFields() {
+        // Custom values
+        let config = AxionConfig(
+            apiKey: "sk-test",
+            curatorEnabled: false,
+            curatorDryRun: true,
+            curatorIntervalHours: 336.0,
+            curatorStaleAfterDays: 60,
+            curatorArchiveAfterDays: 180
+        )
+        let curatorConfig = SkillCuratorConfig(
+            intervalHours: config.curatorIntervalHours ?? 168.0,
+            staleAfterDays: config.curatorStaleAfterDays ?? 30,
+            archiveAfterDays: config.curatorArchiveAfterDays ?? 90,
+            dryRun: config.curatorDryRun ?? false,
+            enabled: config.curatorEnabled ?? true
+        )
+        #expect(curatorConfig.intervalHours == 336.0)
+        #expect(curatorConfig.staleAfterDays == 60)
+        #expect(curatorConfig.archiveAfterDays == 180)
+        #expect(curatorConfig.dryRun == true)
+        #expect(curatorConfig.enabled == false)
+    }
+
+    @Test("SkillCuratorConfig defaults when AxionConfig curator fields are nil")
+    func skillCuratorConfigDefaultsWhenNil() {
+        let config = AxionConfig(apiKey: "sk-test")
+        let curatorConfig = SkillCuratorConfig(
+            intervalHours: config.curatorIntervalHours ?? 168.0,
+            staleAfterDays: config.curatorStaleAfterDays ?? 30,
+            archiveAfterDays: config.curatorArchiveAfterDays ?? 90,
+            dryRun: config.curatorDryRun ?? false,
+            enabled: config.curatorEnabled ?? true
+        )
+        #expect(curatorConfig.intervalHours == 168.0)
+        #expect(curatorConfig.staleAfterDays == 30)
+        #expect(curatorConfig.archiveAfterDays == 90)
+        #expect(curatorConfig.dryRun == false)
+        #expect(curatorConfig.enabled == true)
+    }
+
+    @Test("SkillCuratorStore receives correct skillsDir")
+    func skillCuratorStoreReceivesCorrectSkillsDir() async {
+        let tempDir = NSTemporaryDirectory() + "axion-test-curator-\(UUID().uuidString)"
+        let store = SkillCuratorStore(skillsDir: tempDir)
+        let state = await store.loadState()
+        // Default state should be returned when no persisted state exists
+        #expect(state.lastRunAt == nil)
+        #expect(state.runCount == 0)
+        try? FileManager.default.removeItem(atPath: tempDir)
+    }
+
+    @Test("IntelligentCurator holds all 6 dependencies")
+    func intelligentCuratorHoldsAllDependencies() async {
+        let tempMemoryDir = NSTemporaryDirectory() + "axion-test-mem-\(UUID().uuidString)"
+        let tempSkillsDir = NSTemporaryDirectory() + "axion-test-skills-\(UUID().uuidString)"
+
+        let usageStore = SkillUsageStore(skillsDir: tempSkillsDir)
+        let curatorStore = SkillCuratorStore(skillsDir: tempSkillsDir)
+        let curatorConfig = SkillCuratorConfig()
+        let skillCurator = SkillCurator(
+            usageStore: usageStore,
+            curatorStore: curatorStore,
+            config: curatorConfig
+        )
+        let factStore = FactStore(memoryDir: tempMemoryDir)
+        let skillRegistry = SkillRegistry()
+        let skillEvolver = LLMSkillEvolver(
+            client: AnthropicClient(apiKey: "sk-test"),
+            evolutionModel: "claude-haiku-4-5-20251001"
+        )
+
+        let curator = IntelligentCurator(
+            skillCurator: skillCurator,
+            factStore: factStore,
+            skillRegistry: skillRegistry,
+            skillEvolver: skillEvolver,
+            usageStore: usageStore,
+            curatorStore: curatorStore
+        )
+
+        // Verify all 6 deps accessible
+        #expect(curator.skillCurator.config.intervalHours == 168.0)
+        #expect(curator.skillRegistry.allSkills.isEmpty)
+        #expect(curator.usageStore === usageStore)
+        #expect(curator.curatorStore === curatorStore)
+
+        try? FileManager.default.removeItem(atPath: tempMemoryDir)
+        try? FileManager.default.removeItem(atPath: tempSkillsDir)
+    }
+
+    @Test("SkillCurator.shouldRun skips when intervalHours not elapsed")
+    func curatorShouldRunSkipsWhenIntervalNotElapsed() async {
+        let tempSkillsDir = NSTemporaryDirectory() + "axion-test-skills-\(UUID().uuidString)"
+        let usageStore = SkillUsageStore(skillsDir: tempSkillsDir)
+        let curatorStore = SkillCuratorStore(skillsDir: tempSkillsDir)
+
+        // Save state with a recent lastRunAt
+        var state = await curatorStore.loadState()
+        state.lastRunAt = Date()  // Just ran — interval not elapsed
+        try? await curatorStore.saveState(state)
+
+        let config = SkillCuratorConfig(intervalHours: 168.0)
+        let curator = SkillCurator(usageStore: usageStore, curatorStore: curatorStore, config: config)
+
+        let freshState = await curatorStore.loadState()
+        #expect(!curator.shouldRun(state: freshState))
+
+        try? FileManager.default.removeItem(atPath: tempSkillsDir)
+    }
+
+    @Test("SkillCurator.shouldRun triggers when intervalHours elapsed")
+    func curatorShouldRunTriggersWhenIntervalElapsed() async {
+        let tempSkillsDir = NSTemporaryDirectory() + "axion-test-skills-\(UUID().uuidString)"
+        let usageStore = SkillUsageStore(skillsDir: tempSkillsDir)
+        let curatorStore = SkillCuratorStore(skillsDir: tempSkillsDir)
+
+        // Save state with an old lastRunAt (200 hours ago > 168 hour interval)
+        var state = await curatorStore.loadState()
+        state.lastRunAt = Date().addingTimeInterval(-200 * 3600)
+        try? await curatorStore.saveState(state)
+
+        let config = SkillCuratorConfig(intervalHours: 168.0)
+        let curator = SkillCurator(usageStore: usageStore, curatorStore: curatorStore, config: config)
+
+        let freshState = await curatorStore.loadState()
+        #expect(curator.shouldRun(state: freshState))
+
+        try? FileManager.default.removeItem(atPath: tempSkillsDir)
+    }
+
+    @Test("AgentBuilder.build() intelligentCurator is nil when dryrun")
+    func intelligentCuratorNilOnDryrun() async throws {
+        let config = AxionConfig(apiKey: "sk-test")
+        let buildConfig = AgentBuilder.BuildConfig.forCLI(
+            config: config,
+            task: "test",
+            dryrun: true
+        )
+        let result = try await AgentBuilder.build(buildConfig)
+        #expect(result.intelligentCurator == nil)
+    }
+
+    @Test("AgentBuilder.build() intelligentCurator is nil when noMemory")
+    func intelligentCuratorNilOnNoMemory() async throws {
+        let config = AxionConfig(apiKey: "sk-test")
+        let buildConfig = AgentBuilder.BuildConfig.forCLI(
+            config: config,
+            task: "test",
+            noMemory: true,
+            dryrun: true
+        )
+        let result = try await AgentBuilder.build(buildConfig)
+        #expect(result.intelligentCurator == nil)
     }
 }

@@ -44,6 +44,40 @@ enum TraceRecorder {
         appendEvent(event, to: runId, traceDir: traceDir)
     }
 
+    /// Records a successful curator completion event.
+    static func recordCuratorCompleted(
+        runId: String,
+        consolidations: Int,
+        prunings: Int,
+        transitionsApplied: Int,
+        traceDir: String
+    ) {
+        let event: [String: Any] = [
+            "ts": isoFormatter.string(from: Date()),
+            "event": "curator_completed",
+            "run_id": runId,
+            "consolidations": consolidations,
+            "prunings": prunings,
+            "transitions_applied": transitionsApplied,
+        ]
+        appendEvent(event, to: runId, traceDir: traceDir)
+    }
+
+    /// Records a curator failure event.
+    static func recordCuratorFailed(
+        runId: String,
+        error: String,
+        traceDir: String
+    ) {
+        let event: [String: Any] = [
+            "ts": isoFormatter.string(from: Date()),
+            "event": "curator_failed",
+            "run_id": runId,
+            "error": error,
+        ]
+        appendEvent(event, to: runId, traceDir: traceDir)
+    }
+
     // MARK: - Private
 
     private static func appendEvent(_ event: [String: Any], to runId: String, traceDir: String) {

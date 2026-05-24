@@ -282,6 +282,38 @@ enum RunOrchestrator {
             }
         }
 
+        // Background curator trigger — after review trigger, before lock release
+        if let curator = buildResult.intelligentCurator, !runConfig.dryrun, !runConfig.noMemory {
+            let curatorDryRun = curator.skillCurator.config.dryRun
+            let curatorState = await curator.curatorStore.loadState()
+            if curator.skillCurator.shouldRun(state: curatorState) {
+                _Concurrency.Task.detached {
+                    do {
+                        let result = try await curator.execute(parentAgent: agent, dryRun: curatorDryRun)
+                        let report = CuratorRunReport(from: result)
+                        let logger = Logger(subsystem: "com.axion.cli", category: "IntelligentCurator")
+                        logger.info("Curator completed in \(result.durationMs)ms")
+                        logger.debug("Curator report:\n\(report.renderMarkdown())")
+                        TraceRecorder.recordCuratorCompleted(
+                            runId: runId,
+                            consolidations: result.consolidations.count,
+                            prunings: result.prunings.count,
+                            transitionsApplied: result.mechanicalResult.transitionsApplied.count,
+                            traceDir: (ConfigManager.defaultConfigDirectory as NSString).appendingPathComponent("runs")
+                        )
+                    } catch {
+                        let logger = Logger(subsystem: "com.axion.cli", category: "IntelligentCurator")
+                        logger.warning("Curator failed for run \(runId): \(error.localizedDescription)")
+                        TraceRecorder.recordCuratorFailed(
+                            runId: runId,
+                            error: error.localizedDescription,
+                            traceDir: (ConfigManager.defaultConfigDirectory as NSString).appendingPathComponent("runs")
+                        )
+                    }
+                }
+            }
+        }
+
         // Lock release
         if !runConfig.dryrun {
             await runLockService.release()

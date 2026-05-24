@@ -23,6 +23,7 @@ struct AgentBuildResult: Sendable {
     let skillRegisteredCount: Int
     let runCompleteBox: RunCompleteContextBox
     let reviewOrchestrator: ReviewOrchestrator?
+    let intelligentCurator: IntelligentCurator?
 }
 
 /// Single source of truth for constructing an Agent used by both CLI (RunCommand)
@@ -259,8 +260,9 @@ enum AgentBuilder {
         // 10. Create Agent
         let agent = createAgent(options: agentOptions)
 
-        // 11. Create ReviewOrchestrator (when review is enabled and memory is on)
+        // 11. Create ReviewOrchestrator + IntelligentCurator (when memory is on and not dryrun)
         let reviewOrchestrator: ReviewOrchestrator?
+        let intelligentCurator: IntelligentCurator?
         if !buildConfig.noMemory, !buildConfig.dryrun {
             let scheduleConfig = ReviewScheduleConfig(
                 memoryReviewInterval: config.reviewMemoryInterval ?? ReviewScheduleConfig().memoryReviewInterval,
@@ -286,8 +288,32 @@ enum AgentBuilder {
                 skillEvolver: skillEvolver,
                 usageStore: usageStore
             )
+
+            // IntelligentCurator — reuses deps from ReviewOrchestrator block
+            let curatorStore = SkillCuratorStore(skillsDir: skillsDir)
+            let curatorConfig = SkillCuratorConfig(
+                intervalHours: config.curatorIntervalHours ?? 168.0,
+                staleAfterDays: config.curatorStaleAfterDays ?? 30,
+                archiveAfterDays: config.curatorArchiveAfterDays ?? 90,
+                dryRun: config.curatorDryRun ?? false,
+                enabled: config.curatorEnabled ?? true
+            )
+            let skillCurator = SkillCurator(
+                usageStore: usageStore,
+                curatorStore: curatorStore,
+                config: curatorConfig
+            )
+            intelligentCurator = IntelligentCurator(
+                skillCurator: skillCurator,
+                factStore: reviewFactStore,
+                skillRegistry: skillRegistry,
+                skillEvolver: skillEvolver,
+                usageStore: usageStore,
+                curatorStore: curatorStore
+            )
         } else {
             reviewOrchestrator = nil
+            intelligentCurator = nil
         }
 
         return AgentBuildResult(
@@ -299,7 +325,8 @@ enum AgentBuilder {
             skillRegistry: skillRegistry,
             skillRegisteredCount: skillRegisteredCount,
             runCompleteBox: runCompleteBox,
-            reviewOrchestrator: reviewOrchestrator
+            reviewOrchestrator: reviewOrchestrator,
+            intelligentCurator: intelligentCurator
         )
     }
 

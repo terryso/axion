@@ -21,6 +21,11 @@ public struct AxionConfig: Equatable, Sendable {
     public var reviewSkillInterval: Int?
     public var reviewMinMessages: Int?
     public var reviewModel: String?
+    public var curatorEnabled: Bool?
+    public var curatorDryRun: Bool?
+    public var curatorIntervalHours: Double?
+    public var curatorStaleAfterDays: Int?
+    public var curatorArchiveAfterDays: Int?
 
     public static let `default` = AxionConfig(
         apiKey: nil,
@@ -37,7 +42,12 @@ public struct AxionConfig: Equatable, Sendable {
         reviewMemoryInterval: nil,
         reviewSkillInterval: nil,
         reviewMinMessages: nil,
-        reviewModel: nil
+        reviewModel: nil,
+        curatorEnabled: nil,
+        curatorDryRun: nil,
+        curatorIntervalHours: nil,
+        curatorStaleAfterDays: nil,
+        curatorArchiveAfterDays: nil
     )
 
     public init(
@@ -55,7 +65,12 @@ public struct AxionConfig: Equatable, Sendable {
         reviewMemoryInterval: Int? = nil,
         reviewSkillInterval: Int? = nil,
         reviewMinMessages: Int? = nil,
-        reviewModel: String? = nil
+        reviewModel: String? = nil,
+        curatorEnabled: Bool? = nil,
+        curatorDryRun: Bool? = nil,
+        curatorIntervalHours: Double? = nil,
+        curatorStaleAfterDays: Int? = nil,
+        curatorArchiveAfterDays: Int? = nil
     ) {
         self.apiKey = apiKey
         self.provider = provider
@@ -72,6 +87,11 @@ public struct AxionConfig: Equatable, Sendable {
         self.reviewSkillInterval = reviewSkillInterval
         self.reviewMinMessages = reviewMinMessages
         self.reviewModel = reviewModel
+        self.curatorEnabled = curatorEnabled
+        self.curatorDryRun = curatorDryRun
+        self.curatorIntervalHours = curatorIntervalHours
+        self.curatorStaleAfterDays = curatorStaleAfterDays
+        self.curatorArchiveAfterDays = curatorArchiveAfterDays
     }
 }
 
@@ -79,6 +99,7 @@ extension AxionConfig: Codable {
     public enum CodingKeys: String, CodingKey {
         case apiKey, provider, baseURL, model, maxSteps, maxBatches, maxReplanRetries, traceEnabled, sharedSeatMode, maxModelCalls, maxScreenshots
         case reviewMemoryInterval, reviewSkillInterval, reviewMinMessages, reviewModel
+        case curatorEnabled, curatorDryRun, curatorIntervalHours, curatorStaleAfterDays, curatorArchiveAfterDays
     }
 
     public init(from decoder: Decoder) throws {
@@ -98,5 +119,10 @@ extension AxionConfig: Codable {
         reviewSkillInterval = try c.decodeIfPresent(Int.self, forKey: .reviewSkillInterval)
         reviewMinMessages = try c.decodeIfPresent(Int.self, forKey: .reviewMinMessages)
         reviewModel = try c.decodeIfPresent(String.self, forKey: .reviewModel)
+        curatorEnabled = try c.decodeIfPresent(Bool.self, forKey: .curatorEnabled)
+        curatorDryRun = try c.decodeIfPresent(Bool.self, forKey: .curatorDryRun)
+        curatorIntervalHours = try c.decodeIfPresent(Double.self, forKey: .curatorIntervalHours)
+        curatorStaleAfterDays = try c.decodeIfPresent(Int.self, forKey: .curatorStaleAfterDays)
+        curatorArchiveAfterDays = try c.decodeIfPresent(Int.self, forKey: .curatorArchiveAfterDays)
     }
 }
