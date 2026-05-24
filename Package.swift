@@ -229,6 +229,11 @@ let package = Package(
             path: "Examples/MemoryStoreExample"
         ),
         .executableTarget(
+            name: "SelfEvolutionExample",
+            dependencies: ["OpenAgentSDK"],
+            path: "Examples/SelfEvolutionExample"
+        ),
+        .executableTarget(
             name: "AgentMCPServerExample",
             dependencies: ["OpenAgentSDK",
                 .product(name: "MCP", package: "swift-mcp"),

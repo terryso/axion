@@ -33,6 +33,7 @@
 | 14 | [查询中断与 Pause/Resume](#场景-14查询中断与-pauseresume) | `interrupt()`、`pause()`、`resume()` |
 | 15 | [日志、监控与调试](#场景-15日志监控与调试) | `LogLevel`、`LogOutput`、成本追踪 |
 | 16 | [完整生产级 Agent 配置](#场景-16完整生产级-agent-配置) | 综合配置模板 |
+| 17 | [自进化与智能策展](#场景-17自进化与智能策展) | `ExperienceExtractor`、`SkillEvolver`、`ReviewOrchestrator`、`IntelligentCurator` |
 
 ---
 
@@ -1533,4 +1534,283 @@ let filtered = filterTools(tools: allTools, allowed: ["Read", "Glob", "Grep"], d
 
 // 完整工具池组装（基础 + 自定义 + MCP）
 let (pool, mcpManager) = await agent.assembleFullToolPool()
+```
+
+---
+
+## 场景 17：自进化与智能策展
+
+SDK 提供完整的自进化管道：从对话中提取经验 → 进化技能 → 后台审查 → 智能策展技能库。
+
+### 17.1 经验提取 — LLMExperienceExtractor
+
+从对话消息中自动提取结构化经验信号（用户偏好、项目知识、工作模式等）：
+
+```swift
+// 创建提取器（使用轻量模型降低成本）
+let extractor = LLMExperienceExtractor(
+    client: myLLMClient,
+    extractionModel: "claude-haiku-4-5-20251001"
+)
+
+// 从对话消息中提取经验
+let result = try await extractor.extract(
+    from: messages,  // [SDKMessage] — 当前对话历史
+    config: ExtractionConfig(
+        minSignalConfidence: 0.7,
+        maxSignalsPerExtraction: 10,
+        domain: "project-knowledge"  // 可选：限定提取领域
+    )
+)
+
+print("提取了 \(result.signals.count) 条经验信号")
+print("跳过了 \(result.skippedCount) 条低质量信号")
+
+// 将信号保存到 FactStore
+for signal in result.signals {
+    try await factStore.save(signal: signal)
+}
+```
+
+**ExperienceSignal 关键字段：**
+
+| 字段 | 类型 | 说明 |
+|------|------|------|
+| `domain` | `String` | 知识领域（如 `user-preferences`、`project-knowledge`） |
+| `content` | `String` | 经验内容 |
+| `kind` | `MemoryKind` | 类型：`.fact`（事实）、`.preference`（偏好）、`.pattern`（模式） |
+| `confidence` | `Double` | 置信度 0.0~1.0 |
+| `source` | `ExperienceSource` | 来源：`.conversation`、`.tool`、`.review` |
+| `metadata` | `[String: String]?` | 附加元数据 |
+
+### 17.2 技能进化 — LLMSkillEvolver
+
+根据使用信号自动进化技能定义：
+
+```swift
+let evolver = LLMSkillEvolver(
+    client: myLLMClient,
+    evolutionModel: "claude-haiku-4-5-20251001"
+)
+
+let result = try await evolver.evolve(
+    skill: mySkill,
+    signals: signals,  // [SkillSignal] — 使用信号
+    config: SkillEvolutionConfig(
+        minConfidence: 0.6,
+        allowedSignalTypes: [.refinement, .deprecation, .merge]  // 可选：过滤信号类型
+    )
+)
+
+print("应用了 \(result.appliedSignals.count) 条信号")
+print("跳过了 \(result.skippedSignals.count) 条信号")
+print("产生了 \(result.changes.count) 项变更")
+```
+
+**SkillSignalType 类型：**
+
+| 类型 | 说明 |
+|------|------|
+| `.refinement` | 改进技能 Prompt |
+| `.deprecation` | 技能从未使用或总是失败 |
+| `.merge` | 两个技能重叠，建议合并 |
+| `.split` | 技能过于宽泛，建议拆分 |
+| `.newSkill` | 观察到重复模式，应成为新技能 |
+
+### 17.3 后台审查代理 — ReviewOrchestrator
+
+在会话结束后自动 Fork 一个审查 Agent，提取记忆并更新技能：
+
+```swift
+// 配置审查调度
+let scheduleConfig = ReviewScheduleConfig(
+    minMessagesForReview: 10,     // 至少 10 条消息才触发审查
+    memoryReviewInterval: 20,     // 每 20 条消息审查一次记忆
+    skillReviewInterval: 30       // 每 30 条消息审查一次技能
+)
+
+// 创建调度器
+let orchestrator = ReviewOrchestrator(
+    scheduleConfig: scheduleConfig,
+    factStore: factStore,
+    skillRegistry: skillRegistry,
+    skillEvolver: evolver,
+    usageStore: usageStore
+)
+
+// 在 sessionEnd Hook 中触发审查
+await hookRegistry.register(.sessionEnd, definition: HookDefinition(
+    handler: { input in
+        let (doMemory, doSkills) = orchestrator.shouldReview(
+            sessionId: input.sessionId ?? "",
+            messageCount: input.messageCount ?? 0,
+            config: ReviewAgentConfig()
+        )
+
+        if doMemory || doSkills {
+            Task {
+                let _ = await orchestrator.executeReview(
+                    parentAgent: agent,
+                    messages: input.messages ?? [],
+                    config: ReviewAgentConfig(
+                        reviewMemory: doMemory,
+                        reviewSkills: doSkills
+                    )
+                )
+            }
+        }
+        return nil
+    }
+))
+```
+
+**ReviewAgentConfig 关键参数：**
+
+| 参数 | 默认值 | 说明 |
+|------|--------|------|
+| `reviewMemory` | `true` | 是否审查记忆 |
+| `reviewSkills` | `true` | 是否审查技能 |
+| `maxTurns` | `16` | 审查 Agent 最大轮次 |
+| `allowedTools` | 5 个审查工具 | 审查 Agent 可用的工具列表 |
+
+### 17.4 智能策展 — IntelligentCurator
+
+两阶段策展：机械式生命周期转换 + LLM 驱动的合并/归档决策：
+
+```swift
+// 创建策展器
+let curator = IntelligentCurator(
+    skillCurator: SkillCurator(
+        usageStore: usageStore,
+        curatorStore: curatorStore,
+        config: SkillCuratorConfig(
+            staleAfterDays: 30,       // 30 天未用标记为 stale
+            archiveAfterDays: 90      // 90 天归档为 retired
+        )
+    ),
+    factStore: factStore,
+    skillRegistry: skillRegistry,
+    skillEvolver: evolver,
+    usageStore: usageStore,
+    curatorStore: curatorStore
+)
+
+// 执行策展
+let result = try await curator.execute(parentAgent: agent)
+
+// 生成报告
+let report = CuratorRunReport(from: result)
+
+// 人类可读 Markdown 报告
+print(report.renderMarkdown())
+// # Curator run — 2026-05-24T10:00:00Z
+// Duration: 3s · Skills: 15 → 13 (-2)
+// ## Auto-transitions
+// - transitions applied: 3
+// - marked stale: 2
+// - archived: 1
+// ## LLM consolidation pass
+// - consolidated into umbrellas: 1
+// - archived for staleness: 1
+// ### Consolidated into umbrella skills (1)
+// - `debug-login-issue` → merged into `debugging-workflow` — login debugging is a subset
+
+// 机器可读 YAML 报告
+print(report.renderYAML())
+// consolidations:
+//   - from: debug-login-issue
+//     into: debugging-workflow
+//     reason: "login debugging is a subset of general debugging"
+// prunings:
+//   - name: temp-analysis-2026
+//     reason: "one-off analysis, no reusable pattern"
+```
+
+### 17.5 Dry-Run 模式
+
+预览策展会做什么，不实际执行：
+
+```swift
+let result = try await curator.execute(parentAgent: agent, dryRun: true)
+let report = CuratorRunReport(from: result)
+
+// Markdown 报告会带 [DRY RUN] 前缀
+print(report.renderMarkdown())
+// [DRY RUN] # Curator run — ...
+// - would merge: ...
+// - would archive: ...
+
+// YAML 报告会带 dry_run: true
+print(report.renderYAML())
+// dry_run: true
+// consolidations: ...
+```
+
+### 17.6 自进化组件架构
+
+```
+会话结束 → Hook 触发
+    │
+    ├── ReviewOrchestrator.shouldReview()
+    │       ├── LLMExperienceExtractor — 从对话提取经验信号
+    │       └── LLMSkillEvolver — 根据信号进化技能
+    │
+    └── IntelligentCurator.execute()
+            ├── Phase 1: 机械式生命周期转换（SkillCurator）
+            │     active → deprecated → retired
+            └── Phase 2: LLM 驱动的智能决策
+                  ├── 合并相似技能（consolidation）
+                  ├── 归档废弃技能（pruning）
+                  └── CuratorRunReport — 生成 Markdown/YAML 报告
+```
+
+### 17.7 集成到生产 Agent
+
+```swift
+// 1. 创建共享存储
+let factStore = FactStore()
+let usageStore = SkillUsageStore(skillsDir: "/project/.skills")
+let curatorStore = SkillCuratorStore(skillsDir: "/project/.skills")
+let skillRegistry = SkillRegistry()
+
+// 2. 创建进化组件
+let extractor = LLMExperienceExtractor(client: myLLMClient)
+let evolver = LLMSkillEvolver(client: myLLMClient)
+let curator = IntelligentCurator(
+    skillCurator: SkillCurator(usageStore: usageStore, curatorStore: curatorStore),
+    factStore: factStore,
+    skillRegistry: skillRegistry,
+    skillEvolver: evolver,
+    usageStore: usageStore,
+    curatorStore: curatorStore
+)
+
+// 3. 配置自动审查
+let hooks = HookRegistry()
+await hooks.register(.sessionEnd, definition: HookDefinition(
+    handler: { input in
+        Task {
+            // 自动策展
+            let result = try? await curator.execute(parentAgent: agent)
+            if let result, let report = result.map({ CuratorRunReport(from: $0) }) {
+                // 保存策展报告
+                try? report.renderYAML().write(
+                    toFile: "/project/logs/curator-\(Date().timeIntervalSince1970).yaml",
+                    atomically: true, encoding: .utf8
+                )
+            }
+        }
+        return nil
+    }
+))
+
+// 4. 创建带自进化的 Agent
+let agent = createAgent(options: AgentOptions(
+    apiKey: "sk-...",
+    model: "claude-sonnet-4-6",
+    hookRegistry: hooks,
+    skillRegistry: skillRegistry,
+    memoryStore: factStore,
+    tools: getAllBaseTools(tier: .core) + [createSkillTool(registry: skillRegistry)]
+))
 ```
