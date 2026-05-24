@@ -4743,9 +4743,13 @@ Epic 21–23 构建了自进化的"砖块"（类型、协议、工具）。Epic 
 
 ## Epic 25: 智能策展 — LLM 驱动的技能库维护
 
-> **状态：规划中**
+> **状态：已完成**
 > **优先级：P1**
 > **依赖：** Epic 24（ReviewAgentFactory + ReviewTools）、Epic 22（SkillCurator + SkillUsageTracker + SkillRegistry）
+
+**覆盖的 FR（新增）：** FR79
+
+**新增 FR79:** 开发者可以通过 IntelligentCurator 执行两阶段智能策展（机械式生命周期转换 + LLM 驱动的技能合并/归档），策展使用 CuratorPromptBuilder 构建 UMBRELLA-BUILDING 目标 prompt，CuratorArchiveTool 安全归档技能并记录合并关系，CuratorRunReport 生成人类可读 Markdown 和机器可读 YAML 报告。
 
 ### 背景与动机
 

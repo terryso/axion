@@ -410,11 +410,12 @@ open-agent-sdk-swift/
 │       │   │   ├── TodoWriteTool.swift
 │       │   │   ├── ListMcpResourcesTool.swift
 │       │   │   └── ReadMcpResourceTool.swift
-│       │   ├── Review/                  # [Epic 24] 审查专用工具
+│       │   ├── Review/                  # [Epic 24] 审查专用工具 + [Epic 25] 策展归档工具
 │       │   │   ├── ReviewMemoryTool.swift
 │       │   │   ├── ReviewSkillUpdateTool.swift
 │       │   │   ├── ReviewSkillCreateTool.swift
 │       │   │   ├── ReviewSkillFileTool.swift
+│       │   │   ├── CuratorArchiveTool.swift  # [Epic 25] 策展专用归档工具
 │       │   │   └── ReviewTools.swift    # createReviewTools() 便利函数
 │       │   └── MCP/
 │       │       ├── MCPClientManager.swift    # Actor: 管理 MCP 服务器连接
@@ -490,7 +491,10 @@ open-agent-sdk-swift/
 │           ├── PromptEvolverPlugin.swift # [Epic 23] Prompt 进化插件
 │           ├── ReviewAgentFactory.swift # [Epic 24] 审查 Agent 工厂
 │           ├── ReviewPromptBuilder.swift # [Epic 24] 审查 Prompt 构建器
-│           └── ReviewOrchestrator.swift # [Epic 24] 审查调度 + 间隔控制
+│           ├── ReviewOrchestrator.swift # [Epic 24] 审查调度 + 间隔控制
+│           ├── CuratorPromptBuilder.swift # [Epic 25] 策展 Prompt 构建器
+│           ├── IntelligentCurator.swift   # [Epic 25] LLM 驱动的智能策展执行器
+│           └── CuratorRunReport.swift     # [Epic 25] 策展报告与结构化输出
 │
 ├── Tests/
 │   └── OpenAgentSDKTests/
@@ -565,6 +569,7 @@ _将每个 FR 映射到实现它的文件。_
 | FR69-FR71 | `Hooks/PluginRegistry.swift`, `Utils/SessionSearchEngine.swift`, `Utils/PromptEvolverEngine.swift` |
 | FR72-FR77 | `Types/ExperienceTypes.swift`, `Types/SkillEvolutionTypes.swift`, `Types/SessionSearchTypes.swift`, `Types/PluginEvolutionTypes.swift`, `Types/PromptEvolutionTypes.swift` |
 | FR78 | `Utils/ReviewAgentFactory.swift`, `Utils/ReviewOrchestrator.swift`, `Tools/Review/*.swift` |
+| FR79 | `Utils/CuratorPromptBuilder.swift`, `Utils/IntelligentCurator.swift`, `Utils/CuratorRunReport.swift`, `Tools/Review/CuratorArchiveTool.swift` |
 
 ### 架构边界
 **模块边界：**
@@ -577,7 +582,7 @@ _将每个 FR 映射到实现它的文件。_
 - `MCP/` -> 依赖 `Types/`、外部 mcp-swift-sdk
 - `HTTP/` -> 依赖 `Types/`、`Core/`、`API/`
 - `Skills/` -> 依赖 `Types/`
-- `Utils/` -> 可以依赖 `Types/`、`Stores/`、`API/`、`Tools/`、`Core/Agent`（扩展）。Epic 21-24 的进化组件（LLMExperienceExtractor、LLMSkillEvolver、ReviewAgentFactory、ReviewOrchestrator 等）都位于 `Utils/`
+- `Utils/` -> 可以依赖 `Types/`、`Stores/`、`API/`、`Tools/`、`Core/Agent`（扩展）。Epic 21-25 的进化组件（LLMExperienceExtractor、LLMSkillEvolver、ReviewAgentFactory、ReviewOrchestrator、IntelligentCurator 等）都位于 `Utils/`
 
 **关键规则：** `Core/` 是唯一的编排器。`Tools/`、`Stores/` 和 `Hooks/` 独立于核心循环 — 它们只定义行为，从不驱动它。`Utils/` 可以扩展 `Core/Agent`（例如 `ReviewAgentFactory`），但不能替代 `Core/` 的编排职责。
 

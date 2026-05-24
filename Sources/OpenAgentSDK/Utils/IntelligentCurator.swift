@@ -285,6 +285,12 @@ public struct IntelligentCurator: Sendable {
             prunings = parsePruningEntries(afterPrunings)
         }
 
+        if consolidations.isEmpty && prunings.isEmpty {
+            Logger.shared.debug("IntelligentCurator", "yaml_parse_empty_result", data: [
+                "yamlContentLength": yamlContent.count.description,
+            ])
+        }
+
         return (consolidations, prunings)
     }
 
