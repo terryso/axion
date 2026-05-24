@@ -27,6 +27,7 @@ Axion is a Swift-based AI agent for macOS that takes natural language task descr
 - **MCP Server Mode** — Act as a desktop plugin for external agents (Claude Code, Cursor, etc.), while also supporting CLI, file, and web tasks standalone
 - **User Takeover** — Pause and resume when automation gets stuck
 - **Completion Notifications** — macOS desktop notification with AI-generated summary when tasks finish
+- **Self-Evolution** — Background review agent and intelligent curator automatically extract memory, evolve skills, and manage skill lifecycle after each run
 
 ## Architecture
 
@@ -151,6 +152,9 @@ axion run --fast "Open Calculator"
 
 # Limit maximum steps
 axion run --max-steps 10 "Create a new note in Notes"
+
+# Disable post-run review and curator
+axion run --no-review "Open Calculator"
 ```
 
 ## Core Features
@@ -199,6 +203,44 @@ axion memory clear --app com.apple.calculator
 # Disable memory for a single run
 axion run --no-memory "Open Calculator"
 ```
+
+### Self-Evolution (Review & Curator)
+
+After each run, Axion automatically triggers a **background review** that analyzes the conversation, extracts memory, and evolves skills — no user action required.
+
+**Review Agent** — Automatically runs after `axion run` completes:
+- Checks if review is needed based on message count and scheduling interval
+- Forks a lightweight review agent (Haiku model) that inspects the conversation
+- Extracts new memory facts and evolves skill definitions
+- Runs in a detached task — does not block the terminal
+
+```bash
+# Review is enabled by default. Disable for a single run:
+axion run --no-review "Open Calculator"
+
+# Override the model used for review:
+axion run --review-model claude-haiku-4-5-20251001 "Open Calculator"
+```
+
+**Intelligent Curator** — Periodically manages skill lifecycle:
+- **Mechanical curation** — archives stale skills (>30 days unused), transitions skill states
+- **LLM curation** — consolidates overlapping skills, prunes redundant ones
+- Runs automatically when the configured interval elapses
+
+```bash
+# View curator status and next run time
+axion curator status
+
+# Force-run curator immediately
+axion curator run
+
+# Dry-run (see what would change without modifying)
+axion curator run --dry-run
+```
+
+**Skill usage tracking** — Every skill invocation via the `Skill` tool is automatically counted, providing data for curator decisions.
+
+Review and curator results appear as trace events in `~/.axion/runs/<run-id>/review-trace.jsonl`.
 
 ### HTTP API Server
 
@@ -414,7 +456,15 @@ Config file located at `~/.config/axion/config.json`:
   "apiKey": "sk-...",
   "model": "claude-sonnet-4-20250514",
   "maxSteps": 20,
-  "maxModelCalls": 50
+  "maxModelCalls": 50,
+  "reviewModel": "claude-haiku-4-5-20251001",
+  "reviewMemoryInterval": 10,
+  "reviewSkillInterval": 15,
+  "reviewMinMessages": 4,
+  "curatorEnabled": true,
+  "curatorIntervalHours": 168,
+  "curatorStaleAfterDays": 30,
+  "curatorArchiveAfterDays": 90
 }
 ```
 
@@ -440,7 +490,7 @@ swift test --filter AxionHelperIntegrationTests
 ```
 Sources/
 ├── AxionCLI/              # CLI entry point and commands
-│   ├── Commands/          # run, setup, doctor, server, mcp, record, skill, daemon subcommands
+│   ├── Commands/          # run, setup, doctor, server, mcp, record, skill, daemon, curator subcommands
 │   ├── Config/            # Configuration management
 │   ├── Checks/            # Environment and permission checks
 │   ├── Constants/         # CLI-specific constants
@@ -451,6 +501,7 @@ Sources/
 │   ├── Planner/           # PromptBuilder
 │   ├── Skills/            # SkillRegistry, AxionBuiltInSkills
 │   ├── Helper/            # HelperProcessManager (stdio lifecycle)
+│   ├── Trace/              # TraceRecorder (review/curator trace events)
 │   └── Services/          # RunOrchestrator, AgentBuilder, shared services
 ├── AxionCore/             # Shared core layer
 │   ├── Models/            # RunConfig, AxionConfig, AppProfile

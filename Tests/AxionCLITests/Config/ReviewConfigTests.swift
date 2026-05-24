@@ -62,8 +62,8 @@ struct ReviewConfigTests: ~Copyable {
 
     @Test("CLIOverrides has reviewModel field")
     func cliOverridesHasReviewModel() {
-        let overrides = CLIOverrides(reviewModel: "claude-haiku-4-5-20251001")
-        #expect(overrides.reviewModel == "claude-haiku-4-5-20251001")
+        let overrides = CLIOverrides(reviewModel: AxionConfig.defaultReviewModel)
+        #expect(overrides.reviewModel == AxionConfig.defaultReviewModel)
     }
 
     @Test("CLIOverrides reviewModel defaults to nil")
@@ -78,14 +78,14 @@ struct ReviewConfigTests: ~Copyable {
         {"apiKey": "sk-test"}
         """)
 
-        let cliOverrides = CLIOverrides(reviewModel: "claude-haiku-4-5-20251001")
+        let cliOverrides = CLIOverrides(reviewModel: AxionConfig.defaultReviewModel)
         let config = try await ConfigManager.loadConfig(
             configDirectory: tempDir,
             cliOverrides: cliOverrides,
             environment: [:]
         )
 
-        #expect(config.reviewModel == "claude-haiku-4-5-20251001")
+        #expect(config.reviewModel == AxionConfig.defaultReviewModel)
     }
 
     @Test("--review-model CLI override takes precedence over config.json")
@@ -94,14 +94,14 @@ struct ReviewConfigTests: ~Copyable {
         {"apiKey": "sk-test", "reviewModel": "claude-sonnet-4-20250514"}
         """)
 
-        let cliOverrides = CLIOverrides(reviewModel: "claude-haiku-4-5-20251001")
+        let cliOverrides = CLIOverrides(reviewModel: AxionConfig.defaultReviewModel)
         let config = try await ConfigManager.loadConfig(
             configDirectory: tempDir,
             cliOverrides: cliOverrides,
             environment: [:]
         )
 
-        #expect(config.reviewModel == "claude-haiku-4-5-20251001")
+        #expect(config.reviewModel == AxionConfig.defaultReviewModel)
     }
 
     // MARK: - 6.3: config.json review fields decode correctly
@@ -114,7 +114,7 @@ struct ReviewConfigTests: ~Copyable {
           "reviewMemoryInterval": 8,
           "reviewSkillInterval": 10,
           "reviewMinMessages": 6,
-          "reviewModel": "claude-haiku-4-5-20251001"
+          "reviewModel": "\(AxionConfig.defaultReviewModel)"
         }
         """)
 
@@ -127,7 +127,7 @@ struct ReviewConfigTests: ~Copyable {
         #expect(config.reviewMemoryInterval == 8)
         #expect(config.reviewSkillInterval == 10)
         #expect(config.reviewMinMessages == 6)
-        #expect(config.reviewModel == "claude-haiku-4-5-20251001")
+        #expect(config.reviewModel == AxionConfig.defaultReviewModel)
     }
 
     @Test("config.json curator fields decode correctly")
@@ -230,7 +230,7 @@ struct ReviewConfigTests: ~Copyable {
     @Test("doctor shows review model in output")
     func doctorShowsReviewModelInOutput() throws {
         let configJSON = """
-        {"apiKey": "sk-ant-test-key-1234567890", "reviewModel": "claude-haiku-4-5-20251001"}
+        {"apiKey": "sk-ant-test-key-1234567890", "reviewModel": "\(AxionConfig.defaultReviewModel)"}
         """
         try configJSON.write(toFile: configFilePath, atomically: true, encoding: .utf8)
 
@@ -238,6 +238,6 @@ struct ReviewConfigTests: ~Copyable {
         let _ = DoctorCommand.runDoctor(io: mock, configDirectory: tempDir, isServerRunningOverride: { false })
 
         let output = mock.capturedOutput.joined(separator: "\n")
-        #expect(output.contains("claude-haiku-4-5-20251001"), "应显示配置的 review model")
+        #expect(output.contains(AxionConfig.defaultReviewModel), "应显示配置的 review model")
     }
 }

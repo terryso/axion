@@ -147,4 +147,83 @@ struct ReviewSummaryTests {
         let run = await coordinator.getRun(runId: "nonexistent")
         #expect(run == nil)
     }
+
+    // MARK: - Legacy camelCase backward compatibility
+
+    @Test("TrackedRun decodes legacy camelCase JSON format")
+    func trackedRunDecodesLegacyCamelCase() throws {
+        let json = """
+        {
+            "runId": "20260524-legacy01",
+            "task": "open calculator",
+            "status": "completed",
+            "submittedAt": "2026-05-24T10:00:00+08:00",
+            "completedAt": "2026-05-24T10:00:05+08:00",
+            "totalSteps": 3,
+            "durationMs": 4500,
+            "replanCount": 0,
+            "steps": [],
+            "live": true,
+            "allowForeground": false,
+            "schemaVersion": 1
+        }
+        """.data(using: .utf8)!
+
+        let decoded = try JSONDecoder().decode(TrackedRun.self, from: json)
+        #expect(decoded.runId == "20260524-legacy01")
+        #expect(decoded.task == "open calculator")
+        #expect(decoded.status == .completed)
+        #expect(decoded.submittedAt == "2026-05-24T10:00:00+08:00")
+        #expect(decoded.completedAt == "2026-05-24T10:00:05+08:00")
+        #expect(decoded.totalSteps == 3)
+        #expect(decoded.durationMs == 4500)
+        #expect(decoded.reviewSummary == nil)
+    }
+
+    @Test("TrackedRun decodes legacy camelCase with costTelemetry and exitCode")
+    func trackedRunDecodesLegacyCamelCaseFull() throws {
+        let json = """
+        {
+            "runId": "legacy-full",
+            "task": "test",
+            "status": "failed",
+            "submittedAt": "2026-05-24T10:00:00+08:00",
+            "exitCode": 1,
+            "error": "something went wrong",
+            "durationMs": 100
+        }
+        """.data(using: .utf8)!
+
+        let decoded = try JSONDecoder().decode(TrackedRun.self, from: json)
+        #expect(decoded.runId == "legacy-full")
+        #expect(decoded.status == .failed)
+        #expect(decoded.exitCode == 1)
+        #expect(decoded.error == "something went wrong")
+        #expect(decoded.durationMs == 100)
+    }
+
+    @Test("TrackedRun round-trips from new snake_case format")
+    func trackedRunRoundTripSnakeCase() throws {
+        let original = TrackedRun(
+            runId: "snake-test",
+            task: "test",
+            status: .completed,
+            submittedAt: "2026-05-24T10:00:00+08:00",
+            totalSteps: 5,
+            durationMs: 3000,
+            exitCode: 0,
+            reviewSummary: "Review: 保存了 1 条记忆"
+        )
+
+        let data = try JSONEncoder().encode(original)
+        // Verify it encodes as snake_case
+        let json = try JSONSerialization.jsonObject(with: data) as! [String: Any]
+        #expect(json["run_id"] != nil)
+        #expect(json["submitted_at"] != nil)
+        #expect(json["total_steps"] != nil)
+
+        // Verify it decodes back correctly
+        let decoded = try JSONDecoder().decode(TrackedRun.self, from: data)
+        #expect(decoded == original)
+    }
 }

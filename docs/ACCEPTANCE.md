@@ -80,7 +80,7 @@
 
 ## 验收总结
 
-**19/20 通过，1 项跳过（无预录制技能）。**
+**23/24 通过，1 项跳过（无预录制技能）。**
 
 | 组别 | 通过 | 总数 | 说明 |
 |------|------|------|------|
@@ -91,5 +91,19 @@
 | Skill 系统 | 1 | 2 | 列表正常，执行跳过（需预录制） |
 | Server 模式 | 3 | 3 | health/capabilities/runs/SSE 正常 |
 | MCP Server | 1 | 1 | tools/list 返回完整工具集 |
+| Self-Evolution | 4 | 4 | --no-review/curator status/doctor/help 正常 |
+
+## 8. Self-Evolution（Review & Curator）（4 项）
+
+验证 Phase 8 自进化功能的回归。
+
+| # | 命令 | 预期行为 | 实际结果 |
+|---|------|---------|---------|
+| 8.1 | `swift run AxionCLI run "1+1等于几" --no-review` | 正常完成，不触发 review | ✅ 通过。正常完成，无 review 输出 |
+| 8.2 | `swift run AxionCLI doctor` | 包含 Review/Curator 检查项 | ✅ 通过。显示 review 间隔、curator 启用状态、review 模型 |
+| 8.3 | `swift run AxionCLI curator status` | 显示策展配置和上次运行时间 | ✅ 通过。显示启用/间隔/上次策展/下次策展/运行次数 |
+| 8.4 | `swift run AxionCLI run --help` | 包含 `--no-review` 和 `--review-model` 选项 | ✅ 通过。两个选项正确显示 |
+
+---
 
 **前置条件：** API Key 已配置（`axion doctor` 通过），macOS AX 权限已授予。

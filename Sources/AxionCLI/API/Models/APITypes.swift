@@ -214,27 +214,64 @@ struct TrackedRun: Codable, Equatable, Sendable {
         case reviewSummary = "review_summary"
     }
 
+    // Legacy camelCase keys for backward-compatible decoding of pre-23.2 persisted data.
+    private enum LegacyKeys: String, CodingKey {
+        case runId, task, status, submittedAt, completedAt, totalSteps
+        case durationMs, replanCount, steps, costTelemetry, live
+        case allowForeground, criteria, result, intervention, exitCode
+        case error, schemaVersion
+    }
+
     init(from decoder: Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
-        runId = try container.decode(String.self, forKey: .runId)
-        task = try container.decode(String.self, forKey: .task)
-        status = try container.decode(APIRunStatus.self, forKey: .status)
-        submittedAt = try container.decode(String.self, forKey: .submittedAt)
-        completedAt = try container.decodeIfPresent(String.self, forKey: .completedAt)
-        totalSteps = try container.decodeIfPresent(Int.self, forKey: .totalSteps) ?? 0
-        durationMs = try container.decodeIfPresent(Int.self, forKey: .durationMs)
-        replanCount = try container.decodeIfPresent(Int.self, forKey: .replanCount) ?? 0
-        steps = try container.decodeIfPresent([StepSummary].self, forKey: .steps) ?? []
-        costTelemetry = try container.decodeIfPresent(CostTelemetry.self, forKey: .costTelemetry)
-        live = try container.decodeIfPresent(Bool.self, forKey: .live) ?? true
-        allowForeground = try container.decodeIfPresent(Bool.self, forKey: .allowForeground) ?? false
-        criteria = try container.decodeIfPresent(String.self, forKey: .criteria)
-        result = try container.decodeIfPresent(ApiTaskResult.self, forKey: .result)
-        intervention = try container.decodeIfPresent(InterventionData.self, forKey: .intervention)
-        exitCode = try container.decodeIfPresent(Int.self, forKey: .exitCode)
-        error = try container.decodeIfPresent(String.self, forKey: .error)
-        schemaVersion = try container.decodeIfPresent(Int.self, forKey: .schemaVersion) ?? 1
-        reviewSummary = try container.decodeIfPresent(String.self, forKey: .reviewSummary)
+        let legacy = try decoder.container(keyedBy: LegacyKeys.self)
+
+        // Required fields: try snake_case first, fall back to camelCase
+        runId = (try? container.decode(String.self, forKey: .runId))
+            ?? (try? legacy.decode(String.self, forKey: .runId)) ?? ""
+        task = (try? container.decode(String.self, forKey: .task))
+            ?? (try? legacy.decode(String.self, forKey: .task)) ?? ""
+        status = (try? container.decode(APIRunStatus.self, forKey: .status))
+            ?? (try? legacy.decode(APIRunStatus.self, forKey: .status)) ?? .failed
+        submittedAt = (try? container.decode(String.self, forKey: .submittedAt))
+            ?? (try? legacy.decode(String.self, forKey: .submittedAt)) ?? ""
+
+        // Optional fields
+        completedAt = (try? container.decodeIfPresent(String.self, forKey: .completedAt))
+            ?? (try? legacy.decodeIfPresent(String.self, forKey: .completedAt))
+        totalSteps = (try? container.decodeIfPresent(Int.self, forKey: .totalSteps))
+            ?? (try? legacy.decodeIfPresent(Int.self, forKey: .totalSteps))
+            ?? 0
+        durationMs = (try? container.decodeIfPresent(Int.self, forKey: .durationMs))
+            ?? (try? legacy.decodeIfPresent(Int.self, forKey: .durationMs))
+        replanCount = (try? container.decodeIfPresent(Int.self, forKey: .replanCount))
+            ?? (try? legacy.decodeIfPresent(Int.self, forKey: .replanCount))
+            ?? 0
+        steps = (try? container.decodeIfPresent([StepSummary].self, forKey: .steps))
+            ?? (try? legacy.decodeIfPresent([StepSummary].self, forKey: .steps))
+            ?? []
+        costTelemetry = (try? container.decodeIfPresent(CostTelemetry.self, forKey: .costTelemetry))
+            ?? (try? legacy.decodeIfPresent(CostTelemetry.self, forKey: .costTelemetry))
+        live = (try? container.decodeIfPresent(Bool.self, forKey: .live))
+            ?? (try? legacy.decodeIfPresent(Bool.self, forKey: .live))
+            ?? true
+        allowForeground = (try? container.decodeIfPresent(Bool.self, forKey: .allowForeground))
+            ?? (try? legacy.decodeIfPresent(Bool.self, forKey: .allowForeground))
+            ?? false
+        criteria = (try? container.decodeIfPresent(String.self, forKey: .criteria))
+            ?? (try? legacy.decodeIfPresent(String.self, forKey: .criteria))
+        result = (try? container.decodeIfPresent(ApiTaskResult.self, forKey: .result))
+            ?? (try? legacy.decodeIfPresent(ApiTaskResult.self, forKey: .result))
+        intervention = (try? container.decodeIfPresent(InterventionData.self, forKey: .intervention))
+            ?? (try? legacy.decodeIfPresent(InterventionData.self, forKey: .intervention))
+        exitCode = (try? container.decodeIfPresent(Int.self, forKey: .exitCode))
+            ?? (try? legacy.decodeIfPresent(Int.self, forKey: .exitCode))
+        error = (try? container.decodeIfPresent(String.self, forKey: .error))
+            ?? (try? legacy.decodeIfPresent(String.self, forKey: .error))
+        schemaVersion = (try? container.decodeIfPresent(Int.self, forKey: .schemaVersion))
+            ?? (try? legacy.decodeIfPresent(Int.self, forKey: .schemaVersion))
+            ?? 1
+        reviewSummary = (try? container.decodeIfPresent(String.self, forKey: .reviewSummary))
     }
 
     init(

@@ -42,7 +42,7 @@ struct CuratorRunCommand: AsyncParsableCommand {
         }
 
         let evolverClient = AnthropicClient(apiKey: apiKey, baseURL: config.baseURL)
-        let evolutionModel = config.reviewModel ?? "claude-haiku-4-5-20251001"
+        let evolutionModel = config.reviewModel ?? AxionConfig.defaultReviewModel
         let skillEvolver = LLMSkillEvolver(client: evolverClient, evolutionModel: evolutionModel)
 
         let curatorConfig = SkillCuratorConfig(
@@ -79,7 +79,9 @@ struct CuratorRunCommand: AsyncParsableCommand {
         // Force-run: reset lastRunAt so Phase 1 (mechanical curation) also runs
         // regardless of interval. Without this, skillCurator.run() would skip
         // if the configured interval hasn't elapsed since the last automatic run.
-        var forceState = await curatorStore.loadState()
+        // Save original state so we can rollback on failure.
+        let originalState = await curatorStore.loadState()
+        var forceState = originalState
         forceState.lastRunAt = nil
         try await curatorStore.saveState(forceState)
 
@@ -88,6 +90,7 @@ struct CuratorRunCommand: AsyncParsableCommand {
         do {
             result = try await curator.execute(parentAgent: agent, dryRun: dryRun)
         } catch {
+            try? await curatorStore.saveState(originalState)
             try? await agent.close()
             throw error
         }
@@ -144,7 +147,8 @@ struct CuratorStatusCommand: AsyncParsableCommand {
         let reviewModel = config.reviewModel ?? "继承 parent agent"
         fputs("  Review 模型: \(reviewModel)\n", stdout)
         fputs("  干跑模式: \(config.curatorDryRun ?? false ? "是" : "否")\n", stdout)
-        fputs("  最小空闲时间: 2 小时\n", stdout)
+        let minIdleHours = 2.0  // SDK default for SkillCuratorConfig.minIdleHours
+        fputs("  最小空闲时间: \(Int(minIdleHours)) 小时\n", stdout)
         fputs("  过期天数: \(config.curatorStaleAfterDays ?? 30)\n", stdout)
         fputs("  归档天数: \(config.curatorArchiveAfterDays ?? 90)\n", stdout)
     }

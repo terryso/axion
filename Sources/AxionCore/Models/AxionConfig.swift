@@ -6,6 +6,8 @@ public enum LLMProvider: String, Sendable, Equatable, Codable {
 }
 
 public struct AxionConfig: Equatable, Sendable {
+
+    public static let defaultReviewModel = "claude-haiku-4-5-20251001"
     public var apiKey: String?
     public var provider: LLMProvider
     public var baseURL: String?

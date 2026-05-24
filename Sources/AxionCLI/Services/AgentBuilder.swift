@@ -282,7 +282,7 @@ enum AgentBuilder {
             )
             let skillEvolver = LLMSkillEvolver(
                 client: evolverClient,
-                evolutionModel: config.reviewModel ?? "claude-haiku-4-5-20251001"
+                evolutionModel: config.reviewModel ?? AxionConfig.defaultReviewModel
             )
             reviewOrchestrator = ReviewOrchestrator(
                 scheduleConfig: scheduleConfig,
