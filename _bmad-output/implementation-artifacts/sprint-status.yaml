@@ -1,5 +1,6 @@
 # generated: 2026-05-08
 # last_updated: 2026-05-24
+# story-23.2-created: 2026-05-24
 # epic-23-started: 2026-05-24
 # story-23.1-created: 2026-05-24
 # retro-epic-21: 2026-05-21
@@ -321,5 +322,5 @@ development_status:
   # Epic 23: Review 配置与 Axion 专属适配
   epic-23: in-progress
   23-1-review-config-cli-flags: done
-  23-2-review-result-logging-notification: backlog
+  23-2-review-result-logging-notification: done
   epic-23-retrospective: optional

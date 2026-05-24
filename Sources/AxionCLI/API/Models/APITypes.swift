@@ -30,6 +30,7 @@ struct StandardTaskOutput: Codable, Equatable, Sendable, ResponseEncodable {
     let endedAt: String?
     let steps: [StepSummary]
     let costTelemetry: CostTelemetry?
+    let reviewSummary: String?
 
     init(
         schemaVersion: Int = 1,
@@ -47,7 +48,8 @@ struct StandardTaskOutput: Codable, Equatable, Sendable, ResponseEncodable {
         startedAt: String,
         endedAt: String? = nil,
         steps: [StepSummary] = [],
-        costTelemetry: CostTelemetry? = nil
+        costTelemetry: CostTelemetry? = nil,
+        reviewSummary: String? = nil
     ) {
         self.schemaVersion = schemaVersion
         self.runId = runId
@@ -65,6 +67,7 @@ struct StandardTaskOutput: Codable, Equatable, Sendable, ResponseEncodable {
         self.endedAt = endedAt
         self.steps = steps
         self.costTelemetry = costTelemetry
+        self.reviewSummary = reviewSummary
     }
 
     init(from decoder: Decoder) throws {
@@ -85,6 +88,7 @@ struct StandardTaskOutput: Codable, Equatable, Sendable, ResponseEncodable {
         endedAt = try container.decodeIfPresent(String.self, forKey: .endedAt)
         steps = try container.decodeIfPresent([StepSummary].self, forKey: .steps) ?? []
         costTelemetry = try container.decodeIfPresent(CostTelemetry.self, forKey: .costTelemetry)
+        reviewSummary = try container.decodeIfPresent(String.self, forKey: .reviewSummary)
     }
 
     enum CodingKeys: String, CodingKey {
@@ -104,6 +108,7 @@ struct StandardTaskOutput: Codable, Equatable, Sendable, ResponseEncodable {
         case endedAt = "ended_at"
         case steps
         case costTelemetry = "cost_telemetry"
+        case reviewSummary = "review_summary"
     }
 }
 
@@ -185,6 +190,52 @@ struct TrackedRun: Codable, Equatable, Sendable {
     var exitCode: Int?
     var error: String?
     var schemaVersion: Int
+    var reviewSummary: String?
+
+    enum CodingKeys: String, CodingKey {
+        case runId = "run_id"
+        case task
+        case status
+        case submittedAt = "submitted_at"
+        case completedAt = "completed_at"
+        case totalSteps = "total_steps"
+        case durationMs = "duration_ms"
+        case replanCount = "replan_count"
+        case steps
+        case costTelemetry = "cost_telemetry"
+        case live
+        case allowForeground = "allow_foreground"
+        case criteria
+        case result
+        case intervention
+        case exitCode = "exit_code"
+        case error
+        case schemaVersion = "schema_version"
+        case reviewSummary = "review_summary"
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        runId = try container.decode(String.self, forKey: .runId)
+        task = try container.decode(String.self, forKey: .task)
+        status = try container.decode(APIRunStatus.self, forKey: .status)
+        submittedAt = try container.decode(String.self, forKey: .submittedAt)
+        completedAt = try container.decodeIfPresent(String.self, forKey: .completedAt)
+        totalSteps = try container.decodeIfPresent(Int.self, forKey: .totalSteps) ?? 0
+        durationMs = try container.decodeIfPresent(Int.self, forKey: .durationMs)
+        replanCount = try container.decodeIfPresent(Int.self, forKey: .replanCount) ?? 0
+        steps = try container.decodeIfPresent([StepSummary].self, forKey: .steps) ?? []
+        costTelemetry = try container.decodeIfPresent(CostTelemetry.self, forKey: .costTelemetry)
+        live = try container.decodeIfPresent(Bool.self, forKey: .live) ?? true
+        allowForeground = try container.decodeIfPresent(Bool.self, forKey: .allowForeground) ?? false
+        criteria = try container.decodeIfPresent(String.self, forKey: .criteria)
+        result = try container.decodeIfPresent(ApiTaskResult.self, forKey: .result)
+        intervention = try container.decodeIfPresent(InterventionData.self, forKey: .intervention)
+        exitCode = try container.decodeIfPresent(Int.self, forKey: .exitCode)
+        error = try container.decodeIfPresent(String.self, forKey: .error)
+        schemaVersion = try container.decodeIfPresent(Int.self, forKey: .schemaVersion) ?? 1
+        reviewSummary = try container.decodeIfPresent(String.self, forKey: .reviewSummary)
+    }
 
     init(
         runId: String,
@@ -204,7 +255,8 @@ struct TrackedRun: Codable, Equatable, Sendable {
         intervention: InterventionData? = nil,
         exitCode: Int? = nil,
         error: String? = nil,
-        schemaVersion: Int = 1
+        schemaVersion: Int = 1,
+        reviewSummary: String? = nil
     ) {
         self.runId = runId
         self.task = task
@@ -224,6 +276,7 @@ struct TrackedRun: Codable, Equatable, Sendable {
         self.exitCode = exitCode
         self.error = error
         self.schemaVersion = schemaVersion
+        self.reviewSummary = reviewSummary
     }
 }
 

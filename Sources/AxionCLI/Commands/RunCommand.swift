@@ -113,7 +113,7 @@ struct RunCommand: AsyncParsableCommand {
                 task: task, fast: fast, dryrun: dryrun, json: json,
                 noMemory: noMemory, noVisualDelta: noVisualDelta,
                 allowForeground: allowForeground, maxSteps: maxSteps, config: config,
-                noReview: noReview
+                noReview: noReview, onReviewCompleted: nil
             )
         )
     }

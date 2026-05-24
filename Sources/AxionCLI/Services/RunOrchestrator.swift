@@ -23,6 +23,7 @@ enum RunOrchestrator {
         let maxSteps: Int?
         let config: AxionConfig
         let noReview: Bool
+        let onReviewCompleted: (@Sendable (String) -> Void)?
     }
 
     struct RunResult: Sendable {
@@ -294,6 +295,13 @@ enum RunOrchestrator {
                             skillChanges: result.skillChanges,
                             traceDir: (ConfigManager.defaultConfigDirectory as NSString).appendingPathComponent("runs")
                         )
+
+                        // Terminal output for review result
+                        if let output = Self.formatReviewSummary(memoryChanges: result.memoryChanges, skillChanges: result.skillChanges) {
+                            fputs("\(output)\n", stderr)
+                        }
+
+                        runConfig.onReviewCompleted?(result.summary)
                     } else {
                         let logger = Logger(subsystem: "com.axion.cli", category: "ReviewOrchestrator")
                         logger.warning("Review agent returned nil for run \(runId)")
@@ -326,6 +334,11 @@ enum RunOrchestrator {
                             transitionsApplied: result.mechanicalResult.transitionsApplied.count,
                             traceDir: (ConfigManager.defaultConfigDirectory as NSString).appendingPathComponent("runs")
                         )
+
+                        // Terminal output for curator result
+                        if let output = Self.formatCuratorSummary(consolidationCount: result.consolidations.count, pruningCount: result.prunings.count) {
+                            fputs("\(output)\n", stderr)
+                        }
                     } catch {
                         let logger = Logger(subsystem: "com.axion.cli", category: "IntelligentCurator")
                         logger.warning("Curator failed for run \(runId): \(error.localizedDescription)")
@@ -610,6 +623,34 @@ enum RunOrchestrator {
             try process.run()
             process.waitUntilExit()
         } catch {}
+    }
+
+    /// Formats a review summary string for terminal output.
+    /// Returns nil when there are no changes (to avoid noise).
+    static func formatReviewSummary(memoryChanges: [String], skillChanges: [String]) -> String? {
+        guard !memoryChanges.isEmpty || !skillChanges.isEmpty else { return nil }
+        var parts: [String] = []
+        if !memoryChanges.isEmpty {
+            parts.append("保存了 \(memoryChanges.count) 条记忆")
+        }
+        if !skillChanges.isEmpty {
+            parts.append("更新了 \(skillChanges.count) 个技能")
+        }
+        return "[axion] Review: \(parts.joined(separator: ", "))"
+    }
+
+    /// Formats a curator summary string for terminal output.
+    /// Returns nil when there are no changes (to avoid noise).
+    static func formatCuratorSummary(consolidationCount: Int, pruningCount: Int) -> String? {
+        guard consolidationCount > 0 || pruningCount > 0 else { return nil }
+        var parts: [String] = []
+        if consolidationCount > 0 {
+            parts.append("合并 \(consolidationCount) 个技能")
+        }
+        if pruningCount > 0 {
+            parts.append("归档 \(pruningCount) 个技能")
+        }
+        return "[axion] Curator: \(parts.joined(separator: ", "))"
     }
 
     /// Extracts the skill name from a Skill tool's JSON input.

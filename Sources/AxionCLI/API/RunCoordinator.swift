@@ -117,6 +117,14 @@ actor RunCoordinator {
         }
     }
 
+    func updateRunReviewSummary(runId: String, reviewSummary: String) {
+        guard runs[runId] != nil else { return }
+        runs[runId]?.reviewSummary = reviewSummary
+        if let run = runs[runId] {
+            persistRecordSafely(run)
+        }
+    }
+
     // MARK: - Query
 
     func restoreRun(_ run: TrackedRun) {
