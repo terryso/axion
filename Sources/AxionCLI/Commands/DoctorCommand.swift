@@ -101,6 +101,10 @@ struct DoctorCommand: ParsableCommand {
         let settingsApiCheck = checkSettingsAPI(isServerRunning: isServerRunningOverride)
         results.append(settingsApiCheck)
 
+        // Check 9: Review & Curator config
+        let reviewCheck = checkReviewConfig(from: loadedConfig)
+        results.append(reviewCheck)
+
         // 输出所有检查结果
         for result in results {
             let mark = result.status == .ok ? "[OK]  " : "[FAIL] "
@@ -412,6 +416,35 @@ struct DoctorCommand: ParsableCommand {
             name: "Settings API",
             status: .ok,
             detail: "跳过（超时）",
+            fixHint: nil
+        )
+    }
+
+    private static func checkReviewConfig(from config: AxionConfig?) -> CheckResult {
+        guard let config = config else {
+            return CheckResult(
+                name: "Review/Curator",
+                status: .ok,
+                detail: "未配置（使用默认值）",
+                fixHint: nil
+            )
+        }
+
+        let curatorEnabled = config.curatorEnabled ?? true
+        let reviewModel = config.reviewModel ?? "继承 parent"
+        let memoryInterval = config.reviewMemoryInterval ?? 4
+        let skillInterval = config.reviewSkillInterval ?? 6
+
+        var details: [String] = []
+        details.append("review: 每 \(memoryInterval) 次消息")
+        details.append("skill review: 每 \(skillInterval) 次")
+        details.append("curator: \(curatorEnabled ? "启用" : "禁用")")
+        details.append("模型: \(reviewModel)")
+
+        return CheckResult(
+            name: "Review/Curator",
+            status: .ok,
+            detail: details.joined(separator: ", "),
             fixHint: nil
         )
     }

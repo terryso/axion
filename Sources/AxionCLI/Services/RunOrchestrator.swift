@@ -22,6 +22,7 @@ enum RunOrchestrator {
         let allowForeground: Bool
         let maxSteps: Int?
         let config: AxionConfig
+        let noReview: Bool
     }
 
     struct RunResult: Sendable {
@@ -252,7 +253,7 @@ enum RunOrchestrator {
         )
 
         // Background review trigger — after memory processing, before lock release
-        if let orchestrator = buildResult.reviewOrchestrator, !runConfig.dryrun, !runConfig.noMemory {
+        if let orchestrator = buildResult.reviewOrchestrator, !runConfig.dryrun, !runConfig.noMemory, !runConfig.noReview {
             let messages = agent.getMessages()
             let reviewConfig = ReviewAgentConfig()
             let (doMemory, doSkill) = orchestrator.shouldReview(
@@ -307,7 +308,7 @@ enum RunOrchestrator {
         }
 
         // Background curator trigger — after review trigger, before lock release
-        if let curator = buildResult.intelligentCurator, !runConfig.dryrun, !runConfig.noMemory {
+        if let curator = buildResult.intelligentCurator, !runConfig.dryrun, !runConfig.noMemory, !runConfig.noReview {
             let curatorDryRun = curator.skillCurator.config.dryRun
             let curatorState = await curator.curatorStore.loadState()
             if curator.skillCurator.shouldRun(state: curatorState) {

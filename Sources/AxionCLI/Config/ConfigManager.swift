@@ -8,6 +8,7 @@ struct CLIOverrides: Sendable {
     var maxBatches: Int?
     var maxModelCalls: Int?
     var maxScreenshots: Int?
+    var reviewModel: String?
 }
 
 /// ConfigManager — 分层配置加载器
@@ -127,5 +128,6 @@ enum ConfigManager {
         if let v = cli.maxBatches { config.maxBatches = v }
         if let v = cli.maxModelCalls { config.maxModelCalls = v }
         if let v = cli.maxScreenshots { config.maxScreenshots = v }
+        if let v = cli.reviewModel { config.reviewModel = v }
     }
 }

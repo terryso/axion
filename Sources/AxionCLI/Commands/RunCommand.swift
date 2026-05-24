@@ -58,12 +58,19 @@ struct RunCommand: AsyncParsableCommand {
     @Option(name: .long, help: "最大截图次数")
     var maxScreenshots: Int?
 
+    @Flag(name: .long, help: "禁用 post-run review 和 curator")
+    var noReview: Bool = false
+
+    @Option(name: .long, help: "覆盖 review agent 使用的模型")
+    var reviewModel: String?
+
     mutating func run() async throws {
         let cliOverrides = CLIOverrides(
             maxSteps: maxSteps,
             maxBatches: maxBatches,
             maxModelCalls: maxModelCalls,
-            maxScreenshots: maxScreenshots
+            maxScreenshots: maxScreenshots,
+            reviewModel: reviewModel
         )
         let config = try await ConfigManager.loadConfig(cliOverrides: cliOverrides)
 
@@ -105,7 +112,8 @@ struct RunCommand: AsyncParsableCommand {
             runConfig: RunOrchestrator.RunConfig(
                 task: task, fast: fast, dryrun: dryrun, json: json,
                 noMemory: noMemory, noVisualDelta: noVisualDelta,
-                allowForeground: allowForeground, maxSteps: maxSteps, config: config
+                allowForeground: allowForeground, maxSteps: maxSteps, config: config,
+                noReview: noReview
             )
         )
     }
