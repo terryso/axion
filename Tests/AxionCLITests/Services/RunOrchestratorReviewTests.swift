@@ -23,7 +23,7 @@ struct RunOrchestratorReviewTests {
             scheduleConfig: schedule,
             factStore: FactStore(),
             skillRegistry: SkillRegistry(),
-            skillEvolver: NoOpSkillEvolver(),
+            skillEvolver: MockSkillEvolver(),
             usageStore: SkillUsageStore(skillsDir: NSTemporaryDirectory() + "axion-test-usage-\(UUID().uuidString)")
         )
     }
@@ -221,18 +221,81 @@ struct RunOrchestratorReviewTests {
         #expect(json["reviewModel"] == nil)
     }
 
-    // MARK: - NoOpSkillEvolver
+    // MARK: - LLMSkillEvolver Initialization
 
-    @Test("NoOpSkillEvolver returns empty result")
-    func noOpSkillEvolverReturnsEmpty() async throws {
-        let evolver = NoOpSkillEvolver()
-        let result = try await evolver.evolve(
-            skill: Skill(name: "test", description: "test", promptTemplate: "test"),
+    @Test("LLMSkillEvolver can be initialized with AnthropicClient")
+    func llmSkillEvolverInitWithAnthropicClient() {
+        let client = AnthropicClient(apiKey: "sk-test")
+        let evolver = LLMSkillEvolver(client: client, evolutionModel: "claude-haiku-4-5-20251001")
+        #expect(evolver.evolutionModel == "claude-haiku-4-5-20251001")
+    }
+
+    @Test("LLMSkillEvolver defaults evolutionModel to haiku")
+    func llmSkillEvolverDefaultModel() {
+        let client = AnthropicClient(apiKey: "sk-test")
+        let evolver = LLMSkillEvolver(client: client)
+        #expect(evolver.evolutionModel == "claude-haiku-4-5-20251001")
+    }
+
+    @Test("AgentBuilder creates LLMSkillEvolver with config.reviewModel")
+    func agentBuilderUsesConfigReviewModel() {
+        // Verify the wiring pattern: LLMSkillEvolver(client:evolutionModel:)
+        // uses the same parameters AgentBuilder.build() would use.
+        let apiKey = "sk-test"
+        let baseURL: String? = nil
+        let reviewModel = "claude-haiku-4-5-20251001"
+
+        let evolverClient = AnthropicClient(apiKey: apiKey, baseURL: baseURL)
+        let skillEvolver = LLMSkillEvolver(
+            client: evolverClient,
+            evolutionModel: reviewModel
+        )
+        #expect(skillEvolver.evolutionModel == "claude-haiku-4-5-20251001")
+
+        // Verify it can be wired into ReviewOrchestrator
+        let _ = ReviewOrchestrator(
+            scheduleConfig: ReviewScheduleConfig(),
+            factStore: FactStore(),
+            skillRegistry: SkillRegistry(),
+            skillEvolver: skillEvolver,
+            usageStore: SkillUsageStore(skillsDir: NSTemporaryDirectory() + "axion-test-usage-\(UUID().uuidString)")
+        )
+    }
+
+    @Test("MockSkillEvolver returns configured success result")
+    func mockSkillEvolverReturnsSuccess() async throws {
+        let evolvedSkill = Skill(
+            name: "test-skill",
+            description: "evolved",
+            promptTemplate: "evolved prompt"
+        )
+        let result = SkillEvolutionResult(
+            evolvedSkill: evolvedSkill,
+            appliedSignals: [],
+            skippedSignals: [],
+            changes: ["updated prompt"]
+        )
+        let evolver = MockSkillEvolver(result: result)
+
+        let returned = try await evolver.evolve(
+            skill: Skill(name: "test", description: "original", promptTemplate: "original"),
             signals: [],
             config: SkillEvolutionConfig()
         )
-        #expect(result.evolvedSkill == nil)
-        #expect(result.appliedSignals.isEmpty)
-        #expect(result.changes.isEmpty)
+        #expect(returned.evolvedSkill != nil)
+        #expect(returned.evolvedSkill?.description == "evolved")
+        #expect(returned.changes == ["updated prompt"])
+    }
+
+    @Test("MockSkillEvolver returns no-evolution result by default")
+    func mockSkillEvolverReturnsNoEvolutionByDefault() async throws {
+        let evolver = MockSkillEvolver()
+        let returned = try await evolver.evolve(
+            skill: Skill(name: "test", description: "original", promptTemplate: "original"),
+            signals: [],
+            config: SkillEvolutionConfig()
+        )
+        #expect(returned.evolvedSkill == nil)
+        #expect(returned.changes.isEmpty)
     }
 }

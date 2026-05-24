@@ -271,7 +271,14 @@ enum AgentBuilder {
             let reviewFactStore = FactStore(memoryDir: memoryDir)
             let skillsDir = (ConfigManager.defaultConfigDirectory as NSString).appendingPathComponent("skills")
             let usageStore = SkillUsageStore(skillsDir: skillsDir)
-            let skillEvolver = NoOpSkillEvolver()
+            let evolverClient = AnthropicClient(
+                apiKey: apiKey,
+                baseURL: config.baseURL
+            )
+            let skillEvolver = LLMSkillEvolver(
+                client: evolverClient,
+                evolutionModel: config.reviewModel ?? "claude-haiku-4-5-20251001"
+            )
             reviewOrchestrator = ReviewOrchestrator(
                 scheduleConfig: scheduleConfig,
                 factStore: reviewFactStore,

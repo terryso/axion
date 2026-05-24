@@ -72,6 +72,7 @@
 
 generated: 2026-05-08
 last_updated: 2026-05-24
+# story-22.2-created: 2026-05-24
 # story-22.1-created: 2026-05-24
 # epic-22-started: 2026-05-24
 # story-21-6-done: 2026-05-21
@@ -304,7 +305,7 @@ development_status:
 
   # Epic 22: Background Review Agent 集成
   epic-22: in-progress
-  22-2-skillevolver-integration: backlog
+  22-2-skillevolver-integration: done
   22-5-skill-usage-tracking: backlog
   22-1-revieworchestrator-integration: done
   22-3-revieworchestrator-dependency-injection: backlog
