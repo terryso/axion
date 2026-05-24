@@ -99,6 +99,7 @@ enum RunOrchestrator {
         var visualDeltaChecked = 0
         var externallyModified = false
         var takeoverEvent: (issue: String, summary: String, feedback: String?, reason: String, duration: TimeInterval?)? = nil
+        var collectedMessages: [SDKMessage] = []
 
         let visualDeltaTracker = runConfig.noVisualDelta ? nil : VisualDeltaTracker()
         var resultText: String?
@@ -115,6 +116,14 @@ enum RunOrchestrator {
                 if _Concurrency.Task.isCancelled { break }
                 if case .toolUse = message { totalSteps += 1 }
                 outputHandler.handle(message)
+
+                // Collect messages for post-run review
+                switch message {
+                case .userMessage, .assistant, .toolResult, .toolUse:
+                    collectedMessages.append(message)
+                default:
+                    break
+                }
 
                 switch message {
                 case .assistant:
@@ -253,13 +262,12 @@ enum RunOrchestrator {
             runCompleted: runCompleted
         )
 
-        // Background review trigger — after memory processing, before lock release
+        // Post-run review — after memory processing, before lock release
         if let orchestrator = buildResult.reviewOrchestrator, !runConfig.dryrun, !runConfig.noMemory, !runConfig.noReview {
-            let messages = agent.getMessages()
             let reviewConfig = ReviewAgentConfig()
             let (doMemory, doSkill) = orchestrator.shouldReview(
                 sessionId: runId,
-                messageCount: messages.count,
+                messageCount: collectedMessages.count,
                 config: reviewConfig
             )
             if doMemory || doSkill {
@@ -267,87 +275,83 @@ enum RunOrchestrator {
                     reviewMemory: doMemory,
                     reviewSkills: doSkill
                 )
-                _Concurrency.Task.detached {
-                    let result = await orchestrator.executeReview(
-                        parentAgent: agent,
-                        messages: messages,
-                        config: tunedConfig
-                    )
-                    if let result {
-                        let logger = Logger(subsystem: "com.axion.cli", category: "ReviewOrchestrator")
-                        logger.info("Review completed: \(result.summary)")
+                let result = await orchestrator.executeReview(
+                    parentAgent: agent,
+                    messages: collectedMessages,
+                    config: tunedConfig
+                )
+                if let result {
+                    let logger = Logger(subsystem: "com.axion.cli", category: "ReviewOrchestrator")
+                    logger.info("Review completed: \(result.summary)")
 
-                        // Track skill management usage
-                        if let usageStore = buildResult.usageStore {
-                            for skillName in result.skillChanges {
-                                do {
-                                    try await usageStore.bumpManage(skillName: skillName)
-                                } catch {
-                                    logger.warning("Skill manage tracking failed for '\(skillName)': \(error.localizedDescription)")
-                                }
+                    // Track skill management usage
+                    if let usageStore = buildResult.usageStore {
+                        for skillName in result.skillChanges {
+                            do {
+                                try await usageStore.bumpManage(skillName: skillName)
+                            } catch {
+                                logger.warning("Skill manage tracking failed for '\(skillName)': \(error.localizedDescription)")
                             }
                         }
-
-                        TraceRecorder.recordReviewCompleted(
-                            runId: runId,
-                            reviewSummary: result.summary,
-                            memoryChanges: result.memoryChanges,
-                            skillChanges: result.skillChanges,
-                            traceDir: (ConfigManager.defaultConfigDirectory as NSString).appendingPathComponent("runs")
-                        )
-
-                        // Terminal output for review result
-                        if let output = Self.formatReviewSummary(memoryChanges: result.memoryChanges, skillChanges: result.skillChanges) {
-                            fputs("\(output)\n", stderr)
-                        }
-
-                        runConfig.onReviewCompleted?(result.summary)
-                    } else {
-                        let logger = Logger(subsystem: "com.axion.cli", category: "ReviewOrchestrator")
-                        logger.warning("Review agent returned nil for run \(runId)")
-                        TraceRecorder.recordReviewFailed(
-                            runId: runId,
-                            error: "review agent returned nil",
-                            traceDir: (ConfigManager.defaultConfigDirectory as NSString).appendingPathComponent("runs")
-                        )
                     }
+
+                    TraceRecorder.recordReviewCompleted(
+                        runId: runId,
+                        reviewSummary: result.summary,
+                        memoryChanges: result.memoryChanges,
+                        skillChanges: result.skillChanges,
+                        traceDir: (ConfigManager.defaultConfigDirectory as NSString).appendingPathComponent("runs")
+                    )
+
+                    // Terminal output for review result
+                    if let output = Self.formatReviewSummary(memoryChanges: result.memoryChanges, skillChanges: result.skillChanges) {
+                        fputs("\(output)\n", stderr)
+                    }
+
+                    runConfig.onReviewCompleted?(result.summary)
+                } else {
+                    let logger = Logger(subsystem: "com.axion.cli", category: "ReviewOrchestrator")
+                    logger.warning("Review agent returned nil for run \(runId)")
+                    TraceRecorder.recordReviewFailed(
+                        runId: runId,
+                        error: "review agent returned nil",
+                        traceDir: (ConfigManager.defaultConfigDirectory as NSString).appendingPathComponent("runs")
+                    )
                 }
             }
         }
 
-        // Background curator trigger — after review trigger, before lock release
+        // Post-run curator — after review, before lock release
         if let curator = buildResult.intelligentCurator, !runConfig.dryrun, !runConfig.noMemory, !runConfig.noReview {
             let curatorDryRun = curator.skillCurator.config.dryRun
             let curatorState = await curator.curatorStore.loadState()
             if curator.skillCurator.shouldRun(state: curatorState) {
-                _Concurrency.Task.detached {
-                    do {
-                        let result = try await curator.execute(parentAgent: agent, dryRun: curatorDryRun)
-                        let report = CuratorRunReport(from: result)
-                        let logger = Logger(subsystem: "com.axion.cli", category: "IntelligentCurator")
-                        logger.info("Curator completed in \(result.durationMs)ms")
-                        logger.debug("Curator report:\n\(report.renderMarkdown())")
-                        TraceRecorder.recordCuratorCompleted(
-                            runId: runId,
-                            consolidations: result.consolidations.count,
-                            prunings: result.prunings.count,
-                            transitionsApplied: result.mechanicalResult.transitionsApplied.count,
-                            traceDir: (ConfigManager.defaultConfigDirectory as NSString).appendingPathComponent("runs")
-                        )
+                do {
+                    let result = try await curator.execute(parentAgent: agent, dryRun: curatorDryRun)
+                    let report = CuratorRunReport(from: result)
+                    let logger = Logger(subsystem: "com.axion.cli", category: "IntelligentCurator")
+                    logger.info("Curator completed in \(result.durationMs)ms")
+                    logger.debug("Curator report:\n\(report.renderMarkdown())")
+                    TraceRecorder.recordCuratorCompleted(
+                        runId: runId,
+                        consolidations: result.consolidations.count,
+                        prunings: result.prunings.count,
+                        transitionsApplied: result.mechanicalResult.transitionsApplied.count,
+                        traceDir: (ConfigManager.defaultConfigDirectory as NSString).appendingPathComponent("runs")
+                    )
 
-                        // Terminal output for curator result
-                        if let output = Self.formatCuratorSummary(consolidationCount: result.consolidations.count, pruningCount: result.prunings.count) {
-                            fputs("\(output)\n", stderr)
-                        }
-                    } catch {
-                        let logger = Logger(subsystem: "com.axion.cli", category: "IntelligentCurator")
-                        logger.warning("Curator failed for run \(runId): \(error.localizedDescription)")
-                        TraceRecorder.recordCuratorFailed(
-                            runId: runId,
-                            error: error.localizedDescription,
-                            traceDir: (ConfigManager.defaultConfigDirectory as NSString).appendingPathComponent("runs")
-                        )
+                    // Terminal output for curator result
+                    if let output = Self.formatCuratorSummary(consolidationCount: result.consolidations.count, pruningCount: result.prunings.count) {
+                        fputs("\(output)\n", stderr)
                     }
+                } catch {
+                    let logger = Logger(subsystem: "com.axion.cli", category: "IntelligentCurator")
+                    logger.warning("Curator failed for run \(runId): \(error.localizedDescription)")
+                    TraceRecorder.recordCuratorFailed(
+                        runId: runId,
+                        error: error.localizedDescription,
+                        traceDir: (ConfigManager.defaultConfigDirectory as NSString).appendingPathComponent("runs")
+                    )
                 }
             }
         }
