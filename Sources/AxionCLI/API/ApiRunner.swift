@@ -1,4 +1,5 @@
 import Foundation
+import os
 import OpenAgentSDK
 
 import AxionCore
@@ -64,7 +65,8 @@ enum ApiRunner {
             eventBroadcaster: eventBroadcaster,
             runTracker: runTracker,
             shouldMonitorSeat: shouldMonitorSeat,
-            maxScreenshots: config.maxScreenshots
+            maxScreenshots: config.maxScreenshots,
+            usageStore: buildResult.usageStore
         )
 
         completion("", result.finalStatus, result.stepSummaries, nil, 0, result.costTelemetry, result.externallyModified)
@@ -106,6 +108,17 @@ enum ApiRunner {
         )
 
         completion("", result.finalStatus, result.stepSummaries, nil, 0, result.costTelemetry, result.externallyModified)
+
+        // Track skill usage
+        let skillsDir = (ConfigManager.defaultConfigDirectory as NSString).appendingPathComponent("skills")
+        let usageStore = SkillUsageStore(skillsDir: skillsDir)
+        do {
+            try await usageStore.bumpView(skillName: skill.name)
+        } catch {
+            let logger = Logger(subsystem: "com.axion.cli", category: "SkillUsage")
+            logger.warning("Skill usage tracking failed for '\(skill.name)': \(error.localizedDescription)")
+        }
+
         return (result.totalSteps, result.durationMs, 0, result.finalStatus, result.stepSummaries, result.costTelemetry, result.externallyModified)
     }
 
@@ -132,7 +145,8 @@ enum ApiRunner {
         eventBroadcaster: OpenAgentSDK.EventBroadcaster?,
         runTracker: RunCoordinator?,
         shouldMonitorSeat: Bool,
-        maxScreenshots: Int?
+        maxScreenshots: Int?,
+        usageStore: SkillUsageStore? = nil
     ) async -> StreamResult {
         let messageStream = agent.stream(resolvedTask)
         return await processStreamFromAsyncStream(
@@ -144,6 +158,7 @@ enum ApiRunner {
             runTracker: runTracker,
             shouldMonitorSeat: shouldMonitorSeat,
             maxScreenshots: maxScreenshots,
+            usageStore: usageStore,
             cleanup: { try? await agent.close() }
         )
     }
@@ -158,6 +173,7 @@ enum ApiRunner {
         runTracker: RunCoordinator? = nil,
         shouldMonitorSeat: Bool = false,
         maxScreenshots: Int? = nil,
+        usageStore: SkillUsageStore? = nil,
         cleanup: @escaping () async -> Void = {}
     ) async -> StreamResult {
         var totalSteps = 0
@@ -197,6 +213,19 @@ enum ApiRunner {
                 // Track screenshot calls for cost telemetry
                 if data.toolName.contains("screenshot") {
                     screenshotCount += 1
+                }
+
+                // Track Skill tool usage
+                if data.toolName == "Skill", let store = usageStore {
+                    let skillName = RunOrchestrator.extractSkillName(from: data.input)
+                    if let skillName {
+                        do {
+                            try await store.bumpView(skillName: skillName)
+                        } catch {
+                            let logger = Logger(subsystem: "com.axion.cli", category: "SkillUsage")
+                            logger.warning("Skill usage tracking failed for '\(skillName)': \(error.localizedDescription)")
+                        }
+                    }
                 }
 
                 // Emit step_started SSE event (Story 5.2)

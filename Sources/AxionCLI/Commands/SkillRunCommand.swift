@@ -1,6 +1,8 @@
 import ArgumentParser
 import AxionCore
 import Foundation
+import os
+import OpenAgentSDK
 
 struct SkillRunCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
@@ -29,7 +31,7 @@ struct SkillRunCommand: AsyncParsableCommand {
         let skillData = try Data(contentsOf: URL(fileURLWithPath: skillPath))
         let decoder = JSONDecoder()
         decoder.dateDecodingStrategy = .iso8601
-        let skill: Skill
+        let skill: AxionCore.Skill
         do {
             skill = try decoder.decode(Skill.self, from: skillData)
         } catch {
@@ -49,6 +51,15 @@ struct SkillRunCommand: AsyncParsableCommand {
             skillPath: skillPath,
             paramValues: paramValues
         )
+
+        // Track skill usage
+        let usageStore = SkillUsageStore(skillsDir: skillsDir)
+        do {
+            try await usageStore.bumpView(skillName: skill.name)
+        } catch {
+            let logger = Logger(subsystem: "com.axion.cli", category: "SkillUsage")
+            logger.warning("Skill usage tracking failed for '\(skill.name)': \(error.localizedDescription)")
+        }
     }
 
     private func parseParams() throws -> [String: String] {

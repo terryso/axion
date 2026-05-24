@@ -766,4 +766,125 @@ struct RunOrchestratorReviewTests {
         let result = try await AgentBuilder.build(buildConfig)
         #expect(result.intelligentCurator == nil)
     }
+
+    // MARK: - Story 22.5: Skill Usage Tracking
+
+    @Test("AgentBuildResult.usageStore is non-nil when memory enabled and not dryrun")
+    func usageStoreNonNilWhenMemoryEnabled() async throws {
+        let tmpHelper = NSTemporaryDirectory() + "axion-test-helper-\(UUID().uuidString)"
+        FileManager.default.createFile(atPath: tmpHelper, contents: Data())
+        defer { try? FileManager.default.removeItem(atPath: tmpHelper) }
+        setenv("AXION_HELPER_PATH", tmpHelper, 1)
+        defer { unsetenv("AXION_HELPER_PATH") }
+
+        let config = AxionConfig(apiKey: "sk-test")
+        let buildConfig = AgentBuilder.BuildConfig.forCLI(
+            config: config,
+            task: "test",
+            noMemory: false,
+            dryrun: false
+        )
+        let result = try await AgentBuilder.build(buildConfig)
+        #expect(result.usageStore != nil)
+    }
+
+    @Test("AgentBuildResult.usageStore is nil when dryrun")
+    func usageStoreNilOnDryrun() async throws {
+        let config = AxionConfig(apiKey: "sk-test")
+        let buildConfig = AgentBuilder.BuildConfig.forCLI(
+            config: config,
+            task: "test",
+            dryrun: true
+        )
+        let result = try await AgentBuilder.build(buildConfig)
+        #expect(result.usageStore == nil)
+    }
+
+    @Test("AgentBuildResult.usageStore is nil when noMemory")
+    func usageStoreNilOnNoMemory() async throws {
+        let config = AxionConfig(apiKey: "sk-test")
+        let buildConfig = AgentBuilder.BuildConfig.forCLI(
+            config: config,
+            task: "test",
+            noMemory: true,
+            dryrun: true
+        )
+        let result = try await AgentBuilder.build(buildConfig)
+        #expect(result.usageStore == nil)
+    }
+
+    @Test("SkillUsageStore bumpView writes .usage.json")
+    func bumpViewWritesUsageJson() async throws {
+        let tempDir = NSTemporaryDirectory() + "axion-test-usage-\(UUID().uuidString)"
+        defer { try? FileManager.default.removeItem(atPath: tempDir) }
+
+        let store = SkillUsageStore(skillsDir: tempDir)
+        try await store.bumpView(skillName: "screenshot-analyze")
+
+        let usagePath = (tempDir as NSString).appendingPathComponent(".usage.json")
+        #expect(FileManager.default.fileExists(atPath: usagePath))
+
+        let data = try Data(contentsOf: URL(fileURLWithPath: usagePath))
+        let json = try JSONSerialization.jsonObject(with: data) as! [String: Any]
+        let entry = json["screenshot-analyze"] as! [String: Any]
+        #expect(entry["viewCount"] as? Int == 1)
+        #expect(entry["lastViewedAt"] != nil)
+    }
+
+    @Test("SkillUsageStore bumpManage updates lastManagedAt")
+    func bumpManageUpdatesLastManagedAt() async throws {
+        let tempDir = NSTemporaryDirectory() + "axion-test-usage-\(UUID().uuidString)"
+        defer { try? FileManager.default.removeItem(atPath: tempDir) }
+
+        let store = SkillUsageStore(skillsDir: tempDir)
+        try await store.bumpManage(skillName: "my-skill")
+
+        let usage = await store.getUsage(skillName: "my-skill")
+        #expect(usage.lastManagedAt != nil)
+    }
+
+    @Test("SkillUsageStore auto-creates .usage.json on first bump")
+    func autoCreatesUsageJsonOnFirstBump() async throws {
+        let tempDir = NSTemporaryDirectory() + "axion-test-usage-\(UUID().uuidString)"
+        defer { try? FileManager.default.removeItem(atPath: tempDir) }
+
+        let usagePath = (tempDir as NSString).appendingPathComponent(".usage.json")
+        #expect(!FileManager.default.fileExists(atPath: usagePath))
+
+        let store = SkillUsageStore(skillsDir: tempDir)
+        try await store.bumpView(skillName: "new-skill")
+
+        #expect(FileManager.default.fileExists(atPath: usagePath))
+    }
+
+    @Test("RunOrchestrator.extractSkillName parses skill from JSON input")
+    func extractSkillNameParsesCorrectly() {
+        let input = #"{"skill": "screenshot-analyze", "args": "分析屏幕"}"#
+        let name = RunOrchestrator.extractSkillName(from: input)
+        #expect(name == "screenshot-analyze")
+    }
+
+    @Test("RunOrchestrator.extractSkillName returns nil for invalid JSON")
+    func extractSkillNameReturnsNilForInvalidJson() {
+        let name = RunOrchestrator.extractSkillName(from: "not-json")
+        #expect(name == nil)
+    }
+
+    @Test("RunOrchestrator.extractSkillName returns nil when skill key missing")
+    func extractSkillNameReturnsNilWhenNoSkillKey() {
+        let input = #"{"args": "some args"}"#
+        let name = RunOrchestrator.extractSkillName(from: input)
+        #expect(name == nil)
+    }
+
+    @Test("Usage tracking failure does not block — catchable error on unwritable path")
+    func usageTrackingFailureDoesNotBlock() async throws {
+        // Use a path that cannot be written to — bumpView should throw, error must be catchable
+        let store = SkillUsageStore(skillsDir: "/dev/null/impossible-path")
+        do {
+            try await store.bumpView(skillName: "test-skill")
+        } catch {
+            // Expected: error is catchable — calling code's do/catch prevents blocking
+        }
+    }
 }

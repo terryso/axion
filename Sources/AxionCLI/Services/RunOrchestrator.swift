@@ -129,6 +129,18 @@ enum RunOrchestrator {
                     if data.toolName.contains("launch_app") {
                         pendingLaunchAppToolUseIds.insert(data.toolUseId)
                     }
+                    // Track Skill tool usage
+                    if data.toolName == "Skill", let store = buildResult.usageStore {
+                        let skillName = extractSkillName(from: data.input)
+                        if let skillName {
+                            do {
+                                try await store.bumpView(skillName: skillName)
+                            } catch {
+                                let logger = Logger(subsystem: "com.axion.cli", category: "SkillUsage")
+                                logger.warning("Skill usage tracking failed for '\(skillName)': \(error.localizedDescription)")
+                            }
+                        }
+                    }
                 case .toolResult(let data):
                     // Activate app after launch_app (must run from CLI process, not AxionHelper)
                     if pendingLaunchAppToolUseIds.remove(data.toolUseId) != nil {
@@ -262,6 +274,18 @@ enum RunOrchestrator {
                     if let result {
                         let logger = Logger(subsystem: "com.axion.cli", category: "ReviewOrchestrator")
                         logger.info("Review completed: \(result.summary)")
+
+                        // Track skill management usage
+                        if let usageStore = buildResult.usageStore {
+                            for skillName in result.skillChanges {
+                                do {
+                                    try await usageStore.bumpManage(skillName: skillName)
+                                } catch {
+                                    logger.warning("Skill manage tracking failed for '\(skillName)': \(error.localizedDescription)")
+                                }
+                            }
+                        }
+
                         TraceRecorder.recordReviewCompleted(
                             runId: runId,
                             reviewSummary: result.summary,
@@ -391,6 +415,16 @@ enum RunOrchestrator {
         fputs("[axion] 运行结束。步数: \(totalSteps), 耗时: \(String(format: "%.1f", Double(durationMs) / 1000))s\n", stderr)
 
         try? await agent.close()
+
+        // Track skill usage
+        let skillsDir = (ConfigManager.defaultConfigDirectory as NSString).appendingPathComponent("skills")
+        let usageStore = SkillUsageStore(skillsDir: skillsDir)
+        do {
+            try await usageStore.bumpView(skillName: skill.name)
+        } catch {
+            let logger = Logger(subsystem: "com.axion.cli", category: "SkillUsage")
+            logger.warning("Skill usage tracking failed for '\(skill.name)': \(error.localizedDescription)")
+        }
 
         let elapsedSec = Int(elapsed.components.seconds)
         let summary = extractSummary(from: skillResultText) ?? "无结果摘要"
@@ -575,6 +609,15 @@ enum RunOrchestrator {
             try process.run()
             process.waitUntilExit()
         } catch {}
+    }
+
+    /// Extracts the skill name from a Skill tool's JSON input.
+    static func extractSkillName(from input: String) -> String? {
+        guard let data = input.data(using: .utf8),
+              let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else {
+            return nil
+        }
+        return json["skill"] as? String
     }
 
 }

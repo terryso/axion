@@ -1,5 +1,6 @@
 import AxionCore
 import Foundation
+import os
 import OpenAgentSDK
 
 /// Runs a skill through the RunTracker + EventBroadcaster pipeline.
@@ -135,6 +136,16 @@ enum SkillAPIRunner {
         ))
         await eventBroadcaster.emit(runId: runId, event: runCompletedEvent)
         await eventBroadcaster.complete(runId: runId)
+
+        // Track skill usage
+        let skillsDir = (ConfigManager.defaultConfigDirectory as NSString).appendingPathComponent("skills")
+        let usageStore = SkillUsageStore(skillsDir: skillsDir)
+        do {
+            try await usageStore.bumpView(skillName: skill.name)
+        } catch {
+            let logger = Logger(subsystem: "com.axion.cli", category: "SkillUsage")
+            logger.warning("Skill usage tracking failed for '\(skill.name)': \(error.localizedDescription)")
+        }
 
         return RunResult(
             finalStatus: .completed,
