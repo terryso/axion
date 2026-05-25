@@ -184,7 +184,7 @@ await SessionSearchE2ETests.run()
 await ReviewOrchestratorE2ETests.run(apiKey: apiKey, model: model, baseURL: baseURL)
 
 // ================================================================
-// SECTION 87-92: Agent Event Types E2E Tests (Story 26.2: Session Lifecycle Events)
+// SECTION 87-101: Agent Event Types E2E Tests (Story 26.2-26.3: Session + Agent Lifecycle Events)
 // ================================================================
 await AgentEventTypesE2ETests.run()
 

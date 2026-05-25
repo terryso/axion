@@ -907,3 +907,681 @@ private extension AgentEventTypesTests {
     static let sessionClosedEchoActor = SessionClosedEchoActor()
     static let sessionAutoSavedEchoActor = SessionAutoSavedEchoActor()
 }
+
+// MARK: - Agent Lifecycle Events
+
+extension AgentEventTypesTests {
+
+    // MARK: - AgentStartedEvent (AC1)
+
+    func testAgentStartedEventConstruction() {
+        let event = AgentStartedEvent(sessionId: "sess-1", task: "build app")
+        XCTAssertEqual(event.sessionId, "sess-1")
+        XCTAssertEqual(event.task, "build app")
+        XCTAssertFalse(event.id.isEmpty)
+        XCTAssertNotNil(event.timestamp)
+    }
+
+    func testAgentStartedEventNilSessionId() {
+        let event = AgentStartedEvent(sessionId: nil, task: "hello")
+        XCTAssertNil(event.sessionId)
+    }
+
+    func testAgentStartedEventAgentEventConformance() {
+        func acceptEvent<T: AgentEvent>(_ event: T) {
+            XCTAssertFalse(event.id.isEmpty)
+            XCTAssertNotNil(event.timestamp)
+        }
+        let event = AgentStartedEvent(sessionId: "s", task: "t")
+        acceptEvent(event)
+    }
+
+    func testAgentStartedEventSendable() {
+        func acceptSendable<T: Sendable>(_ value: T) { _ = value }
+        acceptSendable(AgentStartedEvent(sessionId: nil, task: "t"))
+    }
+
+    func testAgentStartedEventCodableRoundTrip() throws {
+        let event = AgentStartedEvent(sessionId: "sess-42", task: "write tests")
+        let encoder = JSONEncoder()
+        encoder.dateEncodingStrategy = .iso8601
+        let data = try encoder.encode(event)
+
+        let decoder = JSONDecoder()
+        decoder.dateDecodingStrategy = .iso8601
+        let decoded = try decoder.decode(AgentStartedEvent.self, from: data)
+
+        XCTAssertEqual(decoded.id, event.id)
+        XCTAssertEqual(decoded.sessionId, event.sessionId)
+        XCTAssertEqual(decoded.task, event.task)
+        XCTAssertEqual(decoded.timestamp.timeIntervalSince(event.timestamp), 0, accuracy: 1.0)
+    }
+
+    func testAgentStartedEventSnakeCaseJsonKeys() throws {
+        let event = AgentStartedEvent(sessionId: "s1", task: "t")
+        let encoder = JSONEncoder()
+        encoder.dateEncodingStrategy = .iso8601
+        let data = try encoder.encode(event)
+        let json = try JSONSerialization.jsonObject(with: data) as! [String: Any]
+
+        XCTAssertNotNil(json["session_id"], "JSON should use snake_case 'session_id'")
+        XCTAssertNotNil(json["task"])
+        XCTAssertNotNil(json["id"])
+        XCTAssertNotNil(json["timestamp"])
+    }
+
+    func testAgentStartedEventEquatable() {
+        let id = "same-id"
+        let ts = Date(timeIntervalSince1970: 1700000000)
+        let e1 = AgentStartedEvent(base: BaseAgentEvent(id: id, timestamp: ts), sessionId: "s", task: "t")
+        let e2 = AgentStartedEvent(base: BaseAgentEvent(id: id, timestamp: ts), sessionId: "s", task: "t")
+        XCTAssertEqual(e1, e2)
+    }
+
+    func testAgentStartedEventNotEqualDifferentTask() {
+        let id = "same-id"
+        let ts = Date(timeIntervalSince1970: 1700000000)
+        let e1 = AgentStartedEvent(base: BaseAgentEvent(id: id, timestamp: ts), sessionId: "s", task: "task-a")
+        let e2 = AgentStartedEvent(base: BaseAgentEvent(id: id, timestamp: ts), sessionId: "s", task: "task-b")
+        XCTAssertNotEqual(e1, e2)
+    }
+
+    func testAgentStartedEventInitWithBase() {
+        let event = AgentStartedEvent(base: BaseAgentEvent(id: "custom", timestamp: Date(timeIntervalSince1970: 0)), sessionId: "s", task: "t")
+        XCTAssertEqual(event.id, "custom")
+        XCTAssertEqual(event.timestamp, Date(timeIntervalSince1970: 0))
+    }
+
+    // MARK: - AgentCompletedEvent (AC2)
+
+    func testAgentCompletedEventConstruction() {
+        let event = AgentCompletedEvent(sessionId: "sess-1", totalSteps: 5, durationMs: 1200, resultText: "done")
+        XCTAssertEqual(event.sessionId, "sess-1")
+        XCTAssertEqual(event.totalSteps, 5)
+        XCTAssertEqual(event.durationMs, 1200)
+        XCTAssertEqual(event.resultText, "done")
+        XCTAssertFalse(event.id.isEmpty)
+    }
+
+    func testAgentCompletedEventNilSessionIdAndResultText() {
+        let event = AgentCompletedEvent(sessionId: nil, totalSteps: 0, durationMs: 0, resultText: nil)
+        XCTAssertNil(event.sessionId)
+        XCTAssertNil(event.resultText)
+    }
+
+    func testAgentCompletedEventAgentEventConformance() {
+        func acceptEvent<T: AgentEvent>(_ event: T) {
+            XCTAssertFalse(event.id.isEmpty)
+        }
+        let event = AgentCompletedEvent(sessionId: "s", totalSteps: 3, durationMs: 500, resultText: "ok")
+        acceptEvent(event)
+    }
+
+    func testAgentCompletedEventSendable() {
+        func acceptSendable<T: Sendable>(_ value: T) { _ = value }
+        acceptSendable(AgentCompletedEvent(sessionId: nil, totalSteps: 0, durationMs: 0, resultText: nil))
+    }
+
+    func testAgentCompletedEventCodableRoundTrip() throws {
+        let event = AgentCompletedEvent(sessionId: "sess-1", totalSteps: 10, durationMs: 3500, resultText: "success")
+        let encoder = JSONEncoder()
+        encoder.dateEncodingStrategy = .iso8601
+        let data = try encoder.encode(event)
+
+        let decoder = JSONDecoder()
+        decoder.dateDecodingStrategy = .iso8601
+        let decoded = try decoder.decode(AgentCompletedEvent.self, from: data)
+
+        XCTAssertEqual(decoded.id, event.id)
+        XCTAssertEqual(decoded.sessionId, event.sessionId)
+        XCTAssertEqual(decoded.totalSteps, event.totalSteps)
+        XCTAssertEqual(decoded.durationMs, event.durationMs)
+        XCTAssertEqual(decoded.resultText, event.resultText)
+    }
+
+    func testAgentCompletedEventSnakeCaseJsonKeys() throws {
+        let event = AgentCompletedEvent(sessionId: "s1", totalSteps: 3, durationMs: 100, resultText: "r")
+        let encoder = JSONEncoder()
+        encoder.dateEncodingStrategy = .iso8601
+        let data = try encoder.encode(event)
+        let json = try JSONSerialization.jsonObject(with: data) as! [String: Any]
+
+        XCTAssertNotNil(json["session_id"])
+        XCTAssertNotNil(json["total_steps"])
+        XCTAssertNotNil(json["duration_ms"])
+        XCTAssertNotNil(json["result_text"])
+    }
+
+    func testAgentCompletedEventEquatable() {
+        let id = "eq-id"
+        let ts = Date(timeIntervalSince1970: 1700000000)
+        let e1 = AgentCompletedEvent(base: BaseAgentEvent(id: id, timestamp: ts), sessionId: "s", totalSteps: 3, durationMs: 100, resultText: "r")
+        let e2 = AgentCompletedEvent(base: BaseAgentEvent(id: id, timestamp: ts), sessionId: "s", totalSteps: 3, durationMs: 100, resultText: "r")
+        XCTAssertEqual(e1, e2)
+    }
+
+    func testAgentCompletedEventNotEqualDifferentDuration() {
+        let id = "eq-id"
+        let ts = Date(timeIntervalSince1970: 1700000000)
+        let e1 = AgentCompletedEvent(base: BaseAgentEvent(id: id, timestamp: ts), sessionId: "s", totalSteps: 3, durationMs: 100, resultText: nil)
+        let e2 = AgentCompletedEvent(base: BaseAgentEvent(id: id, timestamp: ts), sessionId: "s", totalSteps: 3, durationMs: 200, resultText: nil)
+        XCTAssertNotEqual(e1, e2)
+    }
+
+    // MARK: - AgentFailedEvent (AC3)
+
+    func testAgentFailedEventConstruction() {
+        let event = AgentFailedEvent(sessionId: "sess-1", error: "timeout", stepsCompleted: 3)
+        XCTAssertEqual(event.sessionId, "sess-1")
+        XCTAssertEqual(event.error, "timeout")
+        XCTAssertEqual(event.stepsCompleted, 3)
+        XCTAssertFalse(event.id.isEmpty)
+    }
+
+    func testAgentFailedEventNilSessionId() {
+        let event = AgentFailedEvent(sessionId: nil, error: "crash", stepsCompleted: 0)
+        XCTAssertNil(event.sessionId)
+    }
+
+    func testAgentFailedEventAgentEventConformance() {
+        func acceptEvent<T: AgentEvent>(_ event: T) {
+            XCTAssertFalse(event.id.isEmpty)
+        }
+        let event = AgentFailedEvent(sessionId: "s", error: "err", stepsCompleted: 2)
+        acceptEvent(event)
+    }
+
+    func testAgentFailedEventSendable() {
+        func acceptSendable<T: Sendable>(_ value: T) { _ = value }
+        acceptSendable(AgentFailedEvent(sessionId: nil, error: "e", stepsCompleted: 0))
+    }
+
+    func testAgentFailedEventCodableRoundTrip() throws {
+        let event = AgentFailedEvent(sessionId: "sess-1", error: "api failure", stepsCompleted: 7)
+        let encoder = JSONEncoder()
+        encoder.dateEncodingStrategy = .iso8601
+        let data = try encoder.encode(event)
+
+        let decoder = JSONDecoder()
+        decoder.dateDecodingStrategy = .iso8601
+        let decoded = try decoder.decode(AgentFailedEvent.self, from: data)
+
+        XCTAssertEqual(decoded.id, event.id)
+        XCTAssertEqual(decoded.sessionId, event.sessionId)
+        XCTAssertEqual(decoded.error, event.error)
+        XCTAssertEqual(decoded.stepsCompleted, event.stepsCompleted)
+    }
+
+    func testAgentFailedEventSnakeCaseJsonKeys() throws {
+        let event = AgentFailedEvent(sessionId: "s1", error: "e", stepsCompleted: 5)
+        let encoder = JSONEncoder()
+        encoder.dateEncodingStrategy = .iso8601
+        let data = try encoder.encode(event)
+        let json = try JSONSerialization.jsonObject(with: data) as! [String: Any]
+
+        XCTAssertNotNil(json["session_id"])
+        XCTAssertNotNil(json["error"])
+        XCTAssertNotNil(json["steps_completed"])
+    }
+
+    func testAgentFailedEventEquatable() {
+        let id = "eq-id"
+        let ts = Date(timeIntervalSince1970: 1700000000)
+        let e1 = AgentFailedEvent(base: BaseAgentEvent(id: id, timestamp: ts), sessionId: "s", error: "e", stepsCompleted: 3)
+        let e2 = AgentFailedEvent(base: BaseAgentEvent(id: id, timestamp: ts), sessionId: "s", error: "e", stepsCompleted: 3)
+        XCTAssertEqual(e1, e2)
+    }
+
+    func testAgentFailedEventNotEqualDifferentError() {
+        let id = "eq-id"
+        let ts = Date(timeIntervalSince1970: 1700000000)
+        let e1 = AgentFailedEvent(base: BaseAgentEvent(id: id, timestamp: ts), sessionId: "s", error: "err-a", stepsCompleted: 3)
+        let e2 = AgentFailedEvent(base: BaseAgentEvent(id: id, timestamp: ts), sessionId: "s", error: "err-b", stepsCompleted: 3)
+        XCTAssertNotEqual(e1, e2)
+    }
+
+    // MARK: - AgentInterruptedEvent (AC4)
+
+    func testAgentInterruptedEventConstruction() {
+        let event = AgentInterruptedEvent(sessionId: "sess-1", stepsCompleted: 4)
+        XCTAssertEqual(event.sessionId, "sess-1")
+        XCTAssertEqual(event.stepsCompleted, 4)
+        XCTAssertFalse(event.id.isEmpty)
+    }
+
+    func testAgentInterruptedEventNilSessionId() {
+        let event = AgentInterruptedEvent(sessionId: nil, stepsCompleted: 0)
+        XCTAssertNil(event.sessionId)
+    }
+
+    func testAgentInterruptedEventAgentEventConformance() {
+        func acceptEvent<T: AgentEvent>(_ event: T) {
+            XCTAssertFalse(event.id.isEmpty)
+        }
+        let event = AgentInterruptedEvent(sessionId: "s", stepsCompleted: 2)
+        acceptEvent(event)
+    }
+
+    func testAgentInterruptedEventSendable() {
+        func acceptSendable<T: Sendable>(_ value: T) { _ = value }
+        acceptSendable(AgentInterruptedEvent(sessionId: nil, stepsCompleted: 0))
+    }
+
+    func testAgentInterruptedEventCodableRoundTrip() throws {
+        let event = AgentInterruptedEvent(sessionId: "sess-1", stepsCompleted: 6)
+        let encoder = JSONEncoder()
+        encoder.dateEncodingStrategy = .iso8601
+        let data = try encoder.encode(event)
+
+        let decoder = JSONDecoder()
+        decoder.dateDecodingStrategy = .iso8601
+        let decoded = try decoder.decode(AgentInterruptedEvent.self, from: data)
+
+        XCTAssertEqual(decoded.id, event.id)
+        XCTAssertEqual(decoded.sessionId, event.sessionId)
+        XCTAssertEqual(decoded.stepsCompleted, event.stepsCompleted)
+    }
+
+    func testAgentInterruptedEventSnakeCaseJsonKeys() throws {
+        let event = AgentInterruptedEvent(sessionId: "s1", stepsCompleted: 3)
+        let encoder = JSONEncoder()
+        encoder.dateEncodingStrategy = .iso8601
+        let data = try encoder.encode(event)
+        let json = try JSONSerialization.jsonObject(with: data) as! [String: Any]
+
+        XCTAssertNotNil(json["session_id"])
+        XCTAssertNotNil(json["steps_completed"])
+    }
+
+    func testAgentInterruptedEventEquatable() {
+        let id = "eq-id"
+        let ts = Date(timeIntervalSince1970: 1700000000)
+        let e1 = AgentInterruptedEvent(base: BaseAgentEvent(id: id, timestamp: ts), sessionId: "s", stepsCompleted: 3)
+        let e2 = AgentInterruptedEvent(base: BaseAgentEvent(id: id, timestamp: ts), sessionId: "s", stepsCompleted: 3)
+        XCTAssertEqual(e1, e2)
+    }
+
+    func testAgentInterruptedEventNotEqualDifferentSteps() {
+        let id = "eq-id"
+        let ts = Date(timeIntervalSince1970: 1700000000)
+        let e1 = AgentInterruptedEvent(base: BaseAgentEvent(id: id, timestamp: ts), sessionId: "s", stepsCompleted: 3)
+        let e2 = AgentInterruptedEvent(base: BaseAgentEvent(id: id, timestamp: ts), sessionId: "s", stepsCompleted: 7)
+        XCTAssertNotEqual(e1, e2)
+    }
+
+    // MARK: - AgentResumedEvent (AC5)
+
+    func testAgentResumedEventConstruction() {
+        let event = AgentResumedEvent(sessionId: "sess-1", resumeContext: "continue from step 3")
+        XCTAssertEqual(event.sessionId, "sess-1")
+        XCTAssertEqual(event.resumeContext, "continue from step 3")
+        XCTAssertFalse(event.id.isEmpty)
+    }
+
+    func testAgentResumedEventNilSessionId() {
+        let event = AgentResumedEvent(sessionId: nil, resumeContext: "retry")
+        XCTAssertNil(event.sessionId)
+    }
+
+    func testAgentResumedEventAgentEventConformance() {
+        func acceptEvent<T: AgentEvent>(_ event: T) {
+            XCTAssertFalse(event.id.isEmpty)
+        }
+        let event = AgentResumedEvent(sessionId: "s", resumeContext: "ctx")
+        acceptEvent(event)
+    }
+
+    func testAgentResumedEventSendable() {
+        func acceptSendable<T: Sendable>(_ value: T) { _ = value }
+        acceptSendable(AgentResumedEvent(sessionId: nil, resumeContext: "c"))
+    }
+
+    func testAgentResumedEventCodableRoundTrip() throws {
+        let event = AgentResumedEvent(sessionId: "sess-1", resumeContext: "pick up where left off")
+        let encoder = JSONEncoder()
+        encoder.dateEncodingStrategy = .iso8601
+        let data = try encoder.encode(event)
+
+        let decoder = JSONDecoder()
+        decoder.dateDecodingStrategy = .iso8601
+        let decoded = try decoder.decode(AgentResumedEvent.self, from: data)
+
+        XCTAssertEqual(decoded.id, event.id)
+        XCTAssertEqual(decoded.sessionId, event.sessionId)
+        XCTAssertEqual(decoded.resumeContext, event.resumeContext)
+    }
+
+    func testAgentResumedEventSnakeCaseJsonKeys() throws {
+        let event = AgentResumedEvent(sessionId: "s1", resumeContext: "ctx")
+        let encoder = JSONEncoder()
+        encoder.dateEncodingStrategy = .iso8601
+        let data = try encoder.encode(event)
+        let json = try JSONSerialization.jsonObject(with: data) as! [String: Any]
+
+        XCTAssertNotNil(json["session_id"])
+        XCTAssertNotNil(json["resume_context"])
+    }
+
+    func testAgentResumedEventEquatable() {
+        let id = "eq-id"
+        let ts = Date(timeIntervalSince1970: 1700000000)
+        let e1 = AgentResumedEvent(base: BaseAgentEvent(id: id, timestamp: ts), sessionId: "s", resumeContext: "ctx")
+        let e2 = AgentResumedEvent(base: BaseAgentEvent(id: id, timestamp: ts), sessionId: "s", resumeContext: "ctx")
+        XCTAssertEqual(e1, e2)
+    }
+
+    func testAgentResumedEventNotEqualDifferentContext() {
+        let id = "eq-id"
+        let ts = Date(timeIntervalSince1970: 1700000000)
+        let e1 = AgentResumedEvent(base: BaseAgentEvent(id: id, timestamp: ts), sessionId: "s", resumeContext: "a")
+        let e2 = AgentResumedEvent(base: BaseAgentEvent(id: id, timestamp: ts), sessionId: "s", resumeContext: "b")
+        XCTAssertNotEqual(e1, e2)
+    }
+
+    // MARK: - Agent Events Existential Usage (AC6)
+
+    func testAgentEventsAsAgentEventExistential() {
+        let events: [any AgentEvent] = [
+            AgentStartedEvent(sessionId: "s1", task: "start"),
+            AgentCompletedEvent(sessionId: "s2", totalSteps: 5, durationMs: 1000, resultText: "done"),
+            AgentFailedEvent(sessionId: "s3", error: "fail", stepsCompleted: 2),
+            AgentInterruptedEvent(sessionId: "s4", stepsCompleted: 3),
+            AgentResumedEvent(sessionId: "s5", resumeContext: "resume")
+        ]
+        XCTAssertEqual(events.count, 5)
+        for event in events {
+            XCTAssertFalse(event.id.isEmpty)
+            XCTAssertNotNil(event.timestamp)
+        }
+    }
+
+    // MARK: - All Payload Fields Are Immutable (AC6)
+
+    func testAgentStartedEventImmutablePayload() {
+        let event = AgentStartedEvent(sessionId: "s", task: "t")
+        XCTAssertEqual(event.sessionId, "s")
+        XCTAssertEqual(event.task, "t")
+    }
+
+    func testAgentCompletedEventImmutablePayload() {
+        let event = AgentCompletedEvent(sessionId: "s", totalSteps: 5, durationMs: 100, resultText: "r")
+        XCTAssertEqual(event.totalSteps, 5)
+        XCTAssertEqual(event.durationMs, 100)
+        XCTAssertEqual(event.resultText, "r")
+    }
+
+    func testAgentFailedEventImmutablePayload() {
+        let event = AgentFailedEvent(sessionId: "s", error: "e", stepsCompleted: 3)
+        XCTAssertEqual(event.error, "e")
+        XCTAssertEqual(event.stepsCompleted, 3)
+    }
+
+    func testAgentInterruptedEventImmutablePayload() {
+        let event = AgentInterruptedEvent(sessionId: "s", stepsCompleted: 7)
+        XCTAssertEqual(event.stepsCompleted, 7)
+    }
+
+    func testAgentResumedEventImmutablePayload() {
+        let event = AgentResumedEvent(sessionId: "s", resumeContext: "ctx")
+        XCTAssertEqual(event.resumeContext, "ctx")
+    }
+
+    // MARK: - Codable Decode from Raw JSON
+
+    func testAgentStartedEventDecodeFromRawJson() throws {
+        let jsonString = """
+        {"id":"raw-id","timestamp":"2024-01-15T12:00:00Z","session_id":"raw-sess","task":"raw task"}
+        """
+        let data = jsonString.data(using: .utf8)!
+        let decoder = JSONDecoder()
+        decoder.dateDecodingStrategy = .iso8601
+        let event = try decoder.decode(AgentStartedEvent.self, from: data)
+
+        XCTAssertEqual(event.id, "raw-id")
+        XCTAssertEqual(event.sessionId, "raw-sess")
+        XCTAssertEqual(event.task, "raw task")
+    }
+
+    func testAgentCompletedEventDecodeFromRawJson() throws {
+        let jsonString = """
+        {"id":"comp-id","timestamp":"2024-01-15T12:00:00Z","session_id":"comp-sess","total_steps":8,"duration_ms":2500,"result_text":"ok"}
+        """
+        let data = jsonString.data(using: .utf8)!
+        let decoder = JSONDecoder()
+        decoder.dateDecodingStrategy = .iso8601
+        let event = try decoder.decode(AgentCompletedEvent.self, from: data)
+
+        XCTAssertEqual(event.id, "comp-id")
+        XCTAssertEqual(event.totalSteps, 8)
+        XCTAssertEqual(event.durationMs, 2500)
+        XCTAssertEqual(event.resultText, "ok")
+    }
+
+    func testAgentFailedEventDecodeFromRawJson() throws {
+        let jsonString = """
+        {"id":"fail-id","timestamp":"2024-01-15T12:00:00Z","session_id":"fail-sess","error":"timeout","steps_completed":4}
+        """
+        let data = jsonString.data(using: .utf8)!
+        let decoder = JSONDecoder()
+        decoder.dateDecodingStrategy = .iso8601
+        let event = try decoder.decode(AgentFailedEvent.self, from: data)
+
+        XCTAssertEqual(event.id, "fail-id")
+        XCTAssertEqual(event.error, "timeout")
+        XCTAssertEqual(event.stepsCompleted, 4)
+    }
+
+    func testAgentInterruptedEventDecodeFromRawJson() throws {
+        let jsonString = """
+        {"id":"int-id","timestamp":"2024-01-15T12:00:00Z","session_id":"int-sess","steps_completed":2}
+        """
+        let data = jsonString.data(using: .utf8)!
+        let decoder = JSONDecoder()
+        decoder.dateDecodingStrategy = .iso8601
+        let event = try decoder.decode(AgentInterruptedEvent.self, from: data)
+
+        XCTAssertEqual(event.id, "int-id")
+        XCTAssertEqual(event.stepsCompleted, 2)
+    }
+
+    func testAgentResumedEventDecodeFromRawJson() throws {
+        let jsonString = """
+        {"id":"res-id","timestamp":"2024-01-15T12:00:00Z","session_id":"res-sess","resume_context":"continue"}
+        """
+        let data = jsonString.data(using: .utf8)!
+        let decoder = JSONDecoder()
+        decoder.dateDecodingStrategy = .iso8601
+        let event = try decoder.decode(AgentResumedEvent.self, from: data)
+
+        XCTAssertEqual(event.id, "res-id")
+        XCTAssertEqual(event.resumeContext, "continue")
+    }
+
+    // MARK: - Nil SessionId Codable Decode
+
+    func testAgentStartedEventDecodeNilSessionId() throws {
+        let jsonString = """
+        {"id":"n","timestamp":"2024-01-15T12:00:00Z","session_id":null,"task":"hello"}
+        """
+        let data = jsonString.data(using: .utf8)!
+        let decoder = JSONDecoder()
+        decoder.dateDecodingStrategy = .iso8601
+        let event = try decoder.decode(AgentStartedEvent.self, from: data)
+        XCTAssertNil(event.sessionId)
+        XCTAssertEqual(event.task, "hello")
+    }
+
+    func testAgentCompletedEventDecodeNilSessionIdAndResultText() throws {
+        let jsonString = """
+        {"id":"n","timestamp":"2024-01-15T12:00:00Z","session_id":null,"total_steps":1,"duration_ms":50,"result_text":null}
+        """
+        let data = jsonString.data(using: .utf8)!
+        let decoder = JSONDecoder()
+        decoder.dateDecodingStrategy = .iso8601
+        let event = try decoder.decode(AgentCompletedEvent.self, from: data)
+        XCTAssertNil(event.sessionId)
+        XCTAssertNil(event.resultText)
+        XCTAssertEqual(event.totalSteps, 1)
+    }
+
+    func testAgentFailedEventDecodeNilSessionId() throws {
+        let jsonString = """
+        {"id":"n","timestamp":"2024-01-15T12:00:00Z","session_id":null,"error":"err","steps_completed":0}
+        """
+        let data = jsonString.data(using: .utf8)!
+        let decoder = JSONDecoder()
+        decoder.dateDecodingStrategy = .iso8601
+        let event = try decoder.decode(AgentFailedEvent.self, from: data)
+        XCTAssertNil(event.sessionId)
+    }
+
+    func testAgentInterruptedEventDecodeNilSessionId() throws {
+        let jsonString = """
+        {"id":"n","timestamp":"2024-01-15T12:00:00Z","session_id":null,"steps_completed":5}
+        """
+        let data = jsonString.data(using: .utf8)!
+        let decoder = JSONDecoder()
+        decoder.dateDecodingStrategy = .iso8601
+        let event = try decoder.decode(AgentInterruptedEvent.self, from: data)
+        XCTAssertNil(event.sessionId)
+        XCTAssertEqual(event.stepsCompleted, 5)
+    }
+
+    func testAgentResumedEventDecodeNilSessionId() throws {
+        let jsonString = """
+        {"id":"n","timestamp":"2024-01-15T12:00:00Z","session_id":null,"resume_context":"retry"}
+        """
+        let data = jsonString.data(using: .utf8)!
+        let decoder = JSONDecoder()
+        decoder.dateDecodingStrategy = .iso8601
+        let event = try decoder.decode(AgentResumedEvent.self, from: data)
+        XCTAssertNil(event.sessionId)
+        XCTAssertEqual(event.resumeContext, "retry")
+    }
+
+    func testAgentCompletedEventDecodeMissingResultText() throws {
+        let jsonString = """
+        {"id":"n","timestamp":"2024-01-15T12:00:00Z","session_id":"s1","total_steps":3,"duration_ms":100}
+        """
+        let data = jsonString.data(using: .utf8)!
+        let decoder = JSONDecoder()
+        decoder.dateDecodingStrategy = .iso8601
+        let event = try decoder.decode(AgentCompletedEvent.self, from: data)
+        XCTAssertNil(event.resultText)
+        XCTAssertEqual(event.totalSteps, 3)
+    }
+
+    // MARK: - Codable Error Cases
+
+    func testAgentStartedEventDecodeMissingRequiredField() {
+        let jsonString = """
+        {"id":"bad","timestamp":"2024-01-15T12:00:00Z"}
+        """
+        let data = jsonString.data(using: .utf8)!
+        let decoder = JSONDecoder()
+        decoder.dateDecodingStrategy = .iso8601
+        XCTAssertThrowsError(try decoder.decode(AgentStartedEvent.self, from: data))
+    }
+
+    func testAgentCompletedEventDecodeMissingRequiredField() {
+        let jsonString = """
+        {"id":"bad","timestamp":"2024-01-15T12:00:00Z","total_steps":1}
+        """
+        let data = jsonString.data(using: .utf8)!
+        let decoder = JSONDecoder()
+        decoder.dateDecodingStrategy = .iso8601
+        XCTAssertThrowsError(try decoder.decode(AgentCompletedEvent.self, from: data))
+    }
+
+    func testAgentFailedEventDecodeMissingErrorField() {
+        let jsonString = """
+        {"id":"bad","timestamp":"2024-01-15T12:00:00Z","steps_completed":1}
+        """
+        let data = jsonString.data(using: .utf8)!
+        let decoder = JSONDecoder()
+        decoder.dateDecodingStrategy = .iso8601
+        XCTAssertThrowsError(try decoder.decode(AgentFailedEvent.self, from: data))
+    }
+
+    func testAgentInterruptedEventDecodeMissingRequiredField() {
+        let jsonString = """
+        {"id":"bad","timestamp":"2024-01-15T12:00:00Z","session_id":"s"}
+        """
+        let data = jsonString.data(using: .utf8)!
+        let decoder = JSONDecoder()
+        decoder.dateDecodingStrategy = .iso8601
+        XCTAssertThrowsError(try decoder.decode(AgentInterruptedEvent.self, from: data))
+    }
+
+    func testAgentResumedEventDecodeMissingRequiredField() {
+        let jsonString = """
+        {"id":"bad","timestamp":"2024-01-15T12:00:00Z","session_id":"s"}
+        """
+        let data = jsonString.data(using: .utf8)!
+        let decoder = JSONDecoder()
+        decoder.dateDecodingStrategy = .iso8601
+        XCTAssertThrowsError(try decoder.decode(AgentResumedEvent.self, from: data))
+    }
+
+    // MARK: - Actor Boundary (AC6)
+
+    func testAgentStartedEventSendableAcrossActor() async {
+        let event = AgentStartedEvent(sessionId: "s", task: "t")
+        let retrieved = await Self.agentStartedEchoActor.send(event)
+        XCTAssertEqual(retrieved.task, "t")
+    }
+
+    func testAgentCompletedEventSendableAcrossActor() async {
+        let event = AgentCompletedEvent(sessionId: "s", totalSteps: 5, durationMs: 100, resultText: "r")
+        let retrieved = await Self.agentCompletedEchoActor.send(event)
+        XCTAssertEqual(retrieved.totalSteps, 5)
+    }
+
+    func testAgentFailedEventSendableAcrossActor() async {
+        let event = AgentFailedEvent(sessionId: "s", error: "err", stepsCompleted: 3)
+        let retrieved = await Self.agentFailedEchoActor.send(event)
+        XCTAssertEqual(retrieved.error, "err")
+    }
+
+    func testAgentInterruptedEventSendableAcrossActor() async {
+        let event = AgentInterruptedEvent(sessionId: "s", stepsCompleted: 2)
+        let retrieved = await Self.agentInterruptedEchoActor.send(event)
+        XCTAssertEqual(retrieved.stepsCompleted, 2)
+    }
+
+    func testAgentResumedEventSendableAcrossActor() async {
+        let event = AgentResumedEvent(sessionId: "s", resumeContext: "ctx")
+        let retrieved = await Self.agentResumedEchoActor.send(event)
+        XCTAssertEqual(retrieved.resumeContext, "ctx")
+    }
+}
+
+// MARK: - Agent Event Test Helpers
+
+private extension AgentEventTypesTests {
+    actor AgentStartedEchoActor {
+        func send(_ event: AgentStartedEvent) -> AgentStartedEvent { event }
+    }
+
+    actor AgentCompletedEchoActor {
+        func send(_ event: AgentCompletedEvent) -> AgentCompletedEvent { event }
+    }
+
+    actor AgentFailedEchoActor {
+        func send(_ event: AgentFailedEvent) -> AgentFailedEvent { event }
+    }
+
+    actor AgentInterruptedEchoActor {
+        func send(_ event: AgentInterruptedEvent) -> AgentInterruptedEvent { event }
+    }
+
+    actor AgentResumedEchoActor {
+        func send(_ event: AgentResumedEvent) -> AgentResumedEvent { event }
+    }
+
+    static let agentStartedEchoActor = AgentStartedEchoActor()
+    static let agentCompletedEchoActor = AgentCompletedEchoActor()
+    static let agentFailedEchoActor = AgentFailedEchoActor()
+    static let agentInterruptedEchoActor = AgentInterruptedEchoActor()
+    static let agentResumedEchoActor = AgentResumedEchoActor()
+}

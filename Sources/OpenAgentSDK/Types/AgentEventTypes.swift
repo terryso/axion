@@ -228,3 +228,219 @@ public struct SessionAutoSavedEvent: AgentEvent, Equatable {
         try c.encode(messageCount, forKey: .messageCount)
     }
 }
+
+// MARK: - Agent Events
+
+/// Emitted when an agent starts executing.
+public struct AgentStartedEvent: AgentEvent, Equatable {
+    public let base: BaseAgentEvent
+    public let sessionId: String?
+    public let task: String
+
+    public var id: String { base.id }
+    public var timestamp: Date { base.timestamp }
+
+    enum CodingKeys: String, CodingKey {
+        case id, timestamp
+        case sessionId = "session_id"
+        case task
+    }
+
+    public init(base: BaseAgentEvent = BaseAgentEvent(), sessionId: String?, task: String) {
+        self.base = base
+        self.sessionId = sessionId
+        self.task = task
+    }
+
+    public init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        base = BaseAgentEvent(
+            id: try c.decode(String.self, forKey: .id),
+            timestamp: try c.decode(Date.self, forKey: .timestamp)
+        )
+        sessionId = try c.decodeIfPresent(String.self, forKey: .sessionId)
+        task = try c.decode(String.self, forKey: .task)
+    }
+
+    public func encode(to encoder: Encoder) throws {
+        var c = encoder.container(keyedBy: CodingKeys.self)
+        try c.encode(base.id, forKey: .id)
+        try c.encode(base.timestamp, forKey: .timestamp)
+        try c.encodeIfPresent(sessionId, forKey: .sessionId)
+        try c.encode(task, forKey: .task)
+    }
+}
+
+/// Emitted when an agent completes execution successfully.
+public struct AgentCompletedEvent: AgentEvent, Equatable {
+    public let base: BaseAgentEvent
+    public let sessionId: String?
+    public let totalSteps: Int
+    public let durationMs: Int
+    public let resultText: String?
+
+    public var id: String { base.id }
+    public var timestamp: Date { base.timestamp }
+
+    enum CodingKeys: String, CodingKey {
+        case id, timestamp
+        case sessionId = "session_id"
+        case totalSteps = "total_steps"
+        case durationMs = "duration_ms"
+        case resultText = "result_text"
+    }
+
+    public init(base: BaseAgentEvent = BaseAgentEvent(), sessionId: String?, totalSteps: Int, durationMs: Int, resultText: String?) {
+        self.base = base
+        self.sessionId = sessionId
+        self.totalSteps = totalSteps
+        self.durationMs = durationMs
+        self.resultText = resultText
+    }
+
+    public init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        base = BaseAgentEvent(
+            id: try c.decode(String.self, forKey: .id),
+            timestamp: try c.decode(Date.self, forKey: .timestamp)
+        )
+        sessionId = try c.decodeIfPresent(String.self, forKey: .sessionId)
+        totalSteps = try c.decode(Int.self, forKey: .totalSteps)
+        durationMs = try c.decode(Int.self, forKey: .durationMs)
+        resultText = try c.decodeIfPresent(String.self, forKey: .resultText)
+    }
+
+    public func encode(to encoder: Encoder) throws {
+        var c = encoder.container(keyedBy: CodingKeys.self)
+        try c.encode(base.id, forKey: .id)
+        try c.encode(base.timestamp, forKey: .timestamp)
+        try c.encodeIfPresent(sessionId, forKey: .sessionId)
+        try c.encode(totalSteps, forKey: .totalSteps)
+        try c.encode(durationMs, forKey: .durationMs)
+        try c.encodeIfPresent(resultText, forKey: .resultText)
+    }
+}
+
+/// Emitted when an agent fails during execution.
+public struct AgentFailedEvent: AgentEvent, Equatable {
+    public let base: BaseAgentEvent
+    public let sessionId: String?
+    public let error: String
+    public let stepsCompleted: Int
+
+    public var id: String { base.id }
+    public var timestamp: Date { base.timestamp }
+
+    enum CodingKeys: String, CodingKey {
+        case id, timestamp, error
+        case sessionId = "session_id"
+        case stepsCompleted = "steps_completed"
+    }
+
+    public init(base: BaseAgentEvent = BaseAgentEvent(), sessionId: String?, error: String, stepsCompleted: Int) {
+        self.base = base
+        self.sessionId = sessionId
+        self.error = error
+        self.stepsCompleted = stepsCompleted
+    }
+
+    public init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        base = BaseAgentEvent(
+            id: try c.decode(String.self, forKey: .id),
+            timestamp: try c.decode(Date.self, forKey: .timestamp)
+        )
+        sessionId = try c.decodeIfPresent(String.self, forKey: .sessionId)
+        error = try c.decode(String.self, forKey: .error)
+        stepsCompleted = try c.decode(Int.self, forKey: .stepsCompleted)
+    }
+
+    public func encode(to encoder: Encoder) throws {
+        var c = encoder.container(keyedBy: CodingKeys.self)
+        try c.encode(base.id, forKey: .id)
+        try c.encode(base.timestamp, forKey: .timestamp)
+        try c.encodeIfPresent(sessionId, forKey: .sessionId)
+        try c.encode(error, forKey: .error)
+        try c.encode(stepsCompleted, forKey: .stepsCompleted)
+    }
+}
+
+/// Emitted when an agent is interrupted during execution.
+public struct AgentInterruptedEvent: AgentEvent, Equatable {
+    public let base: BaseAgentEvent
+    public let sessionId: String?
+    public let stepsCompleted: Int
+
+    public var id: String { base.id }
+    public var timestamp: Date { base.timestamp }
+
+    enum CodingKeys: String, CodingKey {
+        case id, timestamp
+        case sessionId = "session_id"
+        case stepsCompleted = "steps_completed"
+    }
+
+    public init(base: BaseAgentEvent = BaseAgentEvent(), sessionId: String?, stepsCompleted: Int) {
+        self.base = base
+        self.sessionId = sessionId
+        self.stepsCompleted = stepsCompleted
+    }
+
+    public init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        base = BaseAgentEvent(
+            id: try c.decode(String.self, forKey: .id),
+            timestamp: try c.decode(Date.self, forKey: .timestamp)
+        )
+        sessionId = try c.decodeIfPresent(String.self, forKey: .sessionId)
+        stepsCompleted = try c.decode(Int.self, forKey: .stepsCompleted)
+    }
+
+    public func encode(to encoder: Encoder) throws {
+        var c = encoder.container(keyedBy: CodingKeys.self)
+        try c.encode(base.id, forKey: .id)
+        try c.encode(base.timestamp, forKey: .timestamp)
+        try c.encodeIfPresent(sessionId, forKey: .sessionId)
+        try c.encode(stepsCompleted, forKey: .stepsCompleted)
+    }
+}
+
+/// Emitted when an agent resumes from an interrupted state.
+public struct AgentResumedEvent: AgentEvent, Equatable {
+    public let base: BaseAgentEvent
+    public let sessionId: String?
+    public let resumeContext: String
+
+    public var id: String { base.id }
+    public var timestamp: Date { base.timestamp }
+
+    enum CodingKeys: String, CodingKey {
+        case id, timestamp
+        case sessionId = "session_id"
+        case resumeContext = "resume_context"
+    }
+
+    public init(base: BaseAgentEvent = BaseAgentEvent(), sessionId: String?, resumeContext: String) {
+        self.base = base
+        self.sessionId = sessionId
+        self.resumeContext = resumeContext
+    }
+
+    public init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        base = BaseAgentEvent(
+            id: try c.decode(String.self, forKey: .id),
+            timestamp: try c.decode(Date.self, forKey: .timestamp)
+        )
+        sessionId = try c.decodeIfPresent(String.self, forKey: .sessionId)
+        resumeContext = try c.decode(String.self, forKey: .resumeContext)
+    }
+
+    public func encode(to encoder: Encoder) throws {
+        var c = encoder.container(keyedBy: CodingKeys.self)
+        try c.encode(base.id, forKey: .id)
+        try c.encode(base.timestamp, forKey: .timestamp)
+        try c.encodeIfPresent(sessionId, forKey: .sessionId)
+        try c.encode(resumeContext, forKey: .resumeContext)
+    }
+}
