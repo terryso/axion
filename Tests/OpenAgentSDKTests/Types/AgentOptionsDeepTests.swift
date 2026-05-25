@@ -282,4 +282,104 @@ final class AgentOptionsDeepTests: XCTestCase {
         XCTAssertNoThrow(try options.validate(),
                          "Valid thinking config should not throw")
     }
+
+    // MARK: - AgentOptions EventBus (Story 27.1)
+
+    func testAgentOptions_eventBus_defaultIsNil() {
+        let options = AgentOptions()
+        XCTAssertNil(options.eventBus, "AC1: eventBus should default to nil")
+    }
+
+    func testAgentOptions_eventBus_canBeSet() {
+        let bus = EventBus()
+        let options = AgentOptions(eventBus: bus)
+        XCTAssertNotNil(options.eventBus, "AC2: eventBus should be non-nil when set")
+        XCTAssertTrue(options.eventBus === bus, "AC2: should be the same instance")
+    }
+
+    func testAgentOptions_eventBus_sendable() {
+        let bus = EventBus()
+        let options = AgentOptions(eventBus: bus)
+        // AC3: Assigning to `any Sendable` proves AgentOptions conforms to Sendable.
+        // If EventBus were not Sendable, the struct declaration would fail to compile.
+        let sendable: any Sendable = options
+        XCTAssertTrue(sendable is AgentOptions, "AC3: AgentOptions with eventBus should remain Sendable")
+    }
+
+    func testAgentOptions_eventBus_sharedAcrossInstances() {
+        let bus = EventBus()
+        let opts1 = AgentOptions(eventBus: bus)
+        let opts2 = AgentOptions(eventBus: bus)
+        XCTAssertTrue(opts1.eventBus === opts2.eventBus,
+                       "Multiple AgentOptions should share the same EventBus reference")
+    }
+
+    func testAgentOptions_eventBus_doesNotAffectOtherDefaults() {
+        let bus = EventBus()
+        let options = AgentOptions(eventBus: bus)
+        XCTAssertNil(options.apiKey)
+        XCTAssertEqual(options.model, "claude-sonnet-4-6")
+        XCTAssertEqual(options.maxTurns, 10)
+        XCTAssertEqual(options.maxTokens, 16384)
+        XCTAssertNil(options.systemPrompt)
+        XCTAssertNil(options.agentLabel)
+    }
+
+    // MARK: - AgentOptions EventBus — Gap Tests (Story 27.1 QA)
+
+    func testAgentOptions_eventBus_initFromConfig_isNil() {
+        let config = SDKConfiguration(apiKey: "test-key")
+        let options = AgentOptions(from: config)
+        XCTAssertNil(options.eventBus, "AC5: init(from config:) should set eventBus to nil")
+    }
+
+    func testAgentOptions_eventBus_mutation() async {
+        let bus = EventBus()
+        var options = AgentOptions()
+        XCTAssertNil(options.eventBus, "Should start as nil")
+        options.eventBus = bus
+        XCTAssertTrue(options.eventBus === bus, "Should be mutable and hold the assigned bus")
+        options.eventBus = nil
+        XCTAssertNil(options.eventBus, "Should be clearable back to nil")
+    }
+
+    func testAgentOptions_eventBus_attachedBusCanPublishAndSubscribe() async {
+        let bus = EventBus()
+        let options = AgentOptions(eventBus: bus)
+
+        guard let attachedBus = options.eventBus else {
+            XCTFail("eventBus should not be nil")
+            return
+        }
+
+        let typedStream = await attachedBus.subscribe(AgentStartedEvent.self)
+        let event = AgentStartedEvent(sessionId: "test-session", task: "test-task")
+        await attachedBus.publish(event)
+
+        var receivedEvent: AgentStartedEvent?
+        for await e in typedStream {
+            receivedEvent = e
+            break
+        }
+        XCTAssertNotNil(receivedEvent, "EventBus attached to AgentOptions should be functional")
+        XCTAssertEqual(receivedEvent?.sessionId, "test-session")
+        XCTAssertEqual(receivedEvent?.task, "test-task")
+    }
+
+    func testAgentOptions_eventBus_moreDefaultsUnchanged() {
+        let bus = EventBus()
+        let options = AgentOptions(eventBus: bus)
+        XCTAssertNil(options.baseURL)
+        XCTAssertEqual(options.provider, .anthropic)
+        XCTAssertNil(options.maxBudgetUsd)
+        XCTAssertNil(options.thinking)
+        XCTAssertEqual(options.permissionMode, .default)
+        XCTAssertNil(options.retryConfig)
+        XCTAssertNil(options.tools)
+        XCTAssertNil(options.mcpServers)
+        XCTAssertNil(options.fallbackModel)
+        XCTAssertNil(options.env)
+        XCTAssertNil(options.allowedTools)
+        XCTAssertNil(options.disallowedTools)
+    }
 }

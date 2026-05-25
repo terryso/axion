@@ -1,6 +1,6 @@
 # Runtime Event Layer — Epic 26: AgentEvent Protocol 与 EventBus
 
-> **状态：待开发**
+> **状态：已完成（Epic 26 全部 6 个 Story 已交付）**
 > **优先级：P0**
 > **依赖：** 无（新增类型，不依赖现有 Epic）
 > **Roadmap：** `docs/runtime-event-layer-roadmap.md` → S1 + S2
@@ -130,7 +130,7 @@ So that 上层可以实时追踪 token 消耗和成本.
 - 在 `AgentEventTypes.swift` 中定义：
   - `LLMRequestStartedEvent`：`sessionId`、`model`
   - `LLMResponseReceivedEvent`：`sessionId`、`model`、`durationMs`
-  - `LLMCostEvent`：`sessionId`、`model`、`inputTokens`、`outputTokens`、`cacheReadTokens`、`cacheWriteTokens`、`estimatedCostUsd`
+  - `LLMCostEvent`：`sessionId`、`model`、`inputTokens`、`outputTokens`、`cacheCreationInputTokens`、`cacheReadInputTokens`、`estimatedCostUsd`
 
 **Acceptance Criteria:**
 
@@ -252,5 +252,5 @@ func subscribe<T: AgentEvent>(_ type: T.Type) -> AsyncStream<T> {
 
 - Event 类型：纯 struct 构造测试，不需要 LLM
 - EventBus：actor 并发测试（publish/subscribe/unsubscribe），不需要 LLM
-- 使用 `@Test` + `#expect`（Swift Testing 框架），不用 XCTest
+- 使用 XCTest 框架（`XCTestCase`），与项目现有测试模式一致
 - 测试文件放在 `Tests/OpenAgentSDKTests/` 目录

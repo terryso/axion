@@ -46,7 +46,7 @@ SDK 的 `SDKMessage` 是 LLM 消息级的抽象（assistant、toolUse、toolResu
 
 ---
 
-## S1. AgentEvent Protocol + Event 类型
+## S1. AgentEvent Protocol + Event 类型 ✅ 已完成（Epic 26）
 
 **优先级：P0（所有后续工作的基础）**
 
@@ -104,7 +104,7 @@ public struct BaseAgentEvent: AgentEvent {
 
 ---
 
-## S2. EventBus（进程内 Event Bus）
+## S2. EventBus（进程内 Event Bus） ✅ 已完成（Epic 26）
 
 **优先级：P0**
 **依赖：S1**
@@ -114,7 +114,7 @@ public struct BaseAgentEvent: AgentEvent {
 在 `Sources/OpenAgentSDK/Core/` 新增 `EventBus.swift`：
 
 ```swift
-/// In-process event bus using AsyncChannel.
+/// In-process event bus using AsyncStream.
 /// Supports multiple subscribers. Events are broadcast to all subscribers.
 public actor EventBus {
     public func publish(_ event: any AgentEvent)
@@ -125,7 +125,7 @@ public actor EventBus {
 
 ### 设计要点
 
-- 基于 `AsyncChannel<any AgentEvent>` 实现
+- 基于 `AsyncStream<any AgentEvent>` 实现（bufferingPolicy: .bufferingNewest(100)）
 - 支持类型过滤 subscribe（只订阅特定 event 类型）
 - 支持多个 subscriber（CLI + SSE + trace，同时消费）
 - Buffer 策略：bufferingLatest(100)，避免慢 consumer 阻塞 agent 执行
