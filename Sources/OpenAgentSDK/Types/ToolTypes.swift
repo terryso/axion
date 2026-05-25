@@ -337,6 +337,14 @@ public struct ToolContext: Sendable {
     /// to set environment variables for child processes. Nil when no custom env is configured.
     public let env: [String: String]?
 
+    /// Optional event bus for publishing tool lifecycle events.
+    /// Injected by Core/ from AgentOptions.eventBus. Nil when no event bus is configured.
+    public let eventBus: EventBus?
+
+    /// Optional session ID for correlating tool events with agent sessions.
+    /// Injected by Core/ from the resolved sessionId in Agent.swift.
+    public let sessionId: String?
+
     /// Suggested permission update operations for the CanUseTool callback,
     /// matching TS SDK's `suggestions` parameter.
     public let suggestions: [PermissionUpdateAction]?
@@ -377,7 +385,9 @@ public struct ToolContext: Sendable {
         suggestions: [PermissionUpdateAction]? = nil,
         blockedPath: String? = nil,
         decisionReason: String? = nil,
-        agentId: String? = nil
+        agentId: String? = nil,
+        eventBus: EventBus? = nil,
+        sessionId: String? = nil
     ) {
         self.cwd = cwd
         self.toolUseId = toolUseId
@@ -406,6 +416,8 @@ public struct ToolContext: Sendable {
         self.blockedPath = blockedPath
         self.decisionReason = decisionReason
         self.agentId = agentId
+        self.eventBus = eventBus
+        self.sessionId = sessionId
     }
 
     /// Returns a copy of this context with the toolUseId replaced.
@@ -435,7 +447,9 @@ public struct ToolContext: Sendable {
             suggestions: suggestions,
             blockedPath: blockedPath,
             decisionReason: decisionReason,
-            agentId: agentId
+            agentId: agentId,
+            eventBus: eventBus,
+            sessionId: sessionId
         )
     }
 
@@ -468,7 +482,9 @@ public struct ToolContext: Sendable {
             suggestions: suggestions,
             blockedPath: blockedPath,
             decisionReason: decisionReason,
-            agentId: agentId
+            agentId: agentId,
+            eventBus: eventBus,
+            sessionId: sessionId
         )
     }
 }

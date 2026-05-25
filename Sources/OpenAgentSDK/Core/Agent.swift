@@ -1744,7 +1744,9 @@ public class Agent: CustomStringConvertible, CustomDebugStringConvertible, @unch
                             fileCache: fileCache,
                             sandbox: options.sandbox,
                             mcpConnections: nil,
-                            env: options.env
+                            env: options.env,
+                            eventBus: options.eventBus,
+                            sessionId: resolvedSessionId
                         )
                     )
 
@@ -2726,7 +2728,9 @@ public class Agent: CustomStringConvertible, CustomDebugStringConvertible, @unch
                                     fileCache: capturedFileCache,
                                     sandbox: capturedSandbox,
                                     mcpConnections: nil,
-                                    env: capturedEnv
+                                    env: capturedEnv,
+                                    eventBus: capturedEventBus,
+                                    sessionId: resolvedSessionId
                                 )
                             )
 

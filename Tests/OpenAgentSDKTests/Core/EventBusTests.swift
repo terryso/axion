@@ -536,4 +536,353 @@ final class EventBusTests: XCTestCase {
         let completed = collected[1] as! AgentCompletedEvent
         XCTAssertEqual(completed.sessionId, sessionId)
     }
+
+    // MARK: - Tool Lifecycle Event Emit Tests (Story 27.3)
+
+    /// A simple tool that returns a fixed result.
+    private struct StubTool: ToolProtocol, @unchecked Sendable {
+        let name: String
+        let description: String = "stub"
+        let inputSchema: ToolInputSchema = ["type": "object", "properties": [:]]
+        let isReadOnly: Bool = true
+        let isError: Bool
+        let content: String
+
+        init(name: String = "stub", isError: Bool = false, content: String = "ok") {
+            self.name = name
+            self.isError = isError
+            self.content = content
+        }
+
+        func call(input: Any, context: ToolContext) async -> ToolResult {
+            return ToolResult(toolUseId: context.toolUseId, content: content, isError: isError)
+        }
+    }
+
+    // AC1: ToolStartedEvent emitted before tool execution
+    func testToolStartedEventEmitted() async {
+        let bus = EventBus()
+        let (_, stream) = await bus.subscribe()
+
+        let tool = StubTool(name: "bash", isError: false, content: "ok")
+        let block = ToolUseBlock(id: "tu-1", name: "bash", input: ["command": "echo hi"])
+        let context = ToolContext(
+            cwd: "/tmp",
+            eventBus: bus,
+            sessionId: "sess-1"
+        )
+
+        _ = await ToolExecutor.executeSingleTool(block: block, tool: tool, context: context)
+
+        var collected: [any AgentEvent] = []
+        for await event in stream {
+            collected.append(event)
+            if collected.count >= 2 { break }
+        }
+
+        XCTAssertTrue(collected[0] is ToolStartedEvent)
+        let started = collected[0] as! ToolStartedEvent
+        XCTAssertEqual(started.toolName, "bash")
+        XCTAssertEqual(started.toolUseId, "tu-1")
+        XCTAssertEqual(started.sessionId, "sess-1")
+        XCTAssertNotNil(started.input)
+    }
+
+    // AC2: ToolCompletedEvent emitted on successful tool execution
+    func testToolCompletedEventEmitted() async {
+        let bus = EventBus()
+        let (_, stream) = await bus.subscribe()
+
+        let tool = StubTool(name: "bash", isError: false, content: "hello")
+        let block = ToolUseBlock(id: "tu-2", name: "bash", input: ["command": "echo hi"])
+        let context = ToolContext(
+            cwd: "/tmp",
+            eventBus: bus,
+            sessionId: "sess-2"
+        )
+
+        _ = await ToolExecutor.executeSingleTool(block: block, tool: tool, context: context)
+
+        var collected: [any AgentEvent] = []
+        for await event in stream {
+            collected.append(event)
+            if collected.count >= 2 { break }
+        }
+
+        XCTAssertEqual(collected.count, 2)
+        XCTAssertTrue(collected[0] is ToolStartedEvent)
+        XCTAssertTrue(collected[1] is ToolCompletedEvent)
+
+        let completed = collected[1] as! ToolCompletedEvent
+        XCTAssertEqual(completed.toolName, "bash")
+        XCTAssertEqual(completed.toolUseId, "tu-2")
+        XCTAssertEqual(completed.sessionId, "sess-2")
+        XCTAssertGreaterThanOrEqual(completed.durationMs, 0)
+        XCTAssertFalse(completed.isError)
+    }
+
+    // AC3: ToolFailedEvent emitted on tool execution failure
+    func testToolFailedEventEmitted() async {
+        let bus = EventBus()
+        let (_, stream) = await bus.subscribe()
+
+        let tool = StubTool(name: "bash", isError: true, content: "command not found")
+        let block = ToolUseBlock(id: "tu-3", name: "bash", input: ["command": "bad_cmd"])
+        let context = ToolContext(
+            cwd: "/tmp",
+            eventBus: bus,
+            sessionId: "sess-3"
+        )
+
+        _ = await ToolExecutor.executeSingleTool(block: block, tool: tool, context: context)
+
+        var collected: [any AgentEvent] = []
+        for await event in stream {
+            collected.append(event)
+            if collected.count >= 2 { break }
+        }
+
+        XCTAssertEqual(collected.count, 2)
+        XCTAssertTrue(collected[0] is ToolStartedEvent)
+        XCTAssertTrue(collected[1] is ToolFailedEvent)
+
+        let failed = collected[1] as! ToolFailedEvent
+        XCTAssertEqual(failed.toolName, "bash")
+        XCTAssertEqual(failed.toolUseId, "tu-3")
+        XCTAssertEqual(failed.sessionId, "sess-3")
+        XCTAssertTrue(failed.error.contains("command not found"))
+    }
+
+    // AC4: Each tool gets independent Started/Completed events
+    func testMultipleToolsGetIndependentEvents() async {
+        let bus = EventBus()
+        let (_, stream) = await bus.subscribe()
+
+        let tool1 = StubTool(name: "read", isError: false, content: "file1")
+        let tool2 = StubTool(name: "bash", isError: false, content: "output")
+        let block1 = ToolUseBlock(id: "tu-a", name: "read", input: ["path": "/a"])
+        let block2 = ToolUseBlock(id: "tu-b", name: "bash", input: ["command": "ls"])
+        let context = ToolContext(
+            cwd: "/tmp",
+            eventBus: bus,
+            sessionId: "sess-multi"
+        )
+
+        _ = await ToolExecutor.executeSingleTool(block: block1, tool: tool1, context: context)
+        _ = await ToolExecutor.executeSingleTool(block: block2, tool: tool2, context: context)
+
+        var collected: [any AgentEvent] = []
+        for await event in stream {
+            collected.append(event)
+            if collected.count >= 4 { break }
+        }
+
+        XCTAssertEqual(collected.count, 4)
+        XCTAssertTrue(collected[0] is ToolStartedEvent)
+        XCTAssertTrue(collected[1] is ToolCompletedEvent)
+        XCTAssertTrue(collected[2] is ToolStartedEvent)
+        XCTAssertTrue(collected[3] is ToolCompletedEvent)
+
+        let started1 = collected[0] as! ToolStartedEvent
+        XCTAssertEqual(started1.toolUseId, "tu-a")
+        let completed1 = collected[1] as! ToolCompletedEvent
+        XCTAssertEqual(completed1.toolUseId, "tu-a")
+        XCTAssertEqual(completed1.toolName, "read")
+
+        let started2 = collected[2] as! ToolStartedEvent
+        XCTAssertEqual(started2.toolUseId, "tu-b")
+        let completed2 = collected[3] as! ToolCompletedEvent
+        XCTAssertEqual(completed2.toolUseId, "tu-b")
+        XCTAssertEqual(completed2.toolName, "bash")
+    }
+
+    // AC6: No events emitted when eventBus is nil
+    func testNoEventsWhenEventBusIsNil() async throws {
+        let tool = StubTool(name: "bash", isError: false, content: "ok")
+        let block = ToolUseBlock(id: "tu-nil", name: "bash", input: ["command": "echo hi"])
+        let context = ToolContext(cwd: "/tmp")
+
+        let result = await ToolExecutor.executeSingleTool(block: block, tool: tool, context: context)
+
+        // Tool should execute normally without events — just verify the result is returned
+        XCTAssertEqual(result.toolUseId, "tu-nil")
+        XCTAssertFalse(result.isError)
+    }
+
+    // Unknown tool emits ToolFailedEvent
+    func testUnknownToolEmitsFailedEvent() async {
+        let bus = EventBus()
+        let (_, stream) = await bus.subscribe()
+
+        let block = ToolUseBlock(id: "tu-unknown", name: "nonexistent", input: [:])
+        let context = ToolContext(
+            cwd: "/tmp",
+            eventBus: bus,
+            sessionId: "sess-unknown"
+        )
+
+        _ = await ToolExecutor.executeSingleTool(block: block, tool: nil, context: context)
+
+        var collected: [any AgentEvent] = []
+        for await event in stream {
+            collected.append(event)
+            if collected.count >= 1 { break }
+        }
+
+        XCTAssertEqual(collected.count, 1)
+        XCTAssertTrue(collected[0] is ToolFailedEvent)
+
+        let failed = collected[0] as! ToolFailedEvent
+        XCTAssertEqual(failed.toolName, "nonexistent")
+        XCTAssertEqual(failed.toolUseId, "tu-unknown")
+        XCTAssertTrue(failed.error.contains("Unknown tool"))
+    }
+
+    // Permission denied emits ToolFailedEvent
+    func testPermissionDeniedEmitsFailedEvent() async {
+        let bus = EventBus()
+        let (_, stream) = await bus.subscribe()
+
+        let writeTool = WriteStubTool(name: "Write")
+        let block = ToolUseBlock(id: "tu-perm", name: "Write", input: ["path": "/etc/passwd"])
+        let context = ToolContext(
+            cwd: "/tmp",
+            permissionMode: .plan,
+            eventBus: bus,
+            sessionId: "sess-perm"
+        )
+
+        _ = await ToolExecutor.executeSingleTool(block: block, tool: writeTool, context: context)
+
+        var collected: [any AgentEvent] = []
+        for await event in stream {
+            collected.append(event)
+            if collected.count >= 1 { break }
+        }
+
+        XCTAssertEqual(collected.count, 1)
+        XCTAssertTrue(collected[0] is ToolFailedEvent)
+
+        let failed = collected[0] as! ToolFailedEvent
+        XCTAssertEqual(failed.toolName, "Write")
+        XCTAssertTrue(failed.error.contains("blocked"))
+    }
+
+    // Hook blocked path emits ToolFailedEvent
+    func testHookBlockedEmitsFailedEvent() async {
+        let bus = EventBus()
+        let (_, stream) = await bus.subscribe()
+
+        let registry = HookRegistry()
+        await registry.register(.preToolUse, definition: HookDefinition(handler: { _ in
+            HookOutput(message: "Blocked by security policy", block: true)
+        }))
+
+        let tool = StubTool(name: "bash", isError: false, content: "ok")
+        let block = ToolUseBlock(id: "tu-hook", name: "bash", input: ["command": "rm -rf /"])
+        let context = ToolContext(
+            cwd: "/tmp",
+            hookRegistry: registry,
+            eventBus: bus,
+            sessionId: "sess-hook"
+        )
+
+        _ = await ToolExecutor.executeSingleTool(block: block, tool: tool, context: context)
+
+        var collected: [any AgentEvent] = []
+        for await event in stream {
+            collected.append(event)
+            if collected.count >= 1 { break }
+        }
+
+        XCTAssertEqual(collected.count, 1)
+        XCTAssertTrue(collected[0] is ToolFailedEvent)
+
+        let failed = collected[0] as! ToolFailedEvent
+        XCTAssertEqual(failed.toolName, "bash")
+        XCTAssertEqual(failed.toolUseId, "tu-hook")
+        XCTAssertEqual(failed.sessionId, "sess-hook")
+        XCTAssertTrue(failed.error.contains("Blocked by security policy"))
+    }
+
+    // canUseTool deny path emits ToolFailedEvent
+    func testCanUseToolDenyEmitsFailedEvent() async {
+        let bus = EventBus()
+        let (_, stream) = await bus.subscribe()
+
+        let tool = StubTool(name: "bash", isError: false, content: "ok")
+        let block = ToolUseBlock(id: "tu-deny", name: "bash", input: ["command": "echo hi"])
+        let context = ToolContext(
+            cwd: "/tmp",
+            canUseTool: { _, _, _ in .deny("User rejected this tool") },
+            eventBus: bus,
+            sessionId: "sess-deny"
+        )
+
+        _ = await ToolExecutor.executeSingleTool(block: block, tool: tool, context: context)
+
+        var collected: [any AgentEvent] = []
+        for await event in stream {
+            collected.append(event)
+            if collected.count >= 1 { break }
+        }
+
+        XCTAssertEqual(collected.count, 1)
+        XCTAssertTrue(collected[0] is ToolFailedEvent)
+
+        let failed = collected[0] as! ToolFailedEvent
+        XCTAssertEqual(failed.toolName, "bash")
+        XCTAssertEqual(failed.toolUseId, "tu-deny")
+        XCTAssertTrue(failed.error.contains("User rejected this tool"))
+    }
+
+    // canUseTool allow path emits ToolStartedEvent + ToolCompletedEvent
+    func testCanUseToolAllowEmitsStartedAndCompleted() async {
+        let bus = EventBus()
+        let (_, stream) = await bus.subscribe()
+
+        let tool = StubTool(name: "bash", isError: false, content: "hello world")
+        let block = ToolUseBlock(id: "tu-allow", name: "bash", input: ["command": "echo hi"])
+        let context = ToolContext(
+            cwd: "/tmp",
+            canUseTool: { _, _, _ in .allow() },
+            eventBus: bus,
+            sessionId: "sess-allow"
+        )
+
+        _ = await ToolExecutor.executeSingleTool(block: block, tool: tool, context: context)
+
+        var collected: [any AgentEvent] = []
+        for await event in stream {
+            collected.append(event)
+            if collected.count >= 2 { break }
+        }
+
+        XCTAssertEqual(collected.count, 2)
+        XCTAssertTrue(collected[0] is ToolStartedEvent)
+        XCTAssertTrue(collected[1] is ToolCompletedEvent)
+
+        let started = collected[0] as! ToolStartedEvent
+        XCTAssertEqual(started.toolName, "bash")
+        XCTAssertEqual(started.toolUseId, "tu-allow")
+        XCTAssertEqual(started.sessionId, "sess-allow")
+
+        let completed = collected[1] as! ToolCompletedEvent
+        XCTAssertEqual(completed.toolName, "bash")
+        XCTAssertEqual(completed.toolUseId, "tu-allow")
+        XCTAssertGreaterThanOrEqual(completed.durationMs, 0)
+        XCTAssertFalse(completed.isError)
+    }
+
+    /// A non-read-only stub tool for testing permission paths.
+    private struct WriteStubTool: ToolProtocol, @unchecked Sendable {
+        let name: String
+        let description: String = "write"
+        let inputSchema: ToolInputSchema = ["type": "object", "properties": [:]]
+        let isReadOnly: Bool = false
+
+        func call(input: Any, context: ToolContext) async -> ToolResult {
+            return ToolResult(toolUseId: context.toolUseId, content: "written", isError: false)
+        }
+    }
 }

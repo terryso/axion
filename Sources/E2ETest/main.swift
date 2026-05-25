@@ -199,6 +199,11 @@ await EventBusE2ETests.run()
 await AgentLifecycleEmitE2ETests.run(apiKey: apiKey, model: model, baseURL: baseURL)
 
 // ================================================================
+// SECTION 146-149: Tool Lifecycle Event Emit E2E Tests (Story 27.3)
+// ================================================================
+await ToolLifecycleEmitE2ETests.run(apiKey: apiKey, model: model, baseURL: baseURL)
+
+// ================================================================
 // Results Summary
 // ================================================================
 print("\n=== E2E Test Results ===")

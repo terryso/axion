@@ -301,7 +301,7 @@ development_status:
   epic-27: in-progress
   27-1-agent-options-eventbus-parameter: done
   27-2-agent-startup-completion-event-emit: done
-  27-3-tool-lifecycle-event-emit: backlog
+  27-3-tool-lifecycle-event-emit: done
   27-4-llm-cost-event-emit: backlog
   27-5-session-lifecycle-event-emit: backlog
   epic-27-retrospective: optional
