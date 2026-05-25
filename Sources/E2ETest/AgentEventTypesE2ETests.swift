@@ -25,6 +25,19 @@ struct AgentEventTypesE2ETests {
         await testAgentStartedEvent_concurrentUsage()
         await testAgentCompletedEvent_concurrentUsage()
         await testAgentResumedEvent_concurrentUsage()
+        section("102-113. Tool Lifecycle Events (E2E — Story 26.4)")
+        await testToolStartedEvent_fullLifecycle()
+        await testToolStreamingEvent_codableRoundTrip()
+        await testToolCompletedEvent_concurrentUsage()
+        await testToolFailedEvent_concurrentUsage()
+        await testToolEvents_existentialDispatch()
+        await testToolEvents_jsonFormatSseCompatible()
+        await testToolStartedEvent_concurrentUsage()
+        await testToolStreamingEvent_concurrentUsage()
+        await testToolCompletedEvent_codableRoundTrip()
+        await testToolFailedEvent_codableRoundTrip()
+        await testToolFullLifecycle_sequence()
+        await testCrossCategoryExistentialDispatch()
     }
 
     // MARK: Test 87: SessionCreatedEvent full lifecycle
@@ -522,6 +535,490 @@ struct AgentEventTypesE2ETests {
         }
         pass("101. AgentResumedEvent concurrent usage across actor boundary")
     }
+
+    // MARK: - Tests 102-109: Tool Lifecycle Events (Story 26.4)
+
+    // MARK: Test 102: ToolStartedEvent full lifecycle
+
+    static func testToolStartedEvent_fullLifecycle() async {
+        let event = ToolStartedEvent(
+            sessionId: "e2e-tool-start-\(UUID().uuidString)",
+            toolName: "BashTool",
+            toolUseId: "toolu_\(UUID().uuidString)",
+            input: "{\"command\":\"ls -la\"}"
+        )
+
+        guard !event.id.isEmpty else {
+            fail("ToolStartedEvent lifecycle", "id is empty")
+            return
+        }
+        guard event.sessionId != nil else {
+            fail("ToolStartedEvent lifecycle", "sessionId should not be nil")
+            return
+        }
+
+        let encoder = JSONEncoder()
+        encoder.dateEncodingStrategy = .iso8601
+        let decoder = JSONDecoder()
+        decoder.dateDecodingStrategy = .iso8601
+
+        do {
+            let data = try encoder.encode(event)
+            let decoded = try decoder.decode(ToolStartedEvent.self, from: data)
+
+            guard decoded.id == event.id else {
+                fail("ToolStartedEvent lifecycle", "id mismatch")
+                return
+            }
+            guard decoded.toolName == "BashTool" else {
+                fail("ToolStartedEvent lifecycle", "toolName mismatch")
+                return
+            }
+            guard decoded.input == event.input else {
+                fail("ToolStartedEvent lifecycle", "input mismatch")
+                return
+            }
+            pass("102. ToolStartedEvent full lifecycle (construct → encode → decode → verify)")
+        } catch {
+            fail("ToolStartedEvent lifecycle", "Codable error: \(error)")
+        }
+    }
+
+    // MARK: Test 103: ToolStreamingEvent Codable round-trip
+
+    static func testToolStreamingEvent_codableRoundTrip() async {
+        let event = ToolStreamingEvent(
+            sessionId: "e2e-tool-stream-\(UUID().uuidString)",
+            toolUseId: "toolu_stream_\(UUID().uuidString)",
+            chunk: "partial output data chunk"
+        )
+
+        let encoder = JSONEncoder()
+        encoder.dateEncodingStrategy = .iso8601
+        let decoder = JSONDecoder()
+        decoder.dateDecodingStrategy = .iso8601
+
+        do {
+            let data = try encoder.encode(event)
+            let decoded = try decoder.decode(ToolStreamingEvent.self, from: data)
+
+            guard decoded.chunk == "partial output data chunk" else {
+                fail("ToolStreamingEvent Codable", "chunk mismatch: \(decoded.chunk)")
+                return
+            }
+            let delta = abs(decoded.timestamp.timeIntervalSince(event.timestamp))
+            guard delta < 1.0 else {
+                fail("ToolStreamingEvent Codable", "Date drift: \(delta)s")
+                return
+            }
+            pass("103. ToolStreamingEvent Codable round-trip with Date precision")
+        } catch {
+            fail("ToolStreamingEvent Codable", "error: \(error)")
+        }
+    }
+
+    // MARK: Test 104: ToolCompletedEvent concurrent usage
+
+    static func testToolCompletedEvent_concurrentUsage() async {
+        let event = ToolCompletedEvent(
+            sessionId: "e2e-tool-comp-\(UUID().uuidString)",
+            toolUseId: "toolu_comp_\(UUID().uuidString)",
+            toolName: "FileReadTool",
+            durationMs: 1250,
+            isError: false
+        )
+        let retrieved = await Self.testActor.sendToolCompleted(event)
+        guard retrieved.durationMs == 1250, retrieved.isError == false, retrieved.toolName == "FileReadTool" else {
+            fail("ToolCompletedEvent concurrent", "data corrupted after actor crossing")
+            return
+        }
+        pass("104. ToolCompletedEvent concurrent usage across actor boundary")
+    }
+
+    // MARK: Test 105: ToolFailedEvent concurrent usage
+
+    static func testToolFailedEvent_concurrentUsage() async {
+        let event = ToolFailedEvent(
+            sessionId: "e2e-tool-fail-\(UUID().uuidString)",
+            toolUseId: "toolu_fail_\(UUID().uuidString)",
+            toolName: "BashTool",
+            error: "Permission denied"
+        )
+        let retrieved = await Self.testActor.sendToolFailed(event)
+        guard retrieved.error == "Permission denied", retrieved.toolName == "BashTool" else {
+            fail("ToolFailedEvent concurrent", "data corrupted after actor crossing")
+            return
+        }
+        pass("105. ToolFailedEvent concurrent usage across actor boundary")
+    }
+
+    // MARK: Test 106: All tool events as existential AgentEvent
+
+    static func testToolEvents_existentialDispatch() async {
+        let events: [any AgentEvent] = [
+            ToolStartedEvent(sessionId: "e2e-ex-t1", toolName: "BashTool", toolUseId: "tu-1", input: nil),
+            ToolStreamingEvent(sessionId: "e2e-ex-t2", toolUseId: "tu-2", chunk: "data"),
+            ToolCompletedEvent(sessionId: "e2e-ex-t3", toolUseId: "tu-3", toolName: "FileTool", durationMs: 100, isError: false),
+            ToolFailedEvent(sessionId: "e2e-ex-t4", toolUseId: "tu-4", toolName: "BashTool", error: "fail"),
+        ]
+
+        for event in events {
+            guard !event.id.isEmpty else {
+                fail("Tool existential dispatch", "event has empty id: \(type(of: event))")
+                return
+            }
+        }
+
+        func dispatch(_ event: any AgentEvent) -> String { event.id }
+        let ids = events.map { dispatch($0) }
+        guard ids.count == 4, ids.allSatisfy({ !$0.isEmpty }) else {
+            fail("Tool existential dispatch", "id extraction failed")
+            return
+        }
+        pass("106. All 4 tool events work as existential AgentEvent")
+    }
+
+    // MARK: Test 107: Tool events JSON format SSE-compatible
+
+    static func testToolEvents_jsonFormatSseCompatible() async {
+        let encoder = JSONEncoder()
+        encoder.dateEncodingStrategy = .iso8601
+
+        // ToolStartedEvent
+        do {
+            let event = ToolStartedEvent(sessionId: "s1", toolName: "BashTool", toolUseId: "tu-1", input: "inp")
+            let data = try encoder.encode(event)
+            let json = try JSONSerialization.jsonObject(with: data) as! [String: Any]
+
+            guard json["id"] != nil else { fail("SSE format ToolStarted", "missing 'id'"); return }
+            guard json["timestamp"] != nil else { fail("SSE format ToolStarted", "missing 'timestamp'"); return }
+            guard json["session_id"] != nil else { fail("SSE format ToolStarted", "missing 'session_id'"); return }
+            guard json["tool_name"] != nil else { fail("SSE format ToolStarted", "missing 'tool_name'"); return }
+            guard json["tool_use_id"] != nil else { fail("SSE format ToolStarted", "missing 'tool_use_id'"); return }
+            guard json["input"] != nil else { fail("SSE format ToolStarted", "missing 'input'"); return }
+            guard json["base"] == nil else { fail("SSE format ToolStarted", "should not have nested 'base'"); return }
+        } catch {
+            fail("SSE format ToolStarted", "error: \(error)")
+            return
+        }
+
+        // ToolStreamingEvent
+        do {
+            let event = ToolStreamingEvent(sessionId: "s2", toolUseId: "tu-2", chunk: "chunk")
+            let data = try encoder.encode(event)
+            let json = try JSONSerialization.jsonObject(with: data) as! [String: Any]
+
+            guard json["tool_use_id"] != nil else { fail("SSE format ToolStreaming", "missing 'tool_use_id'"); return }
+            guard json["chunk"] != nil else { fail("SSE format ToolStreaming", "missing 'chunk'"); return }
+            guard json["base"] == nil else { fail("SSE format ToolStreaming", "should not have nested 'base'"); return }
+        } catch {
+            fail("SSE format ToolStreaming", "error: \(error)")
+            return
+        }
+
+        // ToolCompletedEvent
+        do {
+            let event = ToolCompletedEvent(sessionId: "s3", toolUseId: "tu-3", toolName: "BashTool", durationMs: 500, isError: true)
+            let data = try encoder.encode(event)
+            let json = try JSONSerialization.jsonObject(with: data) as! [String: Any]
+
+            guard json["tool_name"] != nil else { fail("SSE format ToolCompleted", "missing 'tool_name'"); return }
+            guard json["duration_ms"] != nil else { fail("SSE format ToolCompleted", "missing 'duration_ms'"); return }
+            guard json["is_error"] != nil else { fail("SSE format ToolCompleted", "missing 'is_error'"); return }
+            guard json["base"] == nil else { fail("SSE format ToolCompleted", "should not have nested 'base'"); return }
+        } catch {
+            fail("SSE format ToolCompleted", "error: \(error)")
+            return
+        }
+
+        // ToolFailedEvent
+        do {
+            let event = ToolFailedEvent(sessionId: "s4", toolUseId: "tu-4", toolName: "FileTool", error: "not found")
+            let data = try encoder.encode(event)
+            let json = try JSONSerialization.jsonObject(with: data) as! [String: Any]
+
+            guard json["tool_name"] != nil else { fail("SSE format ToolFailed", "missing 'tool_name'"); return }
+            guard json["error"] != nil else { fail("SSE format ToolFailed", "missing 'error'"); return }
+            guard json["base"] == nil else { fail("SSE format ToolFailed", "should not have nested 'base'"); return }
+        } catch {
+            fail("SSE format ToolFailed", "error: \(error)")
+            return
+        }
+
+        pass("107. Tool events JSON format SSE-compatible (flat, snake_case, no nested base)")
+    }
+
+    // MARK: Test 108: ToolStartedEvent concurrent usage
+
+    static func testToolStartedEvent_concurrentUsage() async {
+        let event = ToolStartedEvent(
+            sessionId: "e2e-tool-conc-start-\(UUID().uuidString)",
+            toolName: "GrepTool",
+            toolUseId: "toolu_start_\(UUID().uuidString)",
+            input: "{\"pattern\":\"TODO\"}"
+        )
+        let retrieved = await Self.testActor.sendToolStarted(event)
+        guard retrieved.toolName == "GrepTool", retrieved.input == "{\"pattern\":\"TODO\"}" else {
+            fail("ToolStartedEvent concurrent", "data corrupted after actor crossing")
+            return
+        }
+        pass("108. ToolStartedEvent concurrent usage across actor boundary")
+    }
+
+    // MARK: Test 109: ToolStreamingEvent concurrent usage
+
+    static func testToolStreamingEvent_concurrentUsage() async {
+        let event = ToolStreamingEvent(
+            sessionId: "e2e-tool-conc-stream-\(UUID().uuidString)",
+            toolUseId: "toolu_stream_\(UUID().uuidString)",
+            chunk: "streaming output"
+        )
+        let retrieved = await Self.testActor.sendToolStreaming(event)
+        guard retrieved.chunk == "streaming output", retrieved.sessionId == event.sessionId else {
+            fail("ToolStreamingEvent concurrent", "data corrupted after actor crossing")
+            return
+        }
+        pass("109. ToolStreamingEvent concurrent usage across actor boundary")
+    }
+
+    // MARK: Test 110: ToolCompletedEvent Codable round-trip with Date precision
+
+    static func testToolCompletedEvent_codableRoundTrip() async {
+        let event = ToolCompletedEvent(
+            sessionId: "e2e-tool-comp-rt-\(UUID().uuidString)",
+            toolUseId: "toolu_rt_\(UUID().uuidString)",
+            toolName: "GrepTool",
+            durationMs: 4200,
+            isError: false
+        )
+
+        let encoder = JSONEncoder()
+        encoder.dateEncodingStrategy = .iso8601
+        let decoder = JSONDecoder()
+        decoder.dateDecodingStrategy = .iso8601
+
+        do {
+            let data = try encoder.encode(event)
+            let decoded = try decoder.decode(ToolCompletedEvent.self, from: data)
+
+            guard decoded.toolUseId == event.toolUseId else {
+                fail("ToolCompletedEvent Codable", "toolUseId mismatch")
+                return
+            }
+            guard decoded.toolName == "GrepTool" else {
+                fail("ToolCompletedEvent Codable", "toolName mismatch: \(decoded.toolName)")
+                return
+            }
+            guard decoded.durationMs == 4200 else {
+                fail("ToolCompletedEvent Codable", "durationMs mismatch: \(decoded.durationMs)")
+                return
+            }
+            guard decoded.isError == false else {
+                fail("ToolCompletedEvent Codable", "isError mismatch: \(decoded.isError)")
+                return
+            }
+            guard decoded.sessionId == event.sessionId else {
+                fail("ToolCompletedEvent Codable", "sessionId mismatch")
+                return
+            }
+            let delta = abs(decoded.timestamp.timeIntervalSince(event.timestamp))
+            guard delta < 1.0 else {
+                fail("ToolCompletedEvent Codable", "Date drift: \(delta)s")
+                return
+            }
+            pass("110. ToolCompletedEvent Codable round-trip with Date precision")
+        } catch {
+            fail("ToolCompletedEvent Codable", "error: \(error)")
+        }
+    }
+
+    // MARK: Test 111: ToolFailedEvent Codable round-trip with Date precision
+
+    static func testToolFailedEvent_codableRoundTrip() async {
+        let event = ToolFailedEvent(
+            sessionId: "e2e-tool-fail-rt-\(UUID().uuidString)",
+            toolUseId: "toolu_failrt_\(UUID().uuidString)",
+            toolName: "BashTool",
+            error: "Command timed out after 30s"
+        )
+
+        let encoder = JSONEncoder()
+        encoder.dateEncodingStrategy = .iso8601
+        let decoder = JSONDecoder()
+        decoder.dateDecodingStrategy = .iso8601
+
+        do {
+            let data = try encoder.encode(event)
+            let decoded = try decoder.decode(ToolFailedEvent.self, from: data)
+
+            guard decoded.toolUseId == event.toolUseId else {
+                fail("ToolFailedEvent Codable", "toolUseId mismatch")
+                return
+            }
+            guard decoded.toolName == "BashTool" else {
+                fail("ToolFailedEvent Codable", "toolName mismatch: \(decoded.toolName)")
+                return
+            }
+            guard decoded.error == "Command timed out after 30s" else {
+                fail("ToolFailedEvent Codable", "error mismatch: \(decoded.error)")
+                return
+            }
+            guard decoded.sessionId == event.sessionId else {
+                fail("ToolFailedEvent Codable", "sessionId mismatch")
+                return
+            }
+            let delta = abs(decoded.timestamp.timeIntervalSince(event.timestamp))
+            guard delta < 1.0 else {
+                fail("ToolFailedEvent Codable", "Date drift: \(delta)s")
+                return
+            }
+            pass("111. ToolFailedEvent Codable round-trip with Date precision")
+        } catch {
+            fail("ToolFailedEvent Codable", "error: \(error)")
+        }
+    }
+
+    // MARK: Test 112: Full tool lifecycle sequence (Started → Streaming → Completed)
+
+    static func testToolFullLifecycle_sequence() async {
+        let toolUseId = "toolu_lifecycle_\(UUID().uuidString)"
+        let sessionId = "e2e-lifecycle-\(UUID().uuidString)"
+
+        let started = ToolStartedEvent(
+            sessionId: sessionId,
+            toolName: "FileReadTool",
+            toolUseId: toolUseId,
+            input: "{\"path\":\"/tmp/test.txt\"}"
+        )
+        let stream1 = ToolStreamingEvent(
+            sessionId: sessionId,
+            toolUseId: toolUseId,
+            chunk: "line 1 of file\n"
+        )
+        let stream2 = ToolStreamingEvent(
+            sessionId: sessionId,
+            toolUseId: toolUseId,
+            chunk: "line 2 of file\n"
+        )
+        let completed = ToolCompletedEvent(
+            sessionId: sessionId,
+            toolUseId: toolUseId,
+            toolName: "FileReadTool",
+            durationMs: 85,
+            isError: false
+        )
+
+        let encoder = JSONEncoder()
+        encoder.dateEncodingStrategy = .iso8601
+        let decoder = JSONDecoder()
+        decoder.dateDecodingStrategy = .iso8601
+
+        do {
+            // Verify all events share the same toolUseId
+            let events: [any AgentEvent] = [started, stream1, stream2, completed]
+            for event in events {
+                guard !event.id.isEmpty else {
+                    fail("Lifecycle sequence", "event has empty id")
+                    return
+                }
+            }
+
+            // Round-trip each event
+            let decodedStarted = try decoder.decode(ToolStartedEvent.self, from: encoder.encode(started))
+            let decodedStream1 = try decoder.decode(ToolStreamingEvent.self, from: encoder.encode(stream1))
+            let decodedStream2 = try decoder.decode(ToolStreamingEvent.self, from: encoder.encode(stream2))
+            let decodedCompleted = try decoder.decode(ToolCompletedEvent.self, from: encoder.encode(completed))
+
+            // Verify toolUseId consistency across the lifecycle
+            guard decodedStarted.toolUseId == toolUseId else {
+                fail("Lifecycle sequence", "started toolUseId mismatch")
+                return
+            }
+            guard decodedStream1.toolUseId == toolUseId, decodedStream2.toolUseId == toolUseId else {
+                fail("Lifecycle sequence", "streaming toolUseId mismatch")
+                return
+            }
+            guard decodedCompleted.toolUseId == toolUseId else {
+                fail("Lifecycle sequence", "completed toolUseId mismatch")
+                return
+            }
+
+            // Verify all share the same sessionId
+            guard decodedStarted.sessionId == sessionId,
+                  decodedCompleted.toolName == "FileReadTool",
+                  decodedCompleted.durationMs == 85,
+                  decodedCompleted.isError == false else {
+                fail("Lifecycle sequence", "completed event field mismatch")
+                return
+            }
+
+            // Verify streaming chunks are distinct
+            guard decodedStream1.chunk != decodedStream2.chunk else {
+                fail("Lifecycle sequence", "streaming chunks should be distinct")
+                return
+            }
+            guard decodedStream1.chunk == "line 1 of file\n", decodedStream2.chunk == "line 2 of file\n" else {
+                fail("Lifecycle sequence", "chunk content mismatch")
+                return
+            }
+
+            pass("112. Full tool lifecycle sequence (Started → Streaming → Completed) with shared toolUseId")
+        } catch {
+            fail("Lifecycle sequence", "Codable error: \(error)")
+        }
+    }
+
+    // MARK: Test 113: Cross-category existential dispatch (all 13 event types)
+
+    static func testCrossCategoryExistentialDispatch() async {
+        let events: [any AgentEvent] = [
+            // Session events (4)
+            SessionCreatedEvent(sessionId: "cross-1", task: "cross test", model: "m"),
+            SessionRestoredEvent(sessionId: "cross-2", messageCount: 1, originalCreatedAt: Date()),
+            SessionClosedEvent(sessionId: "cross-3", finalStatus: .completed),
+            SessionAutoSavedEvent(sessionId: "cross-4", messageCount: 2),
+            // Agent events (5)
+            AgentStartedEvent(sessionId: "cross-5", task: "start"),
+            AgentCompletedEvent(sessionId: "cross-6", totalSteps: 1, durationMs: 100, resultText: "done"),
+            AgentFailedEvent(sessionId: "cross-7", error: "fail", stepsCompleted: 0),
+            AgentInterruptedEvent(sessionId: "cross-8", stepsCompleted: 1),
+            AgentResumedEvent(sessionId: "cross-9", resumeContext: "resume"),
+            // Tool events (4)
+            ToolStartedEvent(sessionId: "cross-10", toolName: "BashTool", toolUseId: "tu-1", input: nil),
+            ToolStreamingEvent(sessionId: "cross-11", toolUseId: "tu-2", chunk: "data"),
+            ToolCompletedEvent(sessionId: "cross-12", toolUseId: "tu-3", toolName: "FileTool", durationMs: 50, isError: false),
+            ToolFailedEvent(sessionId: "cross-13", toolUseId: "tu-4", toolName: "GrepTool", error: "err"),
+        ]
+
+        guard events.count == 13 else {
+            fail("Cross-category dispatch", "expected 13 events, got \(events.count)")
+            return
+        }
+
+        for event in events {
+            guard !event.id.isEmpty else {
+                fail("Cross-category dispatch", "event has empty id: \(type(of: event))")
+                return
+            }
+        }
+
+        // Dispatch through a type-erased function (simulates EventBus pattern)
+        func dispatch(_ event: any AgentEvent) -> String { event.id }
+        let ids = events.map { dispatch($0) }
+        guard ids.count == 13, ids.allSatisfy({ !$0.isEmpty }) else {
+            fail("Cross-category dispatch", "id extraction failed")
+            return
+        }
+
+        // Verify all IDs are unique
+        let uniqueIds = Set(ids)
+        guard uniqueIds.count == 13 else {
+            fail("Cross-category dispatch", "IDs should all be unique, got \(uniqueIds.count) unique out of \(ids.count)")
+            return
+        }
+
+        pass("113. Cross-category existential dispatch (all 13 event types: session + agent + tool)")
+    }
 }
 
 // MARK: - E2E Test Helpers
@@ -534,6 +1031,10 @@ private extension AgentEventTypesE2ETests {
         func sendFailed(_ event: AgentFailedEvent) -> AgentFailedEvent { event }
         func sendInterrupted(_ event: AgentInterruptedEvent) -> AgentInterruptedEvent { event }
         func sendResumed(_ event: AgentResumedEvent) -> AgentResumedEvent { event }
+        func sendToolStarted(_ event: ToolStartedEvent) -> ToolStartedEvent { event }
+        func sendToolStreaming(_ event: ToolStreamingEvent) -> ToolStreamingEvent { event }
+        func sendToolCompleted(_ event: ToolCompletedEvent) -> ToolCompletedEvent { event }
+        func sendToolFailed(_ event: ToolFailedEvent) -> ToolFailedEvent { event }
     }
     static let testActor = TestActor()
 }

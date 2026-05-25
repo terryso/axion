@@ -1585,3 +1585,567 @@ private extension AgentEventTypesTests {
     static let agentInterruptedEchoActor = AgentInterruptedEchoActor()
     static let agentResumedEchoActor = AgentResumedEchoActor()
 }
+
+// MARK: - Tool Lifecycle Events
+
+extension AgentEventTypesTests {
+
+    // MARK: - ToolStartedEvent (AC1)
+
+    func testToolStartedEventConstruction() {
+        let event = ToolStartedEvent(sessionId: "sess-1", toolName: "BashTool", toolUseId: "tu-1", input: "{\"cmd\":\"ls\"}")
+        XCTAssertEqual(event.sessionId, "sess-1")
+        XCTAssertEqual(event.toolName, "BashTool")
+        XCTAssertEqual(event.toolUseId, "tu-1")
+        XCTAssertEqual(event.input, "{\"cmd\":\"ls\"}")
+        XCTAssertFalse(event.id.isEmpty)
+        XCTAssertNotNil(event.timestamp)
+    }
+
+    func testToolStartedEventNilSessionIdAndInput() {
+        let event = ToolStartedEvent(sessionId: nil, toolName: "FileReadTool", toolUseId: "tu-2", input: nil)
+        XCTAssertNil(event.sessionId)
+        XCTAssertNil(event.input)
+    }
+
+    func testToolStartedEventAgentEventConformance() {
+        func acceptEvent<T: AgentEvent>(_ event: T) {
+            XCTAssertFalse(event.id.isEmpty)
+            XCTAssertNotNil(event.timestamp)
+        }
+        let event = ToolStartedEvent(sessionId: "s", toolName: "t", toolUseId: "tu", input: nil)
+        acceptEvent(event)
+    }
+
+    func testToolStartedEventSendable() {
+        func acceptSendable<T: Sendable>(_ value: T) { _ = value }
+        acceptSendable(ToolStartedEvent(sessionId: nil, toolName: "t", toolUseId: "tu", input: nil))
+    }
+
+    func testToolStartedEventCodableRoundTrip() throws {
+        let event = ToolStartedEvent(sessionId: "sess-42", toolName: "BashTool", toolUseId: "tu-99", input: "{\"cmd\":\"pwd\"}")
+        let encoder = JSONEncoder()
+        encoder.dateEncodingStrategy = .iso8601
+        let data = try encoder.encode(event)
+
+        let decoder = JSONDecoder()
+        decoder.dateDecodingStrategy = .iso8601
+        let decoded = try decoder.decode(ToolStartedEvent.self, from: data)
+
+        XCTAssertEqual(decoded.id, event.id)
+        XCTAssertEqual(decoded.sessionId, event.sessionId)
+        XCTAssertEqual(decoded.toolName, event.toolName)
+        XCTAssertEqual(decoded.toolUseId, event.toolUseId)
+        XCTAssertEqual(decoded.input, event.input)
+        XCTAssertEqual(decoded.timestamp.timeIntervalSince(event.timestamp), 0, accuracy: 1.0)
+    }
+
+    func testToolStartedEventSnakeCaseJsonKeys() throws {
+        let event = ToolStartedEvent(sessionId: "s1", toolName: "BashTool", toolUseId: "tu-1", input: "inp")
+        let encoder = JSONEncoder()
+        encoder.dateEncodingStrategy = .iso8601
+        let data = try encoder.encode(event)
+        let json = try JSONSerialization.jsonObject(with: data) as! [String: Any]
+
+        XCTAssertNotNil(json["session_id"], "JSON should use snake_case 'session_id'")
+        XCTAssertNotNil(json["tool_name"])
+        XCTAssertNotNil(json["tool_use_id"])
+        XCTAssertNotNil(json["input"])
+        XCTAssertNotNil(json["id"])
+        XCTAssertNotNil(json["timestamp"])
+    }
+
+    func testToolStartedEventEquatable() {
+        let id = "same-id"
+        let ts = Date(timeIntervalSince1970: 1700000000)
+        let e1 = ToolStartedEvent(base: BaseAgentEvent(id: id, timestamp: ts), sessionId: "s", toolName: "t", toolUseId: "tu", input: nil)
+        let e2 = ToolStartedEvent(base: BaseAgentEvent(id: id, timestamp: ts), sessionId: "s", toolName: "t", toolUseId: "tu", input: nil)
+        XCTAssertEqual(e1, e2)
+    }
+
+    func testToolStartedEventNotEqualDifferentToolName() {
+        let id = "same-id"
+        let ts = Date(timeIntervalSince1970: 1700000000)
+        let e1 = ToolStartedEvent(base: BaseAgentEvent(id: id, timestamp: ts), sessionId: "s", toolName: "BashTool", toolUseId: "tu", input: nil)
+        let e2 = ToolStartedEvent(base: BaseAgentEvent(id: id, timestamp: ts), sessionId: "s", toolName: "FileTool", toolUseId: "tu", input: nil)
+        XCTAssertNotEqual(e1, e2)
+    }
+
+    func testToolStartedEventInitWithBase() {
+        let event = ToolStartedEvent(base: BaseAgentEvent(id: "custom", timestamp: Date(timeIntervalSince1970: 0)), sessionId: "s", toolName: "t", toolUseId: "tu", input: "i")
+        XCTAssertEqual(event.id, "custom")
+        XCTAssertEqual(event.timestamp, Date(timeIntervalSince1970: 0))
+    }
+
+    func testToolStartedEventDecodeFromRawJson() throws {
+        let jsonString = """
+        {"id":"raw-id","timestamp":"2024-01-15T12:00:00Z","session_id":"raw-sess","tool_name":"BashTool","tool_use_id":"tu-1","input":"ls"}
+        """
+        let data = jsonString.data(using: .utf8)!
+        let decoder = JSONDecoder()
+        decoder.dateDecodingStrategy = .iso8601
+        let event = try decoder.decode(ToolStartedEvent.self, from: data)
+
+        XCTAssertEqual(event.id, "raw-id")
+        XCTAssertEqual(event.sessionId, "raw-sess")
+        XCTAssertEqual(event.toolName, "BashTool")
+        XCTAssertEqual(event.toolUseId, "tu-1")
+        XCTAssertEqual(event.input, "ls")
+    }
+
+    func testToolStartedEventDecodeNilSessionIdAndInput() throws {
+        let jsonString = """
+        {"id":"n","timestamp":"2024-01-15T12:00:00Z","session_id":null,"tool_name":"t","tool_use_id":"tu","input":null}
+        """
+        let data = jsonString.data(using: .utf8)!
+        let decoder = JSONDecoder()
+        decoder.dateDecodingStrategy = .iso8601
+        let event = try decoder.decode(ToolStartedEvent.self, from: data)
+        XCTAssertNil(event.sessionId)
+        XCTAssertNil(event.input)
+    }
+
+    func testToolStartedEventDecodeMissingRequiredField() {
+        let jsonString = """
+        {"id":"bad","timestamp":"2024-01-15T12:00:00Z"}
+        """
+        let data = jsonString.data(using: .utf8)!
+        let decoder = JSONDecoder()
+        decoder.dateDecodingStrategy = .iso8601
+        XCTAssertThrowsError(try decoder.decode(ToolStartedEvent.self, from: data))
+    }
+
+    func testToolStartedEventImmutablePayload() {
+        let event = ToolStartedEvent(sessionId: "s", toolName: "t", toolUseId: "tu", input: "i")
+        XCTAssertEqual(event.toolName, "t")
+        XCTAssertEqual(event.toolUseId, "tu")
+        XCTAssertEqual(event.input, "i")
+    }
+
+    // MARK: - ToolStreamingEvent (AC2)
+
+    func testToolStreamingEventConstruction() {
+        let event = ToolStreamingEvent(sessionId: "sess-1", toolUseId: "tu-1", chunk: "partial output")
+        XCTAssertEqual(event.sessionId, "sess-1")
+        XCTAssertEqual(event.toolUseId, "tu-1")
+        XCTAssertEqual(event.chunk, "partial output")
+        XCTAssertFalse(event.id.isEmpty)
+        XCTAssertNotNil(event.timestamp)
+    }
+
+    func testToolStreamingEventNilSessionId() {
+        let event = ToolStreamingEvent(sessionId: nil, toolUseId: "tu-2", chunk: "data")
+        XCTAssertNil(event.sessionId)
+    }
+
+    func testToolStreamingEventAgentEventConformance() {
+        func acceptEvent<T: AgentEvent>(_ event: T) {
+            XCTAssertFalse(event.id.isEmpty)
+        }
+        let event = ToolStreamingEvent(sessionId: "s", toolUseId: "tu", chunk: "c")
+        acceptEvent(event)
+    }
+
+    func testToolStreamingEventSendable() {
+        func acceptSendable<T: Sendable>(_ value: T) { _ = value }
+        acceptSendable(ToolStreamingEvent(sessionId: nil, toolUseId: "tu", chunk: "c"))
+    }
+
+    func testToolStreamingEventCodableRoundTrip() throws {
+        let event = ToolStreamingEvent(sessionId: "sess-1", toolUseId: "tu-5", chunk: "streaming data")
+        let encoder = JSONEncoder()
+        encoder.dateEncodingStrategy = .iso8601
+        let data = try encoder.encode(event)
+
+        let decoder = JSONDecoder()
+        decoder.dateDecodingStrategy = .iso8601
+        let decoded = try decoder.decode(ToolStreamingEvent.self, from: data)
+
+        XCTAssertEqual(decoded.id, event.id)
+        XCTAssertEqual(decoded.sessionId, event.sessionId)
+        XCTAssertEqual(decoded.toolUseId, event.toolUseId)
+        XCTAssertEqual(decoded.chunk, event.chunk)
+    }
+
+    func testToolStreamingEventSnakeCaseJsonKeys() throws {
+        let event = ToolStreamingEvent(sessionId: "s1", toolUseId: "tu-1", chunk: "c")
+        let encoder = JSONEncoder()
+        encoder.dateEncodingStrategy = .iso8601
+        let data = try encoder.encode(event)
+        let json = try JSONSerialization.jsonObject(with: data) as! [String: Any]
+
+        XCTAssertNotNil(json["session_id"])
+        XCTAssertNotNil(json["tool_use_id"])
+        XCTAssertNotNil(json["chunk"])
+    }
+
+    func testToolStreamingEventEquatable() {
+        let id = "eq-id"
+        let ts = Date(timeIntervalSince1970: 1700000000)
+        let e1 = ToolStreamingEvent(base: BaseAgentEvent(id: id, timestamp: ts), sessionId: "s", toolUseId: "tu", chunk: "c")
+        let e2 = ToolStreamingEvent(base: BaseAgentEvent(id: id, timestamp: ts), sessionId: "s", toolUseId: "tu", chunk: "c")
+        XCTAssertEqual(e1, e2)
+    }
+
+    func testToolStreamingEventNotEqualDifferentChunk() {
+        let id = "eq-id"
+        let ts = Date(timeIntervalSince1970: 1700000000)
+        let e1 = ToolStreamingEvent(base: BaseAgentEvent(id: id, timestamp: ts), sessionId: "s", toolUseId: "tu", chunk: "a")
+        let e2 = ToolStreamingEvent(base: BaseAgentEvent(id: id, timestamp: ts), sessionId: "s", toolUseId: "tu", chunk: "b")
+        XCTAssertNotEqual(e1, e2)
+    }
+
+    func testToolStreamingEventDecodeFromRawJson() throws {
+        let jsonString = """
+        {"id":"raw-id","timestamp":"2024-01-15T12:00:00Z","session_id":"raw-sess","tool_use_id":"tu-1","chunk":"data"}
+        """
+        let data = jsonString.data(using: .utf8)!
+        let decoder = JSONDecoder()
+        decoder.dateDecodingStrategy = .iso8601
+        let event = try decoder.decode(ToolStreamingEvent.self, from: data)
+
+        XCTAssertEqual(event.id, "raw-id")
+        XCTAssertEqual(event.toolUseId, "tu-1")
+        XCTAssertEqual(event.chunk, "data")
+    }
+
+    func testToolStreamingEventDecodeMissingRequiredField() {
+        let jsonString = """
+        {"id":"bad","timestamp":"2024-01-15T12:00:00Z"}
+        """
+        let data = jsonString.data(using: .utf8)!
+        let decoder = JSONDecoder()
+        decoder.dateDecodingStrategy = .iso8601
+        XCTAssertThrowsError(try decoder.decode(ToolStreamingEvent.self, from: data))
+    }
+
+    func testToolStreamingEventImmutablePayload() {
+        let event = ToolStreamingEvent(sessionId: "s", toolUseId: "tu", chunk: "c")
+        XCTAssertEqual(event.toolUseId, "tu")
+        XCTAssertEqual(event.chunk, "c")
+    }
+
+    // MARK: - ToolCompletedEvent (AC3)
+
+    func testToolCompletedEventConstruction() {
+        let event = ToolCompletedEvent(sessionId: "sess-1", toolUseId: "tu-1", toolName: "BashTool", durationMs: 500, isError: false)
+        XCTAssertEqual(event.sessionId, "sess-1")
+        XCTAssertEqual(event.toolUseId, "tu-1")
+        XCTAssertEqual(event.toolName, "BashTool")
+        XCTAssertEqual(event.durationMs, 500)
+        XCTAssertEqual(event.isError, false)
+        XCTAssertFalse(event.id.isEmpty)
+    }
+
+    func testToolCompletedEventNilSessionId() {
+        let event = ToolCompletedEvent(sessionId: nil, toolUseId: "tu-2", toolName: "t", durationMs: 0, isError: true)
+        XCTAssertNil(event.sessionId)
+    }
+
+    func testToolCompletedEventAgentEventConformance() {
+        func acceptEvent<T: AgentEvent>(_ event: T) {
+            XCTAssertFalse(event.id.isEmpty)
+        }
+        let event = ToolCompletedEvent(sessionId: "s", toolUseId: "tu", toolName: "t", durationMs: 100, isError: false)
+        acceptEvent(event)
+    }
+
+    func testToolCompletedEventSendable() {
+        func acceptSendable<T: Sendable>(_ value: T) { _ = value }
+        acceptSendable(ToolCompletedEvent(sessionId: nil, toolUseId: "tu", toolName: "t", durationMs: 0, isError: false))
+    }
+
+    func testToolCompletedEventCodableRoundTrip() throws {
+        let event = ToolCompletedEvent(sessionId: "sess-1", toolUseId: "tu-5", toolName: "BashTool", durationMs: 3500, isError: true)
+        let encoder = JSONEncoder()
+        encoder.dateEncodingStrategy = .iso8601
+        let data = try encoder.encode(event)
+
+        let decoder = JSONDecoder()
+        decoder.dateDecodingStrategy = .iso8601
+        let decoded = try decoder.decode(ToolCompletedEvent.self, from: data)
+
+        XCTAssertEqual(decoded.id, event.id)
+        XCTAssertEqual(decoded.sessionId, event.sessionId)
+        XCTAssertEqual(decoded.toolUseId, event.toolUseId)
+        XCTAssertEqual(decoded.toolName, event.toolName)
+        XCTAssertEqual(decoded.durationMs, event.durationMs)
+        XCTAssertEqual(decoded.isError, event.isError)
+    }
+
+    func testToolCompletedEventSnakeCaseJsonKeys() throws {
+        let event = ToolCompletedEvent(sessionId: "s1", toolUseId: "tu-1", toolName: "BashTool", durationMs: 100, isError: true)
+        let encoder = JSONEncoder()
+        encoder.dateEncodingStrategy = .iso8601
+        let data = try encoder.encode(event)
+        let json = try JSONSerialization.jsonObject(with: data) as! [String: Any]
+
+        XCTAssertNotNil(json["session_id"])
+        XCTAssertNotNil(json["tool_use_id"])
+        XCTAssertNotNil(json["tool_name"])
+        XCTAssertNotNil(json["duration_ms"])
+        XCTAssertNotNil(json["is_error"])
+    }
+
+    func testToolCompletedEventEquatable() {
+        let id = "eq-id"
+        let ts = Date(timeIntervalSince1970: 1700000000)
+        let e1 = ToolCompletedEvent(base: BaseAgentEvent(id: id, timestamp: ts), sessionId: "s", toolUseId: "tu", toolName: "t", durationMs: 100, isError: false)
+        let e2 = ToolCompletedEvent(base: BaseAgentEvent(id: id, timestamp: ts), sessionId: "s", toolUseId: "tu", toolName: "t", durationMs: 100, isError: false)
+        XCTAssertEqual(e1, e2)
+    }
+
+    func testToolCompletedEventNotEqualDifferentDuration() {
+        let id = "eq-id"
+        let ts = Date(timeIntervalSince1970: 1700000000)
+        let e1 = ToolCompletedEvent(base: BaseAgentEvent(id: id, timestamp: ts), sessionId: "s", toolUseId: "tu", toolName: "t", durationMs: 100, isError: false)
+        let e2 = ToolCompletedEvent(base: BaseAgentEvent(id: id, timestamp: ts), sessionId: "s", toolUseId: "tu", toolName: "t", durationMs: 200, isError: false)
+        XCTAssertNotEqual(e1, e2)
+    }
+
+    func testToolCompletedEventDecodeFromRawJson() throws {
+        let jsonString = """
+        {"id":"comp-id","timestamp":"2024-01-15T12:00:00Z","session_id":"comp-sess","tool_use_id":"tu-1","tool_name":"BashTool","duration_ms":2500,"is_error":false}
+        """
+        let data = jsonString.data(using: .utf8)!
+        let decoder = JSONDecoder()
+        decoder.dateDecodingStrategy = .iso8601
+        let event = try decoder.decode(ToolCompletedEvent.self, from: data)
+
+        XCTAssertEqual(event.id, "comp-id")
+        XCTAssertEqual(event.toolName, "BashTool")
+        XCTAssertEqual(event.durationMs, 2500)
+        XCTAssertEqual(event.isError, false)
+    }
+
+    func testToolCompletedEventDecodeNilSessionId() throws {
+        let jsonString = """
+        {"id":"n","timestamp":"2024-01-15T12:00:00Z","session_id":null,"tool_use_id":"tu","tool_name":"t","duration_ms":0,"is_error":true}
+        """
+        let data = jsonString.data(using: .utf8)!
+        let decoder = JSONDecoder()
+        decoder.dateDecodingStrategy = .iso8601
+        let event = try decoder.decode(ToolCompletedEvent.self, from: data)
+        XCTAssertNil(event.sessionId)
+        XCTAssertTrue(event.isError)
+    }
+
+    func testToolCompletedEventDecodeMissingRequiredField() {
+        let jsonString = """
+        {"id":"bad","timestamp":"2024-01-15T12:00:00Z","tool_use_id":"tu"}
+        """
+        let data = jsonString.data(using: .utf8)!
+        let decoder = JSONDecoder()
+        decoder.dateDecodingStrategy = .iso8601
+        XCTAssertThrowsError(try decoder.decode(ToolCompletedEvent.self, from: data))
+    }
+
+    func testToolCompletedEventImmutablePayload() {
+        let event = ToolCompletedEvent(sessionId: "s", toolUseId: "tu", toolName: "t", durationMs: 100, isError: false)
+        XCTAssertEqual(event.durationMs, 100)
+        XCTAssertEqual(event.isError, false)
+    }
+
+    // MARK: - ToolFailedEvent (AC4)
+
+    func testToolFailedEventConstruction() {
+        let event = ToolFailedEvent(sessionId: "sess-1", toolUseId: "tu-1", toolName: "BashTool", error: "command not found")
+        XCTAssertEqual(event.sessionId, "sess-1")
+        XCTAssertEqual(event.toolUseId, "tu-1")
+        XCTAssertEqual(event.toolName, "BashTool")
+        XCTAssertEqual(event.error, "command not found")
+        XCTAssertFalse(event.id.isEmpty)
+    }
+
+    func testToolFailedEventNilSessionId() {
+        let event = ToolFailedEvent(sessionId: nil, toolUseId: "tu-2", toolName: "t", error: "crash")
+        XCTAssertNil(event.sessionId)
+    }
+
+    func testToolFailedEventAgentEventConformance() {
+        func acceptEvent<T: AgentEvent>(_ event: T) {
+            XCTAssertFalse(event.id.isEmpty)
+        }
+        let event = ToolFailedEvent(sessionId: "s", toolUseId: "tu", toolName: "t", error: "err")
+        acceptEvent(event)
+    }
+
+    func testToolFailedEventSendable() {
+        func acceptSendable<T: Sendable>(_ value: T) { _ = value }
+        acceptSendable(ToolFailedEvent(sessionId: nil, toolUseId: "tu", toolName: "t", error: "e"))
+    }
+
+    func testToolFailedEventCodableRoundTrip() throws {
+        let event = ToolFailedEvent(sessionId: "sess-1", toolUseId: "tu-5", toolName: "BashTool", error: "timeout")
+        let encoder = JSONEncoder()
+        encoder.dateEncodingStrategy = .iso8601
+        let data = try encoder.encode(event)
+
+        let decoder = JSONDecoder()
+        decoder.dateDecodingStrategy = .iso8601
+        let decoded = try decoder.decode(ToolFailedEvent.self, from: data)
+
+        XCTAssertEqual(decoded.id, event.id)
+        XCTAssertEqual(decoded.sessionId, event.sessionId)
+        XCTAssertEqual(decoded.toolUseId, event.toolUseId)
+        XCTAssertEqual(decoded.toolName, event.toolName)
+        XCTAssertEqual(decoded.error, event.error)
+    }
+
+    func testToolFailedEventSnakeCaseJsonKeys() throws {
+        let event = ToolFailedEvent(sessionId: "s1", toolUseId: "tu-1", toolName: "BashTool", error: "err")
+        let encoder = JSONEncoder()
+        encoder.dateEncodingStrategy = .iso8601
+        let data = try encoder.encode(event)
+        let json = try JSONSerialization.jsonObject(with: data) as! [String: Any]
+
+        XCTAssertNotNil(json["session_id"])
+        XCTAssertNotNil(json["tool_use_id"])
+        XCTAssertNotNil(json["tool_name"])
+        XCTAssertNotNil(json["error"])
+    }
+
+    func testToolFailedEventEquatable() {
+        let id = "eq-id"
+        let ts = Date(timeIntervalSince1970: 1700000000)
+        let e1 = ToolFailedEvent(base: BaseAgentEvent(id: id, timestamp: ts), sessionId: "s", toolUseId: "tu", toolName: "t", error: "e")
+        let e2 = ToolFailedEvent(base: BaseAgentEvent(id: id, timestamp: ts), sessionId: "s", toolUseId: "tu", toolName: "t", error: "e")
+        XCTAssertEqual(e1, e2)
+    }
+
+    func testToolFailedEventNotEqualDifferentError() {
+        let id = "eq-id"
+        let ts = Date(timeIntervalSince1970: 1700000000)
+        let e1 = ToolFailedEvent(base: BaseAgentEvent(id: id, timestamp: ts), sessionId: "s", toolUseId: "tu", toolName: "t", error: "err-a")
+        let e2 = ToolFailedEvent(base: BaseAgentEvent(id: id, timestamp: ts), sessionId: "s", toolUseId: "tu", toolName: "t", error: "err-b")
+        XCTAssertNotEqual(e1, e2)
+    }
+
+    func testToolFailedEventDecodeFromRawJson() throws {
+        let jsonString = """
+        {"id":"fail-id","timestamp":"2024-01-15T12:00:00Z","session_id":"fail-sess","tool_use_id":"tu-1","tool_name":"BashTool","error":"permission denied"}
+        """
+        let data = jsonString.data(using: .utf8)!
+        let decoder = JSONDecoder()
+        decoder.dateDecodingStrategy = .iso8601
+        let event = try decoder.decode(ToolFailedEvent.self, from: data)
+
+        XCTAssertEqual(event.id, "fail-id")
+        XCTAssertEqual(event.toolName, "BashTool")
+        XCTAssertEqual(event.error, "permission denied")
+    }
+
+    func testToolFailedEventDecodeMissingErrorField() {
+        let jsonString = """
+        {"id":"bad","timestamp":"2024-01-15T12:00:00Z","tool_use_id":"tu","tool_name":"t"}
+        """
+        let data = jsonString.data(using: .utf8)!
+        let decoder = JSONDecoder()
+        decoder.dateDecodingStrategy = .iso8601
+        XCTAssertThrowsError(try decoder.decode(ToolFailedEvent.self, from: data))
+    }
+
+    func testToolFailedEventImmutablePayload() {
+        let event = ToolFailedEvent(sessionId: "s", toolUseId: "tu", toolName: "t", error: "e")
+        XCTAssertEqual(event.error, "e")
+    }
+
+    // MARK: - Tool Events Edge Cases
+
+    func testToolStartedEventEmptyToolName() {
+        let event = ToolStartedEvent(sessionId: nil, toolName: "", toolUseId: "tu", input: nil)
+        XCTAssertTrue(event.toolName.isEmpty)
+    }
+
+    func testToolStartedEventEmptyToolUseId() {
+        let event = ToolStartedEvent(sessionId: nil, toolName: "t", toolUseId: "", input: nil)
+        XCTAssertTrue(event.toolUseId.isEmpty)
+    }
+
+    func testToolStartedEventEmptyInput() {
+        let event = ToolStartedEvent(sessionId: "s", toolName: "t", toolUseId: "tu", input: "")
+        XCTAssertEqual(event.input, "")
+    }
+
+    func testToolStreamingEventEmptyChunk() {
+        let event = ToolStreamingEvent(sessionId: nil, toolUseId: "tu", chunk: "")
+        XCTAssertTrue(event.chunk.isEmpty)
+    }
+
+    func testToolCompletedEventZeroDuration() {
+        let event = ToolCompletedEvent(sessionId: "s", toolUseId: "tu", toolName: "t", durationMs: 0, isError: false)
+        XCTAssertEqual(event.durationMs, 0)
+    }
+
+    func testToolFailedEventEmptyError() {
+        let event = ToolFailedEvent(sessionId: nil, toolUseId: "tu", toolName: "t", error: "")
+        XCTAssertTrue(event.error.isEmpty)
+    }
+
+    // MARK: - Tool Events Existential Usage (AC5)
+
+    func testToolEventsAsAgentEventExistential() {
+        let events: [any AgentEvent] = [
+            ToolStartedEvent(sessionId: "s1", toolName: "BashTool", toolUseId: "tu-1", input: nil),
+            ToolStreamingEvent(sessionId: "s2", toolUseId: "tu-2", chunk: "data"),
+            ToolCompletedEvent(sessionId: "s3", toolUseId: "tu-3", toolName: "FileTool", durationMs: 100, isError: false),
+            ToolFailedEvent(sessionId: "s4", toolUseId: "tu-4", toolName: "BashTool", error: "fail")
+        ]
+        XCTAssertEqual(events.count, 4)
+        for event in events {
+            XCTAssertFalse(event.id.isEmpty)
+            XCTAssertNotNil(event.timestamp)
+        }
+    }
+
+    // MARK: - Actor Boundary (AC5)
+
+    func testToolStartedEventSendableAcrossActor() async {
+        let event = ToolStartedEvent(sessionId: "s", toolName: "BashTool", toolUseId: "tu", input: "i")
+        let retrieved = await Self.toolStartedEchoActor.send(event)
+        XCTAssertEqual(retrieved.toolName, "BashTool")
+    }
+
+    func testToolStreamingEventSendableAcrossActor() async {
+        let event = ToolStreamingEvent(sessionId: "s", toolUseId: "tu", chunk: "chunk-data")
+        let retrieved = await Self.toolStreamingEchoActor.send(event)
+        XCTAssertEqual(retrieved.chunk, "chunk-data")
+    }
+
+    func testToolCompletedEventSendableAcrossActor() async {
+        let event = ToolCompletedEvent(sessionId: "s", toolUseId: "tu", toolName: "t", durationMs: 500, isError: false)
+        let retrieved = await Self.toolCompletedEchoActor.send(event)
+        XCTAssertEqual(retrieved.durationMs, 500)
+    }
+
+    func testToolFailedEventSendableAcrossActor() async {
+        let event = ToolFailedEvent(sessionId: "s", toolUseId: "tu", toolName: "t", error: "err")
+        let retrieved = await Self.toolFailedEchoActor.send(event)
+        XCTAssertEqual(retrieved.error, "err")
+    }
+}
+
+// MARK: - Tool Event Test Helpers
+
+private extension AgentEventTypesTests {
+    actor ToolStartedEchoActor {
+        func send(_ event: ToolStartedEvent) -> ToolStartedEvent { event }
+    }
+
+    actor ToolStreamingEchoActor {
+        func send(_ event: ToolStreamingEvent) -> ToolStreamingEvent { event }
+    }
+
+    actor ToolCompletedEchoActor {
+        func send(_ event: ToolCompletedEvent) -> ToolCompletedEvent { event }
+    }
+
+    actor ToolFailedEchoActor {
+        func send(_ event: ToolFailedEvent) -> ToolFailedEvent { event }
+    }
+
+    static let toolStartedEchoActor = ToolStartedEchoActor()
+    static let toolStreamingEchoActor = ToolStreamingEchoActor()
+    static let toolCompletedEchoActor = ToolCompletedEchoActor()
+    static let toolFailedEchoActor = ToolFailedEchoActor()
+}

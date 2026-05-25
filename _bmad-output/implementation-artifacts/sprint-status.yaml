@@ -291,7 +291,7 @@ development_status:
   26-1-agent-event-protocol-base-event-types: done
   26-2-session-lifecycle-events: done
   26-3-agent-lifecycle-events: done
-  26-4-tool-lifecycle-events: backlog
+  26-4-tool-lifecycle-events: done
   26-5-llm-cost-events: backlog
   26-6-eventbus-in-process-event-bus: backlog
   epic-26-retrospective: optional

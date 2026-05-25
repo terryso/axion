@@ -444,3 +444,204 @@ public struct AgentResumedEvent: AgentEvent, Equatable {
         try c.encode(resumeContext, forKey: .resumeContext)
     }
 }
+
+// MARK: - Tool Events
+
+/// Emitted when a tool starts executing.
+public struct ToolStartedEvent: AgentEvent, Equatable {
+    public let base: BaseAgentEvent
+    public let sessionId: String?
+    public let toolName: String
+    public let toolUseId: String
+    public let input: String?
+
+    public var id: String { base.id }
+    public var timestamp: Date { base.timestamp }
+
+    enum CodingKeys: String, CodingKey {
+        case id, timestamp
+        case sessionId = "session_id"
+        case toolName = "tool_name"
+        case toolUseId = "tool_use_id"
+        case input
+    }
+
+    public init(base: BaseAgentEvent = BaseAgentEvent(), sessionId: String?, toolName: String, toolUseId: String, input: String?) {
+        self.base = base
+        self.sessionId = sessionId
+        self.toolName = toolName
+        self.toolUseId = toolUseId
+        self.input = input
+    }
+
+    public init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        base = BaseAgentEvent(
+            id: try c.decode(String.self, forKey: .id),
+            timestamp: try c.decode(Date.self, forKey: .timestamp)
+        )
+        sessionId = try c.decodeIfPresent(String.self, forKey: .sessionId)
+        toolName = try c.decode(String.self, forKey: .toolName)
+        toolUseId = try c.decode(String.self, forKey: .toolUseId)
+        input = try c.decodeIfPresent(String.self, forKey: .input)
+    }
+
+    public func encode(to encoder: Encoder) throws {
+        var c = encoder.container(keyedBy: CodingKeys.self)
+        try c.encode(base.id, forKey: .id)
+        try c.encode(base.timestamp, forKey: .timestamp)
+        try c.encodeIfPresent(sessionId, forKey: .sessionId)
+        try c.encode(toolName, forKey: .toolName)
+        try c.encode(toolUseId, forKey: .toolUseId)
+        try c.encodeIfPresent(input, forKey: .input)
+    }
+}
+
+/// Emitted when a tool produces streaming output.
+public struct ToolStreamingEvent: AgentEvent, Equatable {
+    public let base: BaseAgentEvent
+    public let sessionId: String?
+    public let toolUseId: String
+    public let chunk: String
+
+    public var id: String { base.id }
+    public var timestamp: Date { base.timestamp }
+
+    enum CodingKeys: String, CodingKey {
+        case id, timestamp
+        case sessionId = "session_id"
+        case toolUseId = "tool_use_id"
+        case chunk
+    }
+
+    public init(base: BaseAgentEvent = BaseAgentEvent(), sessionId: String?, toolUseId: String, chunk: String) {
+        self.base = base
+        self.sessionId = sessionId
+        self.toolUseId = toolUseId
+        self.chunk = chunk
+    }
+
+    public init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        base = BaseAgentEvent(
+            id: try c.decode(String.self, forKey: .id),
+            timestamp: try c.decode(Date.self, forKey: .timestamp)
+        )
+        sessionId = try c.decodeIfPresent(String.self, forKey: .sessionId)
+        toolUseId = try c.decode(String.self, forKey: .toolUseId)
+        chunk = try c.decode(String.self, forKey: .chunk)
+    }
+
+    public func encode(to encoder: Encoder) throws {
+        var c = encoder.container(keyedBy: CodingKeys.self)
+        try c.encode(base.id, forKey: .id)
+        try c.encode(base.timestamp, forKey: .timestamp)
+        try c.encodeIfPresent(sessionId, forKey: .sessionId)
+        try c.encode(toolUseId, forKey: .toolUseId)
+        try c.encode(chunk, forKey: .chunk)
+    }
+}
+
+/// Emitted when a tool completes execution.
+public struct ToolCompletedEvent: AgentEvent, Equatable {
+    public let base: BaseAgentEvent
+    public let sessionId: String?
+    public let toolUseId: String
+    public let toolName: String
+    public let durationMs: Int
+    public let isError: Bool
+
+    public var id: String { base.id }
+    public var timestamp: Date { base.timestamp }
+
+    enum CodingKeys: String, CodingKey {
+        case id, timestamp
+        case sessionId = "session_id"
+        case toolUseId = "tool_use_id"
+        case toolName = "tool_name"
+        case durationMs = "duration_ms"
+        case isError = "is_error"
+    }
+
+    public init(base: BaseAgentEvent = BaseAgentEvent(), sessionId: String?, toolUseId: String, toolName: String, durationMs: Int, isError: Bool) {
+        self.base = base
+        self.sessionId = sessionId
+        self.toolUseId = toolUseId
+        self.toolName = toolName
+        self.durationMs = durationMs
+        self.isError = isError
+    }
+
+    public init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        base = BaseAgentEvent(
+            id: try c.decode(String.self, forKey: .id),
+            timestamp: try c.decode(Date.self, forKey: .timestamp)
+        )
+        sessionId = try c.decodeIfPresent(String.self, forKey: .sessionId)
+        toolUseId = try c.decode(String.self, forKey: .toolUseId)
+        toolName = try c.decode(String.self, forKey: .toolName)
+        durationMs = try c.decode(Int.self, forKey: .durationMs)
+        isError = try c.decode(Bool.self, forKey: .isError)
+    }
+
+    public func encode(to encoder: Encoder) throws {
+        var c = encoder.container(keyedBy: CodingKeys.self)
+        try c.encode(base.id, forKey: .id)
+        try c.encode(base.timestamp, forKey: .timestamp)
+        try c.encodeIfPresent(sessionId, forKey: .sessionId)
+        try c.encode(toolUseId, forKey: .toolUseId)
+        try c.encode(toolName, forKey: .toolName)
+        try c.encode(durationMs, forKey: .durationMs)
+        try c.encode(isError, forKey: .isError)
+    }
+}
+
+/// Emitted when a tool execution fails.
+public struct ToolFailedEvent: AgentEvent, Equatable {
+    public let base: BaseAgentEvent
+    public let sessionId: String?
+    public let toolUseId: String
+    public let toolName: String
+    public let error: String
+
+    public var id: String { base.id }
+    public var timestamp: Date { base.timestamp }
+
+    enum CodingKeys: String, CodingKey {
+        case id, timestamp, error
+        case sessionId = "session_id"
+        case toolUseId = "tool_use_id"
+        case toolName = "tool_name"
+    }
+
+    public init(base: BaseAgentEvent = BaseAgentEvent(), sessionId: String?, toolUseId: String, toolName: String, error: String) {
+        self.base = base
+        self.sessionId = sessionId
+        self.toolUseId = toolUseId
+        self.toolName = toolName
+        self.error = error
+    }
+
+    public init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        base = BaseAgentEvent(
+            id: try c.decode(String.self, forKey: .id),
+            timestamp: try c.decode(Date.self, forKey: .timestamp)
+        )
+        sessionId = try c.decodeIfPresent(String.self, forKey: .sessionId)
+        toolUseId = try c.decode(String.self, forKey: .toolUseId)
+        toolName = try c.decode(String.self, forKey: .toolName)
+        error = try c.decode(String.self, forKey: .error)
+    }
+
+    public func encode(to encoder: Encoder) throws {
+        var c = encoder.container(keyedBy: CodingKeys.self)
+        try c.encode(base.id, forKey: .id)
+        try c.encode(base.timestamp, forKey: .timestamp)
+        try c.encodeIfPresent(sessionId, forKey: .sessionId)
+        try c.encode(toolUseId, forKey: .toolUseId)
+        try c.encode(toolName, forKey: .toolName)
+        try c.encode(error, forKey: .error)
+    }
+}
