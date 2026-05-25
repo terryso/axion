@@ -125,6 +125,11 @@
 /// - ``createSkillTool(registry:)`` — Factory for the Skill tool
 /// - ``ToolRestrictionStack`` — Stack-based tool restriction manager for nested skill execution
 ///
+/// ## Runtime Event Layer
+/// - ``AgentEvent`` — Protocol for all runtime events emitted by the agent system
+/// - ``BaseAgentEvent`` — Default implementation with auto-generated id and timestamp
+/// - ``AgentEventCategory`` — High-level classification of event types (session, agent, tool, llm, memory, subAgent)
+///
 /// ## Pause/Resume Protocol
 /// - ``PausedData`` — Data emitted when the agent pauses for human intervention
 /// - ``PauseResult`` — Result of a pause-for-human operation (resumed/aborted/timedOut)

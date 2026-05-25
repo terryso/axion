@@ -1,0 +1,169 @@
+{
+  "stories": [
+    {
+      "storyId": "26.1",
+      "title": "AgentEvent Protocol 与 Base Event 类型",
+      "complexity": {
+        "score": 1,
+        "level": "Low",
+        "reasons": [
+          "Elevated AC count (8)"
+        ]
+      }
+    },
+    {
+      "storyId": "26.2",
+      "title": "Session Lifecycle Events",
+      "complexity": {
+        "score": 1,
+        "level": "Low",
+        "reasons": [
+          "Elevated AC count (7)"
+        ]
+      }
+    },
+    {
+      "storyId": "26.3",
+      "title": "Agent Lifecycle Events",
+      "complexity": {
+        "score": 1,
+        "level": "Low",
+        "reasons": [
+          "Elevated AC count (7)"
+        ]
+      }
+    },
+    {
+      "storyId": "26.4",
+      "title": "Tool Lifecycle Events",
+      "complexity": {
+        "score": 1,
+        "level": "Low",
+        "reasons": [
+          "Elevated AC count (7)"
+        ]
+      }
+    },
+    {
+      "storyId": "26.5",
+      "title": "LLM Cost Events",
+      "complexity": {
+        "score": 1,
+        "level": "Low",
+        "reasons": [
+          "Caching layer"
+        ]
+      }
+    },
+    {
+      "storyId": "26.6",
+      "title": "EventBus — 进程内 Event Bus",
+      "complexity": {
+        "score": 7,
+        "level": "Medium",
+        "reasons": [
+          "Real-time communication",
+          "Logging/monitoring/observability",
+          "Configuration/feature flags",
+          "High AC count (71)",
+          "Large story (496 words)"
+        ]
+      }
+    },
+    {
+      "storyId": "27.1",
+      "title": "AgentOptions 新增 eventBus 参数",
+      "complexity": {
+        "score": 1,
+        "level": "Low",
+        "reasons": [
+          "Elevated AC count (7)"
+        ]
+      }
+    },
+    {
+      "storyId": "27.2",
+      "title": "Agent 启动与完成事件 Emit",
+      "complexity": {
+        "score": 2,
+        "level": "Low",
+        "reasons": [
+          "High AC count (13)"
+        ]
+      }
+    },
+    {
+      "storyId": "27.3",
+      "title": "Tool 生命周期事件 Emit",
+      "complexity": {
+        "score": 1,
+        "level": "Low",
+        "reasons": [
+          "Elevated AC count (8)"
+        ]
+      }
+    },
+    {
+      "storyId": "27.4",
+      "title": "LLM 成本事件 Emit",
+      "complexity": {
+        "score": 2,
+        "level": "Low",
+        "reasons": [
+          "Caching layer",
+          "Elevated AC count (10)"
+        ]
+      }
+    },
+    {
+      "storyId": "27.5",
+      "title": "Session 生命周期事件 Emit",
+      "complexity": {
+        "score": 5,
+        "level": "Medium",
+        "reasons": [
+          "Logging/monitoring/observability",
+          "Configuration/feature flags",
+          "High AC count (65)",
+          "Large story (458 words)"
+        ]
+      }
+    },
+    {
+      "storyId": "28.1",
+      "title": "AgentEvent → SSE Event 映射",
+      "complexity": {
+        "score": 3,
+        "level": "Low",
+        "reasons": [
+          "Real-time communication",
+          "Elevated AC count (10)"
+        ]
+      }
+    },
+    {
+      "storyId": "28.2",
+      "title": "EventBus → EventBroadcaster 桥接",
+      "complexity": {
+        "score": 3,
+        "level": "Low",
+        "reasons": [
+          "Real-time communication",
+          "Elevated AC count (7)"
+        ]
+      }
+    },
+    {
+      "storyId": "28.3",
+      "title": "Token Streaming Event（可选）",
+      "complexity": {
+        "score": 4,
+        "level": "Medium",
+        "reasons": [
+          "Real-time communication",
+          "High AC count (46)"
+        ]
+      }
+    }
+  ]
+}
