@@ -1494,6 +1494,17 @@ public class Agent: CustomStringConvertible, CustomDebugStringConvertible, @unch
                             let turnCost = estimateCost(model: fallbackModel, usage: turnUsage)
                             totalCostUsd += turnCost
                             costTracker.recordUsage(model: fallbackModel, usage: turnUsage)
+                            if let eventBus = options.eventBus {
+                                await eventBus.publish(LLMCostEvent(
+                                    sessionId: resolvedSessionId,
+                                    model: fallbackModel,
+                                    inputTokens: turnUsage.inputTokens,
+                                    outputTokens: turnUsage.outputTokens,
+                                    cacheCreationInputTokens: usage["cache_creation_input_tokens"] as? Int,
+                                    cacheReadInputTokens: usage["cache_read_input_tokens"] as? Int,
+                                    estimatedCostUsd: turnCost
+                                ))
+                            }
                             costByModel[fallbackModel] = CostBreakdownEntry(
                                 label: options.agentLabel,
                                 model: fallbackModel,
@@ -1622,6 +1633,17 @@ public class Agent: CustomStringConvertible, CustomDebugStringConvertible, @unch
                 let turnCost = estimateCost(model: model, usage: turnUsage)
                 totalCostUsd += turnCost
                 costTracker.recordUsage(model: model, usage: turnUsage)
+                if let eventBus = options.eventBus {
+                    await eventBus.publish(LLMCostEvent(
+                        sessionId: resolvedSessionId,
+                        model: model,
+                        inputTokens: turnUsage.inputTokens,
+                        outputTokens: turnUsage.outputTokens,
+                        cacheCreationInputTokens: usage["cache_creation_input_tokens"] as? Int,
+                        cacheReadInputTokens: usage["cache_read_input_tokens"] as? Int,
+                        estimatedCostUsd: turnCost
+                    ))
+                }
                 // Track per-model cost breakdown
                 let currentModel = model
                 if var existing = costByModel[currentModel] {
@@ -2288,6 +2310,17 @@ public class Agent: CustomStringConvertible, CustomDebugStringConvertible, @unch
                                     let turnCost = estimateCost(model: currentModel, usage: TokenUsage(inputTokens: inputTokens, outputTokens: 0))
                                     totalCostUsd += turnCost
                                     streamCostTracker.recordUsage(model: currentModel, usage: TokenUsage(inputTokens: inputTokens, outputTokens: 0))
+                                    if let eventBus = capturedEventBus {
+                                        await eventBus.publish(LLMCostEvent(
+                                            sessionId: resolvedSessionId,
+                                            model: currentModel,
+                                            inputTokens: inputTokens,
+                                            outputTokens: 0,
+                                            cacheCreationInputTokens: msgUsage["cache_creation_input_tokens"] as? Int,
+                                            cacheReadInputTokens: msgUsage["cache_read_input_tokens"] as? Int,
+                                            estimatedCostUsd: turnCost
+                                        ))
+                                    }
                                     // Track per-model cost breakdown
                                     let modelKey = currentModel
                                     if var existing = costByModel[modelKey] {
@@ -2421,6 +2454,17 @@ public class Agent: CustomStringConvertible, CustomDebugStringConvertible, @unch
                                 let turnCost = estimateCost(model: currentModel, usage: turnUsage)
                                 totalCostUsd += turnCost
                                 streamCostTracker.recordUsage(model: currentModel, usage: turnUsage)
+                                if let eventBus = capturedEventBus {
+                                    await eventBus.publish(LLMCostEvent(
+                                        sessionId: resolvedSessionId,
+                                        model: currentModel,
+                                        inputTokens: turnUsage.inputTokens,
+                                        outputTokens: turnUsage.outputTokens,
+                                        cacheCreationInputTokens: usage["cache_creation_input_tokens"] as? Int,
+                                        cacheReadInputTokens: usage["cache_read_input_tokens"] as? Int,
+                                        estimatedCostUsd: turnCost
+                                    ))
+                                }
                                 // Track per-model cost breakdown
                                 let modelKey = currentModel
                                 if var existing = costByModel[modelKey] {

@@ -204,6 +204,11 @@ await AgentLifecycleEmitE2ETests.run(apiKey: apiKey, model: model, baseURL: base
 await ToolLifecycleEmitE2ETests.run(apiKey: apiKey, model: model, baseURL: baseURL)
 
 // ================================================================
+// SECTION 150-152: LLM Cost Event Emit E2E Tests (Story 27.4)
+// ================================================================
+await LLMCostEmitE2ETests.run(apiKey: apiKey, model: model, baseURL: baseURL)
+
+// ================================================================
 // Results Summary
 // ================================================================
 print("\n=== E2E Test Results ===")

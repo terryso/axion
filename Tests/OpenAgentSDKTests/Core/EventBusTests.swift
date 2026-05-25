@@ -328,7 +328,7 @@ final class EventBusTests: XCTestCase {
         )
     }
 
-    // AC1 + AC2: prompt() emits AgentStartedEvent + AgentCompletedEvent
+    // AC1 + AC2: prompt() emits AgentStartedEvent + LLMCostEvent + AgentCompletedEvent
     func testPromptEmitsStartedAndCompletedEvents() async {
         let bus = EventBus()
         let (_, stream) = await bus.subscribe()
@@ -339,17 +339,16 @@ final class EventBusTests: XCTestCase {
         var collected: [any AgentEvent] = []
         for await event in stream {
             collected.append(event)
-            if collected.count >= 2 { break }
+            if collected.count >= 3 { break }
         }
 
-        XCTAssertEqual(collected.count, 2)
+        XCTAssertGreaterThanOrEqual(collected.count, 2)
         XCTAssertTrue(collected[0] is AgentStartedEvent)
-        XCTAssertTrue(collected[1] is AgentCompletedEvent)
 
         let started = collected[0] as! AgentStartedEvent
         XCTAssertEqual(started.task, "hello")
 
-        let completed = collected[1] as! AgentCompletedEvent
+        let completed = collected.last as! AgentCompletedEvent
         XCTAssertEqual(completed.totalSteps, 1)
         XCTAssertGreaterThanOrEqual(completed.durationMs, 0)
         XCTAssertEqual(completed.resultText, "done")
@@ -385,7 +384,7 @@ final class EventBusTests: XCTestCase {
         XCTAssertEqual(failed.stepsCompleted, 0)
     }
 
-    // AC1 + AC2: stream() emits AgentStartedEvent + AgentCompletedEvent
+    // AC1 + AC2: stream() emits AgentStartedEvent + LLMCostEvent(s) + AgentCompletedEvent
     func testStreamEmitsStartedAndCompletedEvents() async {
         let bus = EventBus()
         let (_, stream) = await bus.subscribe()
@@ -398,17 +397,16 @@ final class EventBusTests: XCTestCase {
         var collected: [any AgentEvent] = []
         for await event in stream {
             collected.append(event)
-            if collected.count >= 2 { break }
+            if collected.count >= 3 { break }
         }
 
-        XCTAssertEqual(collected.count, 2)
+        XCTAssertGreaterThanOrEqual(collected.count, 2)
         XCTAssertTrue(collected[0] is AgentStartedEvent)
-        XCTAssertTrue(collected[1] is AgentCompletedEvent)
 
         let started = collected[0] as! AgentStartedEvent
         XCTAssertEqual(started.task, "hello")
 
-        let completed = collected[1] as! AgentCompletedEvent
+        let completed = collected.last as! AgentCompletedEvent
         XCTAssertGreaterThanOrEqual(completed.totalSteps, 1)
         XCTAssertGreaterThanOrEqual(completed.durationMs, 0)
     }
@@ -462,12 +460,12 @@ final class EventBusTests: XCTestCase {
         var collected: [any AgentEvent] = []
         for await event in stream {
             collected.append(event)
-            if collected.count >= 2 { break }
+            if collected.count >= 3 { break }
         }
 
         let started = collected[0] as! AgentStartedEvent
         XCTAssertEqual(started.sessionId, sessionId)
-        let completed = collected[1] as! AgentCompletedEvent
+        let completed = collected.last as! AgentCompletedEvent
         XCTAssertEqual(completed.sessionId, sessionId)
     }
 
@@ -528,12 +526,12 @@ final class EventBusTests: XCTestCase {
         var collected: [any AgentEvent] = []
         for await event in stream {
             collected.append(event)
-            if collected.count >= 2 { break }
+            if collected.count >= 3 { break }
         }
 
         let started = collected[0] as! AgentStartedEvent
         XCTAssertEqual(started.sessionId, sessionId)
-        let completed = collected[1] as! AgentCompletedEvent
+        let completed = collected.last as! AgentCompletedEvent
         XCTAssertEqual(completed.sessionId, sessionId)
     }
 
@@ -884,5 +882,245 @@ final class EventBusTests: XCTestCase {
         func call(input: Any, context: ToolContext) async -> ToolResult {
             return ToolResult(toolUseId: context.toolUseId, content: "written", isError: false)
         }
+    }
+
+    // MARK: - LLM Cost Event Emit Tests (Story 27.4)
+
+    /// Mock LLM client that returns a response with specific token usage.
+    private struct CostAwareMockLLMClient: LLMClient, @unchecked Sendable {
+        let inputTokens: Int
+        let outputTokens: Int
+        let cacheCreationInputTokens: Int?
+        let cacheReadInputTokens: Int?
+
+        init(inputTokens: Int = 100, outputTokens: Int = 50,
+             cacheCreationInputTokens: Int? = nil, cacheReadInputTokens: Int? = nil) {
+            self.inputTokens = inputTokens
+            self.outputTokens = outputTokens
+            self.cacheCreationInputTokens = cacheCreationInputTokens
+            self.cacheReadInputTokens = cacheReadInputTokens
+        }
+
+        nonisolated func sendMessage(
+            model: String, messages: [[String: Any]], maxTokens: Int,
+            system: String?, tools: [[String: Any]]?, toolChoice: [String: Any]?,
+            thinking: [String: Any]?, temperature: Double?
+        ) async throws -> [String: Any] {
+            var usage: [String: Any] = [
+                "input_tokens": inputTokens,
+                "output_tokens": outputTokens,
+            ]
+            if let v = cacheCreationInputTokens { usage["cache_creation_input_tokens"] = v }
+            if let v = cacheReadInputTokens { usage["cache_read_input_tokens"] = v }
+            return [
+                "content": [["type": "text", "text": "done"]],
+                "stop_reason": "end_turn",
+                "usage": usage,
+            ]
+        }
+
+        nonisolated func streamMessage(
+            model: String, messages: [[String: Any]], maxTokens: Int,
+            system: String?, tools: [[String: Any]]?, toolChoice: [String: Any]?,
+            thinking: [String: Any]?, temperature: Double?
+        ) async throws -> AsyncThrowingStream<SSEEvent, Error> {
+            var deltaUsage: [String: Any] = [
+                "input_tokens": 0,
+                "output_tokens": outputTokens,
+            ]
+            if let v = cacheCreationInputTokens { deltaUsage["cache_creation_input_tokens"] = v }
+            if let v = cacheReadInputTokens { deltaUsage["cache_read_input_tokens"] = v }
+            var msgUsage: [String: Any] = [
+                "input_tokens": inputTokens,
+            ]
+            if let v = cacheCreationInputTokens { msgUsage["cache_creation_input_tokens"] = v }
+            if let v = cacheReadInputTokens { msgUsage["cache_read_input_tokens"] = v }
+            let events: [SSEEvent] = [
+                .messageStart(message: ["type": "message_start", "model": model, "usage": msgUsage]),
+                .contentBlockStart(index: 0, contentBlock: ["type": "text", "text": ""]),
+                .contentBlockDelta(index: 0, delta: ["type": "text_delta", "text": "done"]),
+                .contentBlockStop(index: 0),
+                .messageDelta(delta: ["stop_reason": "end_turn"], usage: deltaUsage),
+                .messageStop,
+            ]
+            return AsyncThrowingStream { continuation in
+                for event in events { continuation.yield(event) }
+                continuation.finish()
+            }
+        }
+    }
+
+    // AC1 + AC5: prompt() emits LLMCostEvent with correct values
+    func testPromptEmitsLLMCostEvent() async {
+        let bus = EventBus()
+        let stream = await bus.subscribe(LLMCostEvent.self)
+
+        let agent = Agent(
+            options: AgentOptions(
+                apiKey: "test-key",
+                model: "claude-sonnet-4-6",
+                systemPrompt: "You are a helper.",
+                eventBus: bus
+            ),
+            client: CostAwareMockLLMClient(inputTokens: 100, outputTokens: 50)
+        )
+
+        _ = await agent.prompt("hello")
+
+        var costEvent: LLMCostEvent?
+        for await event in stream {
+            costEvent = event
+            break
+        }
+
+        XCTAssertNotNil(costEvent)
+        XCTAssertEqual(costEvent?.inputTokens, 100)
+        XCTAssertEqual(costEvent?.outputTokens, 50)
+        XCTAssertEqual(costEvent?.model, "claude-sonnet-4-6")
+
+        let expectedCost = estimateCost(model: "claude-sonnet-4-6", usage: TokenUsage(inputTokens: 100, outputTokens: 50))
+        XCTAssertEqual(costEvent!.estimatedCostUsd, expectedCost, accuracy: 0.000001)
+    }
+
+    // AC3: Multiple LLM calls emit multiple independent LLMCostEvents
+    func testMultiplePromptCallsEmitMultipleCostEvents() async {
+        let bus = EventBus()
+        let (_, stream) = await bus.subscribe()
+
+        let agent = Agent(
+            options: AgentOptions(
+                apiKey: "test-key",
+                model: "claude-sonnet-4-6",
+                systemPrompt: "You are a helper.",
+                eventBus: bus
+            ),
+            client: CostAwareMockLLMClient(inputTokens: 80, outputTokens: 40)
+        )
+
+        _ = await agent.prompt("first")
+        _ = await agent.prompt("second")
+        _ = await agent.prompt("third")
+
+        var costEvents: [LLMCostEvent] = []
+        for await event in stream {
+            if let typed = event as? LLMCostEvent {
+                costEvents.append(typed)
+            }
+            if costEvents.count >= 3 { break }
+        }
+
+        XCTAssertEqual(costEvents.count, 3)
+        for event in costEvents {
+            XCTAssertEqual(event.inputTokens, 80)
+            XCTAssertEqual(event.outputTokens, 40)
+        }
+    }
+
+    // AC4: LLMCostEvent contains cache token data when API returns it
+    func testLLMCostEventContainsCacheTokens() async {
+        let bus = EventBus()
+        let stream = await bus.subscribe(LLMCostEvent.self)
+
+        let agent = Agent(
+            options: AgentOptions(
+                apiKey: "test-key",
+                model: "claude-sonnet-4-6",
+                systemPrompt: "You are a helper.",
+                eventBus: bus
+            ),
+            client: CostAwareMockLLMClient(
+                inputTokens: 200, outputTokens: 30,
+                cacheCreationInputTokens: 150, cacheReadInputTokens: 50
+            )
+        )
+
+        _ = await agent.prompt("test cache tokens")
+
+        var costEvent: LLMCostEvent?
+        for await event in stream {
+            costEvent = event
+            break
+        }
+
+        XCTAssertNotNil(costEvent)
+        XCTAssertEqual(costEvent?.cacheCreationInputTokens, 150)
+        XCTAssertEqual(costEvent?.cacheReadInputTokens, 50)
+    }
+
+    // AC7: No LLMCostEvent when eventBus is nil (zero overhead)
+    func testNoLLMCostEventWhenEventBusIsNil() async {
+        let agent = Agent(
+            options: AgentOptions(
+                apiKey: "test-key",
+                model: "claude-sonnet-4-6",
+                systemPrompt: "You are a helper."
+            ),
+            client: CostAwareMockLLMClient(inputTokens: 100, outputTokens: 50)
+        )
+
+        let result = await agent.prompt("hello")
+        XCTAssertNotNil(result)
+        XCTAssertFalse(result.text.isEmpty)
+    }
+
+    // AC2 + AC8: stream() emits LLMCostEvent
+    func testStreamEmitsLLMCostEvent() async {
+        let bus = EventBus()
+        let stream = await bus.subscribe(LLMCostEvent.self)
+
+        let agent = Agent(
+            options: AgentOptions(
+                apiKey: "test-key",
+                model: "claude-sonnet-4-6",
+                systemPrompt: "You are a helper.",
+                eventBus: bus
+            ),
+            client: CostAwareMockLLMClient(inputTokens: 120, outputTokens: 60)
+        )
+
+        let messageStream = agent.stream("hello")
+        for await _ in messageStream {}
+
+        var costEvents: [LLMCostEvent] = []
+        for await event in stream {
+            costEvents.append(event)
+            // messageStart emits one, messageDelta emits another
+            if costEvents.count >= 2 { break }
+        }
+
+        XCTAssertGreaterThanOrEqual(costEvents.count, 1)
+
+        let totalInput = costEvents.reduce(0) { $0 + $1.inputTokens }
+        let totalOutput = costEvents.reduce(0) { $0 + $1.outputTokens }
+        XCTAssertGreaterThanOrEqual(totalInput, 120)
+        XCTAssertGreaterThanOrEqual(totalOutput, 60)
+    }
+
+    // AC5: estimatedCostUsd matches estimateCost() exactly
+    func testEstimatedCostMatchesEstimateCostFunction() async {
+        let bus = EventBus()
+        let stream = await bus.subscribe(LLMCostEvent.self)
+
+        let agent = Agent(
+            options: AgentOptions(
+                apiKey: "test-key",
+                model: "claude-sonnet-4-6",
+                systemPrompt: "You are a helper.",
+                eventBus: bus
+            ),
+            client: CostAwareMockLLMClient(inputTokens: 500, outputTokens: 200)
+        )
+
+        _ = await agent.prompt("cost check")
+
+        var costEvent: LLMCostEvent?
+        for await event in stream {
+            costEvent = event
+            break
+        }
+
+        XCTAssertNotNil(costEvent)
+        let expectedCost = estimateCost(model: "claude-sonnet-4-6", usage: TokenUsage(inputTokens: 500, outputTokens: 200))
+        XCTAssertEqual(costEvent!.estimatedCostUsd, expectedCost, accuracy: 0.0000001)
     }
 }
