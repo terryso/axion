@@ -298,13 +298,13 @@ development_status:
   epic-26-retrospective: done
 
   # Epic 27: Runtime Event Layer — Agent Event Emitter
-  epic-27: in-progress
+  epic-27: done
   27-1-agent-options-eventbus-parameter: done
   27-2-agent-startup-completion-event-emit: done
   27-3-tool-lifecycle-event-emit: done
   27-4-llm-cost-event-emit: done
   27-5-session-lifecycle-event-emit: done
-  epic-27-retrospective: optional
+  epic-27-retrospective: done
 
   # Epic 28: Runtime Event Layer — EventBus → SSE Bridge
   epic-28: backlog
