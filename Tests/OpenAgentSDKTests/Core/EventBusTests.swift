@@ -15,19 +15,9 @@ final class EventBusTests: XCTestCase {
         let event = AgentStartedEvent(sessionId: "s1", task: "test")
         await bus.publish(event)
 
-        var received1: AgentStartedEvent?
-        var received2: AgentStartedEvent?
-        var received3: AgentStartedEvent?
-
-        for await e in stream1 {
-            if let typed = e as? AgentStartedEvent { received1 = typed; break }
-        }
-        for await e in stream2 {
-            if let typed = e as? AgentStartedEvent { received2 = typed; break }
-        }
-        for await e in stream3 {
-            if let typed = e as? AgentStartedEvent { received3 = typed; break }
-        }
+        let received1 = await collectFirstMatching(stream: stream1, type: AgentStartedEvent.self)
+        let received2 = await collectFirstMatching(stream: stream2, type: AgentStartedEvent.self)
+        let received3 = await collectFirstMatching(stream: stream3, type: AgentStartedEvent.self)
 
         XCTAssertNotNil(received1)
         XCTAssertNotNil(received2)
@@ -64,12 +54,8 @@ final class EventBusTests: XCTestCase {
         // Give the stream time to process buffered items.
         await _Concurrency.Task.yield()
 
-        var collected: [String] = []
-        for await event in stream {
-            if let typed = event as? AgentStartedEvent {
-                collected.append(typed.task)
-            }
-            if collected.count >= 100 { break }
+        let collected = await collectEventsWithTimeout(stream: stream, count: 100) { events in
+            events.compactMap { ($0 as? AgentStartedEvent)?.task }
         }
 
         // Buffer should contain the latest 100 (task-100 through task-199).
@@ -87,11 +73,7 @@ final class EventBusTests: XCTestCase {
         await bus.publish(AgentStartedEvent(sessionId: "s", task: "ignored"))
         await bus.publish(ToolStartedEvent(sessionId: "s", toolName: "bash", toolUseId: "tu1", input: nil))
 
-        var received: ToolStartedEvent?
-        for await event in stream {
-            received = event
-            break
-        }
+        let received = await collectFirstFromTypedStream(stream: stream)
 
         XCTAssertNotNil(received)
         XCTAssertEqual(received?.toolName, "bash")
@@ -105,12 +87,8 @@ final class EventBusTests: XCTestCase {
 
         // Publish one event to verify stream works.
         await bus.publish(AgentStartedEvent(sessionId: "s", task: "before"))
-        var count = 0
-        for await _ in stream {
-            count += 1
-            if count == 1 { break }
-        }
-        XCTAssertEqual(count, 1)
+        let count = await collectEventsWithTimeout(stream: stream, count: 1) { _ in [0] }
+        XCTAssertEqual(count.count, 1)
 
         // Unsubscribe.
         await bus.unsubscribe(id)
@@ -148,16 +126,11 @@ final class EventBusTests: XCTestCase {
         await bus.publish(AgentStartedEvent(sessionId: "s", task: "b"))
 
         // Both subscribers should get both events.
-        var events1: [String] = []
-        for await e in sub1.stream {
-            if let t = e as? AgentStartedEvent { events1.append(t.task) }
-            if events1.count == 2 { break }
+        let events1 = await collectEventsWithTimeout(stream: sub1.stream, count: 2) { events in
+            events.compactMap { ($0 as? AgentStartedEvent)?.task }
         }
-
-        var events2: [String] = []
-        for await e in sub2.stream {
-            if let t = e as? AgentStartedEvent { events2.append(t.task) }
-            if events2.count == 2 { break }
+        let events2 = await collectEventsWithTimeout(stream: sub2.stream, count: 2) { events in
+            events.compactMap { ($0 as? AgentStartedEvent)?.task }
         }
 
         XCTAssertEqual(events1.sorted(), ["a", "b"])
@@ -175,10 +148,8 @@ final class EventBusTests: XCTestCase {
             await bus.publish(event)
         }
 
-        var collected: [String] = []
-        for await e in stream {
-            if let t = e as? AgentStartedEvent { collected.append(t.task) }
-            if collected.count == 50 { break }
+        let collected = await collectEventsWithTimeout(stream: stream, count: 50) { evts in
+            evts.compactMap { ($0 as? AgentStartedEvent)?.task }
         }
 
         let expected = (0..<50).map { "t\($0)" }
@@ -196,11 +167,8 @@ final class EventBusTests: XCTestCase {
         await bus.publish(AgentCompletedEvent(sessionId: "s", totalSteps: 3, durationMs: 100, resultText: "done"))
         await bus.publish(AgentStartedEvent(sessionId: "s", task: "ignored-by-both"))
 
-        var toolEvent: ToolStartedEvent?
-        var agentEvent: AgentCompletedEvent?
-
-        for await e in toolStream { toolEvent = e; break }
-        for await e in agentStream { agentEvent = e; break }
+        let toolEvent = await collectFirstFromTypedStream(stream: toolStream)
+        let agentEvent = await collectFirstFromTypedStream(stream: agentStream)
 
         XCTAssertNotNil(toolEvent)
         XCTAssertEqual(toolEvent?.toolName, "bash")
@@ -219,10 +187,8 @@ final class EventBusTests: XCTestCase {
         await bus.publish(ToolCompletedEvent(sessionId: "s", toolUseId: "tu", toolName: "bash", durationMs: 50, isError: false))
         await bus.publish(LLMCostEvent(sessionId: "s", model: "m", inputTokens: 10, outputTokens: 5, cacheCreationInputTokens: nil, cacheReadInputTokens: nil, estimatedCostUsd: 0.001))
 
-        var collected: [String] = []
-        for await e in stream {
-            collected.append(String(describing: type(of: e)))
-            if collected.count == 4 { break }
+        let collected = await collectEventsWithTimeout(stream: stream, count: 4) { events in
+            events.map { String(describing: type(of: $0)) }
         }
 
         XCTAssertEqual(collected.count, 4)
@@ -238,10 +204,7 @@ final class EventBusTests: XCTestCase {
             let (_, stream) = await bus.subscribe()
             // Consume one event to verify the stream works.
             await bus.publish(AgentStartedEvent(sessionId: "s", task: "before"))
-            for await e in stream {
-                _ = e
-                break
-            }
+            let _ = await collectEventsWithTimeout(stream: stream, count: 1) { $0 }
             // stream goes out of scope here → onTermination fires
         }
 
@@ -336,11 +299,7 @@ final class EventBusTests: XCTestCase {
 
         _ = await agent.prompt("hello")
 
-        var collected: [any AgentEvent] = []
-        for await event in stream {
-            collected.append(event)
-            if collected.count >= 3 { break }
-        }
+        let collected = await collectEventsWithTimeout(stream: stream, count: 3)
 
         XCTAssertGreaterThanOrEqual(collected.count, 2)
         XCTAssertTrue(collected[0] is AgentStartedEvent)
@@ -370,11 +329,7 @@ final class EventBusTests: XCTestCase {
 
         _ = await agent.prompt("hello")
 
-        var collected: [any AgentEvent] = []
-        for await event in stream {
-            collected.append(event)
-            if collected.count >= 2 { break }
-        }
+        let collected = await collectEventsWithTimeout(stream: stream, count: 2, timeoutNs: Self.retryTimeoutNs)
 
         XCTAssertTrue(collected[0] is AgentStartedEvent)
         XCTAssertTrue(collected[1] is AgentFailedEvent)
@@ -394,11 +349,7 @@ final class EventBusTests: XCTestCase {
         // Consume the stream to drive it to completion
         for await _ in messageStream {}
 
-        var collected: [any AgentEvent] = []
-        for await event in stream {
-            collected.append(event)
-            if collected.count >= 3 { break }
-        }
+        let collected = await collectEventsWithTimeout(stream: stream, count: 3)
 
         XCTAssertGreaterThanOrEqual(collected.count, 2)
         XCTAssertTrue(collected[0] is AgentStartedEvent)
@@ -428,11 +379,7 @@ final class EventBusTests: XCTestCase {
         let messageStream = agent.stream("hello")
         for await _ in messageStream {}
 
-        var collected: [any AgentEvent] = []
-        for await event in stream {
-            collected.append(event)
-            if collected.count >= 2 { break }
-        }
+        let collected = await collectEventsWithTimeout(stream: stream, count: 2, timeoutNs: Self.retryTimeoutNs)
 
         XCTAssertTrue(collected[0] is AgentStartedEvent)
         XCTAssertTrue(collected[1] is AgentFailedEvent)
@@ -457,11 +404,7 @@ final class EventBusTests: XCTestCase {
 
         _ = await agent.prompt("hello")
 
-        var collected: [any AgentEvent] = []
-        for await event in stream {
-            collected.append(event)
-            if collected.count >= 3 { break }
-        }
+        let collected = await collectEventsWithTimeout(stream: stream, count: 3)
 
         let started = collected[0] as! AgentStartedEvent
         XCTAssertEqual(started.sessionId, sessionId)
@@ -492,11 +435,7 @@ final class EventBusTests: XCTestCase {
         // Fire-and-forget Task needs brief delay
         try await _Concurrency.Task.sleep(nanoseconds: 200_000_000) // 200ms
 
-        var collected: [any AgentEvent] = []
-        for await event in stream {
-            collected.append(event)
-            if collected.count >= 1 { break }
-        }
+        let collected = await collectEventsWithTimeout(stream: stream, count: 1)
 
         XCTAssertEqual(collected.count, 1)
         let resumed = collected[0] as! AgentResumedEvent
@@ -523,11 +462,7 @@ final class EventBusTests: XCTestCase {
         let messageStream = agent.stream("hello")
         for await _ in messageStream {}
 
-        var collected: [any AgentEvent] = []
-        for await event in stream {
-            collected.append(event)
-            if collected.count >= 3 { break }
-        }
+        let collected = await collectEventsWithTimeout(stream: stream, count: 3)
 
         let started = collected[0] as! AgentStartedEvent
         XCTAssertEqual(started.sessionId, sessionId)
@@ -572,11 +507,7 @@ final class EventBusTests: XCTestCase {
 
         _ = await ToolExecutor.executeSingleTool(block: block, tool: tool, context: context)
 
-        var collected: [any AgentEvent] = []
-        for await event in stream {
-            collected.append(event)
-            if collected.count >= 2 { break }
-        }
+        let collected = await collectEventsWithTimeout(stream: stream, count: 2)
 
         XCTAssertTrue(collected[0] is ToolStartedEvent)
         let started = collected[0] as! ToolStartedEvent
@@ -601,11 +532,7 @@ final class EventBusTests: XCTestCase {
 
         _ = await ToolExecutor.executeSingleTool(block: block, tool: tool, context: context)
 
-        var collected: [any AgentEvent] = []
-        for await event in stream {
-            collected.append(event)
-            if collected.count >= 2 { break }
-        }
+        let collected = await collectEventsWithTimeout(stream: stream, count: 2)
 
         XCTAssertEqual(collected.count, 2)
         XCTAssertTrue(collected[0] is ToolStartedEvent)
@@ -634,11 +561,7 @@ final class EventBusTests: XCTestCase {
 
         _ = await ToolExecutor.executeSingleTool(block: block, tool: tool, context: context)
 
-        var collected: [any AgentEvent] = []
-        for await event in stream {
-            collected.append(event)
-            if collected.count >= 2 { break }
-        }
+        let collected = await collectEventsWithTimeout(stream: stream, count: 2)
 
         XCTAssertEqual(collected.count, 2)
         XCTAssertTrue(collected[0] is ToolStartedEvent)
@@ -669,11 +592,7 @@ final class EventBusTests: XCTestCase {
         _ = await ToolExecutor.executeSingleTool(block: block1, tool: tool1, context: context)
         _ = await ToolExecutor.executeSingleTool(block: block2, tool: tool2, context: context)
 
-        var collected: [any AgentEvent] = []
-        for await event in stream {
-            collected.append(event)
-            if collected.count >= 4 { break }
-        }
+        let collected = await collectEventsWithTimeout(stream: stream, count: 4)
 
         XCTAssertEqual(collected.count, 4)
         XCTAssertTrue(collected[0] is ToolStartedEvent)
@@ -721,11 +640,7 @@ final class EventBusTests: XCTestCase {
 
         _ = await ToolExecutor.executeSingleTool(block: block, tool: nil, context: context)
 
-        var collected: [any AgentEvent] = []
-        for await event in stream {
-            collected.append(event)
-            if collected.count >= 1 { break }
-        }
+        let collected = await collectEventsWithTimeout(stream: stream, count: 1)
 
         XCTAssertEqual(collected.count, 1)
         XCTAssertTrue(collected[0] is ToolFailedEvent)
@@ -752,11 +667,7 @@ final class EventBusTests: XCTestCase {
 
         _ = await ToolExecutor.executeSingleTool(block: block, tool: writeTool, context: context)
 
-        var collected: [any AgentEvent] = []
-        for await event in stream {
-            collected.append(event)
-            if collected.count >= 1 { break }
-        }
+        let collected = await collectEventsWithTimeout(stream: stream, count: 1)
 
         XCTAssertEqual(collected.count, 1)
         XCTAssertTrue(collected[0] is ToolFailedEvent)
@@ -787,11 +698,7 @@ final class EventBusTests: XCTestCase {
 
         _ = await ToolExecutor.executeSingleTool(block: block, tool: tool, context: context)
 
-        var collected: [any AgentEvent] = []
-        for await event in stream {
-            collected.append(event)
-            if collected.count >= 1 { break }
-        }
+        let collected = await collectEventsWithTimeout(stream: stream, count: 1)
 
         XCTAssertEqual(collected.count, 1)
         XCTAssertTrue(collected[0] is ToolFailedEvent)
@@ -819,11 +726,7 @@ final class EventBusTests: XCTestCase {
 
         _ = await ToolExecutor.executeSingleTool(block: block, tool: tool, context: context)
 
-        var collected: [any AgentEvent] = []
-        for await event in stream {
-            collected.append(event)
-            if collected.count >= 1 { break }
-        }
+        let collected = await collectEventsWithTimeout(stream: stream, count: 1)
 
         XCTAssertEqual(collected.count, 1)
         XCTAssertTrue(collected[0] is ToolFailedEvent)
@@ -850,11 +753,7 @@ final class EventBusTests: XCTestCase {
 
         _ = await ToolExecutor.executeSingleTool(block: block, tool: tool, context: context)
 
-        var collected: [any AgentEvent] = []
-        for await event in stream {
-            collected.append(event)
-            if collected.count >= 2 { break }
-        }
+        let collected = await collectEventsWithTimeout(stream: stream, count: 2)
 
         XCTAssertEqual(collected.count, 2)
         XCTAssertTrue(collected[0] is ToolStartedEvent)
@@ -967,11 +866,7 @@ final class EventBusTests: XCTestCase {
 
         _ = await agent.prompt("hello")
 
-        var costEvent: LLMCostEvent?
-        for await event in stream {
-            costEvent = event
-            break
-        }
+        let costEvent = await collectFirstFromTypedStream(stream: stream)
 
         XCTAssertNotNil(costEvent)
         XCTAssertEqual(costEvent?.inputTokens, 100)
@@ -1001,16 +896,12 @@ final class EventBusTests: XCTestCase {
         _ = await agent.prompt("second")
         _ = await agent.prompt("third")
 
-        var costEvents: [LLMCostEvent] = []
-        for await event in stream {
-            if let typed = event as? LLMCostEvent {
-                costEvents.append(typed)
-            }
-            if costEvents.count >= 3 { break }
+        let collected = await collectEventsWithTimeout(stream: stream, count: 9) { events in
+            events.compactMap { $0 as? LLMCostEvent }
         }
 
-        XCTAssertEqual(costEvents.count, 3)
-        for event in costEvents {
+        XCTAssertEqual(collected.count, 3)
+        for event in collected {
             XCTAssertEqual(event.inputTokens, 80)
             XCTAssertEqual(event.outputTokens, 40)
         }
@@ -1036,11 +927,7 @@ final class EventBusTests: XCTestCase {
 
         _ = await agent.prompt("test cache tokens")
 
-        var costEvent: LLMCostEvent?
-        for await event in stream {
-            costEvent = event
-            break
-        }
+        let costEvent = await collectFirstFromTypedStream(stream: stream)
 
         XCTAssertNotNil(costEvent)
         XCTAssertEqual(costEvent?.cacheCreationInputTokens, 150)
@@ -1081,12 +968,7 @@ final class EventBusTests: XCTestCase {
         let messageStream = agent.stream("hello")
         for await _ in messageStream {}
 
-        var costEvents: [LLMCostEvent] = []
-        for await event in stream {
-            costEvents.append(event)
-            // messageStart emits one, messageDelta emits another
-            if costEvents.count >= 2 { break }
-        }
+        let costEvents = await collectTypedEventsWithTimeout(stream: stream, count: 2)
 
         XCTAssertGreaterThanOrEqual(costEvents.count, 1)
 
@@ -1113,14 +995,275 @@ final class EventBusTests: XCTestCase {
 
         _ = await agent.prompt("cost check")
 
-        var costEvent: LLMCostEvent?
-        for await event in stream {
-            costEvent = event
-            break
-        }
+        let costEvent = await collectFirstFromTypedStream(stream: stream)
 
         XCTAssertNotNil(costEvent)
         let expectedCost = estimateCost(model: "claude-sonnet-4-6", usage: TokenUsage(inputTokens: 500, outputTokens: 200))
         XCTAssertEqual(costEvent!.estimatedCostUsd, expectedCost, accuracy: 0.0000001)
+    }
+
+    // MARK: - Session Lifecycle Event Emit Tests (Story 27.5)
+
+    // AC2: prompt() + EventBus + SessionStore → SessionCreatedEvent
+    func testPromptEmitsSessionCreatedEvent() async {
+        let bus = EventBus()
+        let (_, stream) = await bus.subscribe()
+        let store = SessionStore(sessionsDir: NSTemporaryDirectory())
+        let sessionId = "sess-created-\(UUID().uuidString.prefix(8))"
+
+        let agent = Agent(
+            options: AgentOptions(
+                apiKey: "test-key",
+                model: "claude-sonnet-4-6",
+                systemPrompt: "You are a helper.",
+                sessionStore: store,
+                sessionId: sessionId,
+                eventBus: bus
+            ),
+            client: MockLLMClient()
+        )
+
+        _ = await agent.prompt("hello session")
+
+        let collected = await collectEventsWithTimeout(stream: stream, count: 4)
+
+        let sessionCreated = collected.first { $0 is SessionCreatedEvent } as? SessionCreatedEvent
+        XCTAssertNotNil(sessionCreated, "SessionCreatedEvent should be emitted")
+        XCTAssertEqual(sessionCreated?.sessionId, sessionId)
+        XCTAssertEqual(sessionCreated?.task, "hello session")
+        XCTAssertEqual(sessionCreated?.model, "claude-sonnet-4-6")
+    }
+
+    // AC1: stream() + EventBus + SessionStore → SessionCreatedEvent
+    func testStreamEmitsSessionCreatedEvent() async {
+        let bus = EventBus()
+        let (_, stream) = await bus.subscribe()
+        let store = SessionStore(sessionsDir: NSTemporaryDirectory())
+        let sessionId = "sess-stream-created-\(UUID().uuidString.prefix(8))"
+
+        let agent = Agent(
+            options: AgentOptions(
+                apiKey: "test-key",
+                model: "claude-sonnet-4-6",
+                systemPrompt: "You are a helper.",
+                sessionStore: store,
+                sessionId: sessionId,
+                eventBus: bus
+            ),
+            client: MockLLMClient()
+        )
+
+        let messageStream = agent.stream("hello stream session")
+        for await _ in messageStream {}
+
+        let collected = await collectEventsWithTimeout(stream: stream, count: 4)
+
+        let sessionCreated = collected.first { $0 is SessionCreatedEvent } as? SessionCreatedEvent
+        XCTAssertNotNil(sessionCreated, "SessionCreatedEvent should be emitted")
+        XCTAssertEqual(sessionCreated?.sessionId, sessionId)
+        XCTAssertEqual(sessionCreated?.task, "hello stream session")
+        XCTAssertEqual(sessionCreated?.model, "claude-sonnet-4-6")
+    }
+
+    // AC3: prompt() + EventBus + SessionStore + persistSession → SessionAutoSavedEvent
+    func testPromptEmitsSessionAutoSavedEvent() async {
+        let bus = EventBus()
+        let (_, stream) = await bus.subscribe()
+        let tempDir = NSTemporaryDirectory() + "autosave-\(UUID().uuidString.prefix(8))"
+        let store = SessionStore(sessionsDir: tempDir)
+        let sessionId = "sess-autosave-\(UUID().uuidString.prefix(8))"
+
+        let agent = Agent(
+            options: AgentOptions(
+                apiKey: "test-key",
+                model: "claude-sonnet-4-6",
+                systemPrompt: "You are a helper.",
+                sessionStore: store,
+                sessionId: sessionId,
+                persistSession: true,
+                eventBus: bus
+            ),
+            client: MockLLMClient()
+        )
+
+        _ = await agent.prompt("auto-save test")
+
+        let collected = await collectEventsWithTimeout(stream: stream, count: 5)
+
+        let autoSaved = collected.first { $0 is SessionAutoSavedEvent } as? SessionAutoSavedEvent
+        XCTAssertNotNil(autoSaved, "SessionAutoSavedEvent should be emitted")
+        XCTAssertEqual(autoSaved?.sessionId, sessionId)
+        XCTAssertGreaterThanOrEqual(autoSaved?.messageCount ?? 0, 1)
+    }
+
+    // AC4: close() + EventBus → SessionClosedEvent
+    func testCloseEmitsSessionClosedEvent() async throws {
+        let bus = EventBus()
+        let (_, stream) = await bus.subscribe()
+
+        let agent = Agent(
+            options: AgentOptions(
+                apiKey: "test-key",
+                model: "claude-sonnet-4-6",
+                systemPrompt: "You are a helper.",
+                sessionId: "sess-close-test",
+                eventBus: bus
+            ),
+            client: MockLLMClient()
+        )
+
+        try await agent.close()
+
+        let collected = await collectEventsWithTimeout(stream: stream, count: 1)
+
+        XCTAssertEqual(collected.count, 1)
+        let closed = collected[0] as? SessionClosedEvent
+        XCTAssertNotNil(closed, "SessionClosedEvent should be emitted")
+        XCTAssertEqual(closed?.sessionId, "sess-close-test")
+        XCTAssertEqual(closed?.finalStatus, .completed)
+    }
+
+    // AC5: No session events when eventBus is nil (zero overhead)
+    func testNoSessionEventsWhenEventBusIsNil() async throws {
+        let store = SessionStore(sessionsDir: NSTemporaryDirectory())
+
+        let agent = Agent(
+            options: AgentOptions(
+                apiKey: "test-key",
+                model: "claude-sonnet-4-6",
+                systemPrompt: "You are a helper.",
+                sessionStore: store,
+                sessionId: "sess-nil-test",
+                persistSession: true
+            ),
+            client: MockLLMClient()
+        )
+
+        // Should execute normally without eventBus
+        let result = await agent.prompt("hello no bus")
+        XCTAssertNotNil(result)
+        XCTAssertFalse(result.text.isEmpty)
+
+        try await agent.close()
+    }
+
+    // AC6: prompt() error path → SessionAutoSavedEvent
+    func testPromptErrorPathEmitsSessionAutoSavedEvent() async {
+        let bus = EventBus()
+        let (_, stream) = await bus.subscribe()
+        let tempDir = NSTemporaryDirectory() + "autosave-err-\(UUID().uuidString.prefix(8))"
+        let store = SessionStore(sessionsDir: tempDir)
+        let sessionId = "sess-err-autosave-\(UUID().uuidString.prefix(8))"
+
+        let agent = Agent(
+            options: AgentOptions(
+                apiKey: "test-key",
+                model: "claude-sonnet-4-6",
+                systemPrompt: "You are a helper.",
+                sessionStore: store,
+                sessionId: sessionId,
+                persistSession: true,
+                eventBus: bus
+            ),
+            client: FailingLLMClient()
+        )
+
+        _ = await agent.prompt("this will fail")
+
+        let collected = await collectEventsWithTimeout(stream: stream, count: 4, timeoutNs: Self.retryTimeoutNs)
+
+        let autoSaved = collected.first { $0 is SessionAutoSavedEvent } as? SessionAutoSavedEvent
+        XCTAssertNotNil(autoSaved, "SessionAutoSavedEvent should be emitted on error path. Events received: \(collected.map { String(describing: type(of: $0)) })")
+        XCTAssertEqual(autoSaved?.sessionId, sessionId)
+    }
+
+    // MARK: - Timeout-Protected Collection Helpers
+
+    /// Default timeout in nanoseconds (5 seconds).
+    private static let defaultTimeoutNs: UInt64 = 5_000_000_000
+
+    /// Longer timeout in nanoseconds (30 seconds) for tests involving retry logic.
+    private static let retryTimeoutNs: UInt64 = 30_000_000_000
+
+    /// Collect events from an `AsyncStream<any AgentEvent>` with a timeout.
+    /// Returns collected events (may be fewer than `count` if the stream ends or times out).
+    private func collectEventsWithTimeout(
+        stream: AsyncStream<any AgentEvent>,
+        count: Int,
+        timeoutNs: UInt64 = EventBusTests.defaultTimeoutNs
+    ) async -> [any AgentEvent] {
+        await withTaskGroup(of: [any AgentEvent].self, returning: [any AgentEvent].self) { group in
+            group.addTask {
+                var events: [any AgentEvent] = []
+                for await event in stream {
+                    events.append(event)
+                    if events.count >= count { break }
+                }
+                return events
+            }
+            group.addTask {
+                try? await _Concurrency.Task.sleep(nanoseconds: timeoutNs)
+                return []
+            }
+            let first = await group.next()!
+            group.cancelAll()
+            return first
+        }
+    }
+
+    /// Collect events from an `AsyncStream<any AgentEvent>` with a timeout,
+    /// then transform the result using the provided closure.
+    private func collectEventsWithTimeout<T>(
+        stream: AsyncStream<any AgentEvent>,
+        count: Int,
+        timeoutNs: UInt64 = EventBusTests.defaultTimeoutNs,
+        transform: ([any AgentEvent]) -> T
+    ) async -> T {
+        let events = await collectEventsWithTimeout(stream: stream, count: count, timeoutNs: timeoutNs)
+        return transform(events)
+    }
+
+    /// Collect events from a typed `AsyncStream<T>` with a timeout.
+    private func collectTypedEventsWithTimeout<T: AgentEvent>(
+        stream: AsyncStream<T>,
+        count: Int,
+        timeoutNs: UInt64 = EventBusTests.defaultTimeoutNs
+    ) async -> [T] {
+        await withTaskGroup(of: [T].self, returning: [T].self) { group in
+            group.addTask {
+                var events: [T] = []
+                for await event in stream {
+                    events.append(event)
+                    if events.count >= count { break }
+                }
+                return events
+            }
+            group.addTask {
+                try? await _Concurrency.Task.sleep(nanoseconds: timeoutNs)
+                return []
+            }
+            let first = await group.next()!
+            group.cancelAll()
+            return first
+        }
+    }
+
+    /// Collect the first event from an `AsyncStream<any AgentEvent>` with a timeout,
+    /// then attempt to cast it to the specified type.
+    private func collectFirstMatching<T: AgentEvent>(
+        stream: AsyncStream<any AgentEvent>,
+        type: T.Type
+    ) async -> T? {
+        let events = await collectEventsWithTimeout(stream: stream, count: 1)
+        return events.first as? T
+    }
+
+    /// Collect the first event from a typed `AsyncStream<T>` with a timeout.
+    private func collectFirstFromTypedStream<T: AgentEvent>(
+        stream: AsyncStream<T>,
+        timeoutNs: UInt64 = EventBusTests.defaultTimeoutNs
+    ) async -> T? {
+        let events = await collectTypedEventsWithTimeout(stream: stream, count: 1, timeoutNs: timeoutNs)
+        return events.first
     }
 }

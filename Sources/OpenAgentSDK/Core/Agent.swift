@@ -749,6 +749,14 @@ public class Agent: CustomStringConvertible, CustomDebugStringConvertible, @unch
         // Interrupt any active query
         interrupt()
 
+        // Emit SessionClosedEvent (zero-overhead when eventBus is nil)
+        if let eventBus = options.eventBus {
+            await eventBus.publish(SessionClosedEvent(
+                sessionId: options.sessionId,
+                finalStatus: .completed
+            ))
+        }
+
         // Persist session marker if sessionStore is configured and persistSession is enabled.
         // We do NOT overwrite with empty messages — the last promptImpl/stream call already
         // saved the full conversation. We only save a marker here if no prior session exists.
@@ -1401,6 +1409,15 @@ public class Agent: CustomStringConvertible, CustomDebugStringConvertible, @unch
         }
         var traceStepIndex = 0
 
+        // Emit SessionCreatedEvent (zero-overhead when sessionStore or eventBus is nil)
+        if let sessionStore = options.sessionStore, let eventBus = options.eventBus {
+            await eventBus.publish(SessionCreatedEvent(
+                sessionId: resolvedSessionId,
+                task: text,
+                model: model
+            ))
+        }
+
         // Emit AgentStartedEvent (zero-overhead when eventBus is nil)
         if let eventBus = options.eventBus {
             await eventBus.publish(AgentStartedEvent(sessionId: resolvedSessionId, task: text))
@@ -1567,7 +1584,15 @@ public class Agent: CustomStringConvertible, CustomDebugStringConvertible, @unch
                     )
                     if let messagesData = try? JSONSerialization.data(withJSONObject: messages, options: []),
                        let deserializedMessages = try? JSONSerialization.jsonObject(with: messagesData, options: []) as? [[String: Any]] {
+                        let savedMessageCount = deserializedMessages.count
                         try? await sessionStore.save(sessionId: sessionId, messages: deserializedMessages, metadata: metadata)
+                        // Emit SessionAutoSavedEvent on error path (zero-overhead when eventBus is nil)
+                        if let eventBus = options.eventBus {
+                            await eventBus.publish(SessionAutoSavedEvent(
+                                sessionId: resolvedSessionId,
+                                messageCount: savedMessageCount
+                            ))
+                        }
                     }
                 }
                 // Hook: stop — trigger on error path (loop terminated by exception)
@@ -1866,7 +1891,15 @@ public class Agent: CustomStringConvertible, CustomDebugStringConvertible, @unch
             // Serialize messages to Data for Sendable compliance when crossing actor boundary
             if let messagesData = try? JSONSerialization.data(withJSONObject: messages, options: []),
                let deserializedMessages = try? JSONSerialization.jsonObject(with: messagesData, options: []) as? [[String: Any]] {
+                let savedMessageCount = deserializedMessages.count
                 try? await sessionStore.save(sessionId: sessionId, messages: deserializedMessages, metadata: metadata)
+                // Emit SessionAutoSavedEvent (zero-overhead when eventBus is nil)
+                if let eventBus = options.eventBus {
+                    await eventBus.publish(SessionAutoSavedEvent(
+                        sessionId: resolvedSessionId,
+                        messageCount: savedMessageCount
+                    ))
+                }
             }
         }
 
@@ -2152,6 +2185,15 @@ public class Agent: CustomStringConvertible, CustomDebugStringConvertible, @unch
                     sessionId: capturedSessionId,
                     message: text
                 )))
+
+                // Emit SessionCreatedEvent (zero-overhead when capturedSessionStore or capturedEventBus is nil)
+                if let sessionStore = capturedSessionStore, let eventBus = capturedEventBus {
+                    await eventBus.publish(SessionCreatedEvent(
+                        sessionId: resolvedSessionId,
+                        task: text,
+                        model: capturedModel
+                    ))
+                }
 
                 // Emit AgentStartedEvent (zero-overhead when capturedEventBus is nil)
                 if let eventBus = capturedEventBus {
@@ -2953,7 +2995,15 @@ public class Agent: CustomStringConvertible, CustomDebugStringConvertible, @unch
                     // Serialize messages to Data for Sendable compliance when crossing actor boundary
                     if let messagesData = try? JSONSerialization.data(withJSONObject: messages, options: []),
                        let deserializedMessages = try? JSONSerialization.jsonObject(with: messagesData, options: []) as? [[String: Any]] {
+                        let savedMessageCount = deserializedMessages.count
                         try? await sessionStore.save(sessionId: sessionId, messages: deserializedMessages, metadata: metadata)
+                        // Emit SessionAutoSavedEvent (zero-overhead when capturedEventBus is nil)
+                        if let eventBus = capturedEventBus {
+                            await eventBus.publish(SessionAutoSavedEvent(
+                                sessionId: resolvedSessionId,
+                                messageCount: savedMessageCount
+                            ))
+                        }
                     }
                 }
                 // Hook: sessionEnd — trigger before finishing the stream

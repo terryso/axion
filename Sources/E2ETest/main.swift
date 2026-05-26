@@ -209,6 +209,11 @@ await ToolLifecycleEmitE2ETests.run(apiKey: apiKey, model: model, baseURL: baseU
 await LLMCostEmitE2ETests.run(apiKey: apiKey, model: model, baseURL: baseURL)
 
 // ================================================================
+// SECTION 153-157: Session Lifecycle Event Emit E2E Tests (Story 27.5)
+// ================================================================
+await SessionLifecycleEmitE2ETests.run(apiKey: apiKey, model: model, baseURL: baseURL)
+
+// ================================================================
 // Results Summary
 // ================================================================
 print("\n=== E2E Test Results ===")
