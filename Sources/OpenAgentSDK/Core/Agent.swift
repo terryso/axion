@@ -1955,7 +1955,11 @@ public class Agent: CustomStringConvertible, CustomDebugStringConvertible, @unch
     /// - Parameter text: The user's input text to send to the agent.
     /// - Returns: An `AsyncStream<SDKMessage>` that yields typed events as the LLM
     ///   processes the request.
-    public func stream(_ text: String) -> AsyncStream<SDKMessage> {
+    /// Stream with per-call EventBus override.
+    ///
+    /// When `eventBus` is provided it takes precedence over `options.eventBus`,
+    /// allowing each call to use an independent event bus without mutating shared state.
+    public func stream(_ text: String, eventBus: EventBus? = nil) -> AsyncStream<SDKMessage> {
         if isClosed {
             return AsyncStream<SDKMessage> { $0.finish() }
         }
@@ -2021,7 +2025,7 @@ public class Agent: CustomStringConvertible, CustomDebugStringConvertible, @unch
         let capturedTraceEnabled = options.traceEnabled
         let capturedTraceBaseURL = options.traceBaseURL
         let capturedAgentLabel = options.agentLabel
-        let capturedEventBus = options.eventBus
+        let capturedEventBus = eventBus ?? options.eventBus
 
         // Build tool definitions for API call
         let capturedApiTools: [[String: Any]]? = {
