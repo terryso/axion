@@ -1266,4 +1266,5 @@ final class EventBusTests: XCTestCase {
         let events = await collectTypedEventsWithTimeout(stream: stream, count: 1, timeoutNs: timeoutNs)
         return events.first
     }
+
 }

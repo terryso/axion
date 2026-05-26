@@ -490,6 +490,10 @@ public struct AgentOptions: Sendable {
     /// Injection point for Epic 27 event emission (stories 27.2+).
     public var eventBus: EventBus?
 
+    /// When `true`, emit ``LLMTokenStreamEvent`` for each streaming text chunk.
+    /// Defaults to `false` — high-frequency events, enable only for TUI scenarios.
+    public var emitTokenStream: Bool
+
     // MARK: - Memberwise Init
 
     public init(
@@ -563,7 +567,8 @@ public struct AgentOptions: Sendable {
         evolutionPlugins: [EvolutionPluginConfig]? = nil,
         reviewScheduleConfig: ReviewScheduleConfig? = nil,
         agentLabel: String? = nil,
-        eventBus: EventBus? = nil
+        eventBus: EventBus? = nil,
+        emitTokenStream: Bool = false
     ) {
         self.apiKey = apiKey
         self.model = model
@@ -636,6 +641,7 @@ public struct AgentOptions: Sendable {
         self.reviewScheduleConfig = reviewScheduleConfig
         self.agentLabel = agentLabel
         self.eventBus = eventBus
+        self.emitTokenStream = emitTokenStream
     }
 
     // MARK: - Auto-Discover Skills
@@ -756,6 +762,7 @@ public struct AgentOptions: Sendable {
         self.reviewScheduleConfig = nil
         self.agentLabel = nil
         self.eventBus = nil
+        self.emitTokenStream = false
     }
 
     // MARK: - Validation

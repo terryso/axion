@@ -1,5 +1,5 @@
 # generated: 2026-05-25
-# last_updated: 2026-05-26 (Story 28.2 created)
+# last_updated: 2026-05-26 (Story 28.3 created)
 
 # project: open-agent-sdk-swift
 # project_key: NOKEY
@@ -310,5 +310,5 @@ development_status:
   epic-28: in-progress
   28-1-agent-event-sse-event-mapping: done
   28-2-eventbus-event-broadcaster-bridge: done
-  28-3-token-streaming-event: backlog
+  28-3-token-streaming-event: review
   epic-28-retrospective: optional

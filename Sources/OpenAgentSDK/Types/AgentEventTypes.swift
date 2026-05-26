@@ -797,3 +797,45 @@ public struct LLMCostEvent: AgentEvent, Equatable {
         try c.encode(estimatedCostUsd, forKey: .estimatedCostUsd)
     }
 }
+
+/// Emitted for each text chunk during LLM streaming response.
+/// Only emitted when ``AgentOptions/emitTokenStream`` is `true`.
+/// High-frequency event — not mapped to SSE.
+public struct LLMTokenStreamEvent: AgentEvent, Equatable {
+    public let base: BaseAgentEvent
+    public let sessionId: String?
+    public let chunk: String
+
+    public var id: String { base.id }
+    public var timestamp: Date { base.timestamp }
+
+    enum CodingKeys: String, CodingKey {
+        case id, timestamp
+        case sessionId = "session_id"
+        case chunk
+    }
+
+    public init(base: BaseAgentEvent = BaseAgentEvent(), sessionId: String?, chunk: String) {
+        self.base = base
+        self.sessionId = sessionId
+        self.chunk = chunk
+    }
+
+    public init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        base = BaseAgentEvent(
+            id: try c.decode(String.self, forKey: .id),
+            timestamp: try c.decode(Date.self, forKey: .timestamp)
+        )
+        sessionId = try c.decodeIfPresent(String.self, forKey: .sessionId)
+        chunk = try c.decode(String.self, forKey: .chunk)
+    }
+
+    public func encode(to encoder: Encoder) throws {
+        var c = encoder.container(keyedBy: CodingKeys.self)
+        try c.encode(base.id, forKey: .id)
+        try c.encode(base.timestamp, forKey: .timestamp)
+        try c.encodeIfPresent(sessionId, forKey: .sessionId)
+        try c.encode(chunk, forKey: .chunk)
+    }
+}

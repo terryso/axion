@@ -2026,6 +2026,7 @@ public class Agent: CustomStringConvertible, CustomDebugStringConvertible, @unch
         let capturedTraceBaseURL = options.traceBaseURL
         let capturedAgentLabel = options.agentLabel
         let capturedEventBus = eventBus ?? options.eventBus
+        let capturedEmitTokenStream = options.emitTokenStream
 
         // Build tool definitions for API call
         let capturedApiTools: [[String: Any]]? = {
@@ -2448,6 +2449,12 @@ public class Agent: CustomStringConvertible, CustomDebugStringConvertible, @unch
                                     accumulatedText += deltaText
                                     if capturedIncludePartialMessages {
                                         continuation.yield(.partialMessage(SDKMessage.PartialData(text: deltaText)))
+                                    }
+                                    if capturedEmitTokenStream, let eventBus = capturedEventBus {
+                                        await eventBus.publish(LLMTokenStreamEvent(
+                                            sessionId: resolvedSessionId,
+                                            chunk: deltaText
+                                        ))
                                     }
                                 }
                                 // Handle tool_use input_json_delta
