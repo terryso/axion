@@ -431,7 +431,8 @@ enum ToolExecutor {
                             toolUseId: block.id,
                             toolName: block.name,
                             durationMs: durationMs,
-                            isError: false
+                            isError: false,
+                            output: execResult.content
                         ))
                     }
                 }
@@ -537,7 +538,8 @@ enum ToolExecutor {
                     toolUseId: block.id,
                     toolName: block.name,
                     durationMs: durationMs,
-                    isError: false
+                    isError: false,
+                    output: result.content
                 ))
             }
         }

@@ -550,12 +550,14 @@ public struct ToolCompletedEvent: AgentEvent, Equatable {
     public let toolName: String
     public let durationMs: Int
     public let isError: Bool
+    /// Optional tool output content. May be nil for tools with sensitive or very large outputs.
+    public let output: String?
 
     public var id: String { base.id }
     public var timestamp: Date { base.timestamp }
 
     enum CodingKeys: String, CodingKey {
-        case id, timestamp
+        case id, timestamp, output
         case sessionId = "session_id"
         case toolUseId = "tool_use_id"
         case toolName = "tool_name"
@@ -563,13 +565,14 @@ public struct ToolCompletedEvent: AgentEvent, Equatable {
         case isError = "is_error"
     }
 
-    public init(base: BaseAgentEvent = BaseAgentEvent(), sessionId: String?, toolUseId: String, toolName: String, durationMs: Int, isError: Bool) {
+    public init(base: BaseAgentEvent = BaseAgentEvent(), sessionId: String?, toolUseId: String, toolName: String, durationMs: Int, isError: Bool, output: String? = nil) {
         self.base = base
         self.sessionId = sessionId
         self.toolUseId = toolUseId
         self.toolName = toolName
         self.durationMs = durationMs
         self.isError = isError
+        self.output = output
     }
 
     public init(from decoder: Decoder) throws {
@@ -583,6 +586,7 @@ public struct ToolCompletedEvent: AgentEvent, Equatable {
         toolName = try c.decode(String.self, forKey: .toolName)
         durationMs = try c.decode(Int.self, forKey: .durationMs)
         isError = try c.decode(Bool.self, forKey: .isError)
+        output = try c.decodeIfPresent(String.self, forKey: .output)
     }
 
     public func encode(to encoder: Encoder) throws {
@@ -594,6 +598,7 @@ public struct ToolCompletedEvent: AgentEvent, Equatable {
         try c.encode(toolName, forKey: .toolName)
         try c.encode(durationMs, forKey: .durationMs)
         try c.encode(isError, forKey: .isError)
+        try c.encodeIfPresent(output, forKey: .output)
     }
 }
 
