@@ -2,7 +2,7 @@ import Foundation
 import OpenAgentSDK
 import _Concurrency
 
-// MARK: - Tests 153-155: Session Lifecycle Event Emit E2E Tests (Story 27.5)
+// MARK: - Tests 153-157: Session Lifecycle Event Emit E2E Tests (Story 27.5)
 
 /// E2E tests for session lifecycle event emission through EventBus.
 /// Uses real LLM calls + EventBus to verify SessionCreatedEvent and SessionClosedEvent.

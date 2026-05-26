@@ -1,6 +1,6 @@
 # Story 27.5: Session Lifecycle Event Emit
 
-Status: pending
+Status: done
 
 ## Story
 
@@ -47,53 +47,53 @@ So that 上层可以追踪 session 的创建、保存、关闭.
 
 ## Tasks / Subtasks
 
-- [ ] Task 1: 在 promptImpl 的 session 解析完成后 emit SessionCreatedEvent (AC: #2, #5)
-  - [ ] 1.1 在 promptImpl 的 session 解析完成之后、`AgentStartedEvent` emit 之前（~行 1404），添加 `SessionCreatedEvent` emit
-  - [ ] 1.2 仅当 `sessionStore != nil` 时 emit（因为 session 是 sessionStore 管理的）
-  - [ ] 1.3 使用 inline `if let eventBus = options.eventBus` guard，nil 时零开销
-  - [ ] 1.4 emit 内容：`SessionCreatedEvent(sessionId: resolvedSessionId, task: text, model: model)`
+- [x] Task 1: 在 promptImpl 的 session 解析完成后 emit SessionCreatedEvent (AC: #2, #5)
+  - [x] 1.1 在 promptImpl 的 session 解析完成之后、`AgentStartedEvent` emit 之前（~行 1404），添加 `SessionCreatedEvent` emit
+  - [x] 1.2 仅当 `sessionStore != nil` 时 emit（因为 session 是 sessionStore 管理的）
+  - [x] 1.3 使用 inline `if let eventBus = options.eventBus` guard，nil 时零开销
+  - [x] 1.4 emit 内容：`SessionCreatedEvent(sessionId: resolvedSessionId, task: text, model: model)`
 
-- [ ] Task 2: 在 stream() 的 session 解析完成后 emit SessionCreatedEvent (AC: #1, #5)
-  - [ ] 2.1 在 stream() 的 session 解析完成后、`AgentStartedEvent` emit 之前（~行 2156），添加 `SessionCreatedEvent` emit
-  - [ ] 2.2 仅当 `capturedSessionStore != nil` 时 emit
-  - [ ] 2.3 使用 inline `if let eventBus = capturedEventBus` guard
-  - [ ] 2.4 emit 内容：`SessionCreatedEvent(sessionId: resolvedSessionId, task: text, model: capturedModel)`
+- [x] Task 2: 在 stream() 的 session 解析完成后 emit SessionCreatedEvent (AC: #1, #5)
+  - [x] 2.1 在 stream() 的 session 解析完成后、`AgentStartedEvent` emit 之前（~行 2156），添加 `SessionCreatedEvent` emit
+  - [x] 2.2 仅当 `capturedSessionStore != nil` 时 emit
+  - [x] 2.3 使用 inline `if let eventBus = capturedEventBus` guard
+  - [x] 2.4 emit 内容：`SessionCreatedEvent(sessionId: resolvedSessionId, task: text, model: capturedModel)`
 
-- [ ] Task 3: 在 promptImpl 的 session auto-save 处 emit SessionAutoSavedEvent (AC: #3, #5, #6)
-  - [ ] 3.1 在 promptImpl 正常结束路径的 `sessionStore.save()` 之后（~行 1869），添加 `SessionAutoSavedEvent` emit
-  - [ ] 3.2 在 promptImpl error 路径的 `sessionStore.save()` 之后（~行 1570），添加 `SessionAutoSavedEvent` emit
-  - [ ] 3.3 emit 内容：`SessionAutoSavedEvent(sessionId: resolvedSessionId, messageCount: deserializedMessages.count)`
-  - [ ] 3.4 使用 inline `if let eventBus = options.eventBus` guard
+- [x] Task 3: 在 promptImpl 的 session auto-save 处 emit SessionAutoSavedEvent (AC: #3, #5, #6)
+  - [x] 3.1 在 promptImpl 正常结束路径的 `sessionStore.save()` 之后（~行 1869），添加 `SessionAutoSavedEvent` emit
+  - [x] 3.2 在 promptImpl error 路径的 `sessionStore.save()` 之后（~行 1570），添加 `SessionAutoSavedEvent` emit
+  - [x] 3.3 emit 内容：`SessionAutoSavedEvent(sessionId: resolvedSessionId, messageCount: deserializedMessages.count)`
+  - [x] 3.4 使用 inline `if let eventBus = options.eventBus` guard
 
-- [ ] Task 4: 在 stream() 的 session auto-save 处 emit SessionAutoSavedEvent (AC: #3, #5)
-  - [ ] 4.1 在 stream() 正常结束路径的 `sessionStore.save()` 之后（~行 2956），添加 `SessionAutoSavedEvent` emit
-  - [ ] 4.2 emit 内容：`SessionAutoSavedEvent(sessionId: resolvedSessionId, messageCount: deserializedMessages.count)`
-  - [ ] 4.3 使用 inline `if let eventBus = capturedEventBus` guard
+- [x] Task 4: 在 stream() 的 session auto-save 处 emit SessionAutoSavedEvent (AC: #3, #5)
+  - [x] 4.1 在 stream() 正常结束路径的 `sessionStore.save()` 之后（~行 2956），添加 `SessionAutoSavedEvent` emit
+  - [x] 4.2 emit 内容：`SessionAutoSavedEvent(sessionId: resolvedSessionId, messageCount: deserializedMessages.count)`
+  - [x] 4.3 使用 inline `if let eventBus = capturedEventBus` guard
 
-- [ ] Task 5: 在 Agent.close() 中 emit SessionClosedEvent (AC: #4, #5)
-  - [ ] 5.1 在 `close()` 方法中，在 interrupt() 之后、sessionStore save 之前（~行 750），添加 `SessionClosedEvent` emit
-  - [ ] 5.2 使用 inline `if let eventBus = options.eventBus` guard
-  - [ ] 5.3 emit 内容：`SessionClosedEvent(sessionId: options.sessionId, finalStatus: .completed)` — close 是主动关闭，视为 completed
-  - [ ] 5.4 注意：close() 是 `async throws` 方法，可以直接 `await eventBus.publish()`
+- [x] Task 5: 在 Agent.close() 中 emit SessionClosedEvent (AC: #4, #5)
+  - [x] 5.1 在 `close()` 方法中，在 interrupt() 之后、sessionStore save 之前（~行 750），添加 `SessionClosedEvent` emit
+  - [x] 5.2 使用 inline `if let eventBus = options.eventBus` guard
+  - [x] 5.3 emit 内容：`SessionClosedEvent(sessionId: options.sessionId, finalStatus: .completed)` — close 是主动关闭，视为 completed
+  - [x] 5.4 注意：close() 是 `async throws` 方法，可以直接 `await eventBus.publish()`
 
-- [ ] Task 6: 编写单元测试 (AC: #1-#7)
-  - [ ] 6.1 在 `Tests/OpenAgentSDKTests/Core/EventBusTests.swift` 追加 session lifecycle emit 测试
-  - [ ] 6.2 测试 AC2: promptImpl + EventBus + SessionStore → SessionCreatedEvent（含 sessionId、task、model）
-  - [ ] 6.3 测试 AC3: promptImpl + EventBus + SessionStore + persistSession → auto-save → SessionAutoSavedEvent（含 messageCount）
-  - [ ] 6.4 测试 AC4: close() + EventBus → SessionClosedEvent
-  - [ ] 6.5 测试 AC5: eventBus == nil → 无事件 emit（零开销）
-  - [ ] 6.6 测试 AC6: promptImpl error 路径 → SessionAutoSavedEvent
+- [x] Task 6: 编写单元测试 (AC: #1-#7)
+  - [x] 6.1 在 `Tests/OpenAgentSDKTests/Core/EventBusTests.swift` 追加 session lifecycle emit 测试
+  - [x] 6.2 测试 AC2: promptImpl + EventBus + SessionStore → SessionCreatedEvent（含 sessionId、task、model）
+  - [x] 6.3 测试 AC3: promptImpl + EventBus + SessionStore + persistSession → auto-save → SessionAutoSavedEvent（含 messageCount）
+  - [x] 6.4 测试 AC4: close() + EventBus → SessionClosedEvent
+  - [x] 6.5 测试 AC5: eventBus == nil → 无事件 emit（零开销）
+  - [x] 6.6 测试 AC6: promptImpl error 路径 → SessionAutoSavedEvent
 
-- [ ] Task 7: 编写 E2E 测试 (AC: #1, #2, #4, #7)
-  - [ ] 7.1 在 `Sources/E2ETest/SessionLifecycleEmitE2ETests.swift` 创建 session lifecycle emit E2E 测试
-  - [ ] 7.2 E2E 测试：创建 Agent + EventBus → stream("task") → 验证收到 SessionCreatedEvent
-  - [ ] 7.3 E2E 测试：创建 Agent + EventBus → prompt("task") → 验证收到 SessionCreatedEvent
-  - [ ] 7.4 E2E 测试：创建 Agent + EventBus → close() → 验证收到 SessionClosedEvent
-  - [ ] 7.5 注册到 `Sources/E2ETest/main.swift`
+- [x] Task 7: 编写 E2E 测试 (AC: #1, #2, #4, #7)
+  - [x] 7.1 在 `Sources/E2ETest/SessionLifecycleEmitE2ETests.swift` 创建 session lifecycle emit E2E 测试
+  - [x] 7.2 E2E 测试：创建 Agent + EventBus → stream("task") → 验证收到 SessionCreatedEvent
+  - [x] 7.3 E2E 测试：创建 Agent + EventBus → prompt("task") → 验证收到 SessionCreatedEvent
+  - [x] 7.4 E2E 测试：创建 Agent + EventBus → close() → 验证收到 SessionClosedEvent
+  - [x] 7.5 注册到 `Sources/E2ETest/main.swift`
 
-- [ ] Task 8: 验证构建与回归测试 (AC: #7)
-  - [ ] 8.1 `swift build` 确认编译通过
-  - [ ] 8.2 `swift test` 确认所有现有测试通过
+- [x] Task 8: 验证构建与回归测试 (AC: #7)
+  - [x] 8.1 `swift build` 确认编译通过
+  - [x] 8.2 `swift test` 确认所有现有测试通过
 
 ## Dev Notes
 
@@ -303,10 +303,25 @@ Story 27.4 在 Agent.swift 的 4 个 usage 解析位置实现了 LLMCostEvent em
 
 ### Agent Model Used
 
+Claude Sonnet 4.6
+
 ### Debug Log References
 
 ### Completion Notes List
 
+- All 6 emit points implemented in Agent.swift following existing Story 27.2-27.4 patterns
+- Refactored EventBusTests to use timeout-protected collection helpers (collectEventsWithTimeout, collectFirstMatching, etc.)
+- 6 unit tests + 5 E2E tests added, all passing
+- All 5955 tests pass with 0 failures
+
 ### File List
 
+- **UPDATED**: `Sources/OpenAgentSDK/Core/Agent.swift` — Added 6 session lifecycle event emit points (SessionCreatedEvent x2, SessionAutoSavedEvent x3, SessionClosedEvent x1)
+- **UPDATED**: `Tests/OpenAgentSDKTests/Core/EventBusTests.swift` — Added 6 session lifecycle unit tests + refactored all existing tests to use timeout-protected helpers
+- **CREATED**: `Sources/E2ETest/SessionLifecycleEmitE2ETests.swift` — 5 E2E tests for session lifecycle events (tests 153-157)
+- **UPDATED**: `Sources/E2ETest/main.swift` — Registered SessionLifecycleEmitE2ETests
+
 ## Change Log
+
+- 2026-05-26: Story implementation completed. All 8 tasks done. 6 emit points in Agent.swift, 6 unit tests, 5 E2E tests. All 5955 tests pass.
+- 2026-05-26: Code review completed. Fixed E2E test comment (Tests 153-155 → 153-157). Updated story metadata.

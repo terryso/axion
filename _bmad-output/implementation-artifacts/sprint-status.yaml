@@ -303,7 +303,7 @@ development_status:
   27-2-agent-startup-completion-event-emit: done
   27-3-tool-lifecycle-event-emit: done
   27-4-llm-cost-event-emit: done
-  27-5-session-lifecycle-event-emit: in-progress
+  27-5-session-lifecycle-event-emit: done
   epic-27-retrospective: optional
 
   # Epic 28: Runtime Event Layer — EventBus → SSE Bridge
