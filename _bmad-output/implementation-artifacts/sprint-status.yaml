@@ -310,5 +310,5 @@ development_status:
   epic-28: in-progress
   28-1-agent-event-sse-event-mapping: done
   28-2-eventbus-event-broadcaster-bridge: done
-  28-3-token-streaming-event: review
+  28-3-token-streaming-event: done
   epic-28-retrospective: optional

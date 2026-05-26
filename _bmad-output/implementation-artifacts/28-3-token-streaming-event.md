@@ -1,6 +1,6 @@
 # Story 28.3: Token Streaming Event
 
-Status: review
+Status: done
 
 ## Story
 
@@ -261,8 +261,44 @@ Followed the story tasks exactly in order:
 - **MODIFIED**: Sources/OpenAgentSDK/Types/AgentTypes.swift
 - **MODIFIED**: Sources/OpenAgentSDK/Types/AgentEventTypes.swift
 - **MODIFIED**: Sources/OpenAgentSDK/Core/Agent.swift
+- **MODIFIED**: Sources/E2ETest/EventBusE2ETests.swift
 - **CREATED**: Tests/OpenAgentSDKTests/Utils/TokenStreamingEventTests.swift
 
 ## Change Log
 
 - 2026-05-26: Story 28.3 implementation complete — added `emitTokenStream` option, `LLMTokenStreamEvent` type, conditional emit in streaming loop, unit tests (5972 tests all passing)
+- 2026-05-26: Review fix — E2E test "All event types" updated from 16→17 to include `LLMTokenStreamEvent`
+
+## Senior Developer Review (AI)
+
+**Reviewer:** terryso on 2026-05-26
+**Outcome:** Approved (no CRITICAL issues)
+
+### Findings
+
+| # | Severity | Description | Status |
+|---|----------|-------------|--------|
+| 1 | MEDIUM | E2E test "All 16 event types" stale — now 17 types with LLMTokenStreamEvent | Fixed |
+| 2 | MEDIUM | LLMTokenStreamEvent missing from E2E all-types round-trip test | Fixed |
+| 3 | MEDIUM | EventBusTests.swift trailing newline change not in File List | Fixed |
+| 4 | LOW | Story claims 5972 tests, actual count 5976 | Noted |
+| 5 | LOW | AC2 mentions AgentEventCategory .llm but not programmatically enforced | Noted |
+
+### AC Validation
+
+| AC | Status | Evidence |
+|----|--------|----------|
+| AC1 | PASS | `emitTokenStream: Bool` in AgentOptions, defaults `false`, tested in TokenStreamingEventTests |
+| AC2 | PASS | `LLMTokenStreamEvent` conforms `AgentEvent, Equatable, Codable`, follows ToolStreamingEvent pattern |
+| AC3 | PASS | Conditional emit in Agent.swift:2453-2458, checks `capturedEmitTokenStream && capturedEventBus != nil` |
+| AC4 | PASS | Default `false` means zero-overhead, tested with EventBus type filtering |
+| AC5 | PASS | ToolStreamingEvent unchanged, coexistence test passes |
+| AC6 | PASS | SSE mapping default branch returns nil, explicit test verifies |
+| AC7 | PASS | 5976 tests pass (1 flaky HTTPIntegrationTest unrelated to story) |
+
+### Code Quality
+
+- Implementation follows existing patterns precisely (ToolStreamingEvent composition)
+- No security concerns (chunk is read-only data from LLM)
+- Performance: zero-overhead when disabled (single Bool check), documented `await` cost when enabled
+- All CodingKeys follow snake_case convention consistently

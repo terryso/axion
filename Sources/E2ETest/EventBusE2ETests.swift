@@ -4,7 +4,7 @@ import OpenAgentSDK
 // MARK: - Tests 127-133: EventBus E2E Tests (Story 26.6)
 
 /// E2E tests for the EventBus actor: real concurrency, mixed subscriptions,
-/// stress tests, memory cleanup, and all 16 event types.
+/// stress tests, memory cleanup, and all 17 event types.
 /// No mocks — uses real Swift Concurrency primitives.
 struct EventBusE2ETests {
     static func run() async {
@@ -169,15 +169,15 @@ struct EventBusE2ETests {
         }
     }
 
-    // MARK: Test 131: All 16 event types through EventBus
+    // MARK: Test 131: All 17 event types through EventBus
 
-    /// Publish all 16 concrete event types and verify a full-stream subscriber
+    /// Publish all 17 concrete event types and verify a full-stream subscriber
     /// receives each one with the correct dynamic type.
     static func testAllEventTypes_throughEventBus() async {
         let bus = EventBus()
         let (_, stream) = await bus.subscribe()
 
-        // Publish all 16 event types in order.
+        // Publish all 17 event types in order.
         let events: [any AgentEvent] = [
             SessionCreatedEvent(sessionId: "s", task: "t", model: "m"),
             SessionRestoredEvent(sessionId: "s", messageCount: 5, originalCreatedAt: Date()),
@@ -195,6 +195,7 @@ struct EventBusE2ETests {
             LLMRequestStartedEvent(sessionId: "s", model: "m"),
             LLMResponseReceivedEvent(sessionId: "s", model: "m", durationMs: 100),
             LLMCostEvent(sessionId: "s", model: "m", inputTokens: 10, outputTokens: 5, cacheCreationInputTokens: nil, cacheReadInputTokens: nil, estimatedCostUsd: 0.001),
+            LLMTokenStreamEvent(sessionId: "s", chunk: "token"),
         ]
 
         for event in events {
@@ -204,7 +205,7 @@ struct EventBusE2ETests {
         var received: [String] = []
         for await e in stream {
             received.append(String(describing: type(of: e)))
-            if received.count == 16 { break }
+            if received.count == 17 { break }
         }
 
         let expected = [
@@ -212,12 +213,13 @@ struct EventBusE2ETests {
             "AgentStartedEvent", "AgentCompletedEvent", "AgentFailedEvent", "AgentInterruptedEvent",
             "AgentResumedEvent", "ToolStartedEvent", "ToolStreamingEvent", "ToolCompletedEvent",
             "ToolFailedEvent", "LLMRequestStartedEvent", "LLMResponseReceivedEvent", "LLMCostEvent",
+            "LLMTokenStreamEvent",
         ]
 
         if received == expected {
-            pass("131. All 16 event types through EventBus")
+            pass("131. All 17 event types through EventBus")
         } else {
-            fail("131. All 16 event types through EventBus", "got \(received.count) events")
+            fail("131. All 17 event types through EventBus", "got \(received.count) events")
         }
     }
 
