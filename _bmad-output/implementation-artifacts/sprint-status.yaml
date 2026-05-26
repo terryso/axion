@@ -1,5 +1,6 @@
 # generated: 2026-05-08
-# last_updated: 2026-05-24
+# last_updated: 2026-05-27
+# epic-24-27-added: 2026-05-27
 # story-23.2-created: 2026-05-24
 # epic-23-started: 2026-05-24
 # story-23.1-created: 2026-05-24
@@ -74,7 +75,8 @@
 # - Dev moves story to 'review', then runs code-review (fresh context, different LLM recommended)
 
 generated: 2026-05-08
-last_updated: 2026-05-24
+last_updated: 2026-05-27
+# story-24.1-created: 2026-05-27
 # story-22-5-started: 2026-05-24
 # story-22.5-created: 2026-05-24
 # story-22.4-created: 2026-05-24
@@ -116,6 +118,7 @@ last_updated: 2026-05-24
 # phase-8-added: 2026-05-24
 # epic-22-added: 2026-05-24
 # epic-23-added: 2026-05-24
+# phase-9-added: 2026-05-27
 
 project_key: NOKEY
 tracking_system: file-system
@@ -324,3 +327,41 @@ development_status:
   23-1-review-config-cli-flags: done
   23-2-review-result-logging-notification: done
   epic-23-retrospective: optional
+
+  # ============================================================
+  # Phase 9 — AxionRuntime 统一执行引擎
+  # ============================================================
+
+  # Epic 24: AxionRuntime Core
+  epic-24: in-progress
+  24-1-axionruntime-skeleton: done
+  24-2-agent-build-execution: backlog
+  24-3-axionrunstate-session-metadata: backlog
+  24-4-session-state-persistence: backlog
+  epic-24-retrospective: optional
+
+  # Epic 25: EventHandler 体系
+  epic-25: backlog
+  25-1-eventhandler-protocol-registration: backlog
+  25-2-cost-event-handler: backlog
+  25-3-visual-delta-handler: backlog
+  25-4-seat-monitor-handler: backlog
+  25-5-memory-processing-handler: backlog
+  25-6-review-notification-handler: backlog
+  25-7-trace-event-handler: backlog
+  epic-25-retrospective: optional
+
+  # Epic 26: CLI + API 改造
+  epic-26: backlog
+  26-1-runcommand-axionruntime-execution: backlog
+  26-2-apirunner-axionruntime-execution: backlog
+  26-3-remove-legacy-code-cleanup: backlog
+  epic-26-retrospective: optional
+
+  # Epic 27: Session Resume + Daemon 集成
+  epic-27: backlog
+  27-1-session-list-cli: backlog
+  27-2-session-resume-cli: backlog
+  27-3-daemon-axionruntime-integration: backlog
+  27-4-skill-execution-axionruntime: backlog
+  epic-27-retrospective: optional

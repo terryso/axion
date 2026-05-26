@@ -42,7 +42,8 @@ struct ReviewConfigTests: ~Copyable {
             task: "test", fast: false, dryrun: false, json: false,
             noMemory: false, noVisualDelta: false,
             allowForeground: false, maxSteps: nil,
-            config: AxionConfig.default, noReview: true, onReviewCompleted: nil
+            config: AxionConfig.default, noReview: true, onReviewCompleted: nil,
+            eventBus: nil
         )
         #expect(config.noReview == true)
     }
@@ -53,7 +54,8 @@ struct ReviewConfigTests: ~Copyable {
             task: "test", fast: false, dryrun: false, json: false,
             noMemory: false, noVisualDelta: false,
             allowForeground: false, maxSteps: nil,
-            config: AxionConfig.default, noReview: false, onReviewCompleted: nil
+            config: AxionConfig.default, noReview: false, onReviewCompleted: nil,
+            eventBus: nil
         )
         #expect(config.noReview == false)
     }

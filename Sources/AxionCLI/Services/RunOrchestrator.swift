@@ -24,6 +24,7 @@ enum RunOrchestrator {
         let config: AxionConfig
         let noReview: Bool
         let onReviewCompleted: (@Sendable (String) -> Void)?
+        let eventBus: EventBus?
     }
 
     struct RunResult: Sendable {
@@ -111,7 +112,7 @@ enum RunOrchestrator {
 
         // Stream loop
         await withTaskCancellationHandler {
-            let messageStream = agent.stream(runConfig.task)
+            let messageStream = agent.stream(runConfig.task, eventBus: runConfig.eventBus)
             for await message in messageStream {
                 if _Concurrency.Task.isCancelled { break }
                 if case .toolUse = message { totalSteps += 1 }
