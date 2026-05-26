@@ -5,11 +5,11 @@ import OpenAgentSDK
 import AxionCore
 
 /// Main entry point for `axion run` — thin CLI layer that parses arguments
-/// and delegates execution to RunOrchestrator.
+/// and delegates execution to AxionRuntime.
 ///
 /// **Design Decisions:**
 /// - **Thin CLI layer**: argument parsing lives here; all execution logic
-///   (stream loop, lock, trace, takeover, memory processing) lives in RunOrchestrator.
+///   (stream loop, lock, trace, takeover, memory processing) lives in AxionRuntime.
 /// - **Skill detection before agent build**: explicit skill invocations (`/skill-name ...`)
 ///   bypass the full agent build to save one LLM round trip.
 /// - **Layered configuration** (defaults → config.json → env vars → CLI args): see `ConfigManager.loadConfig`.
@@ -89,7 +89,7 @@ struct RunCommand: AsyncParsableCommand {
             }
         }
 
-        // Standard agent execution path
+        // AxionRuntime execution path
         let effectiveMaxSteps = RunOrchestrator.computeEffectiveMaxSteps(
             fast: fast, maxSteps: maxSteps, configMaxSteps: config.maxSteps
         )
@@ -101,20 +101,39 @@ struct RunCommand: AsyncParsableCommand {
             maxTokens: effectiveMaxTokens, verbose: verbose, dryrun: dryrun, fast: fast
         )
 
-        let buildResult = try await AgentBuilder.build(buildConfig)
+        let eventBus = EventBus()
+        let runtime = AxionRuntime(eventBus: eventBus)
+        await registerHandlers(into: runtime, config: config)
 
-        if buildResult.skillRegisteredCount > 0 {
-            fputs("[axion] 已加载 \(buildResult.skillRegisteredCount) 个技能\n", stderr)
-        }
+        // Start event loop concurrently so handlers receive events during execution
+        let eventLoopTask = _Concurrency.Task { await runtime.startEventLoop() }
 
-        _ = try await RunOrchestrator.execute(
-            buildResult: buildResult,
-            runConfig: RunOrchestrator.RunConfig(
-                task: task, fast: fast, dryrun: dryrun, json: json,
-                noMemory: noMemory, noVisualDelta: noVisualDelta,
-                allowForeground: allowForeground, maxSteps: maxSteps, config: config,
-                noReview: noReview, onReviewCompleted: nil, eventBus: nil
-            )
+        let overrides = AxionRuntime.RunOverrides(
+            json: json,
+            noVisualDelta: noVisualDelta,
+            noReview: noReview,
+            onReviewCompleted: nil
         )
+
+        let result = try await runtime.execute(buildConfig: buildConfig, runOverrides: overrides)
+        eventLoopTask.cancel()
+        await runtime.stopEventLoop()
+
+        if result.state == .failed {
+            throw ExitCode(1)
+        }
+    }
+
+    private func registerHandlers(into runtime: AxionRuntime, config: AxionConfig) async {
+        let memoryDir = (ConfigManager.defaultConfigDirectory as NSString).appendingPathComponent("memory")
+        let traceDir = (ConfigManager.defaultConfigDirectory as NSString).appendingPathComponent("runs")
+
+        await runtime.registerHandler(CostEventHandler())
+        await runtime.registerHandler(VisualDeltaHandler(noVisualDelta: noVisualDelta))
+        await runtime.registerHandler(SeatMonitorHandler(sharedSeatMode: config.sharedSeatMode))
+        await runtime.registerHandler(MemoryProcessingHandler(noMemory: noMemory, memoryDir: memoryDir))
+        await runtime.registerHandler(ReviewHandler(noReview: noReview, noMemory: noMemory, reviewOrchestrator: nil))
+        await runtime.registerHandler(NotificationHandler(json: json))
+        await runtime.registerHandler(TraceEventHandler(traceDir: traceDir))
     }
 }

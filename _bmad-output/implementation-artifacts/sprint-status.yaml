@@ -343,14 +343,14 @@ development_status:
   epic-24-retrospective: optional
 
   # Epic 25: EventHandler 体系
-  epic-25: backlog
-  25-1-eventhandler-protocol-registration: backlog
-  25-2-cost-event-handler: backlog
-  25-3-visual-delta-handler: backlog
-  25-4-seat-monitor-handler: backlog
-  25-5-memory-processing-handler: backlog
-  25-6-review-notification-handler: backlog
-  25-7-trace-event-handler: backlog
+  epic-25: done
+  25-1-eventhandler-protocol-registration: done
+  25-2-cost-event-handler: done
+  25-3-visual-delta-handler: done
+  25-4-seat-monitor-handler: done
+  25-5-memory-processing-handler: done
+  25-6-review-notification-handler: done
+  25-7-trace-event-handler: done
   epic-25-retrospective: optional
 
   # Epic 26: CLI + API 改造
