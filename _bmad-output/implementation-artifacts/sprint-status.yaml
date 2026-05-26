@@ -76,6 +76,8 @@
 
 generated: 2026-05-08
 last_updated: 2026-05-27
+# story-24.3-created: 2026-05-27
+# story-24.2-created: 2026-05-27
 # story-24.1-created: 2026-05-27
 # story-22-5-started: 2026-05-24
 # story-22.5-created: 2026-05-24
@@ -335,8 +337,8 @@ development_status:
   # Epic 24: AxionRuntime Core
   epic-24: in-progress
   24-1-axionruntime-skeleton: done
-  24-2-agent-build-execution: backlog
-  24-3-axionrunstate-session-metadata: backlog
+  24-2-agent-build-execution: done
+  24-3-axionrunstate-session-metadata: done
   24-4-session-state-persistence: backlog
   epic-24-retrospective: optional
 

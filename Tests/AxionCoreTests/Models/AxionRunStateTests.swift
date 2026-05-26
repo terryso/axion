@@ -29,9 +29,9 @@ struct AxionRunStateTests {
         #expect(!AxionRunState.created.isValidTransition(to: .completed))
     }
 
-    @Test("CREATED → FAILED is invalid")
+    @Test("CREATED → FAILED is valid (build failure)")
     func createdToFailed() {
-        #expect(!AxionRunState.created.isValidTransition(to: .failed))
+        #expect(AxionRunState.created.isValidTransition(to: .failed))
     }
 
     @Test("COMPLETED → RUNNING is invalid")

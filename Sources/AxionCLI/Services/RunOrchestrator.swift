@@ -31,6 +31,9 @@ enum RunOrchestrator {
         let totalSteps: Int
         let durationMs: Int
         let runSucceeded: Bool
+        let externallyModified: Bool
+        let takeoverEvent: RunMemoryProcessor.TakeoverEventContext?
+        let runCompleteContext: RunCompleteContext?
     }
 
     /// Executes the full agent pipeline: lock → trace → stream loop → cleanup → post-run.
@@ -377,7 +380,14 @@ enum RunOrchestrator {
             }
         }
 
-        return RunResult(totalSteps: totalSteps, durationMs: durationMs, runSucceeded: runSucceeded)
+        return RunResult(
+            totalSteps: totalSteps,
+            durationMs: durationMs,
+            runSucceeded: runSucceeded,
+            externallyModified: externallyModified,
+            takeoverEvent: takeoverContext,
+            runCompleteContext: runCtx
+        )
     }
 
     /// Executes a prompt skill directly via `executeSkillStream`, bypassing the full agent build.

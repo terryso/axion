@@ -154,14 +154,17 @@ struct VisualDeltaChecker {
         guard totalPixels > 0 else { return 0.0 }
 
         var diffCount = 0
+        let threshold = Int(luminanceThreshold)
         for i in stride(from: 0, to: currentData.count, by: 4) {
             let r1 = currentData[i], g1 = currentData[i + 1], b1 = currentData[i + 2]
             let r2 = previousData[i], g2 = previousData[i + 1], b2 = previousData[i + 2]
 
-            let l1 = Int(0.299 * Double(r1) + 0.587 * Double(g1) + 0.114 * Double(b1))
-            let l2 = Int(0.299 * Double(r2) + 0.587 * Double(g2) + 0.114 * Double(b2))
+            let dr1 = Double(r1), dg1 = Double(g1), db1 = Double(b1)
+            let dr2 = Double(r2), dg2 = Double(g2), db2 = Double(b2)
+            let l1 = Int(0.299 * dr1 + 0.587 * dg1 + 0.114 * db1)
+            let l2 = Int(0.299 * dr2 + 0.587 * dg2 + 0.114 * db2)
 
-            if abs(l1 - l2) > Int(luminanceThreshold) {
+            if abs(l1 - l2) > threshold {
                 diffCount += 1
             }
         }
