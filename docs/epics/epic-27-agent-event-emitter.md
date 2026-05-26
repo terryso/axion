@@ -1,6 +1,6 @@
 # Runtime Event Layer — Epic 27: Agent Event Emitter
 
-> **状态：待开发**
+> **状态：已完成（Epic 27）**
 > **优先级：P0**
 > **依赖：** Epic 26（AgentEvent + EventBus）
 > **Roadmap：** `docs/runtime-event-layer-roadmap.md` → S3
@@ -219,7 +219,7 @@ Agent.swift 的核心执行流程在以下方法中：
 tool 执行在 `ToolExecutor.executeTools()`（`Sources/OpenAgentSDK/Core/ToolExecutor.swift:181`）中。
 这是一个 `static func`，被 `Agent.swift` 的 `promptImpl` 和 `stream` 调用。
 
-**emit ToolStarted/ToolCompleted 的位置：** 在 `Agent.swift` 中调用 `ToolExecutor.executeTools()` 的前后，不在 ToolExecutor 内部。原因是 Agent 持有 `options.eventBus`，ToolExecutor 不持有。
+**emit ToolStarted/ToolCompleted 的位置：** ~~在 `Agent.swift` 中调用 `ToolExecutor.executeTools()` 的前后，不在 ToolExecutor 内部。~~ **实际实现（Story 27.3）：** 通过 `ToolContext` 注入 `EventBus` 和 `sessionId` 到 `ToolExecutor.executeSingleTool()` 内部。这给出了精确的每个工具的 `durationMs` 和独立的事件序列。请参阅 Story 27.3 的开发说明，了解此架构决策的基本原理。
 
 **sub-agent 与 EventBus：**
 - sub-agent 通过 `AgentTool`（`Sources/OpenAgentSDK/Tools/Advanced/AgentTool.swift`）spawn

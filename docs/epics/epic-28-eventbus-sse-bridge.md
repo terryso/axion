@@ -1,6 +1,6 @@
 # Runtime Event Layer — Epic 28: EventBus → SSE Bridge
 
-> **状态：待开发**
+> **状态：已完成**
 > **优先级：P1**
 > **依赖：** Epic 27（Agent Event Emitter）
 > **Roadmap：** `docs/runtime-event-layer-roadmap.md` → S4 + S5

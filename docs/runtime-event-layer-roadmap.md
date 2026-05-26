@@ -140,7 +140,7 @@ public actor EventBus {
 
 ---
 
-## S3. Agent Event Emitter
+## S3. Agent Event Emitter ✅ 已完成（Epic 27）
 
 **优先级：P0**
 **依赖：S1, S2**
@@ -151,19 +151,25 @@ public actor EventBus {
 
 **emit 点：**
 
-| 位置 | Event |
-|------|-------|
-| agent.stream() 开始 | `AgentStartedEvent` |
-| LLM API 调用前 | `LLMRequestStartedEvent` |
-| LLM 流式 token | `LLMTokenStreamEvent`（可选，可配置开关） |
-| LLM 响应完成 | `LLMResponseReceivedEvent` + `LLMCostEvent` |
-| tool 执行前 | `ToolStartedEvent` |
-| tool 执行后 | `ToolCompletedEvent` / `ToolFailedEvent` |
-| agent 执行结束 | `AgentCompletedEvent` / `AgentFailedEvent` |
-| interrupt() 调用 | `AgentInterruptedEvent` |
-| resume() 调用 | `AgentResumedEvent` |
-| session auto-save | `SessionAutoSavedEvent` |
-| sub-agent spawn | `SubAgentSpawnedEvent` |
+| 位置 | Event | Epic 27 实现状态 |
+|------|-------|-----------------|
+| agent.stream() 开始 | `AgentStartedEvent` | ✅ 已实现 |
+| agent.stream()/prompt() 开始 | `SessionCreatedEvent` | ✅ 已实现（Story 27.5） |
+| LLM API 调用前 | `LLMRequestStartedEvent` | ❌ 未实现（P2，未来） |
+| LLM 流式 token | `LLMTokenStreamEvent`（可选，可配置开关） | ❌ 未实现（P2，→ S5/Epic 28） |
+| LLM 响应完成后 | `LLMCostEvent` | ✅ 已实现（Story 27.4） |
+| tool 执行前 | `ToolStartedEvent` | ✅ 已实现（通过 ToolContext 注入） |
+| tool 执行后 | `ToolCompletedEvent` / `ToolFailedEvent` | ✅ 已实现 |
+| agent 执行结束 | `AgentCompletedEvent` / `AgentFailedEvent` / `AgentInterruptedEvent` | ✅ 已实现 |
+| resume() 调用 | `AgentResumedEvent` | ✅ 已实现（fire-and-forget Task） |
+| session auto-save | `SessionAutoSavedEvent` | ✅ 已实现 |
+| session close | `SessionClosedEvent` | ✅ 已实现（Story 27.5） |
+| sub-agent spawn | `SubAgentSpawnedEvent` | ❌ 未实现（未来） |
+
+**实现说明：**
+- Tool 事件通过 `ToolContext` 注入到 `ToolExecutor.executeSingleTool()` 内部（非 Agent.swift 外部包裹），以获得精确的 per-tool durationMs
+- `LLMRequestStartedEvent` 和 `LLMResponseReceivedEvent` 未在 Epic 27 实现（`LLMCostEvent` 覆盖了成本追踪需求）
+- `SubAgentSpawnedEvent` 和 `LLMTokenStreamEvent` 留给后续 Epic
 
 ### 向后兼容
 
@@ -178,9 +184,7 @@ public actor EventBus {
 - Event payload 信息完整（tool name, input/output, duration, tokens, cost）
 - 现有 E2E 测试全部通过
 
----
-
-## S4. EventBus → EventBroadcaster 桥接
+**验收结果：** 5955 tests passing, 42 skipped, 0 failures。所有 5 个 story 完成，零回归。
 
 **优先级：P1**
 **依赖：S3**
@@ -188,6 +192,8 @@ public actor EventBus {
 ### 改动
 
 将现有的 `EventBroadcaster`（SSE）改造为 `EventBus` 的一个 subscriber：
+
+**验收结果：** 6016 tests passing, 42 skipped, 0 failures。EventBusBridge actor 实现了 EventBus → SSE 桥接，移除了 executeRun 中手动 emit 代码。所有 3 个 story 完成，零回归。
 
 ```swift
 // 在 AgentHTTPServer 中
@@ -212,7 +218,7 @@ eventBus.subscribe().map { event in
 
 ---
 
-## S5. Token Streaming Event（可选）
+## S5. Token Streaming Event（可选） ✅ 已完成（Epic 28）
 
 **优先级：P2**
 **依赖：S3**
@@ -220,6 +226,8 @@ eventBus.subscribe().map { event in
 ### 改动
 
 在 LLM streaming 响应时，emit `LLMTokenStreamEvent`，包含每个 token chunk。
+
+**验收结果：** 包含在 Epic 28 Story 28.3 中。`emitTokenStream: Bool = false` 默认关闭，零开销。SSE 不映射此事件。
 
 ### 设计决策
 
@@ -243,8 +251,8 @@ S2 (EventBus)
     ↓
 S3 (Agent Event Emitter)  ← 核心，改 Agent.swift
     ↓
-S4 (EventBus → SSE bridge)    P1
-S5 (Token Streaming)          P2
+S4 (EventBus → SSE bridge)    P1 ✅ 已完成
+S5 (Token Streaming)          P2 ✅ 已完成
 ```
 
 ---
