@@ -1,6 +1,6 @@
 # Story 28.1: AgentEvent → SSE Event Mapping
 
-Status: review
+Status: done
 
 ## Story
 
@@ -226,10 +226,11 @@ GLM-5.1
 
 - Sources/OpenAgentSDK/HTTP/APITypes.swift — Added RunStartedData, CostUpdateData structs; extended AgentSSEEvent with .runStarted/.costUpdate; updated PersistedSSEEvent
 - Sources/OpenAgentSDK/Utils/AgentEventSSEMapping.swift — NEW: stateless mapping enum (AgentEvent → AgentSSEEvent?)
-- Tests/OpenAgentSDKTests/Utils/AgentEventSSEMappingTests.swift — NEW: 17 unit tests for mapping function
+- Tests/OpenAgentSDKTests/Utils/AgentEventSSEMappingTests.swift — NEW: 24 unit tests for mapping function (17 original + 7 review additions)
 - Tests/OpenAgentSDKTests/HTTP/APITypesTests.swift — Added CodingKeys, SSE encoding, PersistedSSEEvent round-trip tests for RunStartedData and CostUpdateData
 
 ## Change Log
 
 - 2026-05-26: Story 28.1 implemented — AgentEvent → SSE event mapping with 2 new SSE data types (RunStartedData, CostUpdateData), 5 event mappings, and 17 unit tests. All 5971 tests pass.
 - 2026-05-26: Review fix — Added 10 tests to APITypesTests.swift (CodingKeys, SSE encoding, PersistedSSEEvent round-trip for new types), 1 nil sessionId edge case test for AgentCompletedEvent.
+- 2026-05-26: Senior Developer Review (AI) — Found 0 CRITICAL, 3 MEDIUM, 2 LOW issues. Auto-fixed all. Added 7 nil mapping tests for unmapped event types (ToolFailedEvent, AgentInterruptedEvent, LLMRequestStartedEvent, LLMResponseReceivedEvent, AgentResumedEvent, SessionRestoredEvent), 3 stepIndex-ignored tests for non-tool events, and updated stale PersistedSSEEvent test JSON. All 5989 tests pass.

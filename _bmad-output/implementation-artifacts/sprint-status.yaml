@@ -1,5 +1,5 @@
 # generated: 2026-05-25
-# last_updated: 2026-05-26 (Story 28.1 created)
+# last_updated: 2026-05-26 (Story 28.1 review complete)
 
 # project: open-agent-sdk-swift
 # project_key: NOKEY
@@ -308,7 +308,7 @@ development_status:
 
   # Epic 28: Runtime Event Layer — EventBus → SSE Bridge
   epic-28: in-progress
-  28-1-agent-event-sse-event-mapping: review
+  28-1-agent-event-sse-event-mapping: done
   28-2-eventbus-event-broadcaster-bridge: backlog
   28-3-token-streaming-event: backlog
   epic-28-retrospective: optional

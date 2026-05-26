@@ -382,7 +382,7 @@ final class APITypesTests: XCTestCase {
 
     func testPersistedSSEEventUnknownTypeReturnsNil() throws {
         let json = """
-        {"eventType":"unknown_event","stepStarted":null,"stepCompleted":null,"runCompleted":null}
+        {"eventType":"unknown_event","stepStarted":null,"stepCompleted":null,"runStarted":null,"runCompleted":null,"costUpdate":null}
         """
         let data = Data(json.utf8)
         let persisted = try JSONDecoder().decode(PersistedSSEEvent.self, from: data)
