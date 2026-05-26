@@ -36,6 +36,7 @@ Also available in **TypeScript**: [open-agent-sdk-typescript](https://github.com
 - **Enhanced Memory** — Fact-based memory with candidate→active→retired lifecycle, evidence-driven confidence, and import/export
 - **Self-Evolution** — ExperienceExtractor for memory auto-extraction, SkillEvolver for skill adaptation, ReviewAgent background pipeline, and IntelligentCurator for LLM-driven skill library curation with Markdown/YAML reports
 - **Output Formatting** — SDKMessageOutputHandler protocol with Terminal and JSON output formatters
+- **Runtime Event Layer** — 18 typed events via EventBus, SSE bridge for HTTP API, optional token streaming
 
 ## Quick Start (15 minutes)
 
@@ -422,6 +423,59 @@ for await message in agent.stream("Summarize this project") {
 let result = json.finalize()  // [String: Any] dictionary
 ```
 
+### Runtime Event Layer
+
+Subscribe to typed runtime events via `EventBus` — session lifecycle, agent progress, tool execution, LLM cost tracking, and token streaming.
+
+```swift
+let eventBus = EventBus()
+
+// Subscribe to all events
+let (_, stream) = await eventBus.subscribe()
+for await event in stream {
+    switch event {
+    case let e as AgentStartedEvent:
+        print("Agent started: \(e.task)")
+    case let e as ToolCompletedEvent:
+        print("Tool done: \(e.toolName) in \(e.durationMs)ms")
+    case let e as LLMCostEvent:
+        print("Cost: $\(String(format: "%.4f", e.estimatedCostUsd))")
+    default: break
+    }
+}
+
+// Or subscribe to a specific event type only
+let costStream = await eventBus.subscribe(LLMCostEvent.self)
+```
+
+Pass the EventBus to an agent and all events are emitted automatically:
+
+```swift
+let agent = createAgent(options: AgentOptions(
+    apiKey: "sk-...",
+    eventBus: eventBus,            // opt-in, nil = zero overhead
+    emitTokenStream: true          // enable LLMTokenStreamEvent for TUI rendering
+))
+```
+
+**18 event types across 4 categories:**
+
+| Category | Events |
+|----------|--------|
+| **Session** | `SessionCreatedEvent`, `SessionRestoredEvent`, `SessionClosedEvent`, `SessionAutoSavedEvent` |
+| **Agent** | `AgentStartedEvent`, `AgentCompletedEvent`, `AgentFailedEvent`, `AgentInterruptedEvent`, `AgentResumedEvent` |
+| **Tool** | `ToolStartedEvent`, `ToolStreamingEvent`, `ToolCompletedEvent`, `ToolFailedEvent` |
+| **LLM** | `LLMRequestStartedEvent`, `LLMResponseReceivedEvent`, `LLMCostEvent`, `LLMTokenStreamEvent` |
+
+Bridge EventBus to SSE for HTTP API:
+
+```swift
+let broadcaster = EventBroadcaster()
+let bridge = EventBusBridge(eventBus: eventBus, broadcaster: broadcaster, runId: "run-1")
+await bridge.start()
+// SSE clients now receive typed events via broadcaster
+```
+
 ## Built-in Tools
 
 ### Core Tools (10)
@@ -563,6 +617,7 @@ graph TD
     C --> I
     C --> J
     C --> K
+    C --> L
     D["<b>LLMClient Protocol</b><br/>AnthropicClient &middot; OpenAIClient"]
     E["<b>34 Built-in Tools</b><br/>Core 10 &middot; Advanced 11 &middot; Specialist 13"]
     F["<b>MCP Servers</b><br/>stdio &middot; SSE &middot; HTTP &middot; In-Process"]
@@ -571,6 +626,7 @@ graph TD
     I["<b>HTTP API Server</b><br/>REST + SSE &middot; Run Tracking"]
     J["<b>Cost &amp; Trace</b><br/>Budget Control &middot; JSONL Traces"]
     K["<b>Self-Evolution</b><br/>ExperienceExtractor &middot; SkillEvolver<br/>ReviewOrchestrator &middot; IntelligentCurator"]
+    L["<b>Runtime Event Layer</b><br/>EventBus &middot; 18 Event Types<br/>SSE Bridge &middot; Token Streaming"]
 
     style A fill:#0277bd,stroke:#01579b,color:#fff,stroke-width:2px
     style B fill:#ef6c00,stroke:#e65100,color:#fff,stroke-width:2px
@@ -583,6 +639,7 @@ graph TD
     style I fill:#1565c0,stroke:#0d47a1,color:#fff,stroke-width:2px
     style J fill:#880e4f,stroke:#560027,color:#fff,stroke-width:2px
     style K fill:#00695c,stroke:#004d40,color:#fff,stroke-width:2px
+    style L fill:#283593,stroke:#1a237e,color:#fff,stroke-width:2px
 ```
 
 ## Environment Variables
@@ -601,8 +658,8 @@ API documentation and guides are available via Swift-DocC:
 - [Tool System](Sources/OpenAgentSDK/Documentation.docc/ToolSystem.md) — Tool protocol, custom tools, tiers
 - [Multi-Agent Orchestration](Sources/OpenAgentSDK/Documentation.docc/MultiAgent.md) — Sub-agents, teams, tasks
 - [MCP, Sessions & Hooks](Sources/OpenAgentSDK/Documentation.docc/MCPSessionHooks.md) — MCP integration, persistence, hook system
-- [Cookbook](docs/cookbook.md) — 17 real-world scenarios with runnable code (structured output, sandbox, multi-agent, self-evolution, etc.)
-- [Runnable Examples](Examples/README.md) — 31 complete examples with step-by-step tutorial (19 feature demos + 12 compat verification)
+- [Cookbook](docs/cookbook.md) — 18 real-world scenarios with runnable code (structured output, sandbox, multi-agent, self-evolution, runtime events, etc.)
+- [Runnable Examples](Examples/README.md) — 33 complete examples with step-by-step tutorial (20 feature demos + 12 compat verification + EventBus demo)
 
 ## Requirements
 
