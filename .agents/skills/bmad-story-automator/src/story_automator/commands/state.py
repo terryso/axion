@@ -7,6 +7,7 @@ from typing import Any
 
 from ..core.frontmatter import extract_frontmatter, parse_simple_frontmatter
 from ..core.runtime_policy import PolicyError, load_policy_for_state, snapshot_effective_policy
+from ..core.agent_config import normalize_model as _model_or_none
 from ..core.utils import count_matches, ensure_dir, file_exists, get_project_root, now_utc, now_utc_z, read_text, write_json
 
 
@@ -99,6 +100,20 @@ def cmd_build_state_doc(args: list[str]) -> int:
             f"  defaultPrimary: {json.dumps(default_primary)}",
             f"  defaultFallback: {json.dumps(default_fallback)}",
         ]
+        # Model serialization preserves three states so round-trips through
+        # `_load_agent_config_from_state` + `resolve_agent` keep the same
+        # semantics as the in-memory config:
+        #   - key ABSENT  → no `model` line (task inherits defaultModel)
+        #   - key PRESENT, sentinel  → `model: ""`  (explicit opt-out — clears
+        #     any inherited defaultModel; later parsed back as empty string,
+        #     `"model" in entry` is True, resolver assigns "" overriding the
+        #     default)
+        #   - key PRESENT, real ID  → `model: "<id>"`
+        # See bma-d's review of 5ada2c2 for the round-trip regression that
+        # motivated this — without preserving the explicit clear, retro/dev
+        # tasks silently re-inherited `defaultModel` after persistence.
+        if "defaultModel" in agent_config:
+            lines.append(f"  defaultModel: {json.dumps(_model_or_none(agent_config.get('defaultModel')))}")
         if isinstance(per_task, dict) and per_task:
             lines.append("  perTask:")
             for task in sorted(per_task):
@@ -111,6 +126,8 @@ def cmd_build_state_doc(args: list[str]) -> int:
                 if "fallback" in entry:
                     value = entry["fallback"]
                     lines.append(f"      fallback: {'false' if value is False else json.dumps(value)}")
+                if "model" in entry:
+                    lines.append(f"      model: {json.dumps(_model_or_none(entry.get('model')))}")
         complexity_overrides = agent_config.get("complexityOverrides", {})
         if isinstance(complexity_overrides, dict) and complexity_overrides:
             lines.append("  complexityOverrides:")
@@ -129,6 +146,8 @@ def cmd_build_state_doc(args: list[str]) -> int:
                     if "fallback" in entry:
                         value = entry["fallback"]
                         lines.append(f"        fallback: {'false' if value is False else json.dumps(value)}")
+                    if "model" in entry:
+                        lines.append(f"        model: {json.dumps(_model_or_none(entry.get('model')))}")
         block = "\n".join(lines) + "\n"
         text = re.sub(r"(?m)^agentConfig:\n(?:(?:\s{2}.*\n)*)", block, text)
     for key, value in replacements.items():

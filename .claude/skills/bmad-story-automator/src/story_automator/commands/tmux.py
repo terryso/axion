@@ -84,7 +84,20 @@ def cmd_tmux_wrapper(args: list[str]) -> int:
         print(agent_type())
         return 0
     if action == "agent-cli":
-        print(agent_cli(agent_type()))
+        rest = args[1:]
+        model = ""
+        idx = 0
+        while idx < len(rest):
+            if rest[idx] == "--model":
+                try:
+                    model = _flag_value(rest, idx, "--model")
+                except PolicyError as exc:
+                    print(str(exc), file=__import__("sys").stderr)
+                    return 1
+                idx += 2
+                continue
+            idx += 1
+        print(agent_cli(agent_type(), model))
         return 0
     if action == "skill-prefix":
         print(skill_prefix(agent_type()))
@@ -103,7 +116,7 @@ def _usage(code: int) -> int:
     print("  kill <session_name>", file=target)
     print("  kill-all [--project-only]", file=target)
     print("  exists <session_name>", file=target)
-    print("  build-cmd <step> <story_id> [--agent TYPE] [--state-file PATH] [extra_instruction]", file=target)
+    print("  build-cmd <step> <story_id> [--agent TYPE] [--model ID] [--state-file PATH] [extra_instruction]", file=target)
     print("  project-slug", file=target)
     print("  project-hash", file=target)
     print("  story-suffix <story_id>", file=target)
@@ -155,10 +168,15 @@ def _build_cmd(args: list[str]) -> int:
     tail = args[2:]
     idx = 0
     state_file = ""
+    model = ""
     try:
         while idx < len(tail):
             if tail[idx] == "--agent":
                 agent = _flag_value(tail, idx, "--agent")
+                idx += 2
+                continue
+            if tail[idx] == "--model":
+                model = _flag_value(tail, idx, "--model")
                 idx += 2
                 continue
             if tail[idx] == "--state-file":
@@ -185,18 +203,19 @@ def _build_cmd(args: list[str]) -> int:
     if ai_command and not os.environ.get("AI_AGENT"):
         cli = ai_command
     elif agent != "codex":
-        cli = agent_cli(agent)
+        cli = agent_cli(agent, model)
     else:
         cli = "codex exec"
     quoted_prompt = shlex.quote(prompt)
     if agent == "codex" and not ai_command:
         codex_home = f"/tmp/sa-codex-home-{project_hash(root)}"
         auth_src = os.path.expanduser("~/.codex/auth.json")
+        model_flag = f" --model {shlex.quote(model)}" if model else ""
         print(
             f'mkdir -p "{codex_home}"'
             + f' && if [ -f "{auth_src}" ]; then ln -sf "{auth_src}" "{codex_home}/auth.json"; fi'
             + f' && CODEX_HOME="{codex_home}" codex exec -s workspace-write -c \'approval_policy="never"\''
-            + f' -c \'model_reasoning_effort="high"\''
+            + f' -c \'model_reasoning_effort="high"\'{model_flag}'
             + f" --disable plugins --disable sqlite --disable shell_snapshot {quoted_prompt}"
         )
     else:

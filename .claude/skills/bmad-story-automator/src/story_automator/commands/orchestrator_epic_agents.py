@@ -121,8 +121,14 @@ def agents_build_action(args: list[str]) -> int:
         level = str(story.get("complexity", {}).get("level", "medium")).lower() or "medium"
         tasks = {}
         for task in ("create", "dev", "auto", "review"):
-            primary, fallback = resolve_agent(config, level, task)
-            tasks[task] = {"primary": primary, "fallback": False if fallback == "false" else fallback}
+            primary, fallback, model = resolve_agent(config, level, task)
+            entry = {
+                "primary": primary,
+                "fallback": False if fallback == "false" else fallback,
+            }
+            if model:
+                entry["model"] = model
+            tasks[task] = entry
         stories.append({"storyId": story["storyId"], "title": story.get("title", ""), "complexity": level, "tasks": tasks})
     payload = {"version": "1.0.0", "stateFile": options["state-file"], "epic": state_fields.get("epic", ""), "epicName": state_fields.get("epicName", ""), "createdAt": iso_now(), "stories": stories}
     header = f'---\nstateFile: "{payload["stateFile"]}"\ncreatedAt: "{payload["createdAt"]}"\n---\n\n# Agents Plan: {payload["epicName"]}\n\n'
@@ -163,7 +169,8 @@ def agents_resolve_action(args: list[str]) -> int:
             return 1
         fallback = selection.get("fallback", "")
         fallback = "false" if fallback in {False, "false", "none", "null"} else fallback
-        print_json({"ok": True, "story": options["story"], "task": options["task"], "primary": selection.get("primary", ""), "fallback": fallback, "complexity": story.get("complexity", "")})
+        model = _normalize_model_value(selection.get("model"))
+        print_json({"ok": True, "story": options["story"], "task": options["task"], "primary": selection.get("primary", ""), "fallback": fallback, "model": model, "complexity": story.get("complexity", "")})
         return 0
     print_json({"ok": False, "error": "story_not_found"})
     return 1
@@ -186,8 +193,8 @@ def retro_agent_action(args: list[str]) -> int:
         print_json({"ok": False, "error": "file_not_found"})
         return 1
     config = _load_agent_config_from_state(options["state-file"])
-    primary, fallback = resolve_agent(config, "medium", "retro")
-    print_json({"ok": True, "task": "retro", "primary": primary, "fallback": fallback})
+    primary, fallback, model = resolve_agent(config, "medium", "retro")
+    print_json({"ok": True, "task": "retro", "primary": primary, "fallback": fallback, "model": model})
     return 0
 
 
@@ -220,20 +227,27 @@ def parse_agent_config(raw: str) -> dict:
     return {
         "defaultPrimary": data.get("defaultPrimary") or data.get("primary") or "auto",
         "defaultFallback": "false" if fallback_raw in {False, "false", "none", "null"} else (fallback_raw or "false"),
+        "defaultModel": _normalize_model_value(data.get("defaultModel")),
         "perTask": per_task,
         "complexityOverrides": complexity_overrides,
     }
 
 
-def resolve_agent(config: dict, level: str, task: str) -> tuple[str, str]:
+def resolve_agent(config: dict, level: str, task: str) -> tuple[str, str, str]:
     primary = config["defaultPrimary"]
     fallback = config["defaultFallback"]
+    model = config.get("defaultModel", "")
     if task in config["perTask"]:
         entry = config["perTask"][task]
         if isinstance(entry, dict):
             primary = entry.get("primary", primary)
             if "fallback" in entry:
                 fallback = "false" if entry["fallback"] in {False, "false", "none", "null"} else entry["fallback"]
+            # `"model" in entry` distinguishes "key absent" (inherit default)
+            # from "key present with sentinel" ("" after normalization → clear
+            # the inherited defaultModel, the documented opt-out behavior).
+            if "model" in entry:
+                model = _normalize_model_value(entry.get("model"))
     level_map = config["complexityOverrides"].get(level, {})
     if not isinstance(level_map, dict):
         level_map = {}
@@ -243,7 +257,14 @@ def resolve_agent(config: dict, level: str, task: str) -> tuple[str, str]:
             primary = entry.get("primary", primary)
             if "fallback" in entry:
                 fallback = "false" if entry["fallback"] in {False, "false", "none", "null"} else entry["fallback"]
-    return (_resolve_primary_agent(primary), _resolve_fallback_agent(fallback))
+            if "model" in entry:
+                model = _normalize_model_value(entry.get("model"))
+    return (_resolve_primary_agent(primary), _resolve_fallback_agent(fallback), model)
+
+
+# Delegate to the canonical normalizer in core.agent_config so the sentinel
+# set is defined in exactly one place.
+from story_automator.core.agent_config import normalize_model as _normalize_model_value  # noqa: E402
 
 
 def _resolve_primary_agent(raw: object) -> str:

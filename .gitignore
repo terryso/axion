@@ -37,3 +37,5 @@ coverage/
 # Python bytecode
 __pycache__/
 *.pyc
+
+.understand-anything/

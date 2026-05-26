@@ -85,8 +85,15 @@ def agent_type() -> str:
     return runtime_provider()
 
 
-def agent_cli(agent: str) -> str:
-    return "codex exec" if agent == "codex" else "claude --dangerously-skip-permissions"
+def agent_cli(agent: str, model: str = "") -> str:
+    model = (model or "").strip()
+    if agent == "codex":
+        base = "codex exec"
+    else:
+        base = "claude --dangerously-skip-permissions"
+    if model:
+        base = f"{base} --model {shlex.quote(model)}"
+    return base
 
 
 def skill_prefix(agent: str) -> str:
@@ -734,13 +741,16 @@ def _runner_claude_prompt_completed(
 
 
 def _claude_completion_marker_present(capture: str) -> bool:
+    """Return True if a tmux pane capture contains a Claude CLI completion marker.
+
+    Claude CLI uses ~185 random verbs in its spinner (Baked, Cogitated, Cooked,
+    etc.). When work completes the tense switches from present-participle (-ing)
+    to past-tense (-ed). This function detects that switch by matching past-tense
+    verbs followed by ``for Xm`` after a line start or the ``✻`` spinner glyph,
+    rejecting both in-progress forms and generic text like "tests passed for 3m".
+    """
     if not capture:
         return False
-    # Claude CLI uses ~185 random verbs in its spinner. When work completes,
-    # the tense switches from present-participle (-ing) to past-tense (-ed).
-    # Matching past-tense + "for Xm" after line-start or spinner (✻) reliably
-    # detects completion regardless of which spinner verb was used, while
-    # rejecting in-progress forms and generic text like "tests passed for 3m".
     return bool(
         re.search(
             r"(?im)(?:^|✻\s+)(?:\w+ed|Done)\s+for\s+\d+m(?:\s+\d+s)?\b",
