@@ -12,6 +12,8 @@ public actor AxionRuntime {
     private(set) var externallyModified: Bool = false
     private(set) var takeoverEvent: RunMemoryProcessor.TakeoverEventContext?
     private(set) var lastRunCompleteContext: RunCompleteContext?
+    private var handlers: [any EventHandler] = []
+    private var eventSubscriptionId: UUID?
 
     public init(eventBus: EventBus? = nil) {
         self.eventBus = eventBus
@@ -178,6 +180,55 @@ public actor AxionRuntime {
             totalSteps: 0, durationMs: 0
         )
         return sid
+    }
+
+    // MARK: - Handler Management
+
+    func registerHandler(_ handler: any EventHandler) {
+        handlers.append(handler)
+    }
+
+    func startEventLoop() async {
+        guard let bus = eventBus, eventSubscriptionId == nil else { return }
+        let (id, stream) = await bus.subscribe()
+        eventSubscriptionId = id
+        for await event in stream {
+            await dispatchToHandlers(event)
+        }
+    }
+
+    func stopEventLoop() async {
+        guard let bus = eventBus, let id = eventSubscriptionId else { return }
+        await bus.unsubscribe(id)
+        eventSubscriptionId = nil
+    }
+
+    private func dispatchToHandlers(_ event: any AgentEvent) async {
+        let context = EventHandlerContext(
+            sessionId: sessionId,
+            config: AxionConfig(apiKey: ""),
+            eventBus: eventBus,
+            externallyModified: externallyModified,
+            takeoverEvent: takeoverEvent,
+            runCompleteContext: lastRunCompleteContext,
+            sessionStore: sessionStore
+        )
+        for handler in handlers {
+            let shouldDispatch = await shouldDispatch(event: event, to: handler)
+            guard shouldDispatch else { continue }
+            do {
+                await handler.handle(event, context: context)
+            } catch {
+                let id = await handler.identifier
+                fputs("[axion] handler '\(id)' error: \(error.localizedDescription)\n", stderr)
+            }
+        }
+    }
+
+    private func shouldDispatch(event: any AgentEvent, to handler: any EventHandler) async -> Bool {
+        let types = await handler.subscribedEventTypes
+        if types.isEmpty { return true }
+        return types.contains { type(of: event) == $0 }
     }
 
     // MARK: - Session Queries

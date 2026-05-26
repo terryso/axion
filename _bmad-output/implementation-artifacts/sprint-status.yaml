@@ -339,7 +339,7 @@ development_status:
   24-1-axionruntime-skeleton: done
   24-2-agent-build-execution: done
   24-3-axionrunstate-session-metadata: done
-  24-4-session-state-persistence: backlog
+  24-4-session-state-persistence: done
   epic-24-retrospective: optional
 
   # Epic 25: EventHandler 体系
