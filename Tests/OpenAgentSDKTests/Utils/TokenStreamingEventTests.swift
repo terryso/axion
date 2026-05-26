@@ -162,7 +162,7 @@ final class TokenStreamingEventTests: XCTestCase {
         await bus.publish(AgentStartedEvent(sessionId: "s1", task: "test"))
         await bus.publish(AgentCompletedEvent(sessionId: "s1", totalSteps: 1, durationMs: 100, resultText: "done"))
 
-        let collected = await collectTypedEventsWithTimeout(stream: typedStream, count: 2)
+        let collected = await collectTypedEventsWithTimeout(stream: typedStream, count: 1, timeoutNs: 100_000_000)
 
         XCTAssertEqual(collected.count, 0, "No LLMTokenStreamEvent should be in the typed stream")
     }

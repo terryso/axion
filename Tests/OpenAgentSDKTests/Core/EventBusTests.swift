@@ -322,6 +322,7 @@ final class EventBusTests: XCTestCase {
                 apiKey: "test-key",
                 model: "claude-sonnet-4-6",
                 systemPrompt: "You are a helper.",
+                retryConfig: RetryConfig(maxRetries: 0),
                 eventBus: bus
             ),
             client: FailingLLMClient()
@@ -329,7 +330,7 @@ final class EventBusTests: XCTestCase {
 
         _ = await agent.prompt("hello")
 
-        let collected = await collectEventsWithTimeout(stream: stream, count: 2, timeoutNs: Self.retryTimeoutNs)
+        let collected = await collectEventsWithTimeout(stream: stream, count: 2)
 
         XCTAssertTrue(collected[0] is AgentStartedEvent)
         XCTAssertTrue(collected[1] is AgentFailedEvent)
@@ -371,6 +372,7 @@ final class EventBusTests: XCTestCase {
                 apiKey: "test-key",
                 model: "claude-sonnet-4-6",
                 systemPrompt: "You are a helper.",
+                retryConfig: RetryConfig(maxRetries: 0),
                 eventBus: bus
             ),
             client: FailingLLMClient()
@@ -379,7 +381,7 @@ final class EventBusTests: XCTestCase {
         let messageStream = agent.stream("hello")
         for await _ in messageStream {}
 
-        let collected = await collectEventsWithTimeout(stream: stream, count: 2, timeoutNs: Self.retryTimeoutNs)
+        let collected = await collectEventsWithTimeout(stream: stream, count: 2)
 
         XCTAssertTrue(collected[0] is AgentStartedEvent)
         XCTAssertTrue(collected[1] is AgentFailedEvent)
@@ -1160,6 +1162,7 @@ final class EventBusTests: XCTestCase {
                 apiKey: "test-key",
                 model: "claude-sonnet-4-6",
                 systemPrompt: "You are a helper.",
+                retryConfig: RetryConfig(maxRetries: 0),
                 sessionStore: store,
                 sessionId: sessionId,
                 persistSession: true,
@@ -1170,7 +1173,7 @@ final class EventBusTests: XCTestCase {
 
         _ = await agent.prompt("this will fail")
 
-        let collected = await collectEventsWithTimeout(stream: stream, count: 4, timeoutNs: Self.retryTimeoutNs)
+        let collected = await collectEventsWithTimeout(stream: stream, count: 4)
 
         let autoSaved = collected.first { $0 is SessionAutoSavedEvent } as? SessionAutoSavedEvent
         XCTAssertNotNil(autoSaved, "SessionAutoSavedEvent should be emitted on error path. Events received: \(collected.map { String(describing: type(of: $0)) })")
@@ -1181,9 +1184,6 @@ final class EventBusTests: XCTestCase {
 
     /// Default timeout in nanoseconds (5 seconds).
     private static let defaultTimeoutNs: UInt64 = 5_000_000_000
-
-    /// Longer timeout in nanoseconds (30 seconds) for tests involving retry logic.
-    private static let retryTimeoutNs: UInt64 = 30_000_000_000
 
     /// Collect events from an `AsyncStream<any AgentEvent>` with a timeout.
     /// Returns collected events (may be fewer than `count` if the stream ends or times out).
