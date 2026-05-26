@@ -54,6 +54,10 @@ public actor AxionRuntime {
             )
         }
         currentState = .running
+        try? writeAxionState(
+            sessionId: sid, status: AxionRunState.running.rawValue,
+            totalSteps: 0, durationMs: 0
+        )
 
         let modifiedConfig = RunOrchestrator.RunConfig(
             task: runConfig.task,
@@ -161,6 +165,19 @@ public actor AxionRuntime {
         )
 
         return try await run(task: buildConfig.task, buildResult: buildResult, runConfig: runConfig)
+    }
+
+    // MARK: - Session Lifecycle
+
+    func createSession(task: String, config: AxionConfig) throws -> String {
+        let sid = RunOrchestrator.generateRunId()
+        sessionId = sid
+        createdAt = Date()
+        try writeAxionState(
+            sessionId: sid, status: AxionRunState.created.rawValue,
+            totalSteps: 0, durationMs: 0
+        )
+        return sid
     }
 
     // MARK: - Session Queries

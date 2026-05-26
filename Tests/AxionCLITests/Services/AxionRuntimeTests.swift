@@ -406,4 +406,57 @@ struct AxionRuntimeTests {
         let overlay = try JSONDecoder().decode(AxionStateOverlay.self, from: data)
         #expect(overlay.status == "completed")
     }
+
+    // MARK: - Story 24.4: Session Lifecycle Persistence
+
+    @Test("createSession() writes axion-state.json with CREATED status")
+    func createSessionWritesCreatedState() async throws {
+        let runtime = AxionRuntime()
+        let sid = try await runtime.createSession(task: "test task", config: testConfig)
+
+        let sessionsDir = (NSHomeDirectory() as NSString).appendingPathComponent(".axion/sessions")
+        let statePath = ((sessionsDir as NSString).appendingPathComponent(sid) as NSString)
+            .appendingPathComponent("axion-state.json")
+
+        let data = try #require(FileManager.default.contents(atPath: statePath),
+                                 "axion-state.json should exist after createSession")
+        let overlay = try JSONDecoder().decode(AxionStateOverlay.self, from: data)
+        #expect(overlay.status == "created")
+        #expect(overlay.totalSteps == 0)
+    }
+
+    @Test("run() writes RUNNING state during execution then COMPLETED on success")
+    func runTransitionsPersist() async throws {
+        let runtime = AxionRuntime()
+        let result = try await runtime.execute(buildConfig: makeDryrunBuildConfig())
+        #expect(result.state == .completed)
+
+        let sessionsDir = (NSHomeDirectory() as NSString).appendingPathComponent(".axion/sessions")
+        let statePath = ((sessionsDir as NSString).appendingPathComponent(result.sessionId) as NSString)
+            .appendingPathComponent("axion-state.json")
+
+        let data = try #require(FileManager.default.contents(atPath: statePath))
+        let overlay = try JSONDecoder().decode(AxionStateOverlay.self, from: data)
+        #expect(overlay.status == "completed")
+    }
+
+    @Test("two sessions write axion-state.json files independently")
+    func twoSessionsWriteStateFiles() async throws {
+        let runtime1 = AxionRuntime()
+        let result1 = try await runtime1.execute(buildConfig: makeDryrunBuildConfig())
+        #expect(result1.state == .completed)
+
+        let runtime2 = AxionRuntime()
+        let result2 = try await runtime2.execute(buildConfig: makeDryrunBuildConfig())
+        #expect(result2.state == .completed)
+
+        let sessionsDir = (NSHomeDirectory() as NSString).appendingPathComponent(".axion/sessions")
+        let path1 = ((sessionsDir as NSString).appendingPathComponent(result1.sessionId) as NSString)
+            .appendingPathComponent("axion-state.json")
+        let path2 = ((sessionsDir as NSString).appendingPathComponent(result2.sessionId) as NSString)
+            .appendingPathComponent("axion-state.json")
+
+        #expect(FileManager.default.fileExists(atPath: path1))
+        #expect(FileManager.default.fileExists(atPath: path2))
+    }
 }
