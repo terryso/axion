@@ -433,6 +433,103 @@ struct AxionRuntimeTests {
         #expect(FileManager.default.fileExists(atPath: path1))
         #expect(FileManager.default.fileExists(atPath: path2))
     }
+    // MARK: - resumeSession()
+
+    @Test("resumeSession() with valid completed session returns COMPLETED")
+    func resumeSessionCompleted() async throws {
+        let buildResult = Self.dummyBuildResult()
+        let runtime = Self.makeRuntime(builderResult: buildResult)
+
+        // Create a session with transcript so sessionStore.load() finds it
+        let sid = try await runtime.createSession(task: "original task", config: AxionConfig(apiKey: "test"))
+        try Self.writeTranscript(sessionId: sid, task: "original task")
+
+        // Mark it as completed
+        try await runtime.writeAxionState(sessionId: sid, status: "completed", totalSteps: 3, durationMs: 1000)
+
+        let resumeConfig = Self.makeBuildConfig(task: "Continue the previous task.")
+        let result = try await runtime.resumeSession(sid, buildConfig: resumeConfig)
+
+        #expect(result.state == .completed)
+        #expect(result.sessionId == sid)
+        #expect(result.runSucceeded == true)
+
+        let state = await runtime.state
+        #expect(state == .completed)
+    }
+
+    @Test("resumeSession() with non-existent session throws sessionNotFound")
+    func resumeSessionNotFound() async throws {
+        let runtime = Self.makeRuntime()
+
+        let resumeConfig = Self.makeBuildConfig()
+        do {
+            _ = try await runtime.resumeSession("nonexistent-\(UUID().uuidString)", buildConfig: resumeConfig)
+            Issue.record("Expected sessionNotFound error")
+        } catch let error as AxionError {
+            if case .sessionNotFound = error {
+                // Expected
+            } else {
+                Issue.record("Expected sessionNotFound, got \(error)")
+            }
+        }
+    }
+
+    @Test("resumeSession() with running session throws sessionAlreadyRunning")
+    func resumeSessionAlreadyRunning() async throws {
+        let runtime = Self.makeRuntime()
+
+        // Create a session with transcript and mark it as running
+        let sid = try await runtime.createSession(task: "running task", config: AxionConfig(apiKey: "test"))
+        try Self.writeTranscript(sessionId: sid, task: "running task")
+        try await runtime.writeAxionState(sessionId: sid, status: "running", totalSteps: 0, durationMs: 0)
+
+        let resumeConfig = Self.makeBuildConfig()
+        do {
+            _ = try await runtime.resumeSession(sid, buildConfig: resumeConfig)
+            Issue.record("Expected sessionAlreadyRunning error")
+        } catch let error as AxionError {
+            if case .sessionAlreadyRunning = error {
+                // Expected
+            } else {
+                Issue.record("Expected sessionAlreadyRunning, got \(error)")
+            }
+        }
+    }
+
+    @Test("resumeSession() with build failure returns FAILED")
+    func resumeSessionBuildFailure() async throws {
+        let runtime = Self.makeRuntime(builderError: AxionError.missingApiKey(suggestion: "test"))
+
+        // Create a session with transcript
+        let sid = try await runtime.createSession(task: "original task", config: AxionConfig(apiKey: "test"))
+        try Self.writeTranscript(sessionId: sid, task: "original task")
+
+        let resumeConfig = Self.makeBuildConfig()
+        let result = try await runtime.resumeSession(sid, buildConfig: resumeConfig)
+
+        #expect(result.state == .failed)
+        #expect(result.sessionId == sid)
+        #expect(result.errorMessage != nil)
+    }
+
+    @Test("resumeSession() with failed session returns COMPLETED (AC #2)")
+    func resumeFailedSession() async throws {
+        let buildResult = Self.dummyBuildResult()
+        let runtime = Self.makeRuntime(builderResult: buildResult)
+
+        // Create a session and mark it as FAILED
+        let sid = try await runtime.createSession(task: "failed task", config: AxionConfig(apiKey: "test"))
+        try Self.writeTranscript(sessionId: sid, task: "failed task")
+        try await runtime.writeAxionState(sessionId: sid, status: "failed", totalSteps: 2, durationMs: 500)
+
+        let resumeConfig = Self.makeBuildConfig(task: "Continue the previous task.")
+        let result = try await runtime.resumeSession(sid, buildConfig: resumeConfig)
+
+        #expect(result.state == .completed)
+        #expect(result.sessionId == sid)
+        #expect(result.runSucceeded == true)
+    }
 }
 
 // MARK: - Shared Helpers
@@ -455,5 +552,35 @@ extension AxionRuntimeTests {
             allowForeground: false, maxSteps: 1, maxTokens: 256,
             verbose: false, dryrun: true, fast: false
         )
+    }
+
+    /// Writes a minimal transcript.json so SessionStore.load() can find the session.
+    static func writeTranscript(sessionId: String, task: String) throws {
+        let sessionsDir = (NSHomeDirectory() as NSString).appendingPathComponent(".axion/sessions")
+        let sessionDir = (sessionsDir as NSString).appendingPathComponent(sessionId)
+        try FileManager.default.createDirectory(atPath: sessionDir, withIntermediateDirectories: true)
+
+        let dateFormatter = ISO8601DateFormatter()
+        dateFormatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+        let now = dateFormatter.string(from: Date())
+
+        let transcript: [String: Any] = [
+            "metadata": [
+                "id": sessionId,
+                "cwd": "/tmp",
+                "model": "claude-sonnet-4-6",
+                "createdAt": now,
+                "updatedAt": now,
+                "messageCount": 2,
+                "summary": task
+            ],
+            "messages": [
+                ["role": "user", "content": task],
+                ["role": "assistant", "content": "done"]
+            ]
+        ]
+        let data = try JSONSerialization.data(withJSONObject: transcript, options: [.sortedKeys])
+        let transcriptPath = (sessionDir as NSString).appendingPathComponent("transcript.json")
+        FileManager.default.createFile(atPath: transcriptPath, contents: data)
     }
 }

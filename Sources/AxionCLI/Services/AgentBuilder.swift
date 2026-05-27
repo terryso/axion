@@ -48,6 +48,8 @@ enum AgentBuilder {
         let dryrun: Bool
         let fast: Bool
         let runId: String?
+        let sessionId: String?
+        let sessionStore: SessionStore?
 
         static func forCLI(
             config: AxionConfig,
@@ -60,7 +62,9 @@ enum AgentBuilder {
             verbose: Bool = false,
             dryrun: Bool = false,
             fast: Bool = false,
-            runId: String? = nil
+            runId: String? = nil,
+            sessionId: String? = nil,
+            sessionStore: SessionStore? = nil
         ) -> BuildConfig {
             BuildConfig(
                 config: config,
@@ -74,7 +78,9 @@ enum AgentBuilder {
                 verbose: verbose,
                 dryrun: dryrun,
                 fast: fast,
-                runId: runId
+                runId: runId,
+                sessionId: sessionId,
+                sessionStore: sessionStore
             )
         }
 
@@ -95,7 +101,9 @@ enum AgentBuilder {
                 verbose: false,
                 dryrun: false,
                 fast: false,
-                runId: nil
+                runId: nil,
+                sessionId: nil,
+                sessionStore: nil
             )
         }
 
@@ -119,7 +127,9 @@ enum AgentBuilder {
                 verbose: verbose,
                 dryrun: false,
                 fast: false,
-                runId: nil
+                runId: nil,
+                sessionId: nil,
+                sessionStore: nil
             )
         }
 
@@ -141,7 +151,9 @@ enum AgentBuilder {
                 verbose: verbose,
                 dryrun: false,
                 fast: false,
-                runId: nil
+                runId: nil,
+                sessionId: nil,
+                sessionStore: nil
             )
         }
     }
@@ -251,6 +263,12 @@ enum AgentBuilder {
         agentOptions.runId = buildConfig.runId
         agentOptions.traceEnabled = true
         agentOptions.traceBaseURL = (ConfigManager.defaultConfigDirectory as NSString).appendingPathComponent("runs")
+
+        // Session resume: inject sessionId + sessionStore into SDK AgentOptions
+        if let sid = buildConfig.sessionId {
+            agentOptions.sessionId = sid
+            agentOptions.sessionStore = buildConfig.sessionStore
+        }
 
         // Hook onRunComplete — captures context for post-run processing
         let runCompleteBox = RunCompleteContextBox()

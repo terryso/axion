@@ -20,6 +20,8 @@ public enum AxionError: Error, Equatable {
     case runLocked(runId: String, pid: Int32)
     case modelCallBudgetExceeded(calls: Int, limit: Int)
     case screenshotBudgetExceeded(count: Int, limit: Int)
+    case sessionNotFound(id: String)
+    case sessionAlreadyRunning(id: String)
 
     public struct MCPErrorPayload: Codable, Equatable {
         public let error: String
@@ -142,6 +144,18 @@ public enum AxionError: Error, Equatable {
                 error: "screenshot_budget_exceeded",
                 message: "已达到截图上限（\(count)/\(limit)次）",
                 suggestion: "增加 --max-screenshots 或简化任务。"
+            )
+        case .sessionNotFound(let id):
+            return MCPErrorPayload(
+                error: "session_not_found",
+                message: "Session not found: \(id)",
+                suggestion: "Run 'axion sessions' to see available sessions."
+            )
+        case .sessionAlreadyRunning(let id):
+            return MCPErrorPayload(
+                error: "session_already_running",
+                message: "Session is already running: \(id)",
+                suggestion: "Wait for the current session to complete or cancel it first."
             )
         }
     }

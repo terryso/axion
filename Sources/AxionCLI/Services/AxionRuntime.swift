@@ -3,7 +3,7 @@ import OpenAgentSDK
 
 import AxionCore
 
-public actor AxionRuntime: AxionRuntimeRunning, SessionListing {
+public actor AxionRuntime: AxionRuntimeRunning, AxionRuntimeResuming, SessionListing {
     let eventBus: EventBus?
     let executor: RunExecuting
     let builder: AgentBuilding
@@ -46,9 +46,10 @@ public actor AxionRuntime: AxionRuntimeRunning, SessionListing {
     func run(
         task: String,
         buildResult: AgentBuildResult,
-        runConfig: RunOrchestrator.RunConfig
+        runConfig: RunOrchestrator.RunConfig,
+        resumeSessionId: String? = nil
     ) async throws -> AxionRunResult {
-        let sid = executor.generateRunId()
+        let sid = resumeSessionId ?? executor.generateRunId()
         let startedAt = Date()
         sessionId = sid
         createdAt = startedAt
@@ -177,6 +178,82 @@ public actor AxionRuntime: AxionRuntimeRunning, SessionListing {
         return try await run(task: buildConfig.task, buildResult: buildResult, runConfig: runConfig)
     }
 
+    // MARK: - Session Resume
+
+    func resumeSession(
+        _ sessionId: String,
+        buildConfig: AgentBuilder.BuildConfig,
+        runOverrides: RunOverrides = .default
+    ) async throws -> AxionRunResult {
+        // 1. Validate session exists
+        guard let _ = try await sessionStore.load(sessionId: sessionId) else {
+            throw AxionError.sessionNotFound(id: sessionId)
+        }
+
+        // 2. Validate session is not already running
+        if let overlay = loadOverlay(sessionId: sessionId), overlay.status == "running" {
+            throw AxionError.sessionAlreadyRunning(id: sessionId)
+        }
+
+        // 3. Reset state for this session (run() will set sessionId/createdAt)
+        currentState = .created
+
+        // 4. Inject sessionId + sessionStore into BuildConfig for SDK restore
+        let resumeBuildConfig = AgentBuilder.BuildConfig(
+            config: buildConfig.config,
+            task: buildConfig.task,
+            noMemory: buildConfig.noMemory,
+            noSkills: buildConfig.noSkills,
+            includePlaywright: buildConfig.includePlaywright,
+            allowForeground: buildConfig.allowForeground,
+            maxSteps: buildConfig.maxSteps,
+            maxTokens: buildConfig.maxTokens,
+            verbose: buildConfig.verbose,
+            dryrun: buildConfig.dryrun,
+            fast: buildConfig.fast,
+            runId: sessionId,
+            sessionId: sessionId,
+            sessionStore: sessionStore
+        )
+
+        // 5. Build agent
+        let buildResult: AgentBuildResult
+        do {
+            buildResult = try await builder.build(resumeBuildConfig)
+        } catch {
+            currentState = .failed
+            return AxionRunResult(
+                sessionId: sessionId, task: buildConfig.task, state: .failed,
+                totalSteps: 0, durationMs: 0, runSucceeded: false,
+                errorMessage: error.localizedDescription,
+                createdAt: Date()
+            )
+        }
+
+        // 6. Execute via existing run() with resumeSessionId
+        let runConfig = RunOrchestrator.RunConfig(
+            task: buildConfig.task,
+            fast: buildConfig.fast,
+            dryrun: buildConfig.dryrun,
+            json: runOverrides.json,
+            noMemory: buildConfig.noMemory,
+            noVisualDelta: runOverrides.noVisualDelta,
+            allowForeground: buildConfig.allowForeground,
+            maxSteps: buildConfig.maxSteps,
+            config: buildConfig.config,
+            noReview: runOverrides.noReview,
+            onReviewCompleted: runOverrides.onReviewCompleted,
+            eventBus: eventBus
+        )
+
+        return try await run(
+            task: buildConfig.task,
+            buildResult: buildResult,
+            runConfig: runConfig,
+            resumeSessionId: sessionId
+        )
+    }
+
     // MARK: - Session Lifecycle
 
     func createSession(task: String, config: AxionConfig) throws -> String {
@@ -287,7 +364,8 @@ public actor AxionRuntime: AxionRuntimeRunning, SessionListing {
 
     // MARK: - Axion State Persistence
 
-    private func writeAxionState(sessionId: String, status: String, totalSteps: Int, durationMs: Int) throws {
+    /// Visible for testing — writes axion-state.json for a session.
+    func writeAxionState(sessionId: String, status: String, totalSteps: Int, durationMs: Int) throws {
         let sessionDir = (sessionsDir as NSString).appendingPathComponent(sessionId)
         try FileManager.default.createDirectory(
             atPath: sessionDir,
