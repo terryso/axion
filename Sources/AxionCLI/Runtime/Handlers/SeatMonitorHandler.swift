@@ -23,6 +23,7 @@ actor SeatMonitorHandler: EventHandler {
         guard let monitor else { return }
 
         if let activity = await monitor.check() {
+            context.externallyModifiedFlag?.setTrue()
             fputs("[axion] seat-monitor: external activity detected — \(activity)\n", stderr)
         }
     }

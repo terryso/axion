@@ -12,6 +12,7 @@ struct SeatMonitorHandlerTests {
             config: AxionConfig(apiKey: ""),
             eventBus: nil,
             externallyModified: false,
+            externallyModifiedFlag: nil,
             takeoverEvent: nil,
             runCompleteContext: nil,
             sessionStore: SessionStore(sessionsDir: nil)

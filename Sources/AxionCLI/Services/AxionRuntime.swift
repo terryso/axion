@@ -13,6 +13,7 @@ public actor AxionRuntime: AxionRuntimeRunning {
     private(set) var sessionId: String?
     private(set) var createdAt: Date?
     private(set) var externallyModified: Bool = false
+    private var externallyModifiedFlag = ExternallyModifiedFlag()
     private(set) var takeoverEvent: RunMemoryProcessor.TakeoverEventContext?
     private(set) var lastRunCompleteContext: RunCompleteContext?
     private var handlers: [any EventHandler] = []
@@ -62,6 +63,7 @@ public actor AxionRuntime: AxionRuntimeRunning {
             )
         }
         currentState = .running
+        externallyModifiedFlag = ExternallyModifiedFlag()
         try? writeAxionState(
             sessionId: sid, status: AxionRunState.running.rawValue,
             totalSteps: 0, durationMs: 0
@@ -215,6 +217,7 @@ public actor AxionRuntime: AxionRuntimeRunning {
             config: AxionConfig(apiKey: ""),
             eventBus: eventBus,
             externallyModified: externallyModified,
+            externallyModifiedFlag: externallyModifiedFlag,
             takeoverEvent: takeoverEvent,
             runCompleteContext: lastRunCompleteContext,
             sessionStore: sessionStore
@@ -228,6 +231,10 @@ public actor AxionRuntime: AxionRuntimeRunning {
                 let id = await handler.identifier
                 fputs("[axion] handler '\(id)' error: \(error.localizedDescription)\n", stderr)
             }
+        }
+        // Sync flag back from handlers (e.g. SeatMonitorHandler sets it on external activity)
+        if externallyModifiedFlag.value {
+            externallyModified = true
         }
     }
 

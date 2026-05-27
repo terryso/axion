@@ -15,6 +15,7 @@ struct ReviewHandlerTests {
             config: AxionConfig(apiKey: ""),
             eventBus: nil,
             externallyModified: false,
+            externallyModifiedFlag: nil,
             takeoverEvent: nil,
             runCompleteContext: runCompleteContext,
             sessionStore: SessionStore(sessionsDir: nil)

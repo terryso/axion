@@ -24,55 +24,6 @@ import AxionCore
 ///   (totalCostUsd, usage, costBreakdown).
 enum ApiRunner {
 
-    /// Run an agent task and return execution results.
-    /// Uses shared AgentBuilder.BuildConfig.forAPI() for agent construction.
-    static func runAgent(
-        config: AxionConfig,
-        task: String,
-        options: CreateRunRequest,
-        runId: String = "",
-        eventBroadcaster: OpenAgentSDK.EventBroadcaster? = nil,
-        runTracker: RunCoordinator? = nil,
-        verbose: Bool = false,
-        completion: @escaping (String, APIRunStatus, [StepSummary], Int?, Int, CostTelemetry?, Bool) -> Void
-    ) async -> (totalSteps: Int, durationMs: Int, replanCount: Int, finalStatus: APIRunStatus, stepSummaries: [StepSummary], costTelemetry: CostTelemetry?, externallyModified: Bool) {
-        // Build agent via shared builder
-        let buildConfig = AgentBuilder.BuildConfig.forAPI(
-            config: config,
-            task: task,
-            request: options
-        )
-
-        let buildResult: AgentBuildResult
-        do {
-            buildResult = try await AgentBuilder.build(buildConfig)
-        } catch {
-            completion("", .failed, [], nil, 0, nil, false)
-            return (0, 0, 0, .failed, [], nil, false)
-        }
-        let agent = buildResult.agent
-
-        // Seat activity monitoring condition — monitor is created lazily inside processStream
-        let shouldMonitorSeat = config.sharedSeatMode && !(options.allowForeground ?? false)
-
-        // Process the message stream via shared processor
-        let result = await processStream(
-            agent: agent,
-            task: task,
-            resolvedTask: task,
-            model: config.model,
-            runId: runId,
-            eventBroadcaster: eventBroadcaster,
-            runTracker: runTracker,
-            shouldMonitorSeat: shouldMonitorSeat,
-            maxScreenshots: config.maxScreenshots,
-            usageStore: buildResult.usageStore
-        )
-
-        completion("", result.finalStatus, result.stepSummaries, nil, 0, result.costTelemetry, result.externallyModified)
-        return (result.totalSteps, result.durationMs, 0, result.finalStatus, result.stepSummaries, result.costTelemetry, result.externallyModified)
-    }
-
     /// Run a prompt skill as an agent task using SDK's executeSkillStream().
     static func runSkillAgent(
         skill: OpenAgentSDK.Skill,
@@ -130,37 +81,6 @@ enum ApiRunner {
         let costTelemetry: CostTelemetry?
         let externallyModified: Bool
         let finalStatus: APIRunStatus
-    }
-
-    /// Shared stream processing for both `runAgent()` and `runSkillAgent()`.
-    ///
-    /// Handles the `for await message in messageStream` loop including:
-    /// SSE broadcasting, cost tracking, step summaries, RunTracker persistence, duration calculation.
-    private static func processStream(
-        agent: Agent,
-        task: String,
-        resolvedTask: String,
-        model: String,
-        runId: String,
-        eventBroadcaster: OpenAgentSDK.EventBroadcaster?,
-        runTracker: RunCoordinator?,
-        shouldMonitorSeat: Bool,
-        maxScreenshots: Int?,
-        usageStore: SkillUsageStore? = nil
-    ) async -> StreamResult {
-        let messageStream = agent.stream(resolvedTask)
-        return await processStreamFromAsyncStream(
-            messageStream: messageStream,
-            task: task,
-            model: model,
-            runId: runId,
-            eventBroadcaster: eventBroadcaster,
-            runTracker: runTracker,
-            shouldMonitorSeat: shouldMonitorSeat,
-            maxScreenshots: maxScreenshots,
-            usageStore: usageStore,
-            cleanup: { try? await agent.close() }
-        )
     }
 
     /// Process a pre-built `AsyncStream<SDKMessage>` (e.g., from `executeSkillStream()`).

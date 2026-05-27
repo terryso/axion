@@ -1,5 +1,6 @@
 # generated: 2026-05-08
 # last_updated: 2026-05-27
+# story-26.3-created: 2026-05-27
 # epic-24-27-added: 2026-05-27
 # story-23.2-created: 2026-05-24
 # epic-23-started: 2026-05-24
@@ -360,7 +361,7 @@ development_status:
   epic-26: in-progress
   26-1-runcommand-axionruntime-execution: done
   26-2-apirunner-axionruntime-execution: done
-  26-3-remove-legacy-code-cleanup: backlog
+  26-3-remove-legacy-code-cleanup: done
   epic-26-retrospective: optional
 
   # Epic 27: Session Resume + Daemon 集成

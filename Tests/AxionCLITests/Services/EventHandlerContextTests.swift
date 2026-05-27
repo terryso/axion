@@ -28,6 +28,7 @@ struct EventHandlerContextTests {
             config: testConfig,
             eventBus: bus,
             externallyModified: true,
+            externallyModifiedFlag: nil,
             takeoverEvent: takeover,
             runCompleteContext: nil,
             sessionStore: store
@@ -52,6 +53,7 @@ struct EventHandlerContextTests {
             config: testConfig,
             eventBus: nil,
             externallyModified: false,
+            externallyModifiedFlag: nil,
             takeoverEvent: nil,
             runCompleteContext: nil,
             sessionStore: store

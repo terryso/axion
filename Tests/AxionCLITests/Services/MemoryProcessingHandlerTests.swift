@@ -17,6 +17,7 @@ struct MemoryProcessingHandlerTests {
             config: AxionConfig(apiKey: ""),
             eventBus: nil,
             externallyModified: externallyModified,
+            externallyModifiedFlag: nil,
             takeoverEvent: takeoverEvent,
             runCompleteContext: runCompleteContext,
             sessionStore: SessionStore(sessionsDir: nil)

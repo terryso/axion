@@ -4,9 +4,11 @@ import OpenAgentSDK
 
 import AxionCore
 
-/// Encapsulates the full agent execution pipeline: stream loop with all concerns
-/// (visual delta, cost tracking, seat monitoring, takeover, trace recording),
-/// lock management, SIGINT handling, and post-run processing.
+/// Encapsulates the full agent execution pipeline: stream loop with output rendering,
+/// takeover handling, and post-run processing (review + curator).
+///
+/// Visual delta, seat monitoring, cost tracking, and notification concerns are
+/// handled by EventHandlers via EventBus.
 ///
 /// Called by RunCommand (CLI) and could be reused by other execution contexts.
 /// All configuration is passed via parameters — no mutable state.
@@ -42,10 +44,9 @@ enum RunOrchestrator {
         runConfig: RunConfig
     ) async throws -> RunResult {
         let agent = buildResult.agent
-        let memoryDir = buildResult.memoryDir
         let runCompleteBox = buildResult.runCompleteBox
+        let memoryDir = buildResult.memoryDir
         let memoryStore = buildResult.agentOptions.memoryStore as! FileBasedMemoryStore
-        let config = runConfig.config
 
         // Output handler
         let runMode = traceMode(fast: runConfig.fast, dryrun: runConfig.dryrun)
@@ -82,7 +83,7 @@ enum RunOrchestrator {
 
         // Trace recorder — SDK handles trace via AgentOptions.traceEnabled/traceBaseURL
 
-        // Pre-run memory cleanup
+        // Pre-run memory cleanup (fact demotion, expired entry removal)
         if !runConfig.noMemory {
             await RunMemoryProcessor.preRunCleanup(memoryStore: memoryStore, memoryDir: memoryDir)
         }
@@ -97,19 +98,10 @@ enum RunOrchestrator {
 
         // Stream loop state
         var totalSteps = 0
-        var pendingScreenshotToolUseIds: Set<String> = []
         var pendingLaunchAppToolUseIds: Set<String> = []
-        var visualDeltaSkipped = 0
-        var visualDeltaChecked = 0
-        var externallyModified = false
+        let externallyModified = false
         var takeoverEvent: (issue: String, summary: String, feedback: String?, reason: String, duration: TimeInterval?)? = nil
         var collectedMessages: [SDKMessage] = []
-
-        let visualDeltaTracker = runConfig.noVisualDelta ? nil : VisualDeltaTracker()
-        var resultText: String?
-        var screenshotCount = 0
-        var seatMonitor: SeatActivityMonitor? = nil
-        let shouldMonitorSeat = config.sharedSeatMode && !runConfig.allowForeground && !runConfig.dryrun
 
         let startTime = ContinuousClock.now
 
@@ -133,14 +125,6 @@ enum RunOrchestrator {
                 case .assistant:
                     break
                 case .toolUse(let data):
-                    // Lazy-init seat monitor on first Helper tool call
-                    if seatMonitor == nil, shouldMonitorSeat, data.toolName.hasPrefix("mcp__axion-helper__") {
-                        seatMonitor = SeatActivityMonitor.create()
-                    }
-                    if data.toolName.contains("screenshot") {
-                        pendingScreenshotToolUseIds.insert(data.toolUseId)
-                        screenshotCount += 1
-                    }
                     if data.toolName.contains("launch_app") {
                         pendingLaunchAppToolUseIds.insert(data.toolUseId)
                     }
@@ -161,17 +145,6 @@ enum RunOrchestrator {
                     if pendingLaunchAppToolUseIds.remove(data.toolUseId) != nil {
                         if let bundleId = extractBundleIdFromLaunchResult(data.content) {
                             activateAppFromCLI(bundleId: bundleId)
-                        }
-                    }
-                    if pendingScreenshotToolUseIds.remove(data.toolUseId) != nil,
-                       let tracker = visualDeltaTracker {
-                        let base64 = extractBase64FromToolResult(data.content)
-                        if let base64 {
-                            let vdResult = await tracker.processScreenshot(base64: base64)
-                            visualDeltaChecked += 1
-                            if vdResult.shouldSkipVerifier {
-                                visualDeltaSkipped += 1
-                            }
                         }
                     }
                 case .system(let data):
@@ -203,8 +176,8 @@ enum RunOrchestrator {
                     default:
                         break
                     }
-                case .result(let data):
-                    resultText = data.text
+                case .result:
+                    break
                 default:
                     break
                 }
@@ -213,11 +186,7 @@ enum RunOrchestrator {
             agent.interrupt()
         }
 
-        // Post-stream: external desktop activity check
-        if let activity = await seatMonitor?.check() {
-            externallyModified = true
-            fputs("[axion] 检测到外部桌面操作，本次运行的经验不会被记忆\n", stderr)
-        }
+        // Post-stream
 
         let elapsed = ContinuousClock.now - startTime
         let durationMs = Int(elapsed.components.seconds * 1000 + elapsed.components.attoseconds / 1_000_000_000_000)
@@ -228,22 +197,9 @@ enum RunOrchestrator {
         signal(SIGINT, SIG_DFL)
         outputHandler.displayCompletion()
 
-        // Visual delta statistics
-        if visualDeltaChecked > 0 {
-            fputs("[axion] 视觉增量: 跳过 \(visualDeltaSkipped)/\(visualDeltaChecked) 次验证\n", stderr)
-        }
-
-        // Cost summary — from SDK's onRunComplete context
+        // Post-run data from SDK's onRunComplete context
         let runCtx = runCompleteBox.context
-        let costBreakdown = runCtx?.costBreakdown ?? []
-        let modelCalls = costBreakdown.filter { $0.inputTokens > 0 || $0.outputTokens > 0 }.count
-        let totalTokens = (runCtx?.usage.inputTokens ?? 0) + (runCtx?.usage.outputTokens ?? 0)
-        let totalCost = runCtx?.totalCostUsd ?? 0
-        fputs("[axion] LLM 调用: \(modelCalls)次, Tokens: \(totalTokens), 预估成本: $\(String(format: "%.2f", totalCost)), 截图: \(screenshotCount)次\n", stderr)
-
-        // Post-run memory processing — using onRunComplete data
         let runSucceeded = runCtx?.status == .success
-        let runCompleted = runCtx != nil
         let takeoverContext: RunMemoryProcessor.TakeoverEventContext? = takeoverEvent.map { event in
             RunMemoryProcessor.TakeoverEventContext(
                 issue: event.issue,
@@ -253,18 +209,6 @@ enum RunOrchestrator {
                 duration: event.duration
             )
         }
-        await RunMemoryProcessor.processRunResult(
-            toolPairs: runCtx?.toolPairs ?? [],
-            task: runConfig.task,
-            runId: runId,
-            memoryStore: memoryStore,
-            memoryDir: memoryDir,
-            noMemory: runConfig.noMemory,
-            externallyModified: externallyModified,
-            takeoverEvent: takeoverContext,
-            runSucceeded: runSucceeded,
-            runCompleted: runCompleted
-        )
 
         // Post-run review — after memory processing, before lock release
         if let orchestrator = buildResult.reviewOrchestrator, !runConfig.dryrun, !runConfig.noMemory, !runConfig.noReview {
@@ -363,21 +307,6 @@ enum RunOrchestrator {
         // Lock release
         if !runConfig.dryrun {
             await runLockService.release()
-        }
-
-        // macOS desktop notification — user can't see terminal when AI operates a fullscreen app
-        // Skip in JSON mode (programmatic use doesn't need desktop notifications)
-        if !runConfig.json {
-            let statusText = runSucceeded ? "完成" : (runCompleted ? "失败" : "已取消")
-            let elapsedSec = Int(elapsed.components.seconds)
-            let stats = "耗时 \(elapsedSec)s · LLM \(modelCalls)次 · $\(String(format: "%.2f", totalCost))"
-            let summary = extractSummary(from: resultText) ?? "无结果摘要"
-            sendDesktopNotification(title: "Axion \(statusText)", subtitle: stats, message: summary)
-
-            // Bring terminal back to foreground after UI operations
-            if totalSteps > 0 {
-                activateTerminal()
-            }
         }
 
         return RunResult(
