@@ -499,7 +499,7 @@ actor HelperProcessManager {
 3. **Config 系统** — KeychainStore + ConfigManager
 4. **SDK 集成** — AgentBuilder + BuildConfig 构建 Agent
 5. **CLI 入口** — ArgumentParser 子命令 + 流式输出 + Trace 记录
-6. **API 入口** — ApiRunner HTTP 请求处理 + SSE 推送
+6. **API 入口** — ServerCommand runHandler 通过 AxionRuntime + EventBusBridge SSE 推送（Epic 26）；ApiRunner 仅保留 runSkillAgent 路径
 
 **跨组件依赖：**
 
@@ -782,9 +782,9 @@ axion/
 │   │   │   └── PromptBuilder.swift            # D6: 构建含上下文的 prompt
 │   │   ├── Skills/                              # Epic 18: Axion 专有技能定义
 │   │   │   └── AxionBuiltInSkills.swift         # Epic 18: 内置桌面技能（screenshot-analyze, data-extract, form-fill）
-│   │   ├── Services/                            # Epic 21: AgentBuilder 工厂 + RunOrchestrator 统一执行 + 运行时安全
+│   │   ├── Services/                            # Epic 26: AxionRuntime 统一执行 + AgentBuilder 工厂 + 运行时安全
 │   │   │   ├── AgentBuilder.swift              # Epic 21: BuildResult 工厂（build() 返回 agent + options + helper manager）
-│   │   │   ├── RunOrchestrator.swift           # Epic 21: 统一执行入口（CLI/API/MCP 三模式共用）
+│   │   │   ├── RunOrchestrator.swift           # Epic 26: Stream processing layer（review/curator, takeover, skill fast-path; cross-cutting concerns moved to EventHandlers）
 │   │   │   ├── SafetyHookFactory.swift         # Epic 21: SafetyHook 创建（提取自 AgentBuilder）
 │   │   │   ├── MCPConfigResolver.swift         # Epic 21: MCP server 配置解析（提取自 AgentBuilder）
 │   │   │   ├── RunLockService.swift            # Epic 13: 桌面级运行锁 actor（~/.axion/run.lock）
@@ -816,7 +816,7 @@ axion/
 │   │   │   ├── TakeoverLearningService.swift    # Epic 15: Takeover 经验→Memory 转换（affordance/avoid）
 │   │   │   └── TakeoverMarker.swift             # Epic 15: InterventionReason 枚举 + TakeoverMarker struct
 │   │   ├── API/                                # Epic 5 + 14 + 16 + 18 + 21: HTTP API Server（SDK-backed components）
-│   │   │   ├── ApiRunner.swift                # Epic 21: Agent 执行封装（+ runSkillAgent + processStream）
+│   │   │   ├── ApiRunner.swift                # Epic 26: Skill execution only (runSkillAgent; runAgent removed)
 │   │   │   ├── AxionRunTracker.swift          # Epic 21: wraps SDK RunTracker
 │   │   │   ├── AxionAPI.swift                 # Hummingbird 路由注册
 │   │   │   ├── AxionRunPersistence.swift      # Epic 21: wraps SDK persistence
@@ -1102,43 +1102,32 @@ AxionBar ← SwiftUI + AppKit（独立 macOS App）
     ▼
 RunCommand.parse()                          # ArgumentParser 解析
     │
-    ▼
-AgentBuilder.build(BuildConfig.forCLI())    # [Epic 21] 返回 BuildResult (agentOptions + helperManager)
-    ├── ConfigManager.load()                # 分层加载配置
-    ├── SkillRegistry 注册                   # [Epic 17] 技能发现
-    ├── SafetyHookFactory 创建（shared seat）# [Epic 21] MCP-prefixed tool names
-    ├── MCPConfigResolver 解析               # [Epic 21] MCP server 配置解析
-    ├── MemoryContextProvider 注入           # [Epic 4] 记忆上下文
-    └── AgentOptions 构建（skillRegistry + tools + mcpServers）
+    ├── (skill fast-path: /skill-name → RunOrchestrator.executeSkillDirectly())
     │
     ▼
-RunLockService.acquire()                    # [Epic 13] 获取桌面级运行锁
+AxionRuntime(eventBus:)                     # [Epic 26] 统一执行入口
+    ├── registerHandlers(7 handlers)         # Cost, VisualDelta, SeatMonitor, Memory, Review, Notification, Trace
+    ├── startEventLoop()
+    ├── runtime.execute(buildConfig, runOverrides)
+    │       └── AgentBuilder.build() → agent.stream(task)
+    │                │
+    │                ├──► LLM 规划 + 工具调用 # SDK Agent 自动编排
+    │                │        └── ToolExecutor → MCP tools → Helper (AX/Screenshot/KB/Mouse)
+    │                │
+    │                └── EventBus emit AgentEvents
+    │                         ├── CostEventHandler → cost tracking
+    │                         ├── VisualDeltaHandler → screenshot comparison
+    │                         ├── SeatMonitorHandler → external activity detection
+    │                         ├── MemoryProcessingHandler → memory extraction
+    │                         ├── ReviewHandler → review scheduling
+    │                         ├── NotificationHandler → desktop notification
+    │                         └── TraceEventHandler → trace recording
     │
-    ▼
-RunOrchestrator.execute(buildResult, task)  # [Epic 21] 统一执行入口
-    ├── HelperProcessManager.start()        # 启动 Helper（MCP stdio）
-    ├── SeatActivityMonitor.create()        # [Epic 13] 采样活动基线
-    │
-    ▼
-agent.stream(task)                          # SDK Agent Loop 执行
-    │
-    ├──► LLM 规划 + 工具调用                 # SDK Agent 自动编排
-    │        │
-    │        ▼ (每个 turn)
-    │    ToolExecutor → MCP tools           # SDK 通过 MCP 调用 Helper
-    │        │
-    │        ▼
-    │    AX/Screenshot/KB/Mouse Service     # Helper 执行桌面操作
-    │
-    ├──► VisualDeltaTracker.check()         # [Epic 13] 视觉增量检查
-    ├──► SDK AgentOptions 管理 trace + cost # [Epic 21] trace/cost 内建于 AgentOptions
-    ├──► SeatActivityMonitor.check()        # [Epic 13] 检测桌面活动
-    │
-    └──► SDKTerminalOutputHandler           # [Epic 21] SDKMessageOutputHandler 子类，实时输出到终端
+    ├── stopEventLoop()
+    └── SDKTerminalOutputHandler             # 实时输出到终端
     │
     ▼
 RunLockService.release()                    # [Epic 13] 释放运行锁
-SDK AgentOptions.getCostSummary() → 成本摘要  # [Epic 21] SDK AgentOptions 内建管理
 TrackedRun.toStandardOutput() → StandardTaskOutput  # [Epic 14] 统一 API 输出契约
 ```
 

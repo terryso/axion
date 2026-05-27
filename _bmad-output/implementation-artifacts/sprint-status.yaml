@@ -77,6 +77,9 @@
 
 generated: 2026-05-08
 last_updated: 2026-05-27
+# epic-27-started: 2026-05-27
+# story-27.1-created: 2026-05-27
+# retro-epic-26: 2026-05-27
 # story-26.2-created: 2026-05-27
 # story-26.1-created: 2026-05-27
 # epic-26-started: 2026-05-27
@@ -358,15 +361,15 @@ development_status:
   epic-25-retrospective: optional
 
   # Epic 26: CLI + API 改造
-  epic-26: in-progress
+  epic-26: done
   26-1-runcommand-axionruntime-execution: done
   26-2-apirunner-axionruntime-execution: done
   26-3-remove-legacy-code-cleanup: done
-  epic-26-retrospective: optional
+  epic-26-retrospective: done
 
   # Epic 27: Session Resume + Daemon 集成
-  epic-27: backlog
-  27-1-session-list-cli: backlog
+  epic-27: in-progress
+  27-1-session-list-cli: done
   27-2-session-resume-cli: backlog
   27-3-daemon-axionruntime-integration: backlog
   27-4-skill-execution-axionruntime: backlog

@@ -202,7 +202,7 @@ class TraceEventHandler { ... }
 
 ---
 
-## A4. 改造 RunCommand
+## A4. 改造 RunCommand ✅ DONE (Epic 26)
 
 **优先级：P0**
 **前置依赖：A2, A3**
@@ -245,7 +245,7 @@ for await event in eventStream {
 
 ---
 
-## A5. 改造 ApiRunner
+## A5. 改造 ApiRunner ✅ DONE (Epic 26)
 
 **优先级：P1**
 **前置依赖：A4**
@@ -414,11 +414,11 @@ A7 (Skill/Daemon 集成)   P2
 - Cost / Memory / Review / Notification handler
 - 单元测试
 
-**Axion Epic 26: CLI + API 改造（A4 + A5）** → `docs/epics/epic-26-cli-api-refactor.md`
-- RunCommand 改为通过 Runtime
-- ApiRunner 改为通过 Runtime
-- 渐进式切换（先并行，再替换）
-- 验收：现有功能不变
+**Axion Epic 26: CLI + API 改造（A4 + A5）✅ DONE** → `docs/epics/epic-26-cli-api-refactor.md`
+- RunCommand 改为通过 Runtime ✅
+- ApiRunner 改为通过 Runtime ✅
+- 旧代码清理（RunOrchestrator 横切关注点移除）✅
+- 验收：现有功能不变 ✅
 
 **Axion Epic 27: Session Resume + Daemon（A6 + A7）** → `docs/epics/epic-27-session-resume-daemon.md`
 - `axion sessions` / `axion resume`

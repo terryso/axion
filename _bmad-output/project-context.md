@@ -577,14 +577,16 @@ Sources/ScaffoldCLI/
 ### Axion 关键模块内联文档（Story 11.3）
 
 以下文件包含设计决策注释，第三方开发者应参考：
-- `Sources/AxionCLI/Commands/RunCommand.swift` — CLI 入口（参数解析 + 终端输出）
+- `Sources/AxionCLI/Commands/RunCommand.swift` — CLI 入口（参数解析 + AxionRuntime 执行，Epic 26）
+- `Sources/AxionCLI/Services/AxionRuntime.swift` — 统一执行入口 actor（session lifecycle + EventBus + EventHandler 注册）
+- `Sources/AxionCLI/Services/Protocols/AxionRuntimeRunning.swift` — AxionRuntime DI 协议（测试用）
 - `Sources/AxionCLI/Services/AgentBuilder.swift` — BuildResult 工厂（build() 返回 agent + options + helper manager，不执行；buildSkillAgent() 为技能执行独立路径）
-- `Sources/AxionCLI/Services/RunOrchestrator.swift` — 统一执行入口（CLI、API、MCP 三模式共用，513 行）
+- `Sources/AxionCLI/Services/RunOrchestrator.swift` — Stream processing layer（review/curator execution, takeover, skill fast-path; cross-cutting concerns moved to EventHandlers in Epic 26）
 - `Sources/AxionCLI/Services/SafetyHookFactory.swift` — SafetyHook 创建（提取自 AgentBuilder，34 行）
 - `Sources/AxionCLI/Services/MCPConfigResolver.swift` — MCP 配置解析（提取自 AgentBuilder，67 行）
 - `Sources/AxionCLI/MCP/MCPServerRunner.swift` — Agent-as-MCP-Server 模式（使用 AgentBuilder.BuildResult）
 - `Sources/AxionCLI/Memory/MemoryContextProvider.swift` — Memory 系统设计
-- `Sources/AxionCLI/API/ApiRunner.swift` — HTTP API Agent 执行（SSE 推送 + processStream 共享流处理）
+- `Sources/AxionCLI/API/ApiRunner.swift` — HTTP API skill execution (runSkillAgent path; runAgent removed in Epic 26)
 - `Sources/AxionCLI/Commands/SDKOutputHandlers.swift` — SDKTerminalOutputHandler / SDKJSONOutputHandler（SDKMessageOutputHandler 子类）
 
 ### SDK 开发者文档（位于 OpenAgentSDK 仓库）
@@ -602,20 +604,29 @@ Sources/ScaffoldCLI/
 
 ## 执行循环
 
-执行循环由 SDK Agent Loop 管理（非自建）。`RunOrchestrator` 是统一执行入口（CLI、API、MCP 三模式共用），`AgentBuilder` 仅负责构建 `BuildResult`（agent + options + helper manager），不执行。
+执行循环由 SDK Agent Loop 管理（非自建）。`AxionRuntime` 是 CLI 和 API 的统一执行入口（Epic 26），`AgentBuilder` 仅负责构建 `BuildResult`（agent + options + helper manager），不执行。
 
 ```
-RunOrchestrator.execute(buildResult, task) → agent.stream(task) → SDK Agent Loop
+AxionRuntime.execute(buildConfig, runOverrides) → AgentBuilder.build() → agent.stream(task) → SDK Agent Loop
+    │                                                              ↓
+    ├── EventBus (from SDK)                              AgentEvents emitted
+    │        ↓
+    ├── EventHandlers (7 for CLI, 2 for API)
+    │        ├── CostEventHandler
+    │        ├── VisualDeltaHandler (CLI only)
+    │        ├── SeatMonitorHandler (CLI only)
+    │        ├── MemoryProcessingHandler (CLI only)
+    │        ├── ReviewHandler (CLI only)
+    │        ├── NotificationHandler (CLI only)
+    │        └── TraceEventHandler
     │
-    ├── LLM 规划（自动）
-    ├── 工具调用（MCP → Helper）
-    ├── 结果验证（LLM 判断）
-    └── 循环直到完成或达到 maxSteps
+    └── RunOrchestrator — still handles review/curator execution, takeover, skill fast-path
 ```
 
 - `maxSteps` 控制最大 turn 数（默认 20，fast mode 下 5）
 - `cancelled` 由用户 Ctrl-C 触发（Takeover pause）
 - `failed` 是不可恢复错误
+- CLI registers 7 EventHandlers; API registers only CostEventHandler + TraceEventHandler
 
 ---
 
@@ -780,32 +791,32 @@ Planner 的 system prompt 必须包含符号键到基础键的映射，告诉 LL
     ▼
 RunCommand.parse()                          # ArgumentParser 解析
     │
-    ▼
-AgentBuilder.build(BuildConfig.forCLI())    # [Epic 21] 返回 BuildResult (agentOptions + helperManager)
-    ├── ConfigManager.load()                # 分层加载配置（默认值 → config.json → env → CLI 参数）
-    ├── SkillRegistry 注册                   # [Epic 17] 技能发现与注册
-    ├── SafetyHookFactory 创建（shared seat）# [Epic 21] MCP-prefixed tool names
-    ├── MCPConfigResolver 解析               # [Epic 21] MCP server 配置解析
-    ├── MemoryContextProvider 注入           # [Epic 4] 记忆上下文注入 system prompt
-    └── AgentOptions 构建（skillRegistry + tools + mcpServers + hookRegistry）
+    ├── (skill fast-path: /skill-name → RunOrchestrator.executeSkillDirectly())
     │
     ▼
-RunOrchestrator.execute()                   # [Epic 21] 统一执行入口（CLI/API/MCP 三模式）
-    ├── HelperProcessManager.start()        # 启动 Helper 进程，建立 MCP stdio 管道
+AxionRuntime(eventBus:)                     # [Epic 26] 统一执行入口
+    ├── registerHandlers(7 handlers)         # Cost, VisualDelta, SeatMonitor, Memory, Review, Notification, Trace
+    ├── startEventLoop()
+    ├── runtime.execute(buildConfig, runOverrides)
+    │       └── AgentBuilder.build() internally → agent.stream(task)
+    │                │
+    │                ├── LLM 规划 + 工具调用  # SDK Agent 自动编排
+    │                │        └── ToolExecutor → MCP tools (Helper)
+    │                │
+    │                └── EventBus emit AgentEvents
+    │                         ├── CostEventHandler → cost tracking
+    │                         ├── VisualDeltaHandler → screenshot comparison
+    │                         ├── SeatMonitorHandler → external activity detection
+    │                         ├── MemoryProcessingHandler → memory extraction
+    │                         ├── ReviewHandler → review scheduling
+    │                         ├── NotificationHandler → desktop notification
+    │                         └── TraceEventHandler → trace recording
     │
-    ▼
-agent.stream(task)                          # SDK Agent Loop 执行
-    │
-    ├──► LLM 规划 + 工具调用                 # SDK Agent 自动编排（plan→execute→verify）
-    │        │
-    │        ▼ (每个 turn)
-    │    ToolExecutor → MCP tools           # SDK 通过 MCP 调用 Helper 工具
-    │
-    └──► SDKTerminalOutputHandler           # [Epic 21] SDKMessageOutputHandler 子类，实时输出到终端
-         SDK AgentOptions 管理 trace + cost # [Epic 21] trace/cost 内建于 AgentOptions
+    ├── stopEventLoop()
+    └── SDKTerminalOutputHandler             # 实时输出到终端
 ```
 
-### HTTP API Server 数据流（Epic 5）
+### HTTP API Server 数据流（Epic 5 + Epic 26）
 
 ```
 外部系统 POST /v1/runs {"task": "打开计算器"}
@@ -830,11 +841,13 @@ AxionAPI.registerRoutes()                     # 路由分发
     │
     ├──► 返回 HTTP 202 {"run_id": "...", "status": "running"}
     │
-    └──► Task.detached {                        # 后台异步执行
-            RunOrchestrator.execute()           # [Epic 21] 统一执行入口
-            AxionRunTracker.updateRun(result)   # 更新任务状态 + 持久化
-            EventBroadcaster.emit(event)        # SSE 事件推送 + 事件持久化
-            ConcurrencyLimiter.release()        # 释放并发槽位
+    └──► server.runHandler {                   # [Epic 26] 使用 AxionRuntime
+            AxionRuntime(eventBus:)            # 创建 Runtime 实例
+            ├── registerHandlers(cost + trace) # API 只注册 2 个 handler
+            ├── EventBusBridge(eventBus:broadcaster:runId:)  # AgentEvents → SSE
+            ├── bridge.start(onComplete:)      # 终端事件时更新 RunCoordinator
+            ├── runtime.execute(buildConfig, runOverrides)    # 执行 agent
+            └── 更新 RunCoordinator + SDK tracker + broadcaster.complete()
         }
 
 GET /v1/runs/{runId}/events (SSE)
