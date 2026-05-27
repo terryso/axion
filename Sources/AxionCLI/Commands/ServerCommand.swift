@@ -14,6 +14,7 @@ struct ServerCommand: AsyncParsableCommand {
     // Test seams — overridden in unit tests to inject mocks.
     nonisolated(unsafe) static var createRuntime: @Sendable (EventBus) -> any AxionRuntimeRunning = { AxionRuntime(eventBus: $0) }
     nonisolated(unsafe) static var createBridge: (@Sendable (EventBus, EventBroadcaster, String) -> EventBusBridge)? = nil
+    nonisolated(unsafe) static var createRuntimeManager: @Sendable (String) -> any DaemonRuntimeManaging = { DaemonRuntimeManager(traceDir: $0) }
 
     @Option(name: .long, help: "监听端口")
     var port: Int = 4242
@@ -60,6 +61,9 @@ struct ServerCommand: AsyncParsableCommand {
 
         let placeholderAgent = Agent(options: AgentOptions(model: "placeholder"))
 
+        let traceDir = (ConfigManager.defaultConfigDirectory as NSString).appendingPathComponent("runs")
+        let runtimeManager = Self.createRuntimeManager(traceDir)
+
         let server = AgentHTTPServer(
             agent: placeholderAgent,
             host: host,
@@ -69,7 +73,7 @@ struct ServerCommand: AsyncParsableCommand {
             dataDir: nil
         )
 
-        server.runHandler = { [runCoordinator, config] task, request, tracker, broadcaster, persistence, limiter in
+        server.runHandler = { [runCoordinator, config, runtimeManager] task, request, tracker, broadcaster, persistence, limiter in
             // Find the runId that SDK's tracker created for this task
             let runs = await tracker.listRuns()
             let sdkRunId = runs.first(where: { $0.task == task && $0.status == .queued })?.runId
@@ -85,13 +89,8 @@ struct ServerCommand: AsyncParsableCommand {
             // Track in Axion's RunCoordinator using the SDK's runId
             await runCoordinator.submitRunWithId(runId, task: task, request: request)
 
-            // Create EventBus + AxionRuntime
+            // Create per-request EventBus
             let eventBus = EventBus()
-            let runtime = Self.createRuntime(eventBus)
-
-            // Register API handlers (cost + trace only)
-            await runtime.registerHandler(CostEventHandler())
-            await runtime.registerHandler(TraceEventHandler(traceDir: (ConfigManager.defaultConfigDirectory as NSString).appendingPathComponent("runs")))
 
             // Create EventBusBridge to forward events → SSE
             let bridge: EventBusBridge
@@ -109,15 +108,16 @@ struct ServerCommand: AsyncParsableCommand {
                 request: request
             )
 
-            // Start event loop, execute, stop event loop
-            let eventLoopTask = _Concurrency.Task { await runtime.startEventLoop() }
-
+            // Execute via DaemonRuntimeManager
             let result: AxionRunResult
             do {
-                result = try await runtime.execute(buildConfig: buildConfig, runOverrides: .default)
+                result = try await runtimeManager.executeRun(
+                    task: task,
+                    buildConfig: buildConfig,
+                    eventBus: eventBus,
+                    runOverrides: .default
+                )
             } catch {
-                eventLoopTask.cancel()
-                await runtime.stopEventLoop()
                 await bridge.stop()
 
                 await runCoordinator.updateRun(runId: runId, status: .failed, steps: [], durationMs: 0, replanCount: 0, costTelemetry: nil)
@@ -126,8 +126,6 @@ struct ServerCommand: AsyncParsableCommand {
                 await limiter.release()
                 return
             }
-            eventLoopTask.cancel()
-            await runtime.stopEventLoop()
             await bridge.stop()
 
             // Map result state to API status

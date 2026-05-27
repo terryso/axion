@@ -1,6 +1,7 @@
 # generated: 2026-05-08
 # last_updated: 2026-05-27
 # story-27.2-created: 2026-05-27
+# story-27.3-created: 2026-05-27
 # story-26.3-created: 2026-05-27
 # epic-24-27-added: 2026-05-27
 # story-23.2-created: 2026-05-24
@@ -372,6 +373,6 @@ development_status:
   epic-27: in-progress
   27-1-session-list-cli: done
   27-2-session-resume-cli: done
-  27-3-daemon-axionruntime-integration: backlog
+  27-3-daemon-axionruntime-integration: done
   27-4-skill-execution-axionruntime: backlog
   epic-27-retrospective: optional
