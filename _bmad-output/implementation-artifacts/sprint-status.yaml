@@ -76,6 +76,8 @@
 
 generated: 2026-05-08
 last_updated: 2026-05-27
+# story-26.1-created: 2026-05-27
+# epic-26-started: 2026-05-27
 # story-24.3-created: 2026-05-27
 # story-24.2-created: 2026-05-27
 # story-24.1-created: 2026-05-27
@@ -354,8 +356,8 @@ development_status:
   epic-25-retrospective: optional
 
   # Epic 26: CLI + API 改造
-  epic-26: backlog
-  26-1-runcommand-axionruntime-execution: backlog
+  epic-26: in-progress
+  26-1-runcommand-axionruntime-execution: done
   26-2-apirunner-axionruntime-execution: backlog
   26-3-remove-legacy-code-cleanup: backlog
   epic-26-retrospective: optional

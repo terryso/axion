@@ -3,7 +3,7 @@ import OpenAgentSDK
 
 import AxionCore
 
-public actor AxionRuntime {
+public actor AxionRuntime: AxionRuntimeRunning {
     let eventBus: EventBus?
     let executor: RunExecuting
     let builder: AgentBuilding

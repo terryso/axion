@@ -19,6 +19,10 @@ struct RunCommand: AsyncParsableCommand {
         abstract: "执行桌面自动化任务"
     )
 
+    // Test seams — overridden in unit tests to inject mocks.
+    nonisolated(unsafe) static var createRuntime: @Sendable (EventBus) -> any AxionRuntimeRunning = { AxionRuntime(eventBus: $0) }
+    nonisolated(unsafe) static var skillExecutorOverride: (@Sendable (String, AxionConfig, Bool, Bool, Bool) async throws -> Void)?
+
     @Argument(help: "任务描述")
     var task: String
 
@@ -81,10 +85,14 @@ struct RunCommand: AsyncParsableCommand {
             _ = registry.registerDiscoveredSkills()
             if let skill = registry.find(skillName) {
                 fputs("[axion] 已加载 \(registry.allSkills.count) 个技能\n", stderr)
-                try await RunOrchestrator.executeSkillDirectly(
-                    skill: skill, task: task, config: config,
-                    json: json, fast: fast, verbose: verbose
-                )
+                if let override = Self.skillExecutorOverride {
+                    try await override(task, config, json, fast, verbose)
+                } else {
+                    try await RunOrchestrator.executeSkillDirectly(
+                        skill: skill, task: task, config: config,
+                        json: json, fast: fast, verbose: verbose
+                    )
+                }
                 return
             }
         }
@@ -102,7 +110,7 @@ struct RunCommand: AsyncParsableCommand {
         )
 
         let eventBus = EventBus()
-        let runtime = AxionRuntime(eventBus: eventBus)
+        let runtime = Self.createRuntime(eventBus)
         await registerHandlers(into: runtime, config: config)
 
         // Start event loop concurrently so handlers receive events during execution
@@ -115,7 +123,14 @@ struct RunCommand: AsyncParsableCommand {
             onReviewCompleted: nil
         )
 
-        let result = try await runtime.execute(buildConfig: buildConfig, runOverrides: overrides)
+        let result: AxionRunResult
+        do {
+            result = try await runtime.execute(buildConfig: buildConfig, runOverrides: overrides)
+        } catch {
+            eventLoopTask.cancel()
+            await runtime.stopEventLoop()
+            throw error
+        }
         eventLoopTask.cancel()
         await runtime.stopEventLoop()
 
@@ -124,7 +139,7 @@ struct RunCommand: AsyncParsableCommand {
         }
     }
 
-    private func registerHandlers(into runtime: AxionRuntime, config: AxionConfig) async {
+    private func registerHandlers(into runtime: any AxionRuntimeRunning, config: AxionConfig) async {
         let memoryDir = (ConfigManager.defaultConfigDirectory as NSString).appendingPathComponent("memory")
         let traceDir = (ConfigManager.defaultConfigDirectory as NSString).appendingPathComponent("runs")
 
