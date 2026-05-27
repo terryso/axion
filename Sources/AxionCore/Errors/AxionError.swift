@@ -1,5 +1,11 @@
 import Foundation
 
+extension AxionError: LocalizedError {
+    public var errorDescription: String? {
+        errorPayload.message
+    }
+}
+
 public enum AxionError: Error, Equatable {
     case planningFailed(reason: String)
     case executionFailed(step: Int, reason: String)

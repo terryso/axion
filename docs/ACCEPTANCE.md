@@ -1,6 +1,6 @@
 # Axion 核心业务回归验收
 
-验收日期：2026-05-22
+验收日期：2026-05-27
 验收目标：确保重构后各核心业务路径正常工作
 
 运行方式：`swift run axion run "任务描述"`（确保使用最新代码）
@@ -80,7 +80,7 @@
 
 ## 验收总结
 
-**23/24 通过，1 项跳过（无预录制技能）。**
+**28/29 通过，1 项跳过（无预录制技能）。**
 
 | 组别 | 通过 | 总数 | 说明 |
 |------|------|------|------|
@@ -92,6 +92,7 @@
 | Server 模式 | 3 | 3 | health/capabilities/runs/SSE 正常 |
 | MCP Server | 1 | 1 | tools/list 返回完整工具集 |
 | Self-Evolution | 4 | 4 | --no-review/curator status/doctor/help 正常 |
+| Agent Runtime | 5 | 5 | Session/Resume/持久化全部通过 |
 
 ## 8. Self-Evolution（Review & Curator）（4 项）
 
@@ -103,6 +104,23 @@
 | 8.2 | `swift run AxionCLI doctor` | 包含 Review/Curator 检查项 | ✅ 通过。显示 review 间隔、curator 启用状态、review 模型 |
 | 8.3 | `swift run AxionCLI curator status` | 显示策展配置和上次运行时间 | ✅ 通过。显示启用/间隔/上次策展/下次策展/运行次数 |
 | 8.4 | `swift run AxionCLI run --help` | 包含 `--no-review` 和 `--review-model` 选项 | ✅ 通过。两个选项正确显示 |
+
+## 9. Agent Runtime — Session + Resume（5 项）
+
+验证 Epic 24-27 引入的 AxionRuntime、Session 持久化、Session Resume、Daemon 集成。
+
+| # | 测试步骤 | 预期行为 | 实际结果 |
+|---|---------|---------|---------|
+| 9.1 | `swift run AxionCLI run "1+2等于几"` → `swift run AxionCLI sessions` | 先执行一次 run 产生 session，再列出 session 列表，包含刚执行的 task、status=COMPLETED、steps/duration | ✅ 通过。sessions 列表显示 task "1+2等于几"、status=completed、duration |
+| 9.2 | `swift run AxionCLI sessions --active` | 只显示 status=RUNNING 的 session（无活跃 session 时输出空列表） | ✅ 通过。只列出 status=running 的 session |
+| 9.3 | 从 9.1 获取 session-id → `swift run AxionCLI resume <session-id>` | 恢复之前的 session，agent 基于历史上下文继续对话，输出包含历史信息 | ✅ 通过。agent 回顾了 "1+2=3" 的历史上下文 |
+| 9.4 | `swift run AxionCLI resume <invalid-session-id>` | 显示错误信息 "Session not found" | ✅ 通过。显示 "Session not found: invalid-session-123" |
+| 9.5 | `ls ~/.axion/sessions/` → 检查任意 session 目录下存在 `axion-state.json` | `axion-state.json` 存在，包含 status/totalSteps/durationMs/updatedAt 字段 | ✅ 通过。axion-state.json 含 status:"completed"/totalSteps/durationMs/updatedAt |
+
+### 9.x 回归说明
+
+Epic 24（AxionRuntime Core）、Epic 25（EventHandler 体系）、Epic 26（CLI + API 改造）属于内部重构。
+回归验证通过上述 1-8 组全部测试通过即可确认，不额外新增手工测试项。
 
 ---
 

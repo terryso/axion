@@ -88,8 +88,13 @@ extension ResumeCommandTests {
         _ body: () async throws -> Void
     ) async throws {
         let savedFactory = ResumeCommand.createRuntime
+        let savedNotify = ResumeCommand.notify
         ResumeCommand.createRuntime = { _ in mock }
-        defer { ResumeCommand.createRuntime = savedFactory }
+        ResumeCommand.notify = { _, _, _ in }
+        defer {
+            ResumeCommand.createRuntime = savedFactory
+            ResumeCommand.notify = savedNotify
+        }
         try await body()
     }
 }
@@ -177,7 +182,7 @@ struct ResumeCommandTests {
         }
     }
 
-    @Test("handler registration count matches expected 7")
+    @Test("handler registration count matches expected 6")
     func handlerRegistrationCount() async throws {
         let mock = MockResumeRuntime(resumeResult: Self.completedResult())
         try await withMockRuntime(mock) {
@@ -185,7 +190,7 @@ struct ResumeCommandTests {
             try await cmd.run()
 
             let count = await mock.handlerCount
-            #expect(count == 7, "Expected 7 handlers (Cost, VisualDelta, SeatMonitor, MemoryProcessing, Review, Notification, Trace)")
+            #expect(count == 6, "Expected 6 handlers (Cost, VisualDelta, SeatMonitor, MemoryProcessing, Review, Trace)")
         }
     }
 

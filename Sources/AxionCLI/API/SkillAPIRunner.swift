@@ -85,7 +85,7 @@ enum SkillAPIRunner {
                 let elapsed = ContinuousClock.now - startTime
                 let durationMs = Int(
                     elapsed.components.seconds * 1000 +
-                    elapsed.components.attoseconds / 1_000_000_000_000
+                    elapsed.components.attoseconds / 1_000_000_000_000_000
                 )
                 let runCompletedEvent = AgentSSEEvent.runCompleted(RunCompletedData(
                     runId: runId,
@@ -125,7 +125,7 @@ enum SkillAPIRunner {
         let elapsed = ContinuousClock.now - startTime
         let durationMs = Int(
             elapsed.components.seconds * 1000 +
-            elapsed.components.attoseconds / 1_000_000_000_000
+            elapsed.components.attoseconds / 1_000_000_000_000_000
         )
 
         let runCompletedEvent = AgentSSEEvent.runCompleted(RunCompletedData(

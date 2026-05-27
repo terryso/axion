@@ -34,10 +34,17 @@ struct HelperPathResolver {
             // 策略 3: 开发模式回退
             if execPath.contains(".build") {
                 if let projectRoot = findProjectRoot(from: URL(fileURLWithPath: execPath)) {
-                    let devPath = projectRoot
+                    // SPM raw build output (swift build)
+                    let rawBuildPath = projectRoot
+                        .appendingPathComponent(".build/arm64-apple-macosx/debug/AxionHelper")
+                    if FileManager.default.fileExists(atPath: rawBuildPath.path) {
+                        return rawBuildPath.path
+                    }
+                    // .app bundle layout (make install or manual)
+                    let appBundlePath = projectRoot
                         .appendingPathComponent(".build/AxionHelper.app/Contents/MacOS/AxionHelper")
-                    if FileManager.default.fileExists(atPath: devPath.path) {
-                        return devPath.path
+                    if FileManager.default.fileExists(atPath: appBundlePath.path) {
+                        return appBundlePath.path
                     }
                 }
             }

@@ -88,11 +88,14 @@ extension RunCommandExecutionTests {
     ) async throws {
         let savedFactory = RunCommand.createRuntime
         let savedSkill = RunCommand.skillExecutorOverride
+        let savedNotify = RunCommand.notify
         RunCommand.createRuntime = { _ in mock }
         RunCommand.skillExecutorOverride = skillOverride
+        RunCommand.notify = { _, _, _ in }
         defer {
             RunCommand.createRuntime = savedFactory
             RunCommand.skillExecutorOverride = savedSkill
+            RunCommand.notify = savedNotify
         }
         try await body()
     }
@@ -158,7 +161,7 @@ struct RunCommandExecutionTests {
         }
     }
 
-    @Test("handler registration count matches expected 7")
+    @Test("handler registration count matches expected 6")
     func handlerRegistrationCount() async throws {
         let mock = MockAxionRuntime(executeResult: Self.completedResult())
         try await withMockRuntime(mock) {
@@ -166,7 +169,7 @@ struct RunCommandExecutionTests {
             try await cmd.run()
 
             let count = await mock.handlerCount
-            #expect(count == 7, "Expected 7 handlers (Cost, VisualDelta, SeatMonitor, MemoryProcessing, Review, Notification, Trace)")
+            #expect(count == 6, "Expected 6 handlers (Cost, VisualDelta, SeatMonitor, MemoryProcessing, Review, Trace)")
         }
     }
 

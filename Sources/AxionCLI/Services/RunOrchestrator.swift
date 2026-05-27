@@ -36,6 +36,7 @@ enum RunOrchestrator {
         let externallyModified: Bool
         let takeoverEvent: RunMemoryProcessor.TakeoverEventContext?
         let runCompleteContext: RunCompleteContext?
+        let responseText: String?
     }
 
     /// Executes the full agent pipeline: lock → trace → stream loop → cleanup → post-run.
@@ -188,8 +189,16 @@ enum RunOrchestrator {
 
         // Post-stream
 
+        // Extract last assistant response text for notification summary
+        let responseText = collectedMessages.last(where: {
+            if case .assistant = $0 { return true }; return false
+        }).flatMap { msg -> String? in
+            if case .assistant(let data) = msg { return data.text }
+            return nil
+        }
+
         let elapsed = ContinuousClock.now - startTime
-        let durationMs = Int(elapsed.components.seconds * 1000 + elapsed.components.attoseconds / 1_000_000_000_000)
+        let durationMs = Int(elapsed.components.seconds * 1000 + elapsed.components.attoseconds / 1_000_000_000_000_000)
 
         // Cleanup
         try? await agent.close()
@@ -315,7 +324,8 @@ enum RunOrchestrator {
             runSucceeded: runSucceeded,
             externallyModified: externallyModified,
             takeoverEvent: takeoverContext,
-            runCompleteContext: runCtx
+            runCompleteContext: runCtx,
+            responseText: responseText
         )
     }
 
@@ -328,7 +338,7 @@ enum RunOrchestrator {
         fast: Bool,
         verbose: Bool
     ) async throws {
-        let agent = try await AgentBuilder.buildSkillAgent(
+        let (agent, _) = try await AgentBuilder.buildSkillAgent(
             config: config,
             skill: skill,
             verbose: verbose
@@ -369,7 +379,7 @@ enum RunOrchestrator {
         }
 
         let elapsed = ContinuousClock.now - startTime
-        let durationMs = Int(elapsed.components.seconds * 1000 + elapsed.components.attoseconds / 1_000_000_000_000)
+        let durationMs = Int(elapsed.components.seconds * 1000 + elapsed.components.attoseconds / 1_000_000_000_000_000)
         fputs("[axion] 运行结束。步数: \(totalSteps), 耗时: \(String(format: "%.1f", Double(durationMs) / 1000))s\n", stderr)
 
         try? await agent.close()

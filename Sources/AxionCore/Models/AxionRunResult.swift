@@ -9,6 +9,7 @@ public struct AxionRunResult: Codable, Equatable, Sendable {
     public let runSucceeded: Bool
     public let errorMessage: String?
     public let runCompleteContext: RunCompleteContextWrapper?
+    public let responseText: String?
     public let createdAt: Date
 
     public init(
@@ -20,6 +21,7 @@ public struct AxionRunResult: Codable, Equatable, Sendable {
         runSucceeded: Bool,
         errorMessage: String? = nil,
         runCompleteContext: RunCompleteContextWrapper? = nil,
+        responseText: String? = nil,
         createdAt: Date
     ) {
         self.sessionId = sessionId
@@ -30,6 +32,7 @@ public struct AxionRunResult: Codable, Equatable, Sendable {
         self.runSucceeded = runSucceeded
         self.errorMessage = errorMessage
         self.runCompleteContext = runCompleteContext
+        self.responseText = responseText
         self.createdAt = createdAt
     }
 }

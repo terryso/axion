@@ -165,7 +165,7 @@ enum AgentBuilder {
     /// This is the single entry point for both CLI and API paths.
     /// - Returns: ``AgentBuildResult`` with the agent and resolved configuration.
     /// - Throws: Errors for missing API key or helper path.
-    static func build(_ buildConfig: BuildConfig) async throws -> AgentBuildResult {
+    static func build(_ buildConfig: BuildConfig, eventBus: EventBus? = nil) async throws -> AgentBuildResult {
         let config = buildConfig.config
         let task = buildConfig.task
 
@@ -214,11 +214,16 @@ enum AgentBuilder {
             dryrun: buildConfig.dryrun
         )
 
-        // 6. Configure MCP servers
-        let mcpServers = MCPConfigResolver.resolveMCPServers(
-            helperPath: helperPath,
-            includePlaywright: buildConfig.includePlaywright
-        )
+        // 6. Configure MCP servers (skip in dryrun — no side-effect tools allowed)
+        let mcpServers: [String: McpServerConfig]?
+        if buildConfig.dryrun {
+            mcpServers = nil
+        } else {
+            mcpServers = MCPConfigResolver.resolveMCPServers(
+                helperPath: helperPath,
+                includePlaywright: buildConfig.includePlaywright
+            )
+        }
 
         // 7. Build safety hook registry
         let hookRegistry = await SafetyHookFactory.buildSafetyHookRegistry(
@@ -232,15 +237,20 @@ enum AgentBuilder {
         // Exclude ToolSearch and AskUser — GLM models get confused by ToolSearch
         // ("No deferred tools" kills the model's reasoning), and the system prompt
         // already lists all available tools.
+        //
+        // In dryrun mode, strip side-effect tools (Bash, Skill) so the agent
+        // can only plan — never execute.
         let excludedToolNames: Set<String> = ["ToolSearch", "AskUser"]
+        let dryrunExcludedToolNames: Set<String> = ["Bash", "Skill"]
         var agentTools: [ToolProtocol] = (getAllBaseTools(tier: .core) + getAllBaseTools(tier: .specialist))
             .filter { !excludedToolNames.contains($0.name) }
-        if !buildConfig.noSkills {
+            .filter { !buildConfig.dryrun || !dryrunExcludedToolNames.contains($0.name) }
+        if !buildConfig.noSkills, !buildConfig.dryrun {
             agentTools.append(createSkillTool(registry: skillRegistry))
         }
 
         // 9. Build AgentOptions
-        let effectiveMaxSteps = buildConfig.maxSteps ?? config.maxSteps
+        let effectiveMaxSteps = buildConfig.dryrun ? 1 : (buildConfig.maxSteps ?? config.maxSteps)
         let effectiveMaxTokens = buildConfig.maxTokens ?? 4096
 
         var agentOptions = AgentOptions(
@@ -263,6 +273,9 @@ enum AgentBuilder {
         agentOptions.runId = buildConfig.runId
         agentOptions.traceEnabled = true
         agentOptions.traceBaseURL = (ConfigManager.defaultConfigDirectory as NSString).appendingPathComponent("runs")
+
+        // Wire EventBus so SDK publishes events (AgentCompletedEvent etc.)
+        agentOptions.eventBus = eventBus
 
         // Session resume: inject sessionId + sessionStore into SDK AgentOptions
         if let sid = buildConfig.sessionId {
@@ -367,7 +380,7 @@ enum AgentBuilder {
         maxSteps: Int? = nil,
         verbose: Bool = false,
         eventBus: EventBus? = nil
-    ) async throws -> Agent {
+    ) async throws -> (agent: Agent, runCompleteBox: RunCompleteContextBox) {
         let apiKey = config.apiKey
             ?? ProcessInfo.processInfo.environment["AXION_API_KEY"]
 
@@ -402,7 +415,13 @@ enum AgentBuilder {
         )
         agentOptions.eventBus = eventBus
 
-        return createAgent(options: agentOptions)
+        let runCompleteBox = RunCompleteContextBox()
+        agentOptions.onRunComplete = { context in
+            runCompleteBox.context = context
+        }
+
+        let agent = createAgent(options: agentOptions)
+        return (agent, runCompleteBox)
     }
 
     // MARK: - System Prompt

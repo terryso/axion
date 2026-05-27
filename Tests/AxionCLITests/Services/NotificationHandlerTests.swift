@@ -88,8 +88,8 @@ struct NotificationHandlerTests {
         #expect(capture.callCount == 0)
     }
 
-    @Test("handler skips when runCompleteContext is nil")
-    func testSkipsWithoutRunCompleteContext() async {
+    @Test("handler sends notification on AgentCompletedEvent without runCompleteContext")
+    func testSendsNotificationWithoutRunCompleteContext() async {
         let capture = NotificationCapture()
         let handler = NotificationHandler(json: false) { title, subtitle, message in
             capture.title = title
@@ -102,10 +102,14 @@ struct NotificationHandlerTests {
             sessionId: "s1", totalSteps: 3, durationMs: 5000, resultText: "done"
         )
         await handler.handle(event, context: context)
-        #expect(capture.callCount == 0)
+
+        #expect(capture.callCount == 1)
+        #expect(capture.title == "Axion 完成")
+        #expect(capture.subtitle == "耗时 5s · $0.00")
+        #expect(capture.message == "done")
     }
 
-    @Test("handler sends notification on AgentCompletedEvent")
+    @Test("handler sends notification on AgentCompletedEvent with cost")
     func testSendsNotificationOnCompleted() async {
         let capture = NotificationCapture()
         let handler = NotificationHandler(json: false) { title, subtitle, message in
@@ -134,7 +138,7 @@ struct NotificationHandlerTests {
             capture.message = message
             capture.callCount += 1
         }
-        let context = makeContext(runCompleteContext: makeRunCompleteContext())
+        let context = makeContext(runCompleteContext: nil)
         let event = AgentFailedEvent(
             sessionId: "s1", error: "something went wrong", stepsCompleted: 2
         )
@@ -142,10 +146,11 @@ struct NotificationHandlerTests {
 
         #expect(capture.callCount == 1)
         #expect(capture.title == "Axion 失败")
+        #expect(capture.message == "something went wrong")
     }
 
-    @Test("handler ignores non-terminal events")
-    func testIgnoresNonTerminalEvents() async {
+    @Test("handler handles AgentInterruptedEvent")
+    func testSendsNotificationOnInterrupted() async {
         let capture = NotificationCapture()
         let handler = NotificationHandler(json: false) { title, subtitle, message in
             capture.title = title
@@ -153,16 +158,31 @@ struct NotificationHandlerTests {
             capture.message = message
             capture.callCount += 1
         }
-        let context = makeContext(runCompleteContext: makeRunCompleteContext())
-        let event = ToolStartedEvent(
-            sessionId: "s1", toolName: "bash", toolUseId: "tu1", input: nil
+        let context = makeContext(runCompleteContext: nil)
+        let event = AgentInterruptedEvent(sessionId: "s1", stepsCompleted: 1)
+        await handler.handle(event, context: context)
+
+        #expect(capture.callCount == 1)
+        #expect(capture.title == "Axion 已取消")
+    }
+
+    @Test("handler uses resultText fallback chain for completed event")
+    func testResultTextFallback() async {
+        let capture = NotificationCapture()
+        let handler = NotificationHandler(json: false) { title, subtitle, message in
+            capture.title = title
+            capture.subtitle = subtitle
+            capture.message = message
+            capture.callCount += 1
+        }
+        // context.sessionId is nil, resultText is nil → fallback to "任务完成"
+        let context = makeContext(runCompleteContext: nil)
+        let event = AgentCompletedEvent(
+            sessionId: "s1", totalSteps: 1, durationMs: 1000, resultText: nil
         )
         await handler.handle(event, context: context)
-        // ToolStartedEvent is not a terminal event — handler fires anyway
-        // because AxionRuntime.shouldDispatch filters by subscribedEventTypes.
-        // This test verifies handle() processes whatever it receives;
-        // event-type filtering is AxionRuntime's responsibility.
+
         #expect(capture.callCount == 1)
-        #expect(capture.title == "Axion 失败")
+        #expect(capture.message == "任务完成")
     }
 }

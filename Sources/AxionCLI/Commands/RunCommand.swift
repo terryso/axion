@@ -22,6 +22,7 @@ struct RunCommand: AsyncParsableCommand {
     // Test seams — overridden in unit tests to inject mocks.
     nonisolated(unsafe) static var createRuntime: @Sendable (EventBus) -> any AxionRuntimeRunning = { AxionRuntime(eventBus: $0) }
     nonisolated(unsafe) static var skillExecutorOverride: (@Sendable (String, AxionConfig, Bool, Bool, Bool) async throws -> Void)?
+    nonisolated(unsafe) static var notify: @Sendable (String, String?, String) -> Void = RunOrchestrator.sendDesktopNotification
 
     @Argument(help: "任务描述")
     var task: String
@@ -129,7 +130,14 @@ struct RunCommand: AsyncParsableCommand {
                     eventLoopTask.cancel()
                     await runtime.stopEventLoop()
 
+                    if !json {
+                        sendCompletionNotification(result: result)
+                    }
+
                     if result.state == .failed {
+                        if let msg = result.errorMessage {
+                            fputs("[axion] 错误: \(msg)\n", stderr)
+                        }
                         throw ExitCode(1)
                     }
                 }
@@ -174,7 +182,23 @@ struct RunCommand: AsyncParsableCommand {
         eventLoopTask.cancel()
         await runtime.stopEventLoop()
 
+        if !json {
+            sendCompletionNotification(result: result)
+        }
+
         if result.state == .failed {
+            if let msg = result.errorMessage {
+                if json {
+                    let encoder = JSONEncoder()
+                    encoder.outputFormatting = [.sortedKeys]
+                    let obj: [String: String] = ["error": msg, "runId": result.sessionId, "status": "failed"]
+                    if let data = try? encoder.encode(obj) {
+                        fputs(String(data: data, encoding: .utf8) ?? "{}\n", stdout)
+                    }
+                } else {
+                    fputs("[axion] 错误: \(msg)\n", stderr)
+                }
+            }
             throw ExitCode(1)
         }
     }
@@ -188,7 +212,39 @@ struct RunCommand: AsyncParsableCommand {
         await runtime.registerHandler(SeatMonitorHandler(sharedSeatMode: config.sharedSeatMode))
         await runtime.registerHandler(MemoryProcessingHandler(noMemory: noMemory, memoryDir: memoryDir))
         await runtime.registerHandler(ReviewHandler(noReview: noReview, noMemory: noMemory, reviewOrchestrator: nil))
-        await runtime.registerHandler(NotificationHandler(json: json))
         await runtime.registerHandler(TraceEventHandler(traceDir: traceDir))
+    }
+
+    private func sendCompletionNotification(result: AxionRunResult) {
+        let elapsedSec = result.durationMs / 1000
+        let numTurns = result.runCompleteContext?.numTurns ?? result.totalSteps
+
+        let summary = extractSummaryLine(from: result.responseText ?? result.task)
+
+        let title: String
+        switch result.state {
+        case .completed: title = "Axion 完成"
+        case .failed: title = "Axion 失败"
+        default: title = "Axion"
+        }
+
+        var subtitle = "耗时 \(elapsedSec)s · \(numTurns) 次调用"
+        if let cost = result.runCompleteContext?.totalCostUsd, cost > 0 {
+            subtitle += " · $\(String(format: "%.4f", cost))"
+        }
+
+        Self.notify(
+            title,
+            subtitle,
+            String(summary.prefix(200))
+        )
+    }
+
+    private func extractSummaryLine(from text: String) -> String {
+        let lines = text.components(separatedBy: "\n").filter { !$0.isEmpty }
+        if let resultLine = lines.last(where: { $0.hasPrefix("[结果]") }) {
+            return String(resultLine.dropFirst("[结果]".count).trimmingCharacters(in: .whitespaces))
+        }
+        return lines.last ?? text
     }
 }

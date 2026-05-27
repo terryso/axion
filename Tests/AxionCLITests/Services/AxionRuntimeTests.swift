@@ -32,16 +32,16 @@ struct MockAgentBuilder: AgentBuilding {
         self.error = error
     }
 
-    func build(_ config: AgentBuilder.BuildConfig) async throws -> AgentBuildResult {
+    func build(_ config: AgentBuilder.BuildConfig, eventBus: EventBus?) async throws -> AgentBuildResult {
         if let error { throw error }
         guard let buildResult else { fatalError("MockAgentBuilder: no buildResult and no error") }
         return buildResult
     }
 
-    func buildSkillAgent(config: AxionConfig, skill: OpenAgentSDK.Skill, maxSteps: Int?, verbose: Bool, eventBus: EventBus?) async throws -> Agent {
+    func buildSkillAgent(config: AxionConfig, skill: OpenAgentSDK.Skill, maxSteps: Int?, verbose: Bool, eventBus: EventBus?) async throws -> (agent: Agent, runCompleteBox: RunCompleteContextBox) {
         if let error { throw error }
         let options = AgentOptions(apiKey: config.apiKey ?? "sk-test", model: config.model, maxTurns: maxSteps ?? config.maxSteps, maxTokens: 16384)
-        return Agent(options: options)
+        return (Agent(options: options), RunCompleteContextBox())
     }
 }
 
@@ -52,7 +52,8 @@ extension AxionRuntimeTests {
     static func successResult() -> RunOrchestrator.RunResult {
         RunOrchestrator.RunResult(
             totalSteps: 3, durationMs: 1500, runSucceeded: true,
-            externallyModified: false, takeoverEvent: nil, runCompleteContext: nil
+            externallyModified: false, takeoverEvent: nil, runCompleteContext: nil,
+            responseText: nil
         )
     }
 

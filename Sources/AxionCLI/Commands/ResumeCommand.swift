@@ -11,6 +11,7 @@ struct ResumeCommand: AsyncParsableCommand {
     )
 
     nonisolated(unsafe) static var createRuntime: @Sendable (EventBus) -> any AxionRuntimeResuming = { AxionRuntime(eventBus: $0) }
+    nonisolated(unsafe) static var notify: @Sendable (String, String?, String) -> Void = RunOrchestrator.sendDesktopNotification
 
     @Argument(help: "Session ID to resume")
     var sessionId: String
@@ -78,6 +79,21 @@ struct ResumeCommand: AsyncParsableCommand {
         eventLoopTask.cancel()
         await runtime.stopEventLoop()
 
+        if !json {
+            let elapsedSec = result.durationMs / 1000
+            let numTurns = result.runCompleteContext?.numTurns ?? result.totalSteps
+            let title = result.state == .completed ? "Axion 完成" : "Axion 失败"
+            var subtitle = "耗时 \(elapsedSec)s · \(numTurns) 次调用"
+            if let cost = result.runCompleteContext?.totalCostUsd, cost > 0 {
+                subtitle += " · $\(String(format: "%.4f", cost))"
+            }
+            Self.notify(
+                title,
+                subtitle,
+                "Session \(sessionId) 已恢复"
+            )
+        }
+
         if result.state == .failed {
             throw ExitCode(1)
         }
@@ -92,7 +108,6 @@ struct ResumeCommand: AsyncParsableCommand {
         await runtime.registerHandler(SeatMonitorHandler(sharedSeatMode: config.sharedSeatMode))
         await runtime.registerHandler(MemoryProcessingHandler(noMemory: noMemory, memoryDir: memoryDir))
         await runtime.registerHandler(ReviewHandler(noReview: noReview, noMemory: noMemory, reviewOrchestrator: nil))
-        await runtime.registerHandler(NotificationHandler(json: json))
         await runtime.registerHandler(TraceEventHandler(traceDir: traceDir))
     }
 }

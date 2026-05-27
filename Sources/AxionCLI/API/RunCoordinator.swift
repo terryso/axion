@@ -22,7 +22,7 @@ actor RunCoordinator {
 
     // MARK: - Run Lifecycle
 
-    private nonisolated(unsafe) static let runIdDateFormatter: DateFormatter = {
+    private static let runIdDateFormatter: DateFormatter = {
         let f = DateFormatter()
         f.dateFormat = "yyyyMMdd"
         return f
