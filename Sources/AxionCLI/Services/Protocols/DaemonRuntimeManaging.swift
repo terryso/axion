@@ -17,6 +17,16 @@ protocol DaemonRuntimeManaging: Sendable {
         runOverrides: AxionRuntime.RunOverrides
     ) async throws -> AxionRunResult
 
+    /// Execute a skill through a per-request AxionRuntime with pre-registered API handlers.
+    func executeSkill(
+        skill: OpenAgentSDK.Skill,
+        task: String,
+        config: AxionConfig,
+        buildConfig: AgentBuilder.BuildConfig,
+        eventBus: EventBus,
+        runOverrides: AxionRuntime.RunOverrides
+    ) async throws -> AxionRunResult
+
     /// Returns completed sessions tracked by this manager instance (not currently running).
     func listActiveSessions() async -> [DaemonSessionInfo]
 

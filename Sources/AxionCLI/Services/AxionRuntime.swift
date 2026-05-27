@@ -178,6 +178,105 @@ public actor AxionRuntime: AxionRuntimeRunning, AxionRuntimeResuming, SessionLis
         return try await run(task: buildConfig.task, buildResult: buildResult, runConfig: runConfig)
     }
 
+    // MARK: - Skill Execution
+
+    func executeSkill(
+        skill: OpenAgentSDK.Skill,
+        task: String,
+        config: AxionConfig,
+        buildConfig: AgentBuilder.BuildConfig,
+        runOverrides: RunOverrides = .default
+    ) async throws -> AxionRunResult {
+        let sid = executor.generateRunId()
+        let startedAt = Date()
+        sessionId = sid
+        createdAt = startedAt
+
+        guard currentState.isValidTransition(to: .running) else {
+            currentState = .failed
+            return AxionRunResult(
+                sessionId: sid, task: task, state: .failed,
+                totalSteps: 0, durationMs: 0, runSucceeded: false,
+                errorMessage: "Invalid state transition from \(currentState) to running",
+                createdAt: startedAt
+            )
+        }
+        currentState = .running
+        externallyModifiedFlag = ExternallyModifiedFlag()
+        try? writeAxionState(
+            sessionId: sid, status: AxionRunState.running.rawValue,
+            totalSteps: 0, durationMs: 0
+        )
+
+        do {
+            let agent = try await builder.buildSkillAgent(
+                config: config,
+                skill: skill,
+                maxSteps: buildConfig.maxSteps,
+                verbose: buildConfig.verbose,
+                eventBus: eventBus
+            )
+
+            let args = RunOrchestrator.parseSkillName(from: task).flatMap { skillName in
+                let prefix = "/\(skillName) "
+                return task.hasPrefix(prefix) ? String(task.dropFirst(prefix.count)) : nil
+            }
+
+            let startTime = ContinuousClock.now
+            var totalSteps = 0
+
+            let runMode = runOverrides.json ? "json" : (buildConfig.fast ? "fast" : "standard")
+            let outputHandler: any SDKMessageOutputHandler = runOverrides.json
+                ? SDKJSONOutputHandler(mode: runMode)
+                : SDKTerminalOutputHandler(mode: runMode)
+            outputHandler.displayRunStart(runId: sid, task: task)
+            fputs("[axion] 模式: \(runMode)\n", stderr)
+            fputs("[axion] 运行 ID: \(sid)\n", stderr)
+            fputs("[axion] 任务: \(task)\n", stderr)
+            fputs("[axion] 执行: Skill (via AxionRuntime)\n", stderr)
+
+            let skillStream = agent.executeSkillStream(skill.name, args: args)
+            for await message in skillStream {
+                if _Concurrency.Task.isCancelled { break }
+                if case .toolUse = message { totalSteps += 1 }
+                outputHandler.handle(message)
+            }
+
+            let elapsed = ContinuousClock.now - startTime
+            let durationMs = Int(elapsed.components.seconds * 1000 + elapsed.components.attoseconds / 1_000_000_000_000)
+
+            try? await agent.close()
+            currentState = .completed
+            try? writeAxionState(
+                sessionId: sid, status: AxionRunState.completed.rawValue,
+                totalSteps: totalSteps, durationMs: durationMs
+            )
+
+            let skillsDir = (ConfigManager.defaultConfigDirectory as NSString).appendingPathComponent("skills")
+            let usageStore = SkillUsageStore(skillsDir: skillsDir)
+            try? await usageStore.bumpView(skillName: skill.name)
+
+            fputs("[axion] 运行结束。步数: \(totalSteps), 耗时: \(String(format: "%.1f", Double(durationMs) / 1000))s\n", stderr)
+
+            return AxionRunResult(
+                sessionId: sid, task: task, state: .completed,
+                totalSteps: totalSteps, durationMs: durationMs,
+                runSucceeded: true, createdAt: startedAt
+            )
+        } catch {
+            currentState = .failed
+            try? writeAxionState(
+                sessionId: sid, status: AxionRunState.failed.rawValue,
+                totalSteps: 0, durationMs: 0
+            )
+            return AxionRunResult(
+                sessionId: sid, task: task, state: .failed,
+                totalSteps: 0, durationMs: 0, runSucceeded: false,
+                errorMessage: error.localizedDescription, createdAt: startedAt
+            )
+        }
+    }
+
     // MARK: - Session Resume
 
     func resumeSession(

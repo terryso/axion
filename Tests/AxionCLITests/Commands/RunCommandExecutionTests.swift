@@ -45,6 +45,18 @@ actor MockAxionRuntime: AxionRuntimeRunning {
         if let error = executeError { throw error }
         return executeResult!
     }
+
+    func executeSkill(
+        skill: OpenAgentSDK.Skill,
+        task: String,
+        config: AxionConfig,
+        buildConfig: AgentBuilder.BuildConfig,
+        runOverrides: AxionRuntime.RunOverrides = .default
+    ) async throws -> AxionRunResult {
+        executeCallCount += 1
+        if let error = executeError { throw error }
+        return executeResult!
+    }
 }
 
 // MARK: - Helpers
@@ -120,8 +132,8 @@ struct RunCommandExecutionTests {
         }
     }
 
-    @Test("skill fast-path bypasses AxionRuntime")
-    func skillFastPathBypassesRuntime() async throws {
+    @Test("skill override seam bypasses AxionRuntime")
+    func skillOverrideSeamBypassesRuntime() async throws {
         let mock = MockAxionRuntime(executeResult: Self.completedResult())
         try await withMockRuntime(mock, skillOverride: { _, _, _, _, _ in /* no-op success */ }) {
             // /screenshot-analyze is a built-in skill — triggers fast-path.

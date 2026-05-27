@@ -374,5 +374,5 @@ development_status:
   27-1-session-list-cli: done
   27-2-session-resume-cli: done
   27-3-daemon-axionruntime-integration: done
-  27-4-skill-execution-axionruntime: backlog
+  27-4-skill-execution-axionruntime: done
   epic-27-retrospective: optional

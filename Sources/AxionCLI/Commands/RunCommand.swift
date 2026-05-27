@@ -78,7 +78,7 @@ struct RunCommand: AsyncParsableCommand {
         )
         let config = try await ConfigManager.loadConfig(cliOverrides: cliOverrides)
 
-        // Skill direct execution path: bypasses full agent build
+        // Skill direct execution path: route through AxionRuntime
         if !noSkills, let skillName = RunOrchestrator.parseSkillName(from: task) {
             let registry = SkillRegistry()
             AxionBuiltInSkills.registerAll(into: registry)
@@ -88,10 +88,50 @@ struct RunCommand: AsyncParsableCommand {
                 if let override = Self.skillExecutorOverride {
                     try await override(task, config, json, fast, verbose)
                 } else {
-                    try await RunOrchestrator.executeSkillDirectly(
-                        skill: skill, task: task, config: config,
-                        json: json, fast: fast, verbose: verbose
+                    let effectiveMaxSteps = RunOrchestrator.computeEffectiveMaxSteps(
+                        fast: fast, maxSteps: maxSteps, configMaxSteps: config.maxSteps
                     )
+
+                    let skillBuildConfig = AgentBuilder.BuildConfig.forSkillExecution(
+                        config: config,
+                        skill: skill,
+                        maxSteps: effectiveMaxSteps,
+                        verbose: verbose
+                    )
+
+                    let eventBus = EventBus()
+                    let runtime = Self.createRuntime(eventBus)
+                    await registerHandlers(into: runtime, config: config)
+
+                    let eventLoopTask = _Concurrency.Task { await runtime.startEventLoop() }
+
+                    let overrides = AxionRuntime.RunOverrides(
+                        json: json,
+                        noVisualDelta: noVisualDelta,
+                        noReview: noReview,
+                        onReviewCompleted: nil
+                    )
+
+                    let result: AxionRunResult
+                    do {
+                        result = try await runtime.executeSkill(
+                            skill: skill,
+                            task: task,
+                            config: config,
+                            buildConfig: skillBuildConfig,
+                            runOverrides: overrides
+                        )
+                    } catch {
+                        eventLoopTask.cancel()
+                        await runtime.stopEventLoop()
+                        throw error
+                    }
+                    eventLoopTask.cancel()
+                    await runtime.stopEventLoop()
+
+                    if result.state == .failed {
+                        throw ExitCode(1)
+                    }
                 }
                 return
             }

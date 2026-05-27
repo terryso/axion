@@ -66,6 +66,59 @@ actor DaemonRuntimeManager: DaemonRuntimeManaging {
         return result
     }
 
+    func executeSkill(
+        skill: OpenAgentSDK.Skill,
+        task: String,
+        config: AxionConfig,
+        buildConfig: AgentBuilder.BuildConfig,
+        eventBus: EventBus,
+        runOverrides: AxionRuntime.RunOverrides = .default
+    ) async throws -> AxionRunResult {
+        let runtime = runtimeFactory(eventBus)
+
+        await runtime.registerHandler(CostEventHandler())
+        await runtime.registerHandler(TraceEventHandler(traceDir: traceDir))
+
+        let eventLoopTask = _Concurrency.Task { await runtime.startEventLoop() }
+
+        let result: AxionRunResult
+        do {
+            result = try await runtime.executeSkill(
+                skill: skill,
+                task: task,
+                config: config,
+                buildConfig: buildConfig,
+                runOverrides: runOverrides
+            )
+        } catch {
+            eventLoopTask.cancel()
+            await runtime.stopEventLoop()
+            throw error
+        }
+
+        eventLoopTask.cancel()
+        await runtime.stopEventLoop()
+
+        sessionHistory[result.sessionId] = DaemonSessionInfo(
+            sessionId: result.sessionId,
+            task: task,
+            startedAt: result.createdAt
+        )
+
+        // Evict oldest entries when history exceeds limit
+        if sessionHistory.count > maxSessionHistory {
+            let sortedKeys = sessionHistory.keys.sorted {
+                sessionHistory[$0]!.startedAt < sessionHistory[$1]!.startedAt
+            }
+            let excess = sessionHistory.count - maxSessionHistory
+            for key in sortedKeys.prefix(excess) {
+                sessionHistory.removeValue(forKey: key)
+            }
+        }
+
+        return result
+    }
+
     func listActiveSessions() -> [DaemonSessionInfo] {
         Array(sessionHistory.values)
     }

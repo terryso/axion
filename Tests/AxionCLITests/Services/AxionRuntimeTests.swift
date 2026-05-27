@@ -37,6 +37,12 @@ struct MockAgentBuilder: AgentBuilding {
         guard let buildResult else { fatalError("MockAgentBuilder: no buildResult and no error") }
         return buildResult
     }
+
+    func buildSkillAgent(config: AxionConfig, skill: OpenAgentSDK.Skill, maxSteps: Int?, verbose: Bool, eventBus: EventBus?) async throws -> Agent {
+        if let error { throw error }
+        let options = AgentOptions(apiKey: config.apiKey ?? "sk-test", model: config.model, maxTurns: maxSteps ?? config.maxSteps, maxTokens: 16384)
+        return Agent(options: options)
+    }
 }
 
 // MARK: - Helpers

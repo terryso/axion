@@ -50,6 +50,17 @@ actor MockResumeRuntime: AxionRuntimeResuming {
         if let error = resumeError { throw error }
         return resumeResult!
     }
+
+    func executeSkill(
+        skill: OpenAgentSDK.Skill,
+        task: String,
+        config: AxionConfig,
+        buildConfig: AgentBuilder.BuildConfig,
+        runOverrides: AxionRuntime.RunOverrides = .default
+    ) async throws -> AxionRunResult {
+        if let error = resumeError { throw error }
+        return resumeResult!
+    }
 }
 
 // MARK: - Helpers

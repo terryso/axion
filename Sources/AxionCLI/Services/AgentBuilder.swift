@@ -365,7 +365,8 @@ enum AgentBuilder {
         config: AxionConfig,
         skill: OpenAgentSDK.Skill,
         maxSteps: Int? = nil,
-        verbose: Bool = false
+        verbose: Bool = false,
+        eventBus: EventBus? = nil
     ) async throws -> Agent {
         let apiKey = config.apiKey
             ?? ProcessInfo.processInfo.environment["AXION_API_KEY"]
@@ -386,7 +387,7 @@ enum AgentBuilder {
         let effectiveMaxSteps = maxSteps ?? config.maxSteps
         let effectiveModel = skill.modelOverride ?? config.model
 
-        let agentOptions = AgentOptions(
+        var agentOptions = AgentOptions(
             apiKey: apiKey,
             model: effectiveModel,
             baseURL: config.baseURL,
@@ -399,6 +400,7 @@ enum AgentBuilder {
             skillRegistry: registry,
             logLevel: verbose ? .debug : .info
         )
+        agentOptions.eventBus = eventBus
 
         return createAgent(options: agentOptions)
     }
