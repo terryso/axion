@@ -8,6 +8,7 @@ public actor AxionRuntime {
     let executor: RunExecuting
     let builder: AgentBuilding
     let sessionStore: SessionStore
+    let sessionsDir: String
     private(set) var currentState: AxionRunState = .created
     private(set) var sessionId: String?
     private(set) var createdAt: Date?
@@ -21,8 +22,9 @@ public actor AxionRuntime {
         self.eventBus = eventBus
         self.executor = executor
         self.builder = builder
-        let sessionsDir = (NSHomeDirectory() as NSString).appendingPathComponent(".axion/sessions")
-        self.sessionStore = SessionStore(sessionsDir: sessionsDir)
+        let dir = (NSHomeDirectory() as NSString).appendingPathComponent(".axion/sessions")
+        self.sessionsDir = dir
+        self.sessionStore = SessionStore(sessionsDir: dir)
     }
 
     struct RunOverrides: Sendable {
@@ -279,7 +281,6 @@ public actor AxionRuntime {
     // MARK: - Axion State Persistence
 
     private func writeAxionState(sessionId: String, status: String, totalSteps: Int, durationMs: Int) throws {
-        let sessionsDir = (NSHomeDirectory() as NSString).appendingPathComponent(".axion/sessions")
         let sessionDir = (sessionsDir as NSString).appendingPathComponent(sessionId)
         try FileManager.default.createDirectory(
             atPath: sessionDir,
@@ -304,7 +305,6 @@ public actor AxionRuntime {
     }
 
     private func loadOverlay(sessionId: String) -> AxionStateOverlay? {
-        let sessionsDir = (NSHomeDirectory() as NSString).appendingPathComponent(".axion/sessions")
         let statePath = ((sessionsDir as NSString).appendingPathComponent(sessionId) as NSString)
             .appendingPathComponent("axion-state.json")
         guard let data = FileManager.default.contents(atPath: statePath) else { return nil }

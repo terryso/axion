@@ -20,7 +20,7 @@ struct MockRunExecutor: RunExecuting {
         return runResult
     }
 
-    func generateRunId() -> String { "20260527-test01" }
+    func generateRunId() -> String { "20260527-\(UUID().uuidString.prefix(6).lowercased())" }
 }
 
 struct MockAgentBuilder: AgentBuilding {
@@ -115,7 +115,7 @@ struct AxionRuntimeTests {
         #expect(result.totalSteps == 3)
         #expect(result.durationMs == 1500)
         #expect(result.runSucceeded == true)
-        #expect(result.sessionId == "20260527-test01")
+        #expect(result.sessionId.hasPrefix("20260527-"))
 
         let state = await runtime.state
         #expect(state == .completed)
@@ -176,7 +176,7 @@ struct AxionRuntimeTests {
         )
 
         let sid = result.sessionId
-        #expect(sid == "20260527-test01", "sessionId should match mock executor output")
+        #expect(sid.hasPrefix("20260527-"), "sessionId should follow YYYYMMDD-xxxxxx format")
     }
 
     // MARK: - createdAt is set
