@@ -784,7 +784,7 @@ axion/
 │   │   │   └── AxionBuiltInSkills.swift         # Epic 18: 内置桌面技能（screenshot-analyze, data-extract, form-fill）
 │   │   ├── Services/                            # Epic 26: AxionRuntime 统一执行 + AgentBuilder 工厂 + 运行时安全
 │   │   │   ├── AgentBuilder.swift              # Epic 21: BuildResult 工厂（build() 返回 agent + options + helper manager）
-│   │   │   ├── RunOrchestrator.swift           # Epic 26: Stream processing layer（review/curator, takeover, skill fast-path; cross-cutting concerns moved to EventHandlers）
+│   │   │   ├── RunOrchestrator.swift           # Epic 26: Stream processing layer（review/curator, takeover; skill fast-path moved to AxionRuntime in Epic 27; cross-cutting concerns moved to EventHandlers）
 │   │   │   ├── SafetyHookFactory.swift         # Epic 21: SafetyHook 创建（提取自 AgentBuilder）
 │   │   │   ├── MCPConfigResolver.swift         # Epic 21: MCP server 配置解析（提取自 AgentBuilder）
 │   │   │   ├── RunLockService.swift            # Epic 13: 桌面级运行锁 actor（~/.axion/run.lock）
@@ -1102,7 +1102,7 @@ AxionBar ← SwiftUI + AppKit（独立 macOS App）
     ▼
 RunCommand.parse()                          # ArgumentParser 解析
     │
-    ├── (skill fast-path: /skill-name → RunOrchestrator.executeSkillDirectly())
+    ├── (skill path: /skill-name → AxionRuntime.executeSkill())  # [Epic 27] skill also through runtime
     │
     ▼
 AxionRuntime(eventBus:)                     # [Epic 26] 统一执行入口

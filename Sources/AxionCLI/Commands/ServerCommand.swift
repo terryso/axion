@@ -131,11 +131,12 @@ struct ServerCommand: AsyncParsableCommand {
             // Map result state to API status
             let apiStatus: APIRunStatus = result.state == .completed ? .completed : .failed
 
-            // Update RunCoordinator
+            // Update RunCoordinator (also emits runCompleted SSE and completes stream)
             await runCoordinator.updateRun(
                 runId: runId,
                 status: apiStatus,
                 steps: [],
+                totalSteps: result.totalSteps,
                 durationMs: result.durationMs,
                 replanCount: 0,
                 costTelemetry: nil
@@ -149,16 +150,6 @@ struct ServerCommand: AsyncParsableCommand {
                 totalSteps: result.totalSteps,
                 durationMs: result.durationMs
             )
-
-            // Emit runCompleted and complete SSE stream
-            let completedEvent = AgentSSEEvent.runCompleted(RunCompletedData(
-                runId: runId,
-                finalStatus: sdkStatus.rawValue,
-                totalSteps: result.totalSteps,
-                durationMs: result.durationMs
-            ))
-            await broadcaster.emit(runId: runId, event: completedEvent)
-            await broadcaster.complete(runId: runId)
 
             await limiter.release()
         }

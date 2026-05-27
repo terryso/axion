@@ -66,6 +66,7 @@ actor RunCoordinator {
         runId: String,
         status: APIRunStatus,
         steps: [StepSummary],
+        totalSteps: Int? = nil,
         durationMs: Int?,
         replanCount: Int,
         costTelemetry: CostTelemetry? = nil,
@@ -74,10 +75,11 @@ actor RunCoordinator {
         guard runs[runId] != nil else { return }
 
         let completedAt = Self.isoFormatter.string(from: Date())
+        let resolvedTotalSteps = totalSteps ?? steps.count
 
         runs[runId]?.status = status
         runs[runId]?.completedAt = completedAt
-        runs[runId]?.totalSteps = steps.count
+        runs[runId]?.totalSteps = resolvedTotalSteps
         runs[runId]?.durationMs = durationMs
         runs[runId]?.replanCount = replanCount
         runs[runId]?.steps = steps
@@ -89,7 +91,7 @@ actor RunCoordinator {
             let event = AgentSSEEvent.runCompleted(RunCompletedData(
                 runId: runId,
                 finalStatus: status.rawValue,
-                totalSteps: steps.count,
+                totalSteps: resolvedTotalSteps,
                 durationMs: durationMs
             ))
             await broadcaster.emit(runId: runId, event: event)

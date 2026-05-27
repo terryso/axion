@@ -578,15 +578,18 @@ Sources/ScaffoldCLI/
 
 以下文件包含设计决策注释，第三方开发者应参考：
 - `Sources/AxionCLI/Commands/RunCommand.swift` — CLI 入口（参数解析 + AxionRuntime 执行，Epic 26）
-- `Sources/AxionCLI/Services/AxionRuntime.swift` — 统一执行入口 actor（session lifecycle + EventBus + EventHandler 注册）
+- `Sources/AxionCLI/Services/AxionRuntime.swift` — 统一执行入口 actor（session lifecycle + EventBus + EventHandler 注册 + executeSkill for skill path）
 - `Sources/AxionCLI/Services/Protocols/AxionRuntimeRunning.swift` — AxionRuntime DI 协议（测试用）
-- `Sources/AxionCLI/Services/AgentBuilder.swift` — BuildResult 工厂（build() 返回 agent + options + helper manager，不执行；buildSkillAgent() 为技能执行独立路径）
-- `Sources/AxionCLI/Services/RunOrchestrator.swift` — Stream processing layer（review/curator execution, takeover, skill fast-path; cross-cutting concerns moved to EventHandlers in Epic 26）
+- `Sources/AxionCLI/Services/AgentBuilder.swift` — BuildResult 工厂（build() 返回 agent + options + helper manager，不执行；buildSkillAgent() 为技能执行独立路径，Epic 27 增加 eventBus 参数）
+- `Sources/AxionCLI/Services/RunOrchestrator.swift` — Stream processing layer（review/curator execution, takeover; skill fast-path moved to AxionRuntime in Epic 27; cross-cutting concerns moved to EventHandlers in Epic 26）
+- `Sources/AxionCLI/Services/DaemonRuntimeManager.swift` — [Epic 27] Daemon 模式运行时协调器（per-request AxionRuntime，session tracking）
+- `Sources/AxionCLI/Commands/SessionsCommand.swift` — [Epic 27] axion sessions CLI 命令（--active, --limit）
+- `Sources/AxionCLI/Commands/ResumeCommand.swift` — [Epic 27] axion resume CLI 命令（session 恢复，复用 RunCommand handler 注册）
 - `Sources/AxionCLI/Services/SafetyHookFactory.swift` — SafetyHook 创建（提取自 AgentBuilder，34 行）
 - `Sources/AxionCLI/Services/MCPConfigResolver.swift` — MCP 配置解析（提取自 AgentBuilder，67 行）
 - `Sources/AxionCLI/MCP/MCPServerRunner.swift` — Agent-as-MCP-Server 模式（使用 AgentBuilder.BuildResult）
 - `Sources/AxionCLI/Memory/MemoryContextProvider.swift` — Memory 系统设计
-- `Sources/AxionCLI/API/ApiRunner.swift` — HTTP API skill execution (runSkillAgent path; runAgent removed in Epic 26)
+- `Sources/AxionCLI/API/ApiRunner.swift` — HTTP API skill execution (runSkillAgent via AxionRuntime.executeSkill(); runAgent removed in Epic 26)
 - `Sources/AxionCLI/Commands/SDKOutputHandlers.swift` — SDKTerminalOutputHandler / SDKJSONOutputHandler（SDKMessageOutputHandler 子类）
 
 ### SDK 开发者文档（位于 OpenAgentSDK 仓库）
@@ -620,7 +623,7 @@ AxionRuntime.execute(buildConfig, runOverrides) → AgentBuilder.build() → age
     │        ├── NotificationHandler (CLI only)
     │        └── TraceEventHandler
     │
-    └── RunOrchestrator — still handles review/curator execution, takeover, skill fast-path
+    └── RunOrchestrator — still handles review/curator execution, takeover (skill fast-path moved to AxionRuntime in Epic 27)
 ```
 
 - `maxSteps` 控制最大 turn 数（默认 20，fast mode 下 5）
@@ -791,7 +794,7 @@ Planner 的 system prompt 必须包含符号键到基础键的映射，告诉 LL
     ▼
 RunCommand.parse()                          # ArgumentParser 解析
     │
-    ├── (skill fast-path: /skill-name → RunOrchestrator.executeSkillDirectly())
+    ├── (skill path: /skill-name → AxionRuntime.executeSkill())  # [Epic 27] skill also through runtime
     │
     ▼
 AxionRuntime(eventBus:)                     # [Epic 26] 统一执行入口

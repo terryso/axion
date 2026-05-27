@@ -271,7 +271,7 @@ Task.detached {
 
 ---
 
-## A6. Session Resume CLI
+## A6. Session Resume CLI ✅ DONE (Epic 27)
 
 **优先级：P1**
 **前置依赖：A2**
@@ -299,7 +299,7 @@ axion resume <session-id>   # 恢复一个 session
 
 ---
 
-## A7. Skill / Daemon 集成
+## A7. Skill / Daemon 集成 ✅ DONE (Epic 27)
 
 **优先级：P2**
 **前置依赖：A2**
@@ -420,10 +420,11 @@ A7 (Skill/Daemon 集成)   P2
 - 旧代码清理（RunOrchestrator 横切关注点移除）✅
 - 验收：现有功能不变 ✅
 
-**Axion Epic 27: Session Resume + Daemon（A6 + A7）** → `docs/epics/epic-27-session-resume-daemon.md`
-- `axion sessions` / `axion resume`
-- Daemon 模式集成 Runtime
-- E2E 测试
+**Axion Epic 27: Session Resume + Daemon（A6 + A7）✅ DONE** → `docs/epics/epic-27-session-resume-daemon.md`
+- `axion sessions` / `axion resume` ✅
+- Daemon 模式集成 Runtime ✅
+- Skill 执行通过 AxionRuntime ✅
+- E2E 测试 ✅
 
 ---
 
