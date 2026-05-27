@@ -11,6 +11,10 @@ struct ServerCommand: AsyncParsableCommand {
         abstract: "启动 HTTP API 服务器"
     )
 
+    // Test seams — overridden in unit tests to inject mocks.
+    nonisolated(unsafe) static var createRuntime: @Sendable (EventBus) -> any AxionRuntimeRunning = { AxionRuntime(eventBus: $0) }
+    nonisolated(unsafe) static var createBridge: (@Sendable (EventBus, EventBroadcaster, String) -> EventBusBridge)? = nil
+
     @Option(name: .long, help: "监听端口")
     var port: Int = 4242
 
@@ -81,27 +85,66 @@ struct ServerCommand: AsyncParsableCommand {
             // Track in Axion's RunCoordinator using the SDK's runId
             await runCoordinator.submitRunWithId(runId, task: task, request: request)
 
-            let result = await ApiRunner.runAgent(
+            // Create EventBus + AxionRuntime
+            let eventBus = EventBus()
+            let runtime = Self.createRuntime(eventBus)
+
+            // Register API handlers (cost + trace only)
+            await runtime.registerHandler(CostEventHandler())
+            await runtime.registerHandler(TraceEventHandler(traceDir: (ConfigManager.defaultConfigDirectory as NSString).appendingPathComponent("runs")))
+
+            // Create EventBusBridge to forward events → SSE
+            let bridge: EventBusBridge
+            if let factory = Self.createBridge {
+                bridge = factory(eventBus, broadcaster, runId)
+            } else {
+                bridge = EventBusBridge(eventBus: eventBus, broadcaster: broadcaster, runId: runId)
+            }
+            await bridge.start(onComplete: { })
+
+            // Build config from request
+            let buildConfig = AgentBuilder.BuildConfig.forAPI(
                 config: config,
                 task: task,
-                options: request,
-                runId: runId,
-                eventBroadcaster: broadcaster,
-                runTracker: runCoordinator,
-                verbose: false,
-                completion: { _, _, _, _, _, _, _ in }
+                request: request
             )
 
+            // Start event loop, execute, stop event loop
+            let eventLoopTask = _Concurrency.Task { await runtime.startEventLoop() }
+
+            let result: AxionRunResult
+            do {
+                result = try await runtime.execute(buildConfig: buildConfig, runOverrides: .default)
+            } catch {
+                eventLoopTask.cancel()
+                await runtime.stopEventLoop()
+                await bridge.stop()
+
+                await runCoordinator.updateRun(runId: runId, status: .failed, steps: [], durationMs: 0, replanCount: 0, costTelemetry: nil)
+                await tracker.updateRun(runId: runId, status: .failed)
+                await broadcaster.complete(runId: runId)
+                await limiter.release()
+                return
+            }
+            eventLoopTask.cancel()
+            await runtime.stopEventLoop()
+            await bridge.stop()
+
+            // Map result state to API status
+            let apiStatus: APIRunStatus = result.state == .completed ? .completed : .failed
+
+            // Update RunCoordinator
             await runCoordinator.updateRun(
                 runId: runId,
-                status: result.finalStatus,
-                steps: result.stepSummaries,
+                status: apiStatus,
+                steps: [],
                 durationMs: result.durationMs,
-                replanCount: result.replanCount,
-                costTelemetry: result.costTelemetry
+                replanCount: 0,
+                costTelemetry: nil
             )
 
-            let sdkStatus = OpenAgentSDK.APIRunStatus(rawValue: result.finalStatus.rawValue) ?? .failed
+            // Update SDK tracker
+            let sdkStatus = OpenAgentSDK.APIRunStatus(rawValue: apiStatus.rawValue) ?? .failed
             await tracker.updateRun(
                 runId: runId,
                 status: sdkStatus,
@@ -109,7 +152,7 @@ struct ServerCommand: AsyncParsableCommand {
                 durationMs: result.durationMs
             )
 
-            // Emit runCompleted to SDK's broadcaster for SSE replay
+            // Emit runCompleted and complete SSE stream
             let completedEvent = AgentSSEEvent.runCompleted(RunCompletedData(
                 runId: runId,
                 finalStatus: sdkStatus.rawValue,
