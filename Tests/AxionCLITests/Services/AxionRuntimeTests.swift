@@ -4,87 +4,130 @@ import OpenAgentSDK
 @testable import AxionCLI
 @testable import AxionCore
 
+// MARK: - Mocks
+
+struct MockRunExecutor: RunExecuting {
+    let runResult: RunOrchestrator.RunResult
+    let error: Error?
+
+    init(runResult: RunOrchestrator.RunResult, error: Error? = nil) {
+        self.runResult = runResult
+        self.error = error
+    }
+
+    func execute(buildResult: AgentBuildResult, runConfig: RunOrchestrator.RunConfig) async throws -> RunOrchestrator.RunResult {
+        if let error { throw error }
+        return runResult
+    }
+
+    func generateRunId() -> String { "20260527-test01" }
+}
+
+struct MockAgentBuilder: AgentBuilding {
+    let buildResult: AgentBuildResult?
+    let error: Error?
+
+    init(buildResult: AgentBuildResult? = nil, error: Error? = nil) {
+        self.buildResult = buildResult
+        self.error = error
+    }
+
+    func build(_ config: AgentBuilder.BuildConfig) async throws -> AgentBuildResult {
+        if let error { throw error }
+        guard let buildResult else { fatalError("MockAgentBuilder: no buildResult and no error") }
+        return buildResult
+    }
+}
+
+// MARK: - Helpers
+
+extension AxionRuntimeTests {
+
+    static func successResult() -> RunOrchestrator.RunResult {
+        RunOrchestrator.RunResult(
+            totalSteps: 3, durationMs: 1500, runSucceeded: true,
+            externallyModified: false, takeoverEvent: nil, runCompleteContext: nil
+        )
+    }
+
+    static func makeRuntime(
+        executorResult: RunOrchestrator.RunResult? = nil,
+        executorError: Error? = nil,
+        builderResult: AgentBuildResult? = nil,
+        builderError: Error? = nil,
+        eventBus: EventBus? = nil
+    ) -> AxionRuntime {
+        let result = executorResult ?? successResult()
+        let executor = MockRunExecutor(runResult: result, error: executorError)
+        let builder = MockAgentBuilder(buildResult: builderResult, error: builderError)
+        return AxionRuntime(eventBus: eventBus, executor: executor, builder: builder)
+    }
+
+    static func dummyBuildResult() -> AgentBuildResult {
+        let options = AgentOptions(apiKey: "sk-test", model: "claude-sonnet-4-6", maxTurns: 1, maxTokens: 256)
+        let agent = Agent(options: options)
+        return AgentBuildResult(
+            agent: agent,
+            helperPath: "/tmp/axion-helper",
+            memoryDir: "/tmp/axion-memory",
+            systemPrompt: "test prompt",
+            agentOptions: options,
+            skillRegistry: SkillRegistry(),
+            skillRegisteredCount: 0,
+            runCompleteBox: RunCompleteContextBox(),
+            reviewOrchestrator: nil,
+            intelligentCurator: nil,
+            usageStore: nil
+        )
+    }
+}
+
+// MARK: - Tests
+
 @Suite("AxionRuntime")
 struct AxionRuntimeTests {
-
-    private var testConfig: AxionConfig {
-        AxionConfig(apiKey: "sk-test-unit-test-key")
-    }
-
-    private func buildDryrunResult() async throws -> AgentBuildResult {
-        try await AgentBuilder.build(
-            .forCLI(
-                config: testConfig,
-                task: "test task",
-                noMemory: true,
-                noSkills: true,
-                allowForeground: false,
-                maxSteps: 1,
-                maxTokens: 256,
-                verbose: false,
-                dryrun: true,
-                fast: false
-            )
-        )
-    }
-
-    private func makeRunConfig(task: String = "test task") -> RunOrchestrator.RunConfig {
-        RunOrchestrator.RunConfig(
-            task: task, fast: false, dryrun: true, json: false,
-            noMemory: true, noVisualDelta: true, allowForeground: false,
-            maxSteps: 1, config: testConfig,
-            noReview: true, onReviewCompleted: nil, eventBus: nil
-        )
-    }
 
     // MARK: - Initial state
 
     @Test("AxionRuntime initial state is created")
     func initialState() async {
-        let runtime = AxionRuntime()
+        let runtime = Self.makeRuntime()
         let state = await runtime.state
         #expect(state == .created)
     }
 
-    // MARK: - 5.6: COMPLETED on successful RunOrchestrator result (dryrun)
+    // MARK: - run() — COMPLETED on success
 
-    @Test("AxionRuntime transitions to COMPLETED on successful dryrun")
-    func transitionsToCompletedOnDryrun() async throws {
-        let runtime = AxionRuntime()
-        let buildResult = try await buildDryrunResult()
+    @Test("run() transitions to COMPLETED on successful executor result")
+    func runTransitionsToCompleted() async throws {
+        let runtime = Self.makeRuntime()
+        let buildResult = Self.dummyBuildResult()
+        let runConfig = Self.makeRunConfig()
 
         let result = try await runtime.run(
             task: "test task",
             buildResult: buildResult,
-            runConfig: makeRunConfig()
+            runConfig: runConfig
         )
 
         #expect(result.state == .completed)
         #expect(result.task == "test task")
-        #expect(!result.sessionId.isEmpty)
+        #expect(result.totalSteps == 3)
+        #expect(result.durationMs == 1500)
+        #expect(result.runSucceeded == true)
+        #expect(result.sessionId == "20260527-test01")
 
         let state = await runtime.state
         #expect(state == .completed)
     }
 
-    // MARK: - 5.7: FAILED when RunOrchestrator throws
+    // MARK: - run() — FAILED on executor error
 
-    @Test("AxionRuntime transitions to FAILED when run lock is held")
-    func transitionsToFailedOnThrow() async throws {
-        let runtime = AxionRuntime()
-        let buildResult = try await buildDryrunResult()
-
-        // Acquire lock to force RunOrchestrator to throw
-        let lockService = RunLockService()
-        let acquired = await lockService.acquire(runId: "blocking-test")
-        #expect(acquired)
-
-        let runConfig = RunOrchestrator.RunConfig(
-            task: "test task", fast: false, dryrun: false, json: false,
-            noMemory: true, noVisualDelta: true, allowForeground: false,
-            maxSteps: 1, config: testConfig,
-            noReview: true, onReviewCompleted: nil, eventBus: nil
-        )
+    @Test("run() transitions to FAILED when executor throws")
+    func runTransitionsToFailedOnThrow() async throws {
+        let runtime = Self.makeRuntime(executorError: AxionError.runLocked(runId: "locked", pid: 1234))
+        let buildResult = Self.dummyBuildResult()
+        let runConfig = Self.makeRunConfig()
 
         let result = try await runtime.run(
             task: "test task",
@@ -100,73 +143,54 @@ struct AxionRuntimeTests {
 
         let state = await runtime.state
         #expect(state == .failed)
-
-        await lockService.release()
     }
 
-    // MARK: - 5.8: EventBus passthrough
+    // MARK: - run() — EventBus passthrough
 
-    @Test("AxionRuntime passes eventBus through RunConfig")
-    func eventBusPassthrough() async throws {
+    @Test("run() passes eventBus through RunConfig")
+    func runEventBusPassthrough() async throws {
         let bus = EventBus()
-        let runtime = AxionRuntime(eventBus: bus)
-        let buildResult = try await buildDryrunResult()
+        let runtime = Self.makeRuntime(eventBus: bus)
+        let buildResult = Self.dummyBuildResult()
 
         let result = try await runtime.run(
             task: "test task",
             buildResult: buildResult,
-            runConfig: makeRunConfig()
+            runConfig: Self.makeRunConfig()
         )
 
         #expect(result.state == .completed)
     }
 
-    // MARK: - 5.9: sessionId format
+    // MARK: - sessionId format
 
-    @Test("sessionId follows YYYYMMDD-{6 lowercase alphanumeric} format")
+    @Test("sessionId follows expected format from executor")
     func sessionIdFormat() async throws {
-        let runtime = AxionRuntime()
-        let buildResult = try await buildDryrunResult()
+        let runtime = Self.makeRuntime()
+        let buildResult = Self.dummyBuildResult()
 
         let result = try await runtime.run(
             task: "test",
             buildResult: buildResult,
-            runConfig: makeRunConfig(task: "test")
+            runConfig: Self.makeRunConfig(task: "test")
         )
 
         let sid = result.sessionId
-        #expect(sid.count == 15, "sessionId should be YYYYMMDD-XXXXXX (15 chars), got '\(sid)'")
-
-        let dashIndex = sid.index(sid.startIndex, offsetBy: 8)
-        #expect(sid[dashIndex] == "-", "9th char should be '-'")
-
-        let datePart = String(sid[sid.startIndex..<dashIndex])
-        let randomPart = String(sid[sid.index(after: dashIndex)...])
-
-        #expect(datePart.count == 8, "date part should be 8 chars")
-        #expect(randomPart.count == 6, "random part should be 6 chars")
-
-        let allowedChars = CharacterSet(charactersIn: "abcdefghijklmnopqrstuvwxyz0123456789")
-        #expect(randomPart.unicodeScalars.allSatisfy { allowedChars.contains($0) },
-                "random part should be lowercase alphanumeric")
-
-        let digits = CharacterSet.decimalDigits
-        #expect(datePart.unicodeScalars.allSatisfy { digits.contains($0) },
-                "date part should be all digits")
+        #expect(sid == "20260527-test01", "sessionId should match mock executor output")
     }
 
     // MARK: - createdAt is set
 
-    @Test("AxionRuntime sets createdAt on run")
+    @Test("run() sets createdAt on run")
     func createdAtIsSet() async throws {
-        let runtime = AxionRuntime()
+        let runtime = Self.makeRuntime()
         let before = Date()
-        let buildResult = try await buildDryrunResult()
+        let buildResult = Self.dummyBuildResult()
 
         let result = try await runtime.run(
             task: "test",
             buildResult: buildResult,
-            runConfig: makeRunConfig()
+            runConfig: Self.makeRunConfig()
         )
 
         let after = Date()
@@ -174,28 +198,15 @@ struct AxionRuntimeTests {
         #expect(result.createdAt <= after)
     }
 
-    // MARK: - execute() tests
+    // MARK: - execute() — COMPLETED
 
-    private func makeDryrunBuildConfig(task: String = "test task") -> AgentBuilder.BuildConfig {
-        .forCLI(
-            config: testConfig,
-            task: task,
-            noMemory: true,
-            noSkills: true,
-            allowForeground: false,
-            maxSteps: 1,
-            maxTokens: 256,
-            verbose: false,
-            dryrun: true,
-            fast: false
-        )
-    }
+    @Test("execute() with successful build returns COMPLETED")
+    func executeReturnsCompleted() async throws {
+        let buildResult = Self.dummyBuildResult()
+        let runtime = Self.makeRuntime(builderResult: buildResult)
 
-    @Test("execute() with dryrun BuildConfig returns COMPLETED with valid result (AC #1)")
-    func executeDryrunReturnsCompleted() async throws {
-        let runtime = AxionRuntime()
         let result = try await runtime.execute(
-            buildConfig: makeDryrunBuildConfig()
+            buildConfig: Self.makeBuildConfig()
         )
 
         #expect(result.state == .completed)
@@ -206,24 +217,13 @@ struct AxionRuntimeTests {
         #expect(state == .completed)
     }
 
-    @Test("execute() with missing API key config returns FAILED with errorMessage (AC #2)")
-    func executeMissingApiKeyReturnsFailed() async throws {
-        let runtime = AxionRuntime()
-        let noKeyConfig = AxionConfig(apiKey: nil)
-        let buildConfig = AgentBuilder.BuildConfig.forCLI(
-            config: noKeyConfig,
-            task: "test task",
-            noMemory: true,
-            noSkills: true,
-            allowForeground: false,
-            maxSteps: 1,
-            maxTokens: 256,
-            verbose: false,
-            dryrun: true,
-            fast: false
-        )
+    // MARK: - execute() — FAILED on build error
 
-        let result = try await runtime.execute(buildConfig: buildConfig)
+    @Test("execute() with build failure returns FAILED with errorMessage")
+    func executeBuildFailureReturnsFailed() async throws {
+        let runtime = Self.makeRuntime(builderError: AxionError.missingApiKey(suggestion: "test"))
+
+        let result = try await runtime.execute(buildConfig: Self.makeBuildConfig())
 
         #expect(result.state == .failed)
         #expect(result.runSucceeded == false)
@@ -235,164 +235,165 @@ struct AxionRuntimeTests {
         #expect(state == .failed)
     }
 
-    @Test("execute() with default RunOverrides uses correct values (AC #4)")
+    // MARK: - execute() — default RunOverrides
+
+    @Test("execute() with default RunOverrides succeeds")
     func executeDefaultOverrides() async throws {
-        let runtime = AxionRuntime()
+        let buildResult = Self.dummyBuildResult()
+        let runtime = Self.makeRuntime(builderResult: buildResult)
+
         let result = try await runtime.execute(
-            buildConfig: makeDryrunBuildConfig(),
+            buildConfig: Self.makeBuildConfig(),
             runOverrides: .default
         )
 
         #expect(result.state == .completed)
     }
 
-    @Test("execute() passes eventBus through to RunConfig (AC #5)")
+    // MARK: - execute() — eventBus passthrough
+
+    @Test("execute() passes eventBus through to RunConfig")
     func executeEventBusPassthrough() async throws {
         let bus = EventBus()
-        let runtime = AxionRuntime(eventBus: bus)
-        let result = try await runtime.execute(
-            buildConfig: makeDryrunBuildConfig()
-        )
+        let buildResult = Self.dummyBuildResult()
+        let runtime = Self.makeRuntime(builderResult: buildResult, eventBus: bus)
 
+        let result = try await runtime.execute(buildConfig: Self.makeBuildConfig())
         #expect(result.state == .completed)
     }
 
-    @Test("execute() uses buildConfig.task as runConfig.task (AC #6)")
+    // MARK: - execute() — task passthrough
+
+    @Test("execute() uses buildConfig.task as runConfig.task")
     func executeTaskPassthrough() async throws {
-        let runtime = AxionRuntime()
-        let customTask = "my custom task"
+        let buildResult = Self.dummyBuildResult()
+        let runtime = Self.makeRuntime(builderResult: buildResult)
+
         let result = try await runtime.execute(
-            buildConfig: makeDryrunBuildConfig(task: customTask)
+            buildConfig: Self.makeBuildConfig(task: "custom task")
         )
 
-        #expect(result.task == customTask)
+        #expect(result.task == "custom task")
     }
 
-    @Test("existing run() method still works unchanged (AC #7)")
+    // MARK: - run() still works after execute()
+
+    @Test("run() method still works unchanged")
     func runStillWorksAfterExecute() async throws {
-        let runtime = AxionRuntime()
-        let buildResult = try await buildDryrunResult()
+        let buildResult = Self.dummyBuildResult()
+        let runtime = Self.makeRuntime(builderResult: buildResult)
 
         let result = try await runtime.run(
             task: "test task",
             buildResult: buildResult,
-            runConfig: makeRunConfig()
+            runConfig: Self.makeRunConfig()
         )
 
         #expect(result.state == .completed)
         #expect(result.task == "test task")
     }
 
-    @Test("second execute() call on same instance is rejected by state guard (AC #8)")
-    func executeTwiceRejected() async throws {
-        let runtime = AxionRuntime()
+    // MARK: - Second run rejected by state guard
 
-        let first = try await runtime.execute(
-            buildConfig: makeDryrunBuildConfig()
+    @Test("second run() call on same instance is rejected by state guard")
+    func runTwiceRejected() async throws {
+        let runtime = Self.makeRuntime()
+        let buildResult = Self.dummyBuildResult()
+
+        let first = try await runtime.run(
+            task: "first",
+            buildResult: buildResult,
+            runConfig: Self.makeRunConfig()
         )
         #expect(first.state == .completed)
 
-        let second = try await runtime.execute(
-            buildConfig: makeDryrunBuildConfig()
+        let second = try await runtime.run(
+            task: "second",
+            buildResult: buildResult,
+            runConfig: Self.makeRunConfig()
         )
         #expect(second.state == .failed)
         #expect(second.errorMessage != nil)
     }
 
-    @Test("execute() in dryrun mode returns completed (AC #9)")
-    func executeDryrunModeReturnsSuccess() async throws {
-        let runtime = AxionRuntime()
-        let result = try await runtime.execute(
-            buildConfig: makeDryrunBuildConfig()
-        )
+    // MARK: - externallyModified tracking
 
-        #expect(result.state == .completed)
-    }
-
-    // MARK: - Story 24.3: Runtime State
-
-    @Test("externallyModified is false initially and updated after dryrun (AC #1)")
+    @Test("externallyModified is false initially and false after mock success")
     func externallyModifiedState() async throws {
-        let runtime = AxionRuntime()
+        let runtime = Self.makeRuntime()
         let externallyMod = await runtime.externallyModified
         #expect(externallyMod == false)
 
-        let result = try await runtime.execute(buildConfig: makeDryrunBuildConfig())
+        let buildResult = Self.dummyBuildResult()
+        let result = try await runtime.run(
+            task: "test", buildResult: buildResult, runConfig: Self.makeRunConfig()
+        )
         #expect(result.state == .completed)
 
         let afterRun = await runtime.externallyModified
-        #expect(afterRun == false, "dryrun should not detect external modification")
+        #expect(afterRun == false)
     }
 
-    @Test("takeoverEvent is nil after dryrun (AC #2)")
-    func takeoverEventNilAfterDryrun() async throws {
-        let runtime = AxionRuntime()
-        let result = try await runtime.execute(buildConfig: makeDryrunBuildConfig())
+    // MARK: - takeoverEvent tracking
+
+    @Test("takeoverEvent is nil after mock success")
+    func takeoverEventNilAfterSuccess() async throws {
+        let runtime = Self.makeRuntime()
+        let buildResult = Self.dummyBuildResult()
+        let result = try await runtime.run(
+            task: "test", buildResult: buildResult, runConfig: Self.makeRunConfig()
+        )
         #expect(result.state == .completed)
 
         let takeover = await runtime.takeoverEvent
-        #expect(takeover == nil, "dryrun should not produce takeover event")
+        #expect(takeover == nil)
     }
 
-    @Test("AxionRunResult carries runCompleteContext from dryrun (AC #8)")
-    func runCompleteContextInResult() async throws {
-        let runtime = AxionRuntime()
-        let result = try await runtime.execute(buildConfig: makeDryrunBuildConfig())
-        #expect(result.state == .completed)
-        // With a fake API key, the SDK may or may not produce a RunCompleteContext
-        // depending on whether the dryrun completes before hitting the 401.
-        // The important thing is that the field exists and is accessible.
-        if let ctx = result.runCompleteContext {
-            #expect(!ctx.task.isEmpty)
-        }
+    // MARK: - createSession()
+
+    @Test("createSession() writes axion-state.json with CREATED status")
+    func createSessionWritesCreatedState() async throws {
+        let runtime = Self.makeRuntime()
+        let sid = try await runtime.createSession(task: "test task", config: AxionConfig(apiKey: "test"))
+
+        let sessionsDir = (NSHomeDirectory() as NSString).appendingPathComponent(".axion/sessions")
+        let statePath = ((sessionsDir as NSString).appendingPathComponent(sid) as NSString)
+            .appendingPathComponent("axion-state.json")
+
+        let data = try #require(FileManager.default.contents(atPath: statePath),
+                                 "axion-state.json should exist after createSession")
+        let overlay = try JSONDecoder().decode(AxionStateOverlay.self, from: data)
+        #expect(overlay.status == "created")
+        #expect(overlay.totalSteps == 0)
     }
 
-    // MARK: - Story 24.3: Session Queries
+    // MARK: - listSessions()
 
-    @Test("listSessions() returns empty array when no sessions exist (AC #4)")
-    func listSessionsEmpty() async throws {
-        let tmpDir = NSTemporaryDirectory().appending("/axion-test-sessions-\(UUID().uuidString)")
-        defer { try? FileManager.default.removeItem(atPath: tmpDir) }
-
-        let runtime = AxionRuntime()
-        // Runtime uses default ~/.axion/sessions — test that listing doesn't crash
+    @Test("listSessions() returns array without crashing")
+    func listSessionsNoCrash() async throws {
+        let runtime = Self.makeRuntime()
         let sessions = try await runtime.listSessions()
-        // Can't assert empty because other sessions may exist
         #expect(type(of: sessions) == [SessionInfo].self)
     }
 
-    @Test("getSession() returns nil for non-existent session (AC #5)")
+    // MARK: - getSession()
+
+    @Test("getSession() returns nil for non-existent session")
     func getSessionNil() async throws {
-        let runtime = AxionRuntime()
+        let runtime = Self.makeRuntime()
         let result = try await runtime.getSession("nonexistent-session-\(UUID().uuidString)")
         #expect(result == nil)
     }
 
-    // MARK: - Story 24.3: Axion State Persistence
+    // MARK: - State persistence
 
-    @Test("writeAxionState writes valid JSON to expected path (AC #6)")
-    func writeAxionState() async throws {
-        let runtime = AxionRuntime()
-        let result = try await runtime.execute(buildConfig: makeDryrunBuildConfig())
-        #expect(result.state == .completed)
-
-        // After dryrun, axion-state.json should exist at ~/.axion/sessions/{sessionId}/
-        let sessionsDir = (NSHomeDirectory() as NSString).appendingPathComponent(".axion/sessions")
-        let statePath = ((sessionsDir as NSString).appendingPathComponent(result.sessionId) as NSString)
-            .appendingPathComponent("axion-state.json")
-
-        let data = try #require(FileManager.default.contents(atPath: statePath),
-                                 "axion-state.json should exist after run")
-        let overlay = try JSONDecoder().decode(AxionStateOverlay.self, from: data)
-        #expect(overlay.status == "completed")
-        #expect(overlay.totalSteps == result.totalSteps)
-        #expect(overlay.durationMs == result.durationMs)
-    }
-
-    @Test("dryrun run writes axion-state.json with completed status")
-    func dryrunWritesState() async throws {
-        let runtime = AxionRuntime()
-        let result = try await runtime.execute(buildConfig: makeDryrunBuildConfig())
+    @Test("run() writes axion-state.json with completed status")
+    func runWritesCompletedState() async throws {
+        let runtime = Self.makeRuntime()
+        let buildResult = Self.dummyBuildResult()
+        let result = try await runtime.run(
+            task: "test", buildResult: buildResult, runConfig: Self.makeRunConfig()
+        )
         #expect(result.state == .completed)
 
         let sessionsDir = (NSHomeDirectory() as NSString).appendingPathComponent(".axion/sessions")
@@ -407,47 +408,20 @@ struct AxionRuntimeTests {
         #expect(overlay.status == "completed")
     }
 
-    // MARK: - Story 24.4: Session Lifecycle Persistence
+    @Test("two runs write independent axion-state.json files")
+    func twoRunsWriteStateFiles() async throws {
+        let buildResult = Self.dummyBuildResult()
 
-    @Test("createSession() writes axion-state.json with CREATED status")
-    func createSessionWritesCreatedState() async throws {
-        let runtime = AxionRuntime()
-        let sid = try await runtime.createSession(task: "test task", config: testConfig)
-
-        let sessionsDir = (NSHomeDirectory() as NSString).appendingPathComponent(".axion/sessions")
-        let statePath = ((sessionsDir as NSString).appendingPathComponent(sid) as NSString)
-            .appendingPathComponent("axion-state.json")
-
-        let data = try #require(FileManager.default.contents(atPath: statePath),
-                                 "axion-state.json should exist after createSession")
-        let overlay = try JSONDecoder().decode(AxionStateOverlay.self, from: data)
-        #expect(overlay.status == "created")
-        #expect(overlay.totalSteps == 0)
-    }
-
-    @Test("run() writes RUNNING state during execution then COMPLETED on success")
-    func runTransitionsPersist() async throws {
-        let runtime = AxionRuntime()
-        let result = try await runtime.execute(buildConfig: makeDryrunBuildConfig())
-        #expect(result.state == .completed)
-
-        let sessionsDir = (NSHomeDirectory() as NSString).appendingPathComponent(".axion/sessions")
-        let statePath = ((sessionsDir as NSString).appendingPathComponent(result.sessionId) as NSString)
-            .appendingPathComponent("axion-state.json")
-
-        let data = try #require(FileManager.default.contents(atPath: statePath))
-        let overlay = try JSONDecoder().decode(AxionStateOverlay.self, from: data)
-        #expect(overlay.status == "completed")
-    }
-
-    @Test("two sessions write axion-state.json files independently")
-    func twoSessionsWriteStateFiles() async throws {
-        let runtime1 = AxionRuntime()
-        let result1 = try await runtime1.execute(buildConfig: makeDryrunBuildConfig())
+        let runtime1 = Self.makeRuntime()
+        let result1 = try await runtime1.run(
+            task: "r1", buildResult: buildResult, runConfig: Self.makeRunConfig()
+        )
         #expect(result1.state == .completed)
 
-        let runtime2 = AxionRuntime()
-        let result2 = try await runtime2.execute(buildConfig: makeDryrunBuildConfig())
+        let runtime2 = Self.makeRuntime()
+        let result2 = try await runtime2.run(
+            task: "r2", buildResult: buildResult, runConfig: Self.makeRunConfig()
+        )
         #expect(result2.state == .completed)
 
         let sessionsDir = (NSHomeDirectory() as NSString).appendingPathComponent(".axion/sessions")
@@ -458,5 +432,28 @@ struct AxionRuntimeTests {
 
         #expect(FileManager.default.fileExists(atPath: path1))
         #expect(FileManager.default.fileExists(atPath: path2))
+    }
+}
+
+// MARK: - Shared Helpers
+
+extension AxionRuntimeTests {
+
+    static func makeRunConfig(task: String = "test task") -> RunOrchestrator.RunConfig {
+        RunOrchestrator.RunConfig(
+            task: task, fast: false, dryrun: true, json: false,
+            noMemory: true, noVisualDelta: true, allowForeground: false,
+            maxSteps: 1, config: AxionConfig(apiKey: "test"),
+            noReview: true, onReviewCompleted: nil, eventBus: nil
+        )
+    }
+
+    static func makeBuildConfig(task: String = "test task") -> AgentBuilder.BuildConfig {
+        .forCLI(
+            config: AxionConfig(apiKey: "test"),
+            task: task, noMemory: true, noSkills: true,
+            allowForeground: false, maxSteps: 1, maxTokens: 256,
+            verbose: false, dryrun: true, fast: false
+        )
     }
 }

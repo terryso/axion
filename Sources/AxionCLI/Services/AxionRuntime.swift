@@ -5,6 +5,8 @@ import AxionCore
 
 public actor AxionRuntime {
     let eventBus: EventBus?
+    let executor: RunExecuting
+    let builder: AgentBuilding
     let sessionStore: SessionStore
     private(set) var currentState: AxionRunState = .created
     private(set) var sessionId: String?
@@ -15,8 +17,10 @@ public actor AxionRuntime {
     private var handlers: [any EventHandler] = []
     private var eventSubscriptionId: UUID?
 
-    public init(eventBus: EventBus? = nil) {
+    init(eventBus: EventBus? = nil, executor: RunExecuting = DefaultRunExecutor(), builder: AgentBuilding = DefaultAgentBuilder()) {
         self.eventBus = eventBus
+        self.executor = executor
+        self.builder = builder
         let sessionsDir = (NSHomeDirectory() as NSString).appendingPathComponent(".axion/sessions")
         self.sessionStore = SessionStore(sessionsDir: sessionsDir)
     }
@@ -41,7 +45,7 @@ public actor AxionRuntime {
         buildResult: AgentBuildResult,
         runConfig: RunOrchestrator.RunConfig
     ) async throws -> AxionRunResult {
-        let sid = RunOrchestrator.generateRunId()
+        let sid = executor.generateRunId()
         let startedAt = Date()
         sessionId = sid
         createdAt = startedAt
@@ -77,7 +81,7 @@ public actor AxionRuntime {
         )
 
         do {
-            let result = try await RunOrchestrator.execute(
+            let result = try await executor.execute(
                 buildResult: buildResult,
                 runConfig: modifiedConfig
             )
@@ -133,14 +137,14 @@ public actor AxionRuntime {
         buildConfig: AgentBuilder.BuildConfig,
         runOverrides: RunOverrides = .default
     ) async throws -> AxionRunResult {
-        let sid = RunOrchestrator.generateRunId()
+        let sid = executor.generateRunId()
         let startedAt = Date()
         sessionId = sid
         createdAt = startedAt
 
         let buildResult: AgentBuildResult
         do {
-            buildResult = try await AgentBuilder.build(buildConfig)
+            buildResult = try await builder.build(buildConfig)
         } catch {
             currentState = .failed
             return AxionRunResult(
@@ -172,7 +176,7 @@ public actor AxionRuntime {
     // MARK: - Session Lifecycle
 
     func createSession(task: String, config: AxionConfig) throws -> String {
-        let sid = RunOrchestrator.generateRunId()
+        let sid = executor.generateRunId()
         sessionId = sid
         createdAt = Date()
         try writeAxionState(

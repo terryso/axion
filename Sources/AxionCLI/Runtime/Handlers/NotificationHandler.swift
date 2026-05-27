@@ -12,9 +12,11 @@ actor NotificationHandler: EventHandler {
     ]
 
     private let json: Bool
+    private let notify: @Sendable (String, String?, String) -> Void
 
-    init(json: Bool) {
+    init(json: Bool, notify: @escaping @Sendable (String, String?, String) -> Void = RunOrchestrator.sendDesktopNotification) {
         self.json = json
+        self.notify = notify
     }
 
     func handle(_ event: any AgentEvent, context: EventHandlerContext) async {
@@ -35,10 +37,10 @@ actor NotificationHandler: EventHandler {
             summary = ctx.task
         }
 
-        RunOrchestrator.sendDesktopNotification(
-            title: "Axion \(statusText)",
-            subtitle: stats,
-            message: String(summary.prefix(200))
+        notify(
+            "Axion \(statusText)",
+            stats,
+            String(summary.prefix(200))
         )
     }
 

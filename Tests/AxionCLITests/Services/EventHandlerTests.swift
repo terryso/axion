@@ -29,6 +29,19 @@ actor MockEventHandler: EventHandler {
 @Suite("EventHandler Protocol")
 struct EventHandlerTests {
 
+    private func withEventLoop(
+        bus: EventBus,
+        runtime: AxionRuntime,
+        action: @escaping () async throws -> Void
+    ) async throws {
+        async let loop: Void = runtime.startEventLoop()
+        try await _Concurrency.Task.sleep(for: .milliseconds(50))
+        try await action()
+        try await _Concurrency.Task.sleep(for: .milliseconds(100))
+        await runtime.stopEventLoop()
+        _ = try? await loop
+    }
+
     @Test("handler subscribed to ToolCompletedEvent receives matching event")
     func subscribedHandlerReceivesEvent() async throws {
         let bus = EventBus()
@@ -39,17 +52,12 @@ struct EventHandlerTests {
         )
         await runtime.registerHandler(handler)
 
-        let event = ToolCompletedEvent(
-            sessionId: "s1",
-            toolUseId: "tu1",
-            toolName: "screenshot",
-            durationMs: 100,
-            isError: false,
-            output: nil
-        )
-        await bus.publish(event)
-
-        try await _Concurrency.Task.sleep(for: .milliseconds(100))
+        try await withEventLoop(bus: bus, runtime: runtime) {
+            await bus.publish(ToolCompletedEvent(
+                sessionId: "s1", toolUseId: "tu1", toolName: "screenshot",
+                durationMs: 100, isError: false, output: nil
+            ))
+        }
 
         let count = await handler.getHandledCount()
         #expect(count == 1, "Handler should receive exactly 1 event")
@@ -65,9 +73,9 @@ struct EventHandlerTests {
         )
         await runtime.registerHandler(handler)
 
-        await bus.publish(AgentStartedEvent(sessionId: "s1", task: "test"))
-
-        try await _Concurrency.Task.sleep(for: .milliseconds(100))
+        try await withEventLoop(bus: bus, runtime: runtime) {
+            await bus.publish(AgentStartedEvent(sessionId: "s1", task: "test"))
+        }
 
         let count = await handler.getHandledCount()
         #expect(count == 0, "Handler should NOT receive non-matching event")
@@ -80,13 +88,13 @@ struct EventHandlerTests {
         let handler = MockEventHandler(identifier: "wildcard", subscribedEventTypes: [])
         await runtime.registerHandler(handler)
 
-        await bus.publish(AgentStartedEvent(sessionId: "s1", task: "test"))
-        await bus.publish(ToolCompletedEvent(
-            sessionId: "s1", toolUseId: "tu1", toolName: "screenshot",
-            durationMs: 50, isError: false, output: nil
-        ))
-
-        try await _Concurrency.Task.sleep(for: .milliseconds(100))
+        try await withEventLoop(bus: bus, runtime: runtime) {
+            await bus.publish(AgentStartedEvent(sessionId: "s1", task: "test"))
+            await bus.publish(ToolCompletedEvent(
+                sessionId: "s1", toolUseId: "tu1", toolName: "screenshot",
+                durationMs: 50, isError: false, output: nil
+            ))
+        }
 
         let count = await handler.getHandledCount()
         #expect(count == 2, "Wildcard handler should receive all events")
@@ -108,9 +116,9 @@ struct EventHandlerTests {
         await runtime.registerHandler(handler2)
         await runtime.registerHandler(handler3)
 
-        await bus.publish(AgentStartedEvent(sessionId: "s1", task: "test"))
-
-        try await _Concurrency.Task.sleep(for: .milliseconds(100))
+        try await withEventLoop(bus: bus, runtime: runtime) {
+            await bus.publish(AgentStartedEvent(sessionId: "s1", task: "test"))
+        }
 
         let count1 = await handler1.getHandledCount()
         let count2 = await handler2.getHandledCount()
@@ -128,12 +136,12 @@ struct EventHandlerTests {
         let handler = MockEventHandler(identifier: "test", subscribedEventTypes: [])
         await runtime.registerHandler(handler)
 
-        await bus.publish(ToolCompletedEvent(
-            sessionId: "s1", toolUseId: "tu1", toolName: "screenshot",
-            durationMs: 100, isError: false, output: nil
-        ))
-
-        try await _Concurrency.Task.sleep(for: .milliseconds(100))
+        try await withEventLoop(bus: bus, runtime: runtime) {
+            await bus.publish(ToolCompletedEvent(
+                sessionId: "s1", toolUseId: "tu1", toolName: "screenshot",
+                durationMs: 100, isError: false, output: nil
+            ))
+        }
 
         let count = await handler.getHandledCount()
         #expect(count == 1)

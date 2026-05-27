@@ -99,6 +99,7 @@ struct RunOrchestratorReviewTests {
         let buildConfig = AgentBuilder.BuildConfig.forCLI(
             config: config,
             task: "test",
+            noSkills: true,
             dryrun: true
         )
         // In dryrun mode, AgentBuilder sets reviewOrchestrator to nil
@@ -114,6 +115,7 @@ struct RunOrchestratorReviewTests {
             config: config,
             task: "test",
             noMemory: true,
+            noSkills: true,
             dryrun: true  // dryrun bypasses helper path check
         )
         // noMemory disables review orchestrator
