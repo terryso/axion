@@ -202,12 +202,7 @@ extension GatewayStartCommand {
     }
 }
 
-// MARK: - Placeholder Subcommands
-
-struct GatewayNotImplementedError: Error, CustomStringConvertible {
-    let subcommand: String
-    var description: String { "'\(subcommand)' is not yet implemented" }
-}
+// MARK: - Gateway Subcommands
 
 struct GatewayInstallCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
@@ -215,8 +210,46 @@ struct GatewayInstallCommand: AsyncParsableCommand {
         abstract: "安装 Gateway launchd 服务"
     )
 
+    @Option(name: .long, help: "监听地址")
+    var host: String = "127.0.0.1"
+
+    @Option(name: .long, help: "监听端口")
+    var port: Int = 4242
+
+    @Option(name: .long, help: "API 认证密钥")
+    var authKey: String?
+
+    func validate() throws {
+        guard (1...65535).contains(port) else {
+            throw ValidationError("--port must be between 1 and 65535")
+        }
+    }
+
     func run() async throws {
-        throw GatewayNotImplementedError(subcommand: "gateway install")
+        let tgToken = ProcessInfo.processInfo.environment["AXION_TELEGRAM_BOT_TOKEN"]
+        let tgUsers = ProcessInfo.processInfo.environment["AXION_TELEGRAM_ALLOWED_USERS"]
+
+        var envVars: [String: String] = [:]
+        if let tgToken { envVars["AXION_TELEGRAM_BOT_TOKEN"] = tgToken }
+        if let tgUsers { envVars["AXION_TELEGRAM_ALLOWED_USERS"] = tgUsers }
+
+        let service = DaemonService(
+            label: "dev.axion.gateway",
+            subcommand: "gateway start",
+            logFileName: "gateway.log",
+            errLogFileName: "gateway.err.log",
+            keepAliveCrashOnly: true,
+            environmentVariables: envVars.isEmpty ? nil : envVars
+        )
+        let path = try service.install(host: host, port: port, authKey: authKey)
+        print("Gateway installed successfully")
+        print("  Plist: \(path)")
+        print("  Host: \(host)")
+        print("  Port: \(port)")
+        print("  Auth: \(authKey != nil ? "enabled (via AXION_AUTH_KEY)" : "disabled")")
+        if !envVars.isEmpty {
+            print("  TG Bot: configured")
+        }
     }
 }
 
@@ -227,7 +260,38 @@ struct GatewayStatusCommand: AsyncParsableCommand {
     )
 
     func run() async throws {
-        throw GatewayNotImplementedError(subcommand: "gateway status")
+        let logFileName = "gateway.log"
+        let errLogFileName = "gateway.err.log"
+        let service = DaemonService(
+            label: "dev.axion.gateway",
+            subcommand: "gateway start",
+            logFileName: logFileName,
+            errLogFileName: errLogFileName
+        )
+        let status = service.status()
+
+        switch status.status {
+        case .running:
+            print("Gateway status: running")
+            if let pid = status.pid { print("  PID: \(pid)") }
+            if let host = status.host { print("  Host: \(host)") }
+            if let port = status.port { print("  Port: \(port)") }
+        case .stopped:
+            print("Gateway status: stopped")
+        case .notInstalled:
+            print("Gateway status: not_installed")
+            print("  Run 'axion gateway install' to install")
+        }
+
+        let home = NSHomeDirectory()
+        let logDir = (home as NSString).appendingPathComponent(".axion")
+        print("  Label: \(status.label)")
+        print("  Plist: \(status.plistPath)")
+        print("  Log: \((logDir as NSString).appendingPathComponent(logFileName))")
+        print("  Error log: \((logDir as NSString).appendingPathComponent(errLogFileName))")
+        print("  TG connection: (not yet available)")
+        print("  Last review: (not yet available)")
+        print("  Last curator: (not yet available)")
     }
 }
 
@@ -237,7 +301,20 @@ struct GatewayUninstallCommand: AsyncParsableCommand {
         abstract: "卸载 Gateway 服务"
     )
 
+    @Flag(name: .long, help: "保留日志文件")
+    var keepLogs: Bool = false
+
     func run() async throws {
-        throw GatewayNotImplementedError(subcommand: "gateway uninstall")
+        let service = DaemonService(
+            label: "dev.axion.gateway",
+            subcommand: "gateway start",
+            logFileName: "gateway.log",
+            errLogFileName: "gateway.err.log"
+        )
+        try service.uninstall(keepLogs: keepLogs)
+        print("Gateway uninstalled successfully")
+        if keepLogs {
+            print("  Logs preserved at ~/.axion/")
+        }
     }
 }

@@ -81,6 +81,7 @@
 
 generated: 2026-05-08
 last_updated: 2026-05-29
+# story-28.3-created: 2026-05-29
 # retro-epic-27: 2026-05-27
 # epic-27-started: 2026-05-27
 # story-27.1-created: 2026-05-27
@@ -390,7 +391,7 @@ development_status:
   epic-28: in-progress
   28-1-gateway-config-extension: done
   28-2-gatewayrunner-http-api-reuse: done
-  28-3-launchd-daemon-management: backlog
+  28-3-launchd-daemon-management: done
   28-4-gateway-status-query: backlog
   epic-28-retrospective: optional
 

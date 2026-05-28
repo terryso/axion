@@ -106,35 +106,54 @@ struct GatewayCommandTests {
         }
     }
 
-    // MARK: - Placeholder Subcommands (Task 2.5)
+    // MARK: - GatewayInstallCommand Options (Task 5.8)
 
-    @Test("GatewayInstallCommand throws not implemented")
-    func installCommandThrowsNotImplemented() async {
-        do {
-            try await GatewayInstallCommand.parse([]).run()
-            #expect(Bool(false), "Should have thrown")
-        } catch {
-            #expect(error is GatewayNotImplementedError)
+    @Test("GatewayInstallCommand has correct defaults")
+    func installCommandDefaults() throws {
+        let cmd = try GatewayInstallCommand.parse([])
+        #expect(cmd.host == "127.0.0.1")
+        #expect(cmd.port == 4242)
+        #expect(cmd.authKey == nil)
+    }
+
+    @Test("GatewayInstallCommand parses custom values")
+    func installCommandCustomValues() throws {
+        let cmd = try GatewayInstallCommand.parse(["--host", "0.0.0.0", "--port", "8080", "--auth-key", "secret"])
+        #expect(cmd.host == "0.0.0.0")
+        #expect(cmd.port == 8080)
+        #expect(cmd.authKey == "secret")
+    }
+
+    @Test("GatewayInstallCommand rejects invalid port")
+    func installCommandInvalidPort() {
+        #expect(throws: Error.self) {
+            _ = try GatewayInstallCommand.parse(["--port", "0"])
+        }
+        #expect(throws: Error.self) {
+            _ = try GatewayInstallCommand.parse(["--port", "99999"])
         }
     }
 
-    @Test("GatewayStatusCommand throws not implemented")
-    func statusCommandThrowsNotImplemented() async {
-        do {
-            try await GatewayStatusCommand.parse([]).run()
-            #expect(Bool(false), "Should have thrown")
-        } catch {
-            #expect(error is GatewayNotImplementedError)
-        }
+    // MARK: - GatewayStatusCommand Options (Task 5.9)
+
+    @Test("GatewayStatusCommand has status command name")
+    func statusCommandName() {
+        #expect(GatewayStatusCommand.configuration.commandName == "status")
     }
 
-    @Test("GatewayUninstallCommand throws not implemented")
-    func uninstallCommandThrowsNotImplemented() async {
-        do {
-            try await GatewayUninstallCommand.parse([]).run()
-            #expect(Bool(false), "Should have thrown")
-        } catch {
-            #expect(error is GatewayNotImplementedError)
-        }
+    // MARK: - GatewayUninstallCommand Options (Task 5.10)
+
+    @Test("GatewayUninstallCommand has uninstall command name")
+    func uninstallCommandName() {
+        #expect(GatewayUninstallCommand.configuration.commandName == "uninstall")
+    }
+
+    @Test("GatewayUninstallCommand --keep-logs flag")
+    func uninstallCommandKeepLogs() throws {
+        let cmdDefault = try GatewayUninstallCommand.parse([])
+        #expect(cmdDefault.keepLogs == false)
+
+        let cmdKeep = try GatewayUninstallCommand.parse(["--keep-logs"])
+        #expect(cmdKeep.keepLogs == true)
     }
 }

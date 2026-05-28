@@ -35,7 +35,12 @@ struct DaemonInstallCommand: AsyncParsableCommand {
     }
 
     func run() async throws {
-        let service = DaemonService()
+        let service = DaemonService(
+            label: "dev.axion.server",
+            subcommand: "server",
+            logFileName: "server.log",
+            errLogFileName: "server.err.log"
+        )
         let path = try service.install(host: host, port: port, authKey: authKey)
         print("Daemon installed successfully")
         print("  Plist: \(path)")
@@ -52,7 +57,10 @@ struct DaemonStatusCommand: AsyncParsableCommand {
     )
 
     func run() async throws {
-        let service = DaemonService()
+        let service = DaemonService(
+            label: "dev.axion.server",
+            subcommand: "server"
+        )
         let status = service.status()
 
         switch status.status {
@@ -83,7 +91,12 @@ struct DaemonUninstallCommand: AsyncParsableCommand {
     var keepLogs: Bool = false
 
     func run() async throws {
-        let service = DaemonService()
+        let service = DaemonService(
+            label: "dev.axion.server",
+            subcommand: "server",
+            logFileName: "server.log",
+            errLogFileName: "server.err.log"
+        )
         try service.uninstall(keepLogs: keepLogs)
         print("Daemon uninstalled successfully")
         if keepLogs {
