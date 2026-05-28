@@ -11,7 +11,7 @@
 
 [core]
 user_name = "Nick"
-communication_language = "English"
+communication_language = "Mandarin"
 
 [modules.bmm]
 user_skill_level = "intermediate"

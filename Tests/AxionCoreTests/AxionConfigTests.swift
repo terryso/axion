@@ -273,4 +273,97 @@ struct AxionConfigTests {
         let json = try JSONSerialization.jsonObject(with: data) as! [String: Any]
         #expect(json["baseURL"] == nil)
     }
+
+    // MARK: - Gateway Config
+
+    @Test("gateway default values are nil (matching curator pattern)")
+    func gatewayDefaultValues() {
+        let config = AxionConfig.default
+        #expect(config.gatewayEnabled == nil)
+        #expect(config.gatewayCuratorIdleHours == nil)
+        #expect(config.gatewayCuratorIntervalHours == nil)
+        #expect(config.gatewayTaskTimeoutMinutes == nil)
+        #expect(config.gatewayNotifyCuratorResults == nil)
+    }
+
+    @Test("gateway effective defaults applied via explicit config")
+    func gatewayEffectiveDefaults() {
+        let config = AxionConfig(
+            apiKey: nil,
+            gatewayEnabled: false,
+            gatewayCuratorIdleHours: 2.0,
+            gatewayCuratorIntervalHours: 168.0,
+            gatewayTaskTimeoutMinutes: 10.0,
+            gatewayNotifyCuratorResults: false
+        )
+        #expect(config.gatewayEnabled == false)
+        #expect(config.gatewayCuratorIdleHours == 2.0)
+        #expect(config.gatewayCuratorIntervalHours == 168.0)
+        #expect(config.gatewayTaskTimeoutMinutes == 10.0)
+        #expect(config.gatewayNotifyCuratorResults == false)
+    }
+
+    @Test("gateway partial JSON decode: missing keys decode to nil, not static defaults")
+    func gatewayPartialJsonDecode() throws {
+        let json = """
+        {"gatewayCuratorIdleHours": 4.0}
+        """
+        let data = Data(json.utf8)
+        let config = try JSONDecoder().decode(AxionConfig.self, from: data)
+
+        #expect(config.gatewayCuratorIdleHours == 4.0)
+        #expect(config.gatewayEnabled == nil)
+        #expect(config.gatewayCuratorIntervalHours == nil)
+        #expect(config.gatewayTaskTimeoutMinutes == nil)
+        #expect(config.gatewayNotifyCuratorResults == nil)
+    }
+
+    @Test("gateway fields Codable round-trip")
+    func gatewayCodableRoundTrip() throws {
+        let config = AxionConfig(
+            apiKey: nil,
+            gatewayEnabled: true,
+            gatewayCuratorIdleHours: 5.0,
+            gatewayCuratorIntervalHours: 72.0,
+            gatewayTaskTimeoutMinutes: 30.0,
+            gatewayNotifyCuratorResults: true
+        )
+
+        let data = try JSONEncoder().encode(config)
+        let decoded = try JSONDecoder().decode(AxionConfig.self, from: data)
+
+        #expect(decoded.gatewayEnabled == true)
+        #expect(decoded.gatewayCuratorIdleHours == 5.0)
+        #expect(decoded.gatewayCuratorIntervalHours == 72.0)
+        #expect(decoded.gatewayTaskTimeoutMinutes == 30.0)
+        #expect(decoded.gatewayNotifyCuratorResults == true)
+    }
+
+    @Test("gateway nil fields are omitted from JSON output")
+    func gatewayNilFieldsOmittedFromJson() throws {
+        let config = AxionConfig(apiKey: nil)
+        let encoder = JSONEncoder()
+        encoder.outputFormatting = [.sortedKeys]
+        let data = try encoder.encode(config)
+        let json = try JSONSerialization.jsonObject(with: data) as! [String: Any]
+
+        #expect(json["gatewayEnabled"] == nil)
+        #expect(json["gatewayCuratorIdleHours"] == nil)
+        #expect(json["gatewayCuratorIntervalHours"] == nil)
+        #expect(json["gatewayTaskTimeoutMinutes"] == nil)
+        #expect(json["gatewayNotifyCuratorResults"] == nil)
+    }
+
+    @Test("gateway empty JSON decodes with all gateway fields as nil")
+    func gatewayEmptyJsonDecodesToNil() throws {
+        let json = "{}"
+        let data = Data(json.utf8)
+        let config = try JSONDecoder().decode(AxionConfig.self, from: data)
+
+        #expect(config.gatewayEnabled == nil)
+        #expect(config.gatewayCuratorIdleHours == nil)
+        #expect(config.gatewayCuratorIntervalHours == nil)
+        #expect(config.gatewayTaskTimeoutMinutes == nil)
+        #expect(config.gatewayNotifyCuratorResults == nil)
+    }
 }
