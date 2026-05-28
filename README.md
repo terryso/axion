@@ -4,6 +4,8 @@
 [![Platform](https://img.shields.io/badge/platform-macOS%2014%2B-blue)](https://developer.apple.com/macos/)
 [![CI](https://github.com/terryso/axion/actions/workflows/ci.yml/badge.svg)](https://github.com/terryso/axion/actions/workflows/ci.yml)
 [![Coverage](https://img.shields.io/endpoint?url=https://gist.githubusercontent.com/terryso/3a3cc01e58819c72bf54eab52dc2a3ff/raw/coverage.json)](https://github.com/terryso/axion/actions)
+[![BMAD](https://bmad-badge.vercel.app/terryso/axion.svg)](https://github.com/bmad-code-org/BMAD-METHOD)
+[![DeepWiki](https://img.shields.io/badge/DeepWiki-_.svg?style=flat&color=00b0aa&labelColor=000000&logo=data:image/svg%2Bxml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIxNiIgaGVpZ2h0PSIxNiIgdmlld0JveD0iMCAwIDI0IDI0IiBmaWxsPSJub25lIiBzdHJva2U9IiNmZmYiIHN0cm9rZS13aWR0aD0iMiIgc3Ryb2tlLWxpbmVjYXA9InJvdW5kIiBzdHJva2UtbGluZWpvaW49InJvdW5kIj48cGF0aCBkPSJNMiAzaDZhMTAgMTAgMCAwIDEgMTAgMTB2MiIvPjxwYXRoIGQ9Ik0yIDEzaDYxMCAxMCAwIDAgMSAxMCAxMHYyIi8+PC9zdmc+)](https://deepwiki.com/terryso/axion)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue)](./LICENSE)
 
 macOS AI agent powered by an LLM-driven Plan-Execute-Verify loop, with native desktop automation, cross-run memory, and record-and-replay skills.
@@ -28,6 +30,7 @@ Axion is a Swift-based AI agent for macOS that takes natural language task descr
 - **User Takeover** — Pause and resume when automation gets stuck
 - **Completion Notifications** — macOS desktop notification with AI-generated summary when tasks finish
 - **Self-Evolution** — Background review agent and intelligent curator automatically extract memory, evolve skills, and manage skill lifecycle after each run
+- **Runtime Event Layer** — 18 typed events via EventBus with 7 built-in handlers (cost tracking, notifications, visual delta, seat monitoring, tracing, memory, review)
 
 ## Architecture
 
@@ -35,8 +38,10 @@ Axion is a Swift-based AI agent for macOS that takes natural language task descr
 ┌───────────────────────────────────────────────────────────┐
 │                          AxionCLI                          │
 │  run / setup / doctor / server / mcp / record / skill     │
-│  daemon / Agent Stream Loop · Memory · Takeover           │
+│  daemon / resume / sessions                               │
+│  Agent Stream Loop · Memory · Takeover                    │
 │  Skill System · Built-in Skills · Skill + Memory Context  │
+│  Runtime Event Layer · EventBus · EventHandlers (7)       │
 ├──────────────────────┬────────────────────────────────────┤
 │      AxionCore       │           AxionHelper              │
 │  Models, Protocols,  │  MCP Server                        │
@@ -391,6 +396,50 @@ axion run --no-skills "Open Calculator"
 | `GET` | `/v1/skills/{name}` | Get skill detail (type, step_count, parameter_count) |
 | `POST` | `/v1/skills/{name}/run` | Execute a skill via API (`{"task": "..."}`) |
 
+### Runtime Event Layer
+
+Axion integrates with [OpenAgentSDK](https://github.com/terryso/open-agent-sdk-swift)'s Runtime Event Layer — an `EventBus`-based pub/sub system that decouples agent lifecycle concerns from the core execution loop. 18 typed events across 4 categories are emitted automatically during agent execution.
+
+**Event categories:**
+
+| Category | Events |
+|----------|--------|
+| **Session** | `SessionCreatedEvent`, `SessionRestoredEvent`, `SessionClosedEvent`, `SessionAutoSavedEvent` |
+| **Agent** | `AgentStartedEvent`, `AgentCompletedEvent`, `AgentFailedEvent`, `AgentInterruptedEvent`, `AgentResumedEvent` |
+| **Tool** | `ToolStartedEvent`, `ToolStreamingEvent`, `ToolCompletedEvent`, `ToolFailedEvent` |
+| **LLM** | `LLMRequestStartedEvent`, `LLMResponseReceivedEvent`, `LLMCostEvent`, `LLMTokenStreamEvent` |
+
+**Built-in event handlers:**
+
+| Handler | Description |
+|---------|-------------|
+| `CostEventHandler` | Prints LLM usage summary (turns, tokens, cost) to stderr on agent completion/failure/interrupt |
+| `NotificationHandler` | Sends macOS desktop notification with AI-generated summary when a task finishes |
+| `VisualDeltaHandler` | Detects visual changes via screenshot comparison after tool execution |
+| `SeatMonitorHandler` | Monitors for external user activity during long-running tool calls (shared-seat mode) |
+| `TraceEventHandler` | Appends structured JSONL event traces to `~/.axion/runs/<run-id>/events.jsonl` |
+| `MemoryProcessingHandler` | Triggers post-run memory extraction and skill evolution after agent completion |
+| `ReviewHandler` | Launches background review agent after successful task completion |
+
+**Event flow:**
+
+```
+Agent SDK  →  EventBus.publish(event)  →  AsyncStream  →  AxionRuntime.dispatchToHandlers()
+                                                                   ↓
+                                                          EventHandler.handle(event, context)
+```
+
+The `AxionRuntime` actor manages the event loop lifecycle:
+1. `registerHandler()` — registers event handlers with optional type filtering
+2. `startEventLoop()` — subscribes to the EventBus and begins dispatching events
+3. `stopEventLoop()` — gracefully unsubscribes and stops dispatching
+
+Handlers are actors — AxionRuntime dispatches events in independent Tasks, and actor isolation guarantees thread-safe mutable state.
+
+**SSE bridge for HTTP API:** `EventBusBridge` forwards all events to SSE clients via `EventBroadcaster`, enabling real-time monitoring of agent execution through the `/v1/runs/{id}/events` endpoint.
+
+**Session resume:** `AxionRuntime` supports resuming interrupted sessions via `resumeSession()`, restoring agent state and reconnecting the event loop. The `SessionListing` protocol exposes `listSessions()` for querying persisted session history.
+
 ### Daemon Mode & Crash Recovery
 
 Run Axion as a persistent launchd daemon that survives reboots and auto-restarts on crashes. All running task state is persisted to disk, so in-flight tasks are automatically recovered after an unexpected server termination.
@@ -501,8 +550,9 @@ Sources/
 │   ├── Planner/           # PromptBuilder
 │   ├── Skills/            # SkillRegistry, AxionBuiltInSkills
 │   ├── Helper/            # HelperProcessManager (stdio lifecycle)
+│   ├── Runtime/           # EventHandlers (Cost, Notification, VisualDelta, SeatMonitor, Trace, Memory, Review)
 │   ├── Trace/              # TraceRecorder (review/curator trace events)
-│   └── Services/          # RunOrchestrator, AgentBuilder, shared services
+│   └── Services/          # RunOrchestrator, AgentBuilder, AxionRuntime, EventBus, shared services
 ├── AxionCore/             # Shared core layer
 │   ├── Models/            # RunConfig, AxionConfig, AppProfile
 │   ├── Protocols/         # Service protocols
@@ -527,7 +577,7 @@ Tests/
 
 ## Dependencies
 
-- [open-agent-sdk-swift](https://github.com/terryso/open-agent-sdk-swift) — Agent SDK (Agent Loop, MCP Client, Memory Store, Hooks)
+- [open-agent-sdk-swift](https://github.com/terryso/open-agent-sdk-swift) — Agent SDK (Agent Loop, MCP Client, Memory Store, Hooks, Runtime Event Layer)
 - [swift-mcp](https://github.com/terryso/swift-mcp) — MCP protocol implementation
 - [swift-argument-parser](https://github.com/apple/swift-argument-parser) — CLI argument parsing
 
