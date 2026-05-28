@@ -1,5 +1,5 @@
 {
-  "originHash" : "a6581136d5b639f0bc2fe4291a4b4e9095be0429e0bbd3cc1d35a1f08380bcec",
+  "originHash" : "722786794433591825de41b421d905d5fca321710ea047d7aea535b46d15309c",
   "pins" : [
     {
       "identity" : "async-http-client",
@@ -17,6 +17,15 @@
       "state" : {
         "revision" : "277e5db5b6d348270088e6ee8e8fa2539bae603d",
         "version" : "2.23.0"
+      }
+    },
+    {
+      "identity" : "open-agent-sdk-swift",
+      "kind" : "remoteSourceControl",
+      "location" : "https://github.com/terryso/open-agent-sdk-swift.git",
+      "state" : {
+        "revision" : "af6b1536f4fd950aeea61e3ba1832cb4ebb096ab",
+        "version" : "0.6.0"
       }
     },
     {

@@ -13,10 +13,10 @@ let package = Package(
         .library(name: "AxionCore", targets: ["AxionCore"]),
     ],
     dependencies: [
-        // Local SDK for development (EventBus not yet published)
-        // Switch back to remote when SDK >= 0.6.0 is released:
-        //   .package(url: "https://github.com/terryso/open-agent-sdk-swift.git", from: "0.6.0"),
-        .package(name: "open-agent-sdk-swift", path: "../open-agent-sdk-swift"),
+        .package(
+            url: "https://github.com/terryso/open-agent-sdk-swift.git",
+            from: "0.6.0"
+        ),
         .package(
             url: "https://github.com/terryso/swift-mcp.git",
             from: "2.0.0"
