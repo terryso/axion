@@ -541,6 +541,7 @@ graph TD
     C --> I
     C --> J
     C --> K
+    C --> L
     D["<b>LLMClient 协议</b><br/>AnthropicClient &middot; OpenAIClient"]
     E["<b>34 个内置工具</b><br/>Core 10 &middot; Advanced 11 &middot; Specialist 13"]
     F["<b>MCP 服务器</b><br/>stdio &middot; SSE &middot; HTTP &middot; 进程内"]
@@ -548,7 +549,8 @@ graph TD
     H["<b>钩子注册表</b><br/>20+ 生命周期事件"]
     I["<b>HTTP API Server</b><br/>REST + SSE &middot; Run 追踪"]
     J["<b>成本与追踪</b><br/>预算控制 &middot; JSONL 追踪"]
-    K["<b>Runtime Event Layer</b><br/>EventBus &middot; 18 种事件类型<br/>SSE 桥接 &middot; Token 流式输出"]
+    K["<b>自演化</b><br/>ExperienceExtractor &middot; SkillEvolver<br/>ReviewOrchestrator &middot; IntelligentCurator"]
+    L["<b>Runtime Event Layer</b><br/>EventBus &middot; 18 种事件类型<br/>SSE 桥接 &middot; Token 流式输出"]
 
     style A fill:#0277bd,stroke:#01579b,color:#fff,stroke-width:2px
     style B fill:#ef6c00,stroke:#e65100,color:#fff,stroke-width:2px
@@ -560,7 +562,8 @@ graph TD
     style H fill:#e65100,stroke:#bf360c,color:#fff,stroke-width:2px
     style I fill:#1565c0,stroke:#0d47a1,color:#fff,stroke-width:2px
     style J fill:#880e4f,stroke:#560027,color:#fff,stroke-width:2px
-    style K fill:#283593,stroke:#1a237e,color:#fff,stroke-width:2px
+    style K fill:#00695c,stroke:#004d40,color:#fff,stroke-width:2px
+    style L fill:#283593,stroke:#1a237e,color:#fff,stroke-width:2px
 ```
 
 ## 环境变量
