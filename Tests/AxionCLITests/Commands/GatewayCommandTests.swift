@@ -1,5 +1,6 @@
 import Testing
 import ArgumentParser
+import Foundation
 @testable import AxionCLI
 
 @Suite("GatewayCommand")
@@ -155,5 +156,108 @@ struct GatewayCommandTests {
 
         let cmdKeep = try GatewayUninstallCommand.parse(["--keep-logs"])
         #expect(cmdKeep.keepLogs == true)
+    }
+
+    // MARK: - GatewayStatusCommand HTTP Fallback (Task 4.5, 4.6)
+
+    @Test("GatewayStatusCommand fallback to DaemonService when HTTP fails")
+    func statusCommandFallsBackToDaemonService() async throws {
+        // Set up test seam: HTTP always returns nil (simulates connection refused)
+        GatewayStatusCommand.liveStatusFetcher = { _ in nil }
+
+        let fetcher = GatewayStatusCommand.liveStatusFetcher
+        let result = await fetcher?(4242)
+        #expect(result == nil)
+
+        // Clean up
+        GatewayStatusCommand.liveStatusFetcher = nil
+    }
+
+    @Test("GatewayStatusCommand parses HTTP response correctly")
+    func statusCommandParsesHTTPResponse() async throws {
+        let expectedStatus = GatewayRunnerStatus(
+            state: "running",
+            activeTaskCount: 2,
+            uptimeSeconds: 3600.0,
+            label: "dev.axion.gateway",
+            pid: 12345,
+            tgConnected: nil,
+            lastReviewAt: nil,
+            lastCuratorAt: nil
+        )
+
+        // Set up test seam: returns a valid status
+        GatewayStatusCommand.liveStatusFetcher = { _ in expectedStatus }
+
+        let fetcher = GatewayStatusCommand.liveStatusFetcher
+        let result = await fetcher?(4242)
+
+        #expect(result != nil)
+        #expect(result?.state == "running")
+        #expect(result?.activeTaskCount == 2)
+        #expect(result?.uptimeSeconds == 3600.0)
+        #expect(result?.label == "dev.axion.gateway")
+        #expect(result?.pid == 12345)
+
+        // Clean up
+        GatewayStatusCommand.liveStatusFetcher = nil
+    }
+
+    @Test("GatewayStatusCommand returns rich status when HTTP succeeds")
+    func statusCommandReturnsRichStatus() async throws {
+        let status = GatewayRunnerStatus(
+            state: "running",
+            activeTaskCount: 5,
+            uptimeSeconds: 7200.0,
+            label: "dev.axion.gateway",
+            pid: 9999,
+            tgConnected: "connected",
+            lastReviewAt: "2026-05-29",
+            lastCuratorAt: nil
+        )
+
+        GatewayStatusCommand.liveStatusFetcher = { _ in status }
+
+        let result = await GatewayStatusCommand.liveStatusFetcher?(4242)
+        #expect(result?.state == "running")
+        #expect(result?.activeTaskCount == 5)
+        #expect(result?.uptimeSeconds == 7200.0)
+        #expect(result?.pid == 9999)
+        #expect(result?.tgConnected == "connected")
+        #expect(result?.lastReviewAt == "2026-05-29")
+        #expect(result?.lastCuratorAt == nil)
+
+        GatewayStatusCommand.liveStatusFetcher = nil
+    }
+
+    // MARK: - Gateway Status HTTP Endpoint Response (Task 4.4)
+
+    @Test("GatewayRunnerStatus encodes to expected JSON structure")
+    func statusResponseEncodesToJSON() throws {
+        let status = GatewayRunnerStatus(
+            state: "running",
+            activeTaskCount: 3,
+            uptimeSeconds: 100.5,
+            label: "dev.axion.gateway",
+            pid: 42,
+            tgConnected: nil,
+            lastReviewAt: nil,
+            lastCuratorAt: nil
+        )
+
+        let encoder = JSONEncoder()
+        encoder.outputFormatting = [.sortedKeys]
+        let data = try encoder.encode(status)
+        let json = try #require(String(data: data, encoding: .utf8))
+
+        // Verify JSON structure matches expected API response (AC#4 key names)
+        #expect(json.contains("\"active_tasks\":3"))
+        #expect(json.contains("\"label\":\"dev.axion.gateway\""))
+        #expect(json.contains("\"status\":\"running\""))
+        #expect(json.contains("\"uptime_seconds\":100.5"))
+        #expect(json.contains("\"pid\":42"))
+        #expect(json.contains("\"tg_connected\":null"))
+        #expect(json.contains("\"last_review_at\":null"))
+        #expect(json.contains("\"last_curator_at\":null"))
     }
 }

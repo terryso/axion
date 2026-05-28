@@ -182,4 +182,135 @@ struct GatewayRunnerTests {
         let state = await runner.currentState
         #expect(state == .stopped)
     }
+
+    // MARK: - GatewayRunnerStatus Codable (Task 4.1)
+
+    @Test("GatewayRunnerStatus Codable round-trip preserves all fields")
+    func statusCodableRoundTrip() throws {
+        let original = GatewayRunnerStatus(
+            state: "running",
+            activeTaskCount: 3,
+            uptimeSeconds: 123.456,
+            label: "dev.axion.gateway",
+            pid: 12345,
+            tgConnected: nil,
+            lastReviewAt: "2026-05-29T10:00:00Z",
+            lastCuratorAt: nil
+        )
+
+        let data = try JSONEncoder().encode(original)
+        let decoded = try JSONDecoder().decode(GatewayRunnerStatus.self, from: data)
+
+        #expect(decoded == original)
+        #expect(decoded.state == "running")
+        #expect(decoded.activeTaskCount == 3)
+        #expect(decoded.uptimeSeconds == 123.456)
+        #expect(decoded.label == "dev.axion.gateway")
+        #expect(decoded.pid == 12345)
+        #expect(decoded.tgConnected == nil)
+        #expect(decoded.lastReviewAt == "2026-05-29T10:00:00Z")
+        #expect(decoded.lastCuratorAt == nil)
+    }
+
+    @Test("GatewayRunnerStatus encodes all nullable fields as null in JSON")
+    func statusEncodesNullFields() throws {
+        let status = GatewayRunnerStatus(
+            state: "running",
+            activeTaskCount: 0,
+            uptimeSeconds: 0,
+            label: "dev.axion.gateway",
+            pid: nil,
+            tgConnected: nil,
+            lastReviewAt: nil,
+            lastCuratorAt: nil
+        )
+
+        let data = try JSONEncoder().encode(status)
+        let json = try #require(String(data: data, encoding: .utf8))
+
+        #expect(json.contains("\"active_tasks\""))
+        #expect(json.contains("\"uptime_seconds\""))
+        #expect(json.contains("\"tg_connected\":null"))
+        #expect(json.contains("\"last_review_at\":null"))
+        #expect(json.contains("\"last_curator_at\":null"))
+    }
+
+    // MARK: - GatewayRunner.getStatus() (Task 4.2, 4.3)
+
+    @Test("getStatus returns correct state and task count")
+    func getStatusReturnsCorrectState() async throws {
+        let server = MockGatewayServer()
+        let runner = GatewayRunner(server: server)
+
+        // Before start
+        let beforeStart = await runner.getStatus()
+        #expect(beforeStart.state == "created")
+        #expect(beforeStart.activeTaskCount == 0)
+        #expect(beforeStart.uptimeSeconds == 0)
+
+        // Start the runner
+        let runnerTask = _Concurrency.Task { try await runner.start() }
+        try await _Concurrency.Task.sleep(nanoseconds: 50_000_000)
+
+        await runner.taskStarted()
+        await runner.taskStarted()
+
+        let whileRunning = await runner.getStatus()
+        #expect(whileRunning.state == "running")
+        #expect(whileRunning.activeTaskCount == 2)
+        #expect(whileRunning.label == "dev.axion.gateway")
+
+        await runner.stop(graceful: false)
+        _ = try? await runnerTask.result
+    }
+
+    @Test("getStatus computes uptime from startTime")
+    func getStatusComputesUptime() async throws {
+        let server = MockGatewayServer()
+        let runner = GatewayRunner(server: server)
+
+        // Before start, uptime should be 0
+        let beforeStart = await runner.getStatus()
+        #expect(beforeStart.uptimeSeconds == 0)
+
+        // Start and wait
+        let runnerTask = _Concurrency.Task { try await runner.start() }
+        try await _Concurrency.Task.sleep(nanoseconds: 150_000_000) // 150ms
+
+        let whileRunning = await runner.getStatus()
+        #expect(whileRunning.uptimeSeconds > 0)
+
+        await runner.stop(graceful: false)
+        _ = try? await runnerTask.result
+    }
+
+    // MARK: - Status Providers (Task 1.4)
+
+    @Test("setStatusProviders populates optional fields in status")
+    func setStatusProvidersPopulatesFields() async throws {
+        let server = MockGatewayServer()
+        let runner = GatewayRunner(server: server)
+
+        await runner.setStatusProviders(
+            tgStatus: { "connected" },
+            reviewStatus: { "2026-05-29T10:00:00Z" },
+            curatorStatus: nil
+        )
+
+        let status = await runner.getStatus()
+        #expect(status.tgConnected == "connected")
+        #expect(status.lastReviewAt == "2026-05-29T10:00:00Z")
+        #expect(status.lastCuratorAt == nil)
+    }
+
+    @Test("getStatus without providers returns nil for optional fields")
+    func getStatusWithoutProvidersReturnsNil() async {
+        let server = MockGatewayServer()
+        let runner = GatewayRunner(server: server)
+
+        let status = await runner.getStatus()
+        #expect(status.tgConnected == nil)
+        #expect(status.lastReviewAt == nil)
+        #expect(status.lastCuratorAt == nil)
+    }
 }
