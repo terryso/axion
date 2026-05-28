@@ -1,5 +1,6 @@
 # generated: 2026-05-08
 # last_updated: 2026-05-29
+# story-28.2-created: 2026-05-29
 # story-28.1-created: 2026-05-29
 # story-27.2-created: 2026-05-27
 # story-27.3-created: 2026-05-27
@@ -388,7 +389,7 @@ development_status:
   # Epic 28: Gateway 进程基础
   epic-28: in-progress
   28-1-gateway-config-extension: done
-  28-2-gatewayrunner-http-api-reuse: backlog
+  28-2-gatewayrunner-http-api-reuse: done
   28-3-launchd-daemon-management: backlog
   28-4-gateway-status-query: backlog
   epic-28-retrospective: optional
