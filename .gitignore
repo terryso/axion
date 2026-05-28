@@ -39,3 +39,5 @@ __pycache__/
 *.pyc
 
 .understand-anything/
+outputs/
+webwright_outputs/

@@ -10,6 +10,7 @@ final class SDKTerminalOutputHandler: OpenAgentSDK.SDKMessageOutputHandler, @unc
     private let write: (String) -> Void
     private let mode: String
     private var streamBuffer = ""
+    private var lastFlushedText = ""
     private var startTime: ContinuousClock.Instant?
     private var totalSteps = 0
 
@@ -30,8 +31,9 @@ final class SDKTerminalOutputHandler: OpenAgentSDK.SDKMessageOutputHandler, @unc
         case .assistant(let data):
             if !streamBuffer.isEmpty {
                 flushStreamBuffer()
-            } else if !data.text.isEmpty {
+            } else if !data.text.isEmpty && data.text != lastFlushedText {
                 write("[axion] \(data.text)")
+                lastFlushedText = data.text
             }
 
         case .toolUse(let data):
@@ -107,6 +109,7 @@ final class SDKTerminalOutputHandler: OpenAgentSDK.SDKMessageOutputHandler, @unc
 
     private func flushStreamBuffer() {
         if !streamBuffer.isEmpty {
+            lastFlushedText = streamBuffer
             write("[axion] \(streamBuffer)")
             streamBuffer = ""
         }

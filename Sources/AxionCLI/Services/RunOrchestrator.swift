@@ -355,9 +355,6 @@ enum RunOrchestrator {
             ? SDKJSONOutputHandler(mode: runMode)
             : SDKTerminalOutputHandler(mode: runMode)
         outputHandler.displayRunStart(runId: runId, task: task)
-        fputs("[axion] 模式: \(runMode)\n", stderr)
-        fputs("[axion] 运行 ID: \(runId)\n", stderr)
-        fputs("[axion] 任务: \(task)\n", stderr)
         fputs("[axion] 执行: Skill (direct)\n", stderr)
 
         signal(SIGINT, SIG_IGN)

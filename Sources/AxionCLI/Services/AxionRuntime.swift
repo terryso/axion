@@ -255,9 +255,6 @@ public actor AxionRuntime: AxionRuntimeRunning, AxionRuntimeResuming, SessionLis
                 ? SDKJSONOutputHandler(mode: runMode)
                 : SDKTerminalOutputHandler(mode: runMode)
             outputHandler.displayRunStart(runId: sid, task: task)
-            fputs("[axion] 模式: \(runMode)\n", stderr)
-            fputs("[axion] 运行 ID: \(sid)\n", stderr)
-            fputs("[axion] 任务: \(task)\n", stderr)
             fputs("[axion] 执行: Skill (via AxionRuntime)\n", stderr)
 
             let skillStream = agent.executeSkillStream(skill.name, args: args)

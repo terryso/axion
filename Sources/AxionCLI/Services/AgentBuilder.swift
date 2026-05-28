@@ -400,11 +400,12 @@ enum AgentBuilder {
         let effectiveMaxSteps = maxSteps ?? config.maxSteps
         let effectiveModel = skill.modelOverride ?? config.model
 
+        let cwd = FileManager.default.currentDirectoryPath
         var agentOptions = AgentOptions(
             apiKey: apiKey,
             model: effectiveModel,
             baseURL: config.baseURL,
-            systemPrompt: "All filesystem and terminal operations should use the current working directory.\n\n# Task Summary — MANDATORY\n\nEVERY response MUST end with exactly one summary line in this format:\n[结果] <one-line summary, max 100 chars>\nThis is NOT optional. Even if the task failed, you MUST include this line.",
+            systemPrompt: "All filesystem and terminal operations must use \(cwd) as the working directory. Do NOT invent or guess paths — always resolve relative paths against \(cwd).\n\n# Task Summary — MANDATORY\n\nEVERY response MUST end with exactly one summary line in this format:\n[结果] <one-line summary, max 100 chars>\nThis is NOT optional. Even if the task failed, you MUST include this line.",
             maxTurns: effectiveMaxSteps,
             maxTokens: 16384,
             permissionMode: .bypassPermissions,

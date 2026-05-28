@@ -307,6 +307,58 @@ struct SDKTerminalOutputHandlerTests {
 
         #expect(collector.lines.contains(where: { $0.contains("Direct message") }))
     }
+
+    // MARK: - lastFlushedText Dedup
+
+    @Test("assistant text matching flushed partial text is deduplicated")
+    func assistantTextMatchingFlushedPartialIsDeduplicated() {
+        let collector = OutputCollector()
+        let handler = makeHandler(collector: collector)
+
+        let streamedText = "I will search for flights"
+        handler.handle(.partialMessage(.init(text: streamedText)))
+        handler.handle(.toolUse(.init(toolName: "click", toolUseId: "tu-1", input: "{}")))
+        // Now lastFlushedText == streamedText
+        handler.handle(.assistant(.init(text: streamedText, model: "model", stopReason: "end_turn")))
+
+        let matchingLines = collector.lines.filter { $0.contains("search for flights") }
+        #expect(matchingLines.count == 1)
+    }
+
+    @Test("assistant text different from flushed text is written")
+    func assistantTextDifferentFromFlushedTextIsWritten() {
+        let collector = OutputCollector()
+        let handler = makeHandler(collector: collector)
+
+        handler.handle(.partialMessage(.init(text: "Thinking...")))
+        handler.handle(.toolUse(.init(toolName: "click", toolUseId: "tu-1", input: "{}")))
+        handler.handle(.assistant(.init(text: "Done clicking", model: "model", stopReason: "end_turn")))
+
+        #expect(collector.lines.contains(where: { $0.contains("Thinking...") }))
+        #expect(collector.lines.contains(where: { $0.contains("Done clicking") }))
+    }
+
+    @Test("multiple turn dedup resets correctly across turns")
+    func multipleTurnDedupResetsCorrectly() {
+        let collector = OutputCollector()
+        let handler = makeHandler(collector: collector)
+
+        // Turn 1: stream → flush → same assistant (deduped)
+        handler.handle(.partialMessage(.init(text: "Step one text")))
+        handler.handle(.toolUse(.init(toolName: "click", toolUseId: "tu-1", input: "{}")))
+        handler.handle(.assistant(.init(text: "Step one text", model: "m", stopReason: "end_turn")))
+
+        // Turn 2: different streamed text → flush → same assistant (deduped)
+        handler.handle(.partialMessage(.init(text: "Step two text")))
+        handler.handle(.toolUse(.init(toolName: "type", toolUseId: "tu-2", input: "{}")))
+        handler.handle(.assistant(.init(text: "Step two text", model: "m", stopReason: "end_turn")))
+
+        // Each text should appear exactly once
+        let stepOneLines = collector.lines.filter { $0.contains("Step one text") }
+        let stepTwoLines = collector.lines.filter { $0.contains("Step two text") }
+        #expect(stepOneLines.count == 1)
+        #expect(stepTwoLines.count == 1)
+    }
 }
 
 @Suite("SDKJSONOutputHandler")
