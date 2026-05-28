@@ -1,5 +1,6 @@
-# generated: 2026-05-12
-# last_updated: 2026-05-24
+# generated: 2026-05-25
+# last_updated: 2026-05-26 (Epic 28 retrospective)
+
 # project: open-agent-sdk-swift
 # project_key: NOKEY
 # tracking_system: file-system
@@ -34,8 +35,9 @@
 # - Developer typically creates next story after previous one is 'done' to incorporate learnings
 # - Dev moves story to 'review', then runs code-review (fresh context, different LLM recommended)
 
-generated: 2026-05-12
-last_updated: 2026-05-24
+generated: 2026-05-25
+last_updated: 2026-05-26
+project: open-agent-sdk-swift
 project_key: NOKEY
 tracking_system: file-system
 story_location: _bmad-output/implementation-artifacts
@@ -284,3 +286,29 @@ development_status:
   25-3-intelligent-curator: done
   25-4-curator-run-report: done
   epic-25-retrospective: done
+
+  # Epic 26: Runtime Event Layer — AgentEvent Protocol 与 EventBus
+  epic-26: done
+  26-1-agent-event-protocol-base-event-types: done
+  26-2-session-lifecycle-events: done
+  26-3-agent-lifecycle-events: done
+  26-4-tool-lifecycle-events: done
+  26-5-llm-cost-events: done
+  26-6-eventbus-in-process-event-bus: done
+  epic-26-retrospective: done
+
+  # Epic 27: Runtime Event Layer — Agent Event Emitter
+  epic-27: done
+  27-1-agent-options-eventbus-parameter: done
+  27-2-agent-startup-completion-event-emit: done
+  27-3-tool-lifecycle-event-emit: done
+  27-4-llm-cost-event-emit: done
+  27-5-session-lifecycle-event-emit: done
+  epic-27-retrospective: done
+
+  # Epic 28: Runtime Event Layer — EventBus → SSE Bridge
+  epic-28: done
+  28-1-agent-event-sse-event-mapping: done
+  28-2-eventbus-event-broadcaster-bridge: done
+  28-3-token-streaming-event: done
+  epic-28-retrospective: done

@@ -703,6 +703,77 @@ swift run CompatSandbox
 - `SandboxNetworkConfig` 和 `RipgrepConfig` 对齐
 - 路径遍历防护和 Shell 过滤选项
 
+---
+
+### 32. EventBusExample — Runtime Event Layer（Epic 26）
+
+演示 EventBus：基本发布/订阅、类型过滤订阅、多订阅者并发、缓冲行为。
+
+```bash
+swift run EventBusExample
+```
+
+**无需 API Key** — 本示例发布合成事件。
+
+**你将学到：**
+- 创建 `EventBus()` 并订阅所有事件
+- 发布类型化事件（`SessionCreatedEvent`、`AgentStartedEvent`、`ToolStartedEvent` 等）
+- 类型过滤订阅 — `bus.subscribe(ToolStartedEvent.self)` 只接收该类型
+- 多个并发订阅者（CLI 日志、成本监控、工具追踪）
+- 缓冲策略：`.bufferingNewest(100)` — 慢消费者不阻塞发布者
+
+**关键代码：**
+```swift
+let bus = EventBus()
+
+// 订阅所有事件
+let (subId, stream) = await bus.subscribe()
+
+// 订阅特定类型
+let toolStream = bus.subscribe(ToolStartedEvent.self)
+
+// 发布事件
+await bus.publish(SessionCreatedEvent(sessionId: "sess-001", task: "分析", model: "claude-sonnet-4-6"))
+await bus.publish(ToolStartedEvent(sessionId: "sess-001", toolName: "Read", toolUseId: "tu_01", input: "/data/file.csv"))
+
+// 取消订阅
+await bus.unsubscribe(subId)
+```
+
+---
+
+### 33. SSEBridgeExample — EventBus 到 SSE 管道（Epic 28）
+
+演示完整的 SSE 桥接管道：`EventBus → EventBusBridge → EventBroadcaster → SSE stream`。同时展示通过 `LLMTokenStreamEvent` 实现实时 Token 流式输出。
+
+```bash
+swift run SSEBridgeExample
+```
+
+**需要 API Key** — 设置 `CODEANY_API_KEY` 或 `ANTHROPIC_API_KEY`。
+
+**你将学到：**
+- 构建 SSE 管道：`EventBusBridge(eventBus:broadcaster:runId:)`
+- 将 `eventBus` 和 `emitTokenStream` 传给 `AgentOptions`
+- 并行订阅原始 EventBus 事件和 SSE 事件
+- 使用 `EventBroadcaster.getReplayBuffer()` 实现断线重连追赶
+- `AgentSSEEvent.encodeToSSE()` 生成 SSE 线路格式
+
+**关键代码：**
+```swift
+let eventBus = EventBus()
+let broadcaster = EventBroadcaster()
+let bridge = EventBusBridge(eventBus: eventBus, broadcaster: broadcaster, runId: "run-1")
+await bridge.start()
+
+// 创建带 EventBus + Token 流式输出的 Agent
+let agent = createAgent(options: AgentOptions(
+    apiKey: "sk-...",
+    eventBus: eventBus,
+    emitTokenStream: true
+))
+```
+
 ## 示例依赖
 
 | 示例                     | 需要 MCP 依赖          | 额外配置                  |
@@ -740,6 +811,8 @@ swift run CompatSandbox
 | CompatSubagents          | 否                     | 无                        |
 | CompatThinkingModel      | 否                     | 无                        |
 | CompatSandbox            | 否                     | 无                        |
+| EventBusExample          | 否                     | 无（合成事件）            |
+| SSEBridgeExample         | 否                     | 需要 API Key              |
 
 所有示例都已作为可执行目标定义在 `Package.swift` 中 — 无需额外配置。
 
@@ -755,8 +828,9 @@ swift run CompatSandbox
 | 4 | **Session 管理** — save、load、fork | `CompatSessions/`、`SessionsAndHooks/`、`MultiTurnExample/` | `swift run SessionsAndHooks` |
 | 5 | **Memory（跨任务学习）** — store、query、domain | `MemoryStoreExample/` | `swift run MemoryStoreExample` |
 | 6 | **自进化** — 经验提取、技能进化、智能策展 | `SelfEvolutionExample/` | `swift run SelfEvolutionExample` |
+| 7 | **Runtime 事件** — EventBus、类型化事件、SSE 桥接 | `EventBusExample/`、`SSEBridgeExample/` | `swift run EventBusExample` |
 
-> **提示：** 从场景 1（BasicAgent）开始，按顺序探索每个场景。下方的完整学习路径覆盖全部 30+ 示例。
+> **提示：** 从场景 1（BasicAgent）开始，按顺序探索每个场景。下方的完整学习路径覆盖全部 33 个示例。
 
 ## 推荐学习路径
 
@@ -767,7 +841,7 @@ BasicAgent → StreamingAgent → CustomTools → CustomSystemPromptExample
     → SessionsAndHooks → SkillsExample → SandboxExample
     → LoggerExample → ModelSwitchingExample → QueryAbortExample
     → ContextInjectionExample → MultiTurnExample → OpenAICompatExample
-    → PolyvLiveExample
+    → PolyvLiveExample → EventBusExample → SSEBridgeExample
 ```
 
 1. **从这里开始：** BasicAgent、StreamingAgent — 理解核心 prompt/stream API
@@ -783,6 +857,7 @@ BasicAgent → StreamingAgent → CustomTools → CustomSystemPromptExample
 11. **上下文与多轮对话：** ContextInjectionExample、MultiTurnExample — 文件缓存、上下文注入、多轮对话
 12. **OpenAI 兼容：** OpenAICompatExample — 使用 DeepSeek、Qwen、Ollama 等 OpenAI 兼容 API
 13. **SDK 兼容性验证：** Compat* 示例 — 验证 TypeScript SDK API 对齐（适合 SDK 贡献者）
+14. **Runtime 事件：** EventBusExample、SSEBridgeExample — EventBus 发布/订阅、SSE 桥接管道、Token 流式输出
 
 ## 常见问题
 

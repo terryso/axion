@@ -485,6 +485,15 @@ public struct AgentOptions: Sendable {
     /// Used by the review agent to send a pre-built prompt verbatim for prefix cache sharing.
     var _rawSystemPromptMode: Bool = false
 
+    /// Optional EventBus for publishing runtime events during agent execution.
+    /// When `nil` (default), no events are emitted — zero overhead.
+    /// Injection point for Epic 27 event emission (stories 27.2+).
+    public var eventBus: EventBus?
+
+    /// When `true`, emit ``LLMTokenStreamEvent`` for each streaming text chunk.
+    /// Defaults to `false` — high-frequency events, enable only for TUI scenarios.
+    public var emitTokenStream: Bool
+
     // MARK: - Memberwise Init
 
     public init(
@@ -557,7 +566,9 @@ public struct AgentOptions: Sendable {
         securityConfig: MemorySecurityConfig? = nil,
         evolutionPlugins: [EvolutionPluginConfig]? = nil,
         reviewScheduleConfig: ReviewScheduleConfig? = nil,
-        agentLabel: String? = nil
+        agentLabel: String? = nil,
+        eventBus: EventBus? = nil,
+        emitTokenStream: Bool = false
     ) {
         self.apiKey = apiKey
         self.model = model
@@ -629,6 +640,8 @@ public struct AgentOptions: Sendable {
         self.evolutionPlugins = evolutionPlugins
         self.reviewScheduleConfig = reviewScheduleConfig
         self.agentLabel = agentLabel
+        self.eventBus = eventBus
+        self.emitTokenStream = emitTokenStream
     }
 
     // MARK: - Auto-Discover Skills
@@ -748,6 +761,8 @@ public struct AgentOptions: Sendable {
         self.evolutionPlugins = nil
         self.reviewScheduleConfig = nil
         self.agentLabel = nil
+        self.eventBus = nil
+        self.emitTokenStream = false
     }
 
     // MARK: - Validation

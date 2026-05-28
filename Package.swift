@@ -256,6 +256,21 @@ let package = Package(
             path: "Examples/CostTrackerExample"
         ),
         .executableTarget(
+            name: "EventBusExample",
+            dependencies: ["OpenAgentSDK"],
+            path: "Examples/EventBusExample"
+        ),
+        .executableTarget(
+            name: "AgentEventBusExample",
+            dependencies: ["OpenAgentSDK"],
+            path: "Examples/AgentEventBusExample"
+        ),
+        .executableTarget(
+            name: "SSEBridgeExample",
+            dependencies: ["OpenAgentSDK"],
+            path: "Examples/SSEBridgeExample"
+        ),
+        .executableTarget(
             name: "ScaffoldCLI",
             dependencies: [
                 .product(name: "ArgumentParser", package: "swift-argument-parser"),

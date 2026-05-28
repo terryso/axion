@@ -208,6 +208,50 @@ public struct RunCompletedData: Codable, Equatable, Sendable {
     }
 }
 
+/// Data payload for a `run_started` SSE event.
+public struct RunStartedData: Codable, Equatable, Sendable {
+    public let runId: String
+    public let task: String
+
+    enum CodingKeys: String, CodingKey {
+        case runId = "run_id"
+        case task
+    }
+
+    public init(runId: String, task: String) {
+        self.runId = runId
+        self.task = task
+    }
+}
+
+/// Data payload for a `cost_update` SSE event.
+public struct CostUpdateData: Codable, Equatable, Sendable {
+    public let model: String
+    public let inputTokens: Int
+    public let outputTokens: Int
+    public let cacheCreationInputTokens: Int?
+    public let cacheReadInputTokens: Int?
+    public let estimatedCostUsd: Double
+
+    enum CodingKeys: String, CodingKey {
+        case model
+        case inputTokens = "input_tokens"
+        case outputTokens = "output_tokens"
+        case cacheCreationInputTokens = "cache_creation_input_tokens"
+        case cacheReadInputTokens = "cache_read_input_tokens"
+        case estimatedCostUsd = "estimated_cost_usd"
+    }
+
+    public init(model: String, inputTokens: Int, outputTokens: Int, cacheCreationInputTokens: Int? = nil, cacheReadInputTokens: Int? = nil, estimatedCostUsd: Double) {
+        self.model = model
+        self.inputTokens = inputTokens
+        self.outputTokens = outputTokens
+        self.cacheCreationInputTokens = cacheCreationInputTokens
+        self.cacheReadInputTokens = cacheReadInputTokens
+        self.estimatedCostUsd = estimatedCostUsd
+    }
+}
+
 // MARK: - AgentSSEEvent
 
 /// SSE event types emitted during agent execution via the HTTP API.
@@ -215,14 +259,18 @@ public struct RunCompletedData: Codable, Equatable, Sendable {
 public enum AgentSSEEvent: Equatable, Sendable {
     case stepStarted(StepStartedData)
     case stepCompleted(StepCompletedData)
+    case runStarted(RunStartedData)
     case runCompleted(RunCompletedData)
+    case costUpdate(CostUpdateData)
 
     /// The SSE event type name string.
     public var eventType: String {
         switch self {
         case .stepStarted: return "step_started"
         case .stepCompleted: return "step_completed"
+        case .runStarted: return "run_started"
         case .runCompleted: return "run_completed"
+        case .costUpdate: return "cost_update"
         }
     }
 
@@ -235,7 +283,9 @@ public enum AgentSSEEvent: Equatable, Sendable {
         switch self {
         case .stepStarted(let d): data = try encoder.encode(d)
         case .stepCompleted(let d): data = try encoder.encode(d)
+        case .runStarted(let d): data = try encoder.encode(d)
         case .runCompleted(let d): data = try encoder.encode(d)
+        case .costUpdate(let d): data = try encoder.encode(d)
         }
 
         let jsonString = String(data: data, encoding: .utf8) ?? "{}"
@@ -250,7 +300,9 @@ struct PersistedSSEEvent: Codable, Equatable, Sendable {
     let eventType: String
     let stepStarted: StepStartedData?
     let stepCompleted: StepCompletedData?
+    let runStarted: RunStartedData?
     let runCompleted: RunCompletedData?
+    let costUpdate: CostUpdateData?
 
     init(from event: AgentSSEEvent) {
         self.eventType = event.eventType
@@ -258,15 +310,33 @@ struct PersistedSSEEvent: Codable, Equatable, Sendable {
         case .stepStarted(let data):
             self.stepStarted = data
             self.stepCompleted = nil
+            self.runStarted = nil
             self.runCompleted = nil
+            self.costUpdate = nil
         case .stepCompleted(let data):
             self.stepStarted = nil
             self.stepCompleted = data
+            self.runStarted = nil
             self.runCompleted = nil
+            self.costUpdate = nil
+        case .runStarted(let data):
+            self.stepStarted = nil
+            self.stepCompleted = nil
+            self.runStarted = data
+            self.runCompleted = nil
+            self.costUpdate = nil
         case .runCompleted(let data):
             self.stepStarted = nil
             self.stepCompleted = nil
+            self.runStarted = nil
             self.runCompleted = data
+            self.costUpdate = nil
+        case .costUpdate(let data):
+            self.stepStarted = nil
+            self.stepCompleted = nil
+            self.runStarted = nil
+            self.runCompleted = nil
+            self.costUpdate = data
         }
     }
 
@@ -278,9 +348,15 @@ struct PersistedSSEEvent: Codable, Equatable, Sendable {
         case "step_completed":
             guard let data = stepCompleted else { return nil }
             return .stepCompleted(data)
+        case "run_started":
+            guard let data = runStarted else { return nil }
+            return .runStarted(data)
         case "run_completed":
             guard let data = runCompleted else { return nil }
             return .runCompleted(data)
+        case "cost_update":
+            guard let data = costUpdate else { return nil }
+            return .costUpdate(data)
         default:
             return nil
         }

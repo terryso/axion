@@ -184,6 +184,36 @@ await SessionSearchE2ETests.run()
 await ReviewOrchestratorE2ETests.run(apiKey: apiKey, model: model, baseURL: baseURL)
 
 // ================================================================
+// SECTION 87-126: Agent Event Types E2E Tests (Story 26.2-26.5: Session + Agent + Tool + LLM Events)
+// ================================================================
+await AgentEventTypesE2ETests.run()
+
+// ================================================================
+// SECTION 127-140: EventBus E2E Tests (Story 26.6: In-Process Event Bus)
+// ================================================================
+await EventBusE2ETests.run()
+
+// ================================================================
+// SECTION 141-142: Agent Lifecycle Event Emit E2E Tests (Story 27.2)
+// ================================================================
+await AgentLifecycleEmitE2ETests.run(apiKey: apiKey, model: model, baseURL: baseURL)
+
+// ================================================================
+// SECTION 146-149: Tool Lifecycle Event Emit E2E Tests (Story 27.3)
+// ================================================================
+await ToolLifecycleEmitE2ETests.run(apiKey: apiKey, model: model, baseURL: baseURL)
+
+// ================================================================
+// SECTION 150-152: LLM Cost Event Emit E2E Tests (Story 27.4)
+// ================================================================
+await LLMCostEmitE2ETests.run(apiKey: apiKey, model: model, baseURL: baseURL)
+
+// ================================================================
+// SECTION 153-157: Session Lifecycle Event Emit E2E Tests (Story 27.5)
+// ================================================================
+await SessionLifecycleEmitE2ETests.run(apiKey: apiKey, model: model, baseURL: baseURL)
+
+// ================================================================
 // Results Summary
 // ================================================================
 print("\n=== E2E Test Results ===")

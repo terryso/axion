@@ -236,6 +236,85 @@ final class APITypesTests: XCTestCase {
             RunCompletedData(runId: "", finalStatus: "", totalSteps: 0)
         )
         XCTAssertEqual(runCompleted.eventType, "run_completed")
+
+        let runStarted = AgentSSEEvent.runStarted(RunStartedData(runId: "r1", task: "t"))
+        XCTAssertEqual(runStarted.eventType, "run_started")
+
+        let costUpdate = AgentSSEEvent.costUpdate(
+            CostUpdateData(model: "m", inputTokens: 0, outputTokens: 0, estimatedCostUsd: 0)
+        )
+        XCTAssertEqual(costUpdate.eventType, "cost_update")
+    }
+
+    // MARK: - RunStartedData
+
+    func testRunStartedDataCodingKeys() throws {
+        let data = RunStartedData(runId: "run-42", task: "do work")
+        let encoded = try JSONEncoder().encode(data)
+        let jsonString = String(data: encoded, encoding: .utf8)!
+
+        XCTAssertTrue(jsonString.contains("\"run_id\""))
+        XCTAssertTrue(jsonString.contains("\"task\""))
+    }
+
+    func testRunStartedDataCodableRoundTrip() throws {
+        let data = RunStartedData(runId: "run-99", task: "hello world")
+        let encoded = try JSONEncoder().encode(data)
+        let decoded = try JSONDecoder().decode(RunStartedData.self, from: encoded)
+        XCTAssertEqual(decoded, data)
+    }
+
+    // MARK: - CostUpdateData
+
+    func testCostUpdateDataCodingKeys() throws {
+        let data = CostUpdateData(
+            model: "claude-sonnet-4-6", inputTokens: 100, outputTokens: 50,
+            cacheCreationInputTokens: 10, cacheReadInputTokens: 20, estimatedCostUsd: 0.003
+        )
+        let encoded = try JSONEncoder().encode(data)
+        let jsonString = String(data: encoded, encoding: .utf8)!
+
+        XCTAssertTrue(jsonString.contains("\"model\""))
+        XCTAssertTrue(jsonString.contains("\"input_tokens\""))
+        XCTAssertTrue(jsonString.contains("\"output_tokens\""))
+        XCTAssertTrue(jsonString.contains("\"cache_creation_input_tokens\""))
+        XCTAssertTrue(jsonString.contains("\"cache_read_input_tokens\""))
+        XCTAssertTrue(jsonString.contains("\"estimated_cost_usd\""))
+    }
+
+    func testCostUpdateDataWithNilCache() throws {
+        let data = CostUpdateData(
+            model: "m", inputTokens: 1, outputTokens: 2,
+            cacheCreationInputTokens: nil, cacheReadInputTokens: nil, estimatedCostUsd: 0.01
+        )
+        let encoded = try JSONEncoder().encode(data)
+        let decoded = try JSONDecoder().decode(CostUpdateData.self, from: encoded)
+        XCTAssertEqual(decoded, data)
+        XCTAssertNil(decoded.cacheCreationInputTokens)
+        XCTAssertNil(decoded.cacheReadInputTokens)
+    }
+
+    // MARK: - New SSE Event Encoding
+
+    func testRunStartedSSEEncoding() throws {
+        let event = AgentSSEEvent.runStarted(RunStartedData(runId: "r-1", task: "analyze"))
+        let sseString = try event.encodeToSSE(sequenceId: 3)
+
+        XCTAssertTrue(sseString.hasPrefix("event: run_started\n"))
+        XCTAssertTrue(sseString.contains("id: 3\n"))
+        XCTAssertTrue(sseString.contains("\"run_id\":\"r-1\""))
+        XCTAssertTrue(sseString.contains("\"task\":\"analyze\""))
+    }
+
+    func testCostUpdateSSEEncoding() throws {
+        let event = AgentSSEEvent.costUpdate(
+            CostUpdateData(model: "m", inputTokens: 10, outputTokens: 5, estimatedCostUsd: 0.01)
+        )
+        let sseString = try event.encodeToSSE(sequenceId: 7)
+
+        XCTAssertTrue(sseString.hasPrefix("event: cost_update\n"))
+        XCTAssertTrue(sseString.contains("id: 7\n"))
+        XCTAssertTrue(sseString.contains("\"model\":\"m\""))
     }
 
     // MARK: - PersistedSSEEvent Round-Trip
@@ -264,6 +343,30 @@ final class APITypesTests: XCTestCase {
         XCTAssertEqual(restored, original)
     }
 
+    func testPersistedSSEEventRunStartedRoundTrip() throws {
+        let original = AgentSSEEvent.runStarted(RunStartedData(runId: "r-2", task: "build feature"))
+        let persisted = PersistedSSEEvent(from: original)
+
+        let encoded = try JSONEncoder().encode(persisted)
+        let decoded = try JSONDecoder().decode(PersistedSSEEvent.self, from: encoded)
+        let restored = decoded.toSSEEvent()
+
+        XCTAssertEqual(restored, original)
+    }
+
+    func testPersistedSSEEventCostUpdateRoundTrip() throws {
+        let original = AgentSSEEvent.costUpdate(
+            CostUpdateData(model: "m", inputTokens: 50, outputTokens: 25, estimatedCostUsd: 0.005)
+        )
+        let persisted = PersistedSSEEvent(from: original)
+
+        let encoded = try JSONEncoder().encode(persisted)
+        let decoded = try JSONDecoder().decode(PersistedSSEEvent.self, from: encoded)
+        let restored = decoded.toSSEEvent()
+
+        XCTAssertEqual(restored, original)
+    }
+
     func testPersistedSSEEventRunCompletedRoundTrip() throws {
         let original = AgentSSEEvent.runCompleted(
             RunCompletedData(runId: "r-1", finalStatus: "completed", totalSteps: 4, durationMs: 1000)
@@ -279,7 +382,7 @@ final class APITypesTests: XCTestCase {
 
     func testPersistedSSEEventUnknownTypeReturnsNil() throws {
         let json = """
-        {"eventType":"unknown_event","stepStarted":null,"stepCompleted":null,"runCompleted":null}
+        {"eventType":"unknown_event","stepStarted":null,"stepCompleted":null,"runStarted":null,"runCompleted":null,"costUpdate":null}
         """
         let data = Data(json.utf8)
         let persisted = try JSONDecoder().decode(PersistedSSEEvent.self, from: data)

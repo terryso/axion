@@ -264,42 +264,27 @@ public class AgentHTTPServer: @unchecked Sendable {
         let startTime = Date()
         var stepIndex = 0
         var resultText = ""
-        var toolNameMap: [String: String] = [:]
 
-        let messageStream = agent.stream(task)
+        // Create per-run EventBus and bridge for automatic SSE event forwarding
+        let eventBus = EventBus()
+        let bridge = EventBusBridge(eventBus: eventBus, broadcaster: broadcaster, runId: runId)
+        await bridge.start {}
+
+        let messageStream = agent.stream(task, eventBus: eventBus)
         var sawResult = false
 
         for await message in messageStream {
             switch message {
-            case .toolUse(let data):
-                toolNameMap[data.toolUseId] = data.toolName
-                let sseEvent = AgentSSEEvent.stepStarted(StepStartedData(
-                    stepIndex: stepIndex,
-                    tool: data.toolName
-                ))
-                await broadcaster.emit(runId: runId, event: sseEvent)
+            case .toolUse:
+                break // bridge handles SSE emit
 
-            case .toolResult(let data):
-                let toolName = toolNameMap[data.toolUseId] ?? "unknown"
-                let sseEvent = AgentSSEEvent.stepCompleted(StepCompletedData(
-                    stepIndex: stepIndex,
-                    tool: toolName,
-                    success: !data.isError
-                ))
-                await broadcaster.emit(runId: runId, event: sseEvent)
-                stepIndex += 1
+            case .toolResult:
+                stepIndex += 1 // bridge handles SSE emit
 
             case .result(let data):
                 sawResult = true
                 resultText = data.text
                 let durationMs = Int(Date().timeIntervalSince(startTime) * 1000)
-                let sseEvent = AgentSSEEvent.runCompleted(RunCompletedData(
-                    runId: runId,
-                    finalStatus: "completed",
-                    totalSteps: stepIndex,
-                    durationMs: durationMs
-                ))
-                await broadcaster.emit(runId: runId, event: sseEvent)
 
                 try? await tracker.completeRun(
                     runId: runId,
@@ -311,8 +296,6 @@ public class AgentHTTPServer: @unchecked Sendable {
                 if let run = await tracker.getRun(runId: runId) {
                     persistenceService.persistRecordSafely(run)
                 }
-
-                await broadcaster.complete(runId: runId)
 
             case .assistant:
                 break
@@ -328,8 +311,10 @@ public class AgentHTTPServer: @unchecked Sendable {
             if let run = await tracker.getRun(runId: runId) {
                 persistenceService.persistRecordSafely(run)
             }
-            await broadcaster.complete(runId: runId)
+            // bridge handles broadcaster.complete() on terminal events (AgentFailedEvent/AgentInterruptedEvent)
         }
+
+        await bridge.stop()
 
         await limiter.release()
     }

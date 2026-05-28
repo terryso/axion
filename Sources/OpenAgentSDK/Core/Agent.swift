@@ -432,6 +432,11 @@ public class Agent: CustomStringConvertible, CustomDebugStringConvertible, @unch
     /// - Parameter context: A description of what the human did while the agent was paused.
     ///   This string is injected into the conversation as a user message.
     public func resume(context: String) {
+        // Emit AgentResumedEvent (fire-and-forget to preserve sync API)
+        if let eventBus = options.eventBus {
+            let sessionId = options.sessionId
+            _Concurrency.Task { await eventBus.publish(AgentResumedEvent(sessionId: sessionId, resumeContext: context)) }
+        }
         let continuationToResume = _pauseLock.withLock { () -> CheckedContinuation<String, Never>? in
             guard _paused else { return nil }
             let cont = _pauseContinuation
@@ -743,6 +748,14 @@ public class Agent: CustomStringConvertible, CustomDebugStringConvertible, @unch
 
         // Interrupt any active query
         interrupt()
+
+        // Emit SessionClosedEvent (zero-overhead when eventBus is nil)
+        if let eventBus = options.eventBus {
+            await eventBus.publish(SessionClosedEvent(
+                sessionId: options.sessionId,
+                finalStatus: .completed
+            ))
+        }
 
         // Persist session marker if sessionStore is configured and persistSession is enabled.
         // We do NOT overwrite with empty messages — the last promptImpl/stream call already
@@ -1396,6 +1409,20 @@ public class Agent: CustomStringConvertible, CustomDebugStringConvertible, @unch
         }
         var traceStepIndex = 0
 
+        // Emit SessionCreatedEvent (zero-overhead when sessionStore or eventBus is nil)
+        if let sessionStore = options.sessionStore, let eventBus = options.eventBus {
+            await eventBus.publish(SessionCreatedEvent(
+                sessionId: resolvedSessionId,
+                task: text,
+                model: model
+            ))
+        }
+
+        // Emit AgentStartedEvent (zero-overhead when eventBus is nil)
+        if let eventBus = options.eventBus {
+            await eventBus.publish(AgentStartedEvent(sessionId: resolvedSessionId, task: text))
+        }
+
         while turnCount < maxTurns {
             // Cancellation check (FR60): cooperative cancellation via Task.isCancelled or interrupt()
             if _Concurrency.Task.isCancelled || _interrupted {
@@ -1484,6 +1511,17 @@ public class Agent: CustomStringConvertible, CustomDebugStringConvertible, @unch
                             let turnCost = estimateCost(model: fallbackModel, usage: turnUsage)
                             totalCostUsd += turnCost
                             costTracker.recordUsage(model: fallbackModel, usage: turnUsage)
+                            if let eventBus = options.eventBus {
+                                await eventBus.publish(LLMCostEvent(
+                                    sessionId: resolvedSessionId,
+                                    model: fallbackModel,
+                                    inputTokens: turnUsage.inputTokens,
+                                    outputTokens: turnUsage.outputTokens,
+                                    cacheCreationInputTokens: usage["cache_creation_input_tokens"] as? Int,
+                                    cacheReadInputTokens: usage["cache_read_input_tokens"] as? Int,
+                                    estimatedCostUsd: turnCost
+                                ))
+                            }
                             costByModel[fallbackModel] = CostBreakdownEntry(
                                 label: options.agentLabel,
                                 model: fallbackModel,
@@ -1546,7 +1584,15 @@ public class Agent: CustomStringConvertible, CustomDebugStringConvertible, @unch
                     )
                     if let messagesData = try? JSONSerialization.data(withJSONObject: messages, options: []),
                        let deserializedMessages = try? JSONSerialization.jsonObject(with: messagesData, options: []) as? [[String: Any]] {
+                        let savedMessageCount = deserializedMessages.count
                         try? await sessionStore.save(sessionId: sessionId, messages: deserializedMessages, metadata: metadata)
+                        // Emit SessionAutoSavedEvent on error path (zero-overhead when eventBus is nil)
+                        if let eventBus = options.eventBus {
+                            await eventBus.publish(SessionAutoSavedEvent(
+                                sessionId: resolvedSessionId,
+                                messageCount: savedMessageCount
+                            ))
+                        }
                     }
                 }
                 // Hook: stop — trigger on error path (loop terminated by exception)
@@ -1563,6 +1609,14 @@ public class Agent: CustomStringConvertible, CustomDebugStringConvertible, @unch
                     || _Concurrency.Task.isCancelled
                     || _interrupted
                     || (error as? URLError)?.code == .cancelled
+                // Emit AgentFailedEvent or AgentInterruptedEvent in error path
+                if let eventBus = options.eventBus {
+                    if isCancelled {
+                        await eventBus.publish(AgentInterruptedEvent(sessionId: resolvedSessionId, stepsCompleted: turnCount))
+                    } else {
+                        await eventBus.publish(AgentFailedEvent(sessionId: resolvedSessionId, error: "[\(statusCode)] \(errorMessage)", stepsCompleted: turnCount))
+                    }
+                }
                 let resultStatus: QueryStatus = isCancelled ? .cancelled : .errorDuringExecution
                 return QueryResult(
                     text: lastAssistantText,
@@ -1604,6 +1658,17 @@ public class Agent: CustomStringConvertible, CustomDebugStringConvertible, @unch
                 let turnCost = estimateCost(model: model, usage: turnUsage)
                 totalCostUsd += turnCost
                 costTracker.recordUsage(model: model, usage: turnUsage)
+                if let eventBus = options.eventBus {
+                    await eventBus.publish(LLMCostEvent(
+                        sessionId: resolvedSessionId,
+                        model: model,
+                        inputTokens: turnUsage.inputTokens,
+                        outputTokens: turnUsage.outputTokens,
+                        cacheCreationInputTokens: usage["cache_creation_input_tokens"] as? Int,
+                        cacheReadInputTokens: usage["cache_read_input_tokens"] as? Int,
+                        estimatedCostUsd: turnCost
+                    ))
+                }
                 // Track per-model cost breakdown
                 let currentModel = model
                 if var existing = costByModel[currentModel] {
@@ -1726,7 +1791,9 @@ public class Agent: CustomStringConvertible, CustomDebugStringConvertible, @unch
                             fileCache: fileCache,
                             sandbox: options.sandbox,
                             mcpConnections: nil,
-                            env: options.env
+                            env: options.env,
+                            eventBus: options.eventBus,
+                            sessionId: resolvedSessionId
                         )
                     )
 
@@ -1824,7 +1891,15 @@ public class Agent: CustomStringConvertible, CustomDebugStringConvertible, @unch
             // Serialize messages to Data for Sendable compliance when crossing actor boundary
             if let messagesData = try? JSONSerialization.data(withJSONObject: messages, options: []),
                let deserializedMessages = try? JSONSerialization.jsonObject(with: messagesData, options: []) as? [[String: Any]] {
+                let savedMessageCount = deserializedMessages.count
                 try? await sessionStore.save(sessionId: sessionId, messages: deserializedMessages, metadata: metadata)
+                // Emit SessionAutoSavedEvent (zero-overhead when eventBus is nil)
+                if let eventBus = options.eventBus {
+                    await eventBus.publish(SessionAutoSavedEvent(
+                        sessionId: resolvedSessionId,
+                        messageCount: savedMessageCount
+                    ))
+                }
             }
         }
 
@@ -1835,6 +1910,21 @@ public class Agent: CustomStringConvertible, CustomDebugStringConvertible, @unch
         }
 
         let isCancelled = (status == .cancelled)
+
+        // Emit AgentCompletedEvent / AgentInterruptedEvent
+        if let eventBus = options.eventBus {
+            if isCancelled {
+                await eventBus.publish(AgentInterruptedEvent(sessionId: resolvedSessionId, stepsCompleted: turnCount))
+            } else {
+                await eventBus.publish(AgentCompletedEvent(
+                    sessionId: resolvedSessionId,
+                    totalSteps: turnCount,
+                    durationMs: Self.computeDurationMs(ContinuousClock.now - startTime),
+                    resultText: lastAssistantText.isEmpty ? nil : lastAssistantText
+                ))
+            }
+        }
+
         // Close trace recorder if active (promptImpl path doesn't yield SDKMessages,
         // but trace file should still be cleaned up)
         await traceRecorder?.close()
@@ -1865,7 +1955,11 @@ public class Agent: CustomStringConvertible, CustomDebugStringConvertible, @unch
     /// - Parameter text: The user's input text to send to the agent.
     /// - Returns: An `AsyncStream<SDKMessage>` that yields typed events as the LLM
     ///   processes the request.
-    public func stream(_ text: String) -> AsyncStream<SDKMessage> {
+    /// Stream with per-call EventBus override.
+    ///
+    /// When `eventBus` is provided it takes precedence over `options.eventBus`,
+    /// allowing each call to use an independent event bus without mutating shared state.
+    public func stream(_ text: String, eventBus: EventBus? = nil) -> AsyncStream<SDKMessage> {
         if isClosed {
             return AsyncStream<SDKMessage> { $0.finish() }
         }
@@ -1931,6 +2025,8 @@ public class Agent: CustomStringConvertible, CustomDebugStringConvertible, @unch
         let capturedTraceEnabled = options.traceEnabled
         let capturedTraceBaseURL = options.traceBaseURL
         let capturedAgentLabel = options.agentLabel
+        let capturedEventBus = eventBus ?? options.eventBus
+        let capturedEmitTokenStream = options.emitTokenStream
 
         // Build tool definitions for API call
         let capturedApiTools: [[String: Any]]? = {
@@ -2095,6 +2191,20 @@ public class Agent: CustomStringConvertible, CustomDebugStringConvertible, @unch
                     message: text
                 )))
 
+                // Emit SessionCreatedEvent (zero-overhead when capturedSessionStore or capturedEventBus is nil)
+                if let sessionStore = capturedSessionStore, let eventBus = capturedEventBus {
+                    await eventBus.publish(SessionCreatedEvent(
+                        sessionId: resolvedSessionId,
+                        task: text,
+                        model: capturedModel
+                    ))
+                }
+
+                // Emit AgentStartedEvent (zero-overhead when capturedEventBus is nil)
+                if let eventBus = capturedEventBus {
+                    await eventBus.publish(AgentStartedEvent(sessionId: resolvedSessionId, task: text))
+                }
+
                 var totalUsage = TokenUsage(inputTokens: 0, outputTokens: 0)
                 var totalCostUsd: Double = 0.0
                 var turnCount = 0
@@ -2121,6 +2231,10 @@ public class Agent: CustomStringConvertible, CustomDebugStringConvertible, @unch
                 while turnCount < capturedMaxTurns {
                     // Cancellation check (FR60): cooperative cancellation via Task.isCancelled
                     if _Concurrency.Task.isCancelled {
+                        // Emit AgentInterruptedEvent before yielding cancelled
+                        if let eventBus = capturedEventBus {
+                            await eventBus.publish(AgentInterruptedEvent(sessionId: resolvedSessionId, stepsCompleted: turnCount))
+                        }
                         let finalText = Self.extractCollectedText(messages: messages)
                         await Self.yieldStreamCancelled(
                             continuation: continuation,
@@ -2202,6 +2316,10 @@ public class Agent: CustomStringConvertible, CustomDebugStringConvertible, @unch
                             let endInput = HookInput(event: .sessionEnd, cwd: capturedCwd)
                             await hookRegistry.execute(.sessionEnd, input: endInput)
                         }
+                        // Emit AgentFailedEvent before yielding error
+                        if let eventBus = capturedEventBus {
+                            await eventBus.publish(AgentFailedEvent(sessionId: resolvedSessionId, error: "[\(statusCode)] \(errorMessage)", stepsCompleted: turnCount))
+                        }
                         Self.yieldStreamError(
                             continuation: continuation, text: "",
                             usage: totalUsage, turnCount: turnCount, startTime: startTime,
@@ -2239,6 +2357,17 @@ public class Agent: CustomStringConvertible, CustomDebugStringConvertible, @unch
                                     let turnCost = estimateCost(model: currentModel, usage: TokenUsage(inputTokens: inputTokens, outputTokens: 0))
                                     totalCostUsd += turnCost
                                     streamCostTracker.recordUsage(model: currentModel, usage: TokenUsage(inputTokens: inputTokens, outputTokens: 0))
+                                    if let eventBus = capturedEventBus {
+                                        await eventBus.publish(LLMCostEvent(
+                                            sessionId: resolvedSessionId,
+                                            model: currentModel,
+                                            inputTokens: inputTokens,
+                                            outputTokens: 0,
+                                            cacheCreationInputTokens: msgUsage["cache_creation_input_tokens"] as? Int,
+                                            cacheReadInputTokens: msgUsage["cache_read_input_tokens"] as? Int,
+                                            estimatedCostUsd: turnCost
+                                        ))
+                                    }
                                     // Track per-model cost breakdown
                                     let modelKey = currentModel
                                     if var existing = costByModel[modelKey] {
@@ -2321,6 +2450,12 @@ public class Agent: CustomStringConvertible, CustomDebugStringConvertible, @unch
                                     if capturedIncludePartialMessages {
                                         continuation.yield(.partialMessage(SDKMessage.PartialData(text: deltaText)))
                                     }
+                                    if capturedEmitTokenStream, let eventBus = capturedEventBus {
+                                        await eventBus.publish(LLMTokenStreamEvent(
+                                            sessionId: resolvedSessionId,
+                                            chunk: deltaText
+                                        ))
+                                    }
                                 }
                                 // Handle tool_use input_json_delta
                                 if let partialJson = delta["partial_json"] as? String {
@@ -2372,6 +2507,17 @@ public class Agent: CustomStringConvertible, CustomDebugStringConvertible, @unch
                                 let turnCost = estimateCost(model: currentModel, usage: turnUsage)
                                 totalCostUsd += turnCost
                                 streamCostTracker.recordUsage(model: currentModel, usage: turnUsage)
+                                if let eventBus = capturedEventBus {
+                                    await eventBus.publish(LLMCostEvent(
+                                        sessionId: resolvedSessionId,
+                                        model: currentModel,
+                                        inputTokens: turnUsage.inputTokens,
+                                        outputTokens: turnUsage.outputTokens,
+                                        cacheCreationInputTokens: usage["cache_creation_input_tokens"] as? Int,
+                                        cacheReadInputTokens: usage["cache_read_input_tokens"] as? Int,
+                                        estimatedCostUsd: turnCost
+                                    ))
+                                }
                                 // Track per-model cost breakdown
                                 let modelKey = currentModel
                                 if var existing = costByModel[modelKey] {
@@ -2536,6 +2682,10 @@ public class Agent: CustomStringConvertible, CustomDebugStringConvertible, @unch
                                     let endInput = HookInput(event: .sessionEnd, cwd: capturedCwd)
                                     await hookRegistry.execute(.sessionEnd, input: endInput)
                                 }
+                                // Emit AgentFailedEvent before yielding error
+                                if let eventBus = capturedEventBus {
+                                    await eventBus.publish(AgentFailedEvent(sessionId: resolvedSessionId, error: "SSE error event", stepsCompleted: turnCount))
+                                }
                                 Self.yieldStreamError(
                                     continuation: continuation, text: accumulatedText,
                                     usage: totalUsage, turnCount: turnCount, startTime: startTime,
@@ -2551,6 +2701,10 @@ public class Agent: CustomStringConvertible, CustomDebugStringConvertible, @unch
                     } catch {
                         // Check if this is a cancellation (not a real error)
                         if error is CancellationError || _Concurrency.Task.isCancelled || (error as? URLError)?.code == .cancelled {
+                            // Emit AgentInterruptedEvent before yielding cancelled
+                            if let eventBus = capturedEventBus {
+                                await eventBus.publish(AgentInterruptedEvent(sessionId: resolvedSessionId, stepsCompleted: turnCount))
+                            }
                             let previousText = Self.extractCollectedText(messages: messages)
                             let finalText = previousText.isEmpty ? accumulatedText : "\(previousText) \(accumulatedText)"
                             await Self.yieldStreamCancelled(
@@ -2574,6 +2728,10 @@ public class Agent: CustomStringConvertible, CustomDebugStringConvertible, @unch
                             let endInput = HookInput(event: .sessionEnd, cwd: capturedCwd)
                             await hookRegistry.execute(.sessionEnd, input: endInput)
                         }
+                        // Emit AgentFailedEvent before yielding error
+                        if let eventBus = capturedEventBus {
+                            await eventBus.publish(AgentFailedEvent(sessionId: resolvedSessionId, error: error.localizedDescription, stepsCompleted: turnCount))
+                        }
                         Self.yieldStreamError(
                             continuation: continuation, text: accumulatedText,
                             usage: totalUsage, turnCount: turnCount, startTime: startTime,
@@ -2586,6 +2744,10 @@ public class Agent: CustomStringConvertible, CustomDebugStringConvertible, @unch
                     // Check termination conditions
                     // Cancellation check after SSE event stream ends (FR60)
                     if _Concurrency.Task.isCancelled {
+                        // Emit AgentInterruptedEvent before yielding cancelled
+                        if let eventBus = capturedEventBus {
+                            await eventBus.publish(AgentInterruptedEvent(sessionId: resolvedSessionId, stepsCompleted: turnCount))
+                        }
                         let finalText = Self.extractCollectedText(messages: messages)
                         let partialText = finalText.isEmpty ? accumulatedText : "\(finalText) \(accumulatedText)"
                         await Self.yieldStreamCancelled(
@@ -2663,7 +2825,9 @@ public class Agent: CustomStringConvertible, CustomDebugStringConvertible, @unch
                                     fileCache: capturedFileCache,
                                     sandbox: capturedSandbox,
                                     mcpConnections: nil,
-                                    env: capturedEnv
+                                    env: capturedEnv,
+                                    eventBus: capturedEventBus,
+                                    sessionId: resolvedSessionId
                                 )
                             )
 
@@ -2774,6 +2938,16 @@ public class Agent: CustomStringConvertible, CustomDebugStringConvertible, @unch
                 let resultSubtype: SDKMessage.ResultData.Subtype =
                     (!loopExitedCleanly && turnCount >= capturedMaxTurns) ? .errorMaxTurns : .success
 
+                // Emit AgentCompletedEvent on normal stream completion
+                if let eventBus = capturedEventBus {
+                    await eventBus.publish(AgentCompletedEvent(
+                        sessionId: resolvedSessionId,
+                        totalSteps: turnCount,
+                        durationMs: durationMs,
+                        resultText: finalText.isEmpty ? nil : finalText
+                    ))
+                }
+
                 let resultMsg = SDKMessage.result(SDKMessage.ResultData(
                     subtype: resultSubtype,
                     text: finalText,
@@ -2832,7 +3006,15 @@ public class Agent: CustomStringConvertible, CustomDebugStringConvertible, @unch
                     // Serialize messages to Data for Sendable compliance when crossing actor boundary
                     if let messagesData = try? JSONSerialization.data(withJSONObject: messages, options: []),
                        let deserializedMessages = try? JSONSerialization.jsonObject(with: messagesData, options: []) as? [[String: Any]] {
+                        let savedMessageCount = deserializedMessages.count
                         try? await sessionStore.save(sessionId: sessionId, messages: deserializedMessages, metadata: metadata)
+                        // Emit SessionAutoSavedEvent (zero-overhead when capturedEventBus is nil)
+                        if let eventBus = capturedEventBus {
+                            await eventBus.publish(SessionAutoSavedEvent(
+                                sessionId: resolvedSessionId,
+                                messageCount: savedMessageCount
+                            ))
+                        }
                     }
                 }
                 // Hook: sessionEnd — trigger before finishing the stream

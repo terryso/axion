@@ -36,6 +36,7 @@
 - **增强 Memory** — 基于 Fact 的记忆系统，支持 candidate→active→retired 生命周期、证据驱动置信度和导入导出
 - **自我进化** — 后台审查 Agent 在每次会话后自动 fork，提取记忆并进化技能
 - **输出格式化** — SDKMessageOutputHandler 协议，提供 Terminal 和 JSON 输出格式化器
+- **Runtime Event Layer** — 18 种类型化事件通过 EventBus 订阅，SSE 桥接 HTTP API，可选 Token 流式输出
 
 ## 快速入门（15 分钟）
 
@@ -422,6 +423,59 @@ for await message in agent.stream("总结这个项目") {
 let result = json.finalize()  // [String: Any] 字典
 ```
 
+### Runtime Event Layer
+
+通过 `EventBus` 订阅类型化的运行时事件 — Session 生命周期、Agent 执行进度、Tool 调用详情、LLM 成本追踪和 Token 流式输出。
+
+```swift
+let eventBus = EventBus()
+
+// 订阅所有事件
+let (_, stream) = await eventBus.subscribe()
+for await event in stream {
+    switch event {
+    case let e as AgentStartedEvent:
+        print("Agent 启动: \(e.task)")
+    case let e as ToolCompletedEvent:
+        print("工具完成: \(e.toolName), \(e.durationMs)ms")
+    case let e as LLMCostEvent:
+        print("成本: $\(String(format: "%.4f", e.estimatedCostUsd))")
+    default: break
+    }
+}
+
+// 或只订阅特定事件类型
+let costStream = await eventBus.subscribe(LLMCostEvent.self)
+```
+
+将 EventBus 传给 Agent，所有事件自动发射：
+
+```swift
+let agent = createAgent(options: AgentOptions(
+    apiKey: "sk-...",
+    eventBus: eventBus,            // 可选，nil = 零开销
+    emitTokenStream: true          // 启用 LLMTokenStreamEvent（用于 TUI 实时渲染）
+))
+```
+
+**4 个类别共 18 种事件：**
+
+| 类别 | 事件 |
+|------|------|
+| **Session** | `SessionCreatedEvent`、`SessionRestoredEvent`、`SessionClosedEvent`、`SessionAutoSavedEvent` |
+| **Agent** | `AgentStartedEvent`、`AgentCompletedEvent`、`AgentFailedEvent`、`AgentInterruptedEvent`、`AgentResumedEvent` |
+| **Tool** | `ToolStartedEvent`、`ToolStreamingEvent`、`ToolCompletedEvent`、`ToolFailedEvent` |
+| **LLM** | `LLMRequestStartedEvent`、`LLMResponseReceivedEvent`、`LLMCostEvent`、`LLMTokenStreamEvent` |
+
+桥接 EventBus 到 SSE 供 HTTP API 使用：
+
+```swift
+let broadcaster = EventBroadcaster()
+let bridge = EventBusBridge(eventBus: eventBus, broadcaster: broadcaster, runId: "run-1")
+await bridge.start()
+// SSE 客户端现在通过 broadcaster 接收类型化事件
+```
+
 ## 内置工具
 
 ### Core 工具（10 个）
@@ -486,6 +540,7 @@ graph TD
     C --> H
     C --> I
     C --> J
+    C --> K
     D["<b>LLMClient 协议</b><br/>AnthropicClient &middot; OpenAIClient"]
     E["<b>34 个内置工具</b><br/>Core 10 &middot; Advanced 11 &middot; Specialist 13"]
     F["<b>MCP 服务器</b><br/>stdio &middot; SSE &middot; HTTP &middot; 进程内"]
@@ -493,6 +548,7 @@ graph TD
     H["<b>钩子注册表</b><br/>20+ 生命周期事件"]
     I["<b>HTTP API Server</b><br/>REST + SSE &middot; Run 追踪"]
     J["<b>成本与追踪</b><br/>预算控制 &middot; JSONL 追踪"]
+    K["<b>Runtime Event Layer</b><br/>EventBus &middot; 18 种事件类型<br/>SSE 桥接 &middot; Token 流式输出"]
 
     style A fill:#0277bd,stroke:#01579b,color:#fff,stroke-width:2px
     style B fill:#ef6c00,stroke:#e65100,color:#fff,stroke-width:2px
@@ -504,6 +560,7 @@ graph TD
     style H fill:#e65100,stroke:#bf360c,color:#fff,stroke-width:2px
     style I fill:#1565c0,stroke:#0d47a1,color:#fff,stroke-width:2px
     style J fill:#880e4f,stroke:#560027,color:#fff,stroke-width:2px
+    style K fill:#283593,stroke:#1a237e,color:#fff,stroke-width:2px
 ```
 
 ## 环境变量
@@ -522,8 +579,8 @@ API 文档和指南通过 Swift-DocC 提供：
 - [工具系统](Sources/OpenAgentSDK/Documentation.docc/ToolSystem.md) — 工具协议、自定义工具、层级
 - [多 Agent 编排](Sources/OpenAgentSDK/Documentation.docc/MultiAgent.md) — 子 Agent、团队、任务
 - [MCP、会话与钩子](Sources/OpenAgentSDK/Documentation.docc/MCPSessionHooks.md) — MCP 集成、持久化、钩子系统
-- [Cookbook 实战指南](docs/cookbook.md) — 16 个真实场景的完整代码示例（结构化输出、沙箱、多 Agent 编排等）
-- [可运行示例](Examples/README.md) — 31 个完整示例，含逐步教程（19 个功能演示 + 12 个兼容性验证）
+- [Cookbook 实战指南](docs/cookbook.md) — 18 个真实场景的完整代码示例（结构化输出、沙箱、多 Agent 编排、Runtime 事件等）
+- [可运行示例](Examples/README.md) — 33 个完整示例，含逐步教程（20 个功能演示 + 12 个兼容性验证 + EventBus 演示）
 
 ## 系统要求
 

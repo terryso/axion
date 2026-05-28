@@ -34,6 +34,7 @@
 | 15 | [日志、监控与调试](#场景-15日志监控与调试) | `LogLevel`、`LogOutput`、成本追踪 |
 | 16 | [完整生产级 Agent 配置](#场景-16完整生产级-agent-配置) | 综合配置模板 |
 | 17 | [自进化与智能策展](#场景-17自进化与智能策展) | `ExperienceExtractor`、`SkillEvolver`、`ReviewOrchestrator`、`IntelligentCurator` |
+| 18 | [Runtime Event Layer](#场景-18runtime-event-layer) | `EventBus`、`AgentEvent`、`EventBusBridge`、`LLMTokenStreamEvent` |
 
 ---
 
@@ -1453,6 +1454,13 @@ let agent = createAgent(options: AgentOptions(
 | `logOutput` | `LogOutput` | `.console` | 日志输出目标 |
 | `sandbox` | `SandboxSettings?` | `nil` | 沙箱配置 |
 
+### Runtime Event Layer
+
+| 字段 | 类型 | 默认值 | 说明 |
+|------|------|--------|------|
+| `eventBus` | `EventBus?` | `nil` | Runtime Event Bus，nil 时零开销 |
+| `emitTokenStream` | `Bool` | `false` | 启用 `LLMTokenStreamEvent`（每个 token chunk） |
+
 ### 扩展配置（TS SDK 兼容）
 
 | 字段 | 类型 | 默认值 | 说明 |
@@ -1812,5 +1820,212 @@ let agent = createAgent(options: AgentOptions(
     skillRegistry: skillRegistry,
     memoryStore: factStore,
     tools: getAllBaseTools(tier: .core) + [createSkillTool(registry: skillRegistry)]
+))
+```
+
+---
+
+## 场景 18：Runtime Event Layer
+
+SDK 提供完整的 Runtime Event 体系：通过 `EventBus` 订阅 18 种类型化事件，覆盖 Session 生命周期、Agent 执行进度、Tool 调用详情、LLM 成本追踪和 Token 流式输出。
+
+### 18.1 EventBus 基础 — 发布与订阅
+
+```swift
+let eventBus = EventBus()
+
+// 订阅所有事件
+let (subId, stream) = await eventBus.subscribe()
+
+// 发布事件
+await eventBus.publish(SessionCreatedEvent(
+    sessionId: "sess-001",
+    task: "分析销售数据",
+    model: "claude-sonnet-4-6"
+))
+
+// 消费事件
+for await event in stream {
+    switch event {
+    case let e as SessionCreatedEvent:
+        print("会话创建: \(e.task)")
+    case let e as AgentCompletedEvent:
+        print("Agent 完成: \(e.totalSteps) 步, \(e.durationMs)ms")
+    case let e as ToolCompletedEvent:
+        print("工具完成: \(e.toolName), \(e.durationMs)ms")
+    case let e as LLMCostEvent:
+        print("LLM 成本: $\(String(format: "%.4f", e.estimatedCostUsd))")
+    default: break
+    }
+}
+
+// 取消订阅
+await eventBus.unsubscribe(subId)
+```
+
+### 18.2 类型过滤订阅 — 只接收特定事件
+
+```swift
+// 只订阅 Tool 事件
+let toolStream = await eventBus.subscribe(ToolStartedEvent.self)
+for await event in toolStream {
+    print("工具启动: \(event.toolName)")
+}
+
+// 只订阅成本事件
+let costStream = await eventBus.subscribe(LLMCostEvent.self)
+for await event in costStream {
+    print("成本: in=\(event.inputTokens), out=\(event.outputTokens), $\(event.estimatedCostUsd)")
+}
+```
+
+### 18.3 连接到 Agent — 自动发射事件
+
+```swift
+let eventBus = EventBus()
+
+let agent = createAgent(options: AgentOptions(
+    apiKey: "sk-...",
+    eventBus: eventBus,            // 可选，nil = 零开销
+    emitTokenStream: true          // 可选，启用 LLMTokenStreamEvent（用于 TUI 实时渲染）
+))
+
+// Agent 执行时自动向 EventBus 发射事件
+let result = await agent.prompt("分析项目结构")
+```
+
+不传 `eventBus` 时，行为与之前完全一致 — 零额外开销。
+
+### 18.4 18 种事件类型一览
+
+| 类别 | 事件 | 关键字段 |
+|------|------|----------|
+| **Session** | `SessionCreatedEvent` | `sessionId`, `task`, `model` |
+| | `SessionRestoredEvent` | `sessionId` |
+| | `SessionClosedEvent` | `sessionId` |
+| | `SessionAutoSavedEvent` | `sessionId` |
+| **Agent** | `AgentStartedEvent` | `sessionId`, `task` |
+| | `AgentCompletedEvent` | `totalSteps`, `durationMs`, `resultText` |
+| | `AgentFailedEvent` | `error` |
+| | `AgentInterruptedEvent` | — |
+| | `AgentResumedEvent` | — |
+| **Tool** | `ToolStartedEvent` | `toolName`, `toolUseId`, `input` |
+| | `ToolStreamingEvent` | `toolUseId` |
+| | `ToolCompletedEvent` | `toolName`, `durationMs`, `output`, `isError` |
+| | `ToolFailedEvent` | `toolName`, `error` |
+| **LLM** | `LLMRequestStartedEvent` | `model` |
+| | `LLMResponseReceivedEvent` | `model`, `durationMs` |
+| | `LLMCostEvent` | `inputTokens`, `outputTokens`, `estimatedCostUsd` |
+| | `LLMTokenStreamEvent` | `chunk` |
+
+### 18.5 SSE Bridge — EventBus 到 HTTP SSE
+
+将 EventBus 事件桥接到 SSE 推送，供 HTTP API 消费：
+
+```swift
+let eventBus = EventBus()
+let broadcaster = EventBroadcaster()
+let bridge = EventBusBridge(
+    eventBus: eventBus,
+    broadcaster: broadcaster,
+    runId: "run-\(UUID().uuidString)"
+)
+
+// 启动桥接（EventBus → EventBroadcaster → SSE）
+await bridge.start {
+    print("Run 完成 — 桥接停止")
+}
+
+// SSE 客户端通过 broadcaster 订阅
+let sseStream = await broadcaster.subscribe(runId: "run-1")
+for await event in sseStream {
+    let sseText = try event.encodeToSSE(sequenceId: 1)
+    // 发送给 HTTP 客户端
+}
+
+// 已断开的客户端可通过 replay buffer 追赶
+let replay = await broadcaster.getReplayBuffer(runId: "run-1")
+```
+
+### 18.6 多订阅者并发 — CLI + 成本监控 + 工具追踪
+
+```swift
+let eventBus = EventBus()
+
+// 订阅者 1：CLI 日志（所有事件）
+let (_, allStream) = await eventBus.subscribe()
+
+// 订阅者 2：成本监控（仅 LLM 事件）
+let costStream = await eventBus.subscribe(LLMCostEvent.self)
+
+// 订阅者 3：工具追踪（仅 ToolCompletedEvent）
+let toolDoneStream = await eventBus.subscribe(ToolCompletedEvent.self)
+
+// Buffer 策略：bufferingNewest(100) — 慢订阅者不阻塞发布者
+```
+
+### 18.7 Token 流式输出 — TUI 实时渲染
+
+```swift
+let eventBus = EventBus()
+let tokenStream = await eventBus.subscribe(LLMTokenStreamEvent.self)
+
+let agent = createAgent(options: AgentOptions(
+    apiKey: "sk-...",
+    eventBus: eventBus,
+    emitTokenStream: true  // 默认 false，开启后发射每个 token chunk
+))
+
+// 后台打印 token 流
+Task {
+    for await event in tokenStream {
+        print(event.chunk, terminator: "")  // 实时渲染 AI 输出
+    }
+}
+
+let result = await agent.prompt("解释 Swift 并发")
+```
+
+### 18.8 集成到生产 Agent
+
+```swift
+let eventBus = EventBus()
+let broadcaster = EventBroadcaster()
+
+// SSE Bridge
+let bridge = EventBusBridge(
+    eventBus: eventBus,
+    broadcaster: broadcaster,
+    runId: "run-1"
+)
+await bridge.start()
+
+// CLI 日志订阅
+Task {
+    let (_, stream) = await eventBus.subscribe()
+    for await event in stream {
+        logger.info("\(type(of: event).self): \(event.id)")
+    }
+}
+
+// 成本聚合订阅
+var totalCost = 0.0
+Task {
+    let costStream = await eventBus.subscribe(LLMCostEvent.self)
+    for await event in costStream {
+        totalCost += event.estimatedCostUsd
+        if totalCost > 1.0 {
+            print("警告：累计成本已超过 $1.00")
+        }
+    }
+}
+
+let agent = createAgent(options: AgentOptions(
+    apiKey: "sk-...",
+    model: "claude-sonnet-4-6",
+    eventBus: eventBus,
+    maxBudgetUsd: 2.0,
+    permissionMode: .bypassPermissions,
+    tools: getAllBaseTools(tier: .core)
 ))
 ```

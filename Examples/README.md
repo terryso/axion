@@ -703,6 +703,77 @@ swift run CompatSandbox
 - `SandboxNetworkConfig` and `RipgrepConfig` parity
 - Path traversal protection and shell filtering options
 
+---
+
+### 32. EventBusExample — Runtime Event Layer (Epic 26)
+
+Demonstrates the EventBus: basic publish/subscribe, type-filtered subscription, multiple concurrent subscribers, and buffering behavior.
+
+```bash
+swift run EventBusExample
+```
+
+**No API key required** — this example publishes synthetic events.
+
+**What you'll learn:**
+- Creating an `EventBus()` and subscribing to all events
+- Publishing typed events (`SessionCreatedEvent`, `AgentStartedEvent`, `ToolStartedEvent`, etc.)
+- Type-filtered subscription — `bus.subscribe(ToolStartedEvent.self)` receives only that type
+- Multiple concurrent subscribers (CLI logger, cost monitor, tool tracer)
+- Buffer policy: `.bufferingNewest(100)` — slow consumers don't block publishers
+
+**Key code:**
+```swift
+let bus = EventBus()
+
+// Subscribe to all events
+let (subId, stream) = await bus.subscribe()
+
+// Subscribe to specific type only
+let toolStream = bus.subscribe(ToolStartedEvent.self)
+
+// Publish events
+await bus.publish(SessionCreatedEvent(sessionId: "sess-001", task: "Analyze", model: "claude-sonnet-4-6"))
+await bus.publish(ToolStartedEvent(sessionId: "sess-001", toolName: "Read", toolUseId: "tu_01", input: "/data/file.csv"))
+
+// Unsubscribe
+await bus.unsubscribe(subId)
+```
+
+---
+
+### 33. SSEBridgeExample — EventBus to SSE Pipeline (Epic 28)
+
+Demonstrates the full SSE bridge pipeline: `EventBus → EventBusBridge → EventBroadcaster → SSE stream`. Also shows real-time token streaming via `LLMTokenStreamEvent`.
+
+```bash
+swift run SSEBridgeExample
+```
+
+**Requires API key** — set `CODEANY_API_KEY` or `ANTHROPIC_API_KEY`.
+
+**What you'll learn:**
+- Building the SSE pipeline: `EventBusBridge(eventBus:broadcaster:runId:)`
+- Passing `eventBus` and `emitTokenStream` to `AgentOptions`
+- Subscribing to raw EventBus events and SSE events in parallel
+- Using `EventBroadcaster.getReplayBuffer()` for disconnected client catch-up
+- `AgentSSEEvent.encodeToSSE()` for SSE wire format
+
+**Key code:**
+```swift
+let eventBus = EventBus()
+let broadcaster = EventBroadcaster()
+let bridge = EventBusBridge(eventBus: eventBus, broadcaster: broadcaster, runId: "run-1")
+await bridge.start()
+
+// Create agent with EventBus + token streaming
+let agent = createAgent(options: AgentOptions(
+    apiKey: "sk-...",
+    eventBus: eventBus,
+    emitTokenStream: true
+))
+```
+
 ## Example Dependencies
 
 | Example                  | Requires MCP dependency | Extra setup              |
@@ -739,6 +810,8 @@ swift run CompatSandbox
 | CompatSubagents          | No                     | None                     |
 | CompatThinkingModel      | No                     | None                     |
 | CompatSandbox            | No                     | None                     |
+| EventBusExample          | No                     | None (synthetic events)  |
+| SSEBridgeExample         | No                     | API key required         |
 
 All examples are defined as executable targets in `Package.swift` — no additional configuration needed.
 
@@ -754,8 +827,9 @@ Five essential scenarios every developer should understand. Each links to the re
 | 4 | **Session Management** — save, load, fork | `CompatSessions/`, `SessionsAndHooks/`, `MultiTurnExample/` | `swift run SessionsAndHooks` |
 | 5 | **Memory (Cross-Task Learning)** — store, query, domain-based | `MemoryStoreExample/` | `swift run MemoryStoreExample` |
 | 6 | **Self-Evolution** — experience extraction, skill evolution, curation | `SelfEvolutionExample/` | `swift run SelfEvolutionExample` |
+| 7 | **Runtime Events** — EventBus, typed events, SSE bridge | `EventBusExample/`, `SSEBridgeExample/` | `swift run EventBusExample` |
 
-> **Tip:** Start with scenario 1 (BasicAgent), then explore each scenario in order. The full learning path below covers all 30+ examples.
+> **Tip:** Start with scenario 1 (BasicAgent), then explore each scenario in order. The full learning path below covers all 33 examples.
 
 ## Recommended Learning Path
 
@@ -766,7 +840,7 @@ BasicAgent → StreamingAgent → CustomTools → CustomSystemPromptExample
     → SessionsAndHooks → SkillsExample → SandboxExample
     → LoggerExample → ModelSwitchingExample → QueryAbortExample
     → ContextInjectionExample → MultiTurnExample → OpenAICompatExample
-    → PolyvLiveExample
+    → PolyvLiveExample → EventBusExample → SSEBridgeExample
 ```
 
 1. **Start here:** BasicAgent, StreamingAgent — understand the core prompt/stream APIs
@@ -783,6 +857,7 @@ BasicAgent → StreamingAgent → CustomTools → CustomSystemPromptExample
 12. **OpenAI compat:** OpenAICompatExample — use DeepSeek, Qwen, Ollama, and other OpenAI-compatible APIs
 13. **HTTP API Server:** AgentHTTPServerExample — expose an Agent as a REST + SSE HTTP service
 14. **SDK compat verification:** Compat* examples — verify TypeScript SDK API parity (for SDK contributors)
+15. **Runtime events:** EventBusExample, SSEBridgeExample — EventBus publish/subscribe, SSE bridge pipeline, token streaming
 
 ## Troubleshooting
 
