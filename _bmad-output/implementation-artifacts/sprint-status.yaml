@@ -1,5 +1,5 @@
 # generated: 2026-05-08
-# last_updated: 2026-05-27
+# last_updated: 2026-05-29
 # story-27.2-created: 2026-05-27
 # story-27.3-created: 2026-05-27
 # story-26.3-created: 2026-05-27
@@ -131,6 +131,8 @@ last_updated: 2026-05-27
 # epic-22-added: 2026-05-24
 # epic-23-added: 2026-05-24
 # phase-9-added: 2026-05-27
+# phase-10-added: 2026-05-29
+# epic-28-30-added: 2026-05-29
 
 project_key: NOKEY
 tracking_system: file-system
@@ -326,31 +328,31 @@ development_status:
   # ============================================================
 
   # Epic 22: Background Review Agent 集成
-  epic-22: in-progress
-  22-2-skillevolver-integration: done
-  22-5-skill-usage-tracking: done
+  epic-22: done
   22-1-revieworchestrator-integration: done
+  22-2-skillevolver-integration: done
   22-3-revieworchestrator-dependency-injection: done
   22-4-intelligentcurator-integration: done
-  epic-22-retrospective: optional
+  22-5-skill-usage-tracking: done
+  epic-22-retrospective: done
 
   # Epic 23: Review 配置与 Axion 专属适配
-  epic-23: in-progress
+  epic-23: done
   23-1-review-config-cli-flags: done
   23-2-review-result-logging-notification: done
-  epic-23-retrospective: optional
+  epic-23-retrospective: done
 
   # ============================================================
   # Phase 9 — AxionRuntime 统一执行引擎
   # ============================================================
 
   # Epic 24: AxionRuntime Core
-  epic-24: in-progress
+  epic-24: done
   24-1-axionruntime-skeleton: done
   24-2-agent-build-execution: done
   24-3-axionrunstate-session-metadata: done
   24-4-session-state-persistence: done
-  epic-24-retrospective: optional
+  epic-24-retrospective: done
 
   # Epic 25: EventHandler 体系
   epic-25: done
@@ -377,3 +379,31 @@ development_status:
   27-3-daemon-axionruntime-integration: done
   27-4-skill-execution-axionruntime: done
   epic-27-retrospective: done
+
+  # ============================================================
+  # Phase 10 — Gateway: 远程交互 + 自进化
+  # ============================================================
+
+  # Epic 28: Gateway 进程基础
+  epic-28: backlog
+  28-1-gateway-config-extension: backlog
+  28-2-gatewayrunner-http-api-reuse: backlog
+  28-3-launchd-daemon-management: backlog
+  28-4-gateway-status-query: backlog
+  epic-28-retrospective: optional
+
+  # Epic 29: Telegram 远程交互
+  epic-29: backlog
+  29-1-telegramadapter-core-communication: backlog
+  29-2-task-serial-execution-queue: backlog
+  29-3-tgeventhandler-event-push: backlog
+  29-4-tg-command-support: backlog
+  29-5-tg-image-support: backlog
+  epic-29-retrospective: optional
+
+  # Epic 30: 自进化调度
+  epic-30: backlog
+  30-1-reviewscheduler-isolated-review-agent: backlog
+  30-2-review-result-handling-optional-push: backlog
+  30-3-curatorscheduler-auto-scheduling: backlog
+  epic-30-retrospective: optional

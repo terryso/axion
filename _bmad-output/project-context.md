@@ -163,7 +163,7 @@ AxionBar ← AxionCore + Foundation + SwiftUI + AppKit（独立 macOS App）
 | 目标 | 类型 | 入口 |
 |------|------|------|
 | AxionCore | library | 无（共享库） |
-| AxionCLI | executable | `main.swift` + `@main struct AxionCLI: ParsableCommand` |
+| AxionCLI | executable | `main.swift` + `@main struct AxionCLI: ParsableCommand`（含 gateway 子命令） |
 | AxionHelper | executable | `main.swift`（`try await HelperMCPServer.run()`） |
 | AxionBar | executable | `App.swift`（`@main struct AxionBarApp: App` + MenuBarExtra） |
 
@@ -299,6 +299,10 @@ func test_xxx_roundTrip() throws {
 | `EventBroadcaster` | SSE 事件多客户端广播 + 事件持久化 | 订阅者和重放缓存串行化，每次 emit 追加到 api-events.jsonl |
 | `ConcurrencyLimiter` | 并发任务槽位管理（SDK 提供） | 并发计数和排队串行化 |
 | `TaskQueue` | MCP Server 模式任务串行化（SDK 提供） | agent.prompt() 调用串行化 |
+| `GatewayRunner` | Gateway 生命周期管理、任务调度 | 进程状态、启停、信号处理串行化（D9） |
+| `TelegramAdapter` | TG Bot API 长轮询、消息收发 | TG API 调用和消息队列串行化（D10） |
+| `ReviewScheduler` | 后台审查调度 | 审查间隔状态串行化（D11） |
+| `CuratorScheduler` | Curator 自动调度 | 空闲计时和 curator 状态串行化（D11） |
 
 ### Helper 进程生命周期（D8）
 
@@ -341,6 +345,9 @@ try await withTaskCancellationHandler {
 10. **测试中硬编码字符串而非调用真实方法** — 测试必须调用被测方法/函数，不允许测试纯字面量（bogus test）
 11. **JSON 输出使用手动字符串拼接** — 必须使用 JSONEncoder + Codable struct
 12. **AxionBar 测试写入真实文件系统** — 必须使用临时目录
+13. **审查 agent 连接 Helper/操作桌面** — 审查 agent 工具白名单只有 memory + skill，通过 `AgentBuilder.buildReviewAgent()` 创建（D11）
+14. **TG bot token 写入 config.json** — 必须通过环境变量 `AXION_TELEGRAM_BOT_TOKEN` 传入
+15. **未授权 TG 消息回复错误信息** — 静默丢弃，不泄露任何信息
 
 ---
 
@@ -641,6 +648,8 @@ AxionRuntime.execute(buildConfig, runOverrides) → AgentBuilder.build() → age
 - 环境变量 `AXION_API_KEY` 作为覆盖机制（CI/脚本场景）
 - 环境变量 `AXION_AUTH_KEY` 作为 daemon 模式下 server 的 auth-key 来源（Epic 16）
 - 环境变量 `AXION_BIN` 可覆盖 daemon plist 中的二进制路径（Epic 16）
+- 环境变量 `AXION_TELEGRAM_BOT_TOKEN` 配置 TG bot token（Gateway 模式）
+- 环境变量 `AXION_TELEGRAM_ALLOWED_USERS` 配置 TG 用户 ID 白名单（Gateway 模式）
 - `axion setup` 写入配置，`axion doctor` 验证所有层级
 
 **AxionConfig 默认值：**
@@ -653,6 +662,11 @@ AxionRuntime.execute(buildConfig, runOverrides) → AgentBuilder.build() → age
 | `maxReplanRetries` | `3` | 最大重规划次数 |
 | `traceEnabled` | `true` | 默认开启 trace |
 | `sharedSeatMode` | `true` | 默认开启共享座椅安全模式 |
+| `gatewayEnabled` | `false` | 是否启用 gateway |
+| `gatewayCuratorIdleHours` | `2.0` | Curator 空闲触发阈值（小时） |
+| `gatewayCuratorIntervalHours` | `168.0` | Curator 间隔（小时，默认 7 天） |
+| `gatewayTaskTimeoutMinutes` | `10.0` | 单任务超时（分钟） |
+| `gatewayNotifyCuratorResults` | `false` | Curator 结果是否推送 TG |
 
 ---
 
@@ -698,6 +712,49 @@ Sources/AxionCLI/Commands/DaemonCommand.swift     # CLI 子命令入口
 - 使用 launchctl bootstrap/bootout（不使用已废弃的 load/unload）
 - DaemonService 通过注入 `@Sendable` 闭包实现 launchctl 调用的可测试性
 - ServerCommand authKey 优先级：CLI `--auth-key` > `AXION_AUTH_KEY` 环境变量 > nil
+
+### Gateway 模式（D9/D10/D11）
+
+Gateway 是 daemon 的超集：包含 HTTP API + Telegram adapter + 后台审查 + Curator 自动调度。
+
+**CLI 命令：**
+- `axion gateway` — 前台启动（开发调试）
+- `axion gateway install` — 注册为 launchd 守护进程（开机自启）
+- `axion gateway status` — 运行状态、TG 连接、上次审查/curator 时间
+- `axion gateway uninstall` — 停止并卸载
+
+**核心文件：**
+```
+Sources/AxionCLI/Commands/GatewayCommand.swift    # CLI 入口
+Sources/AxionCLI/Services/GatewayRunner.swift     # 编排器（actor）
+Sources/AxionCLI/Services/TelegramAdapter.swift   # TG Bot API 长轮询（actor）
+Sources/AxionCLI/Services/ReviewScheduler.swift   # 后台审查调度（actor）
+Sources/AxionCLI/Services/CuratorScheduler.swift  # Curator 自动调度（actor）
+```
+
+**plist 配置：**
+- Label: `dev.axion.gateway`（与 `dev.axion.server` 独立）
+- 路径: `~/Library/LaunchAgents/dev.axion.gateway.plist`
+- 日志: `~/.axion/gateway.log` + `~/.axion/gateway.err.log`
+
+**TG 安全：**
+- `AXION_TELEGRAM_BOT_TOKEN` 环境变量配置 bot token（不写入 config.json）
+- `AXION_TELEGRAM_ALLOWED_USERS` 环境变量配置用户 ID 白名单（逗号分隔）
+- 未授权消息静默丢弃
+
+**后台审查（D11）：**
+- 审查 agent 通过 `AgentBuilder.buildReviewAgent()` 创建独立实例
+- 工具白名单：只有 memory + skill 操作，无 MCP/Helper
+- 不与主任务共享 AxionRuntime 实例
+
+**Curator 自动调度：**
+- 空闲 > `curatorIdleHours`（默认 2h）+ 距上次 > `curatorIntervalHours`（默认 168h = 7d）时触发
+- 调用现有 `IntelligentCurator.execute()`
+
+**与 daemon 的关系：**
+- `axion daemon` → 仅 HTTP API（AxionBar），功能不变
+- `axion gateway` → HTTP API + TG + 自进化，是 daemon 超集
+- 两者可独立运行，但通常只需 gateway
 
 ### API 运行状态持久化
 
@@ -884,6 +941,62 @@ MCPServerRunner.run()                            # 编排器（使用 AgentBuild
              ├── tools/list → [Helper 工具 + run_task + query_task_status]
              ├── tool_call "run_task" → TaskQueue.enqueue() → agent.prompt(task)
              └── tool_call "query_task_status" → RunTracker.getRun(runId)
+```
+
+### Gateway 数据流（D9/D10/D11）
+
+```
+axion gateway (长驻进程)
+    │
+    ├── 启动 → GatewayRunner (actor)
+    │       ├── 启动 HTTP API (复用 AxionAPI + Hummingbird)
+    │       ├── 启动 TelegramAdapter (actor) → getUpdates 长轮询
+    │       ├── 启动 CuratorScheduler (actor) → 定时检查
+    │       └── 注册信号处理 (SIGTERM/SIGINT)
+    │
+    ▼ TG 消息到达
+TelegramAdapter.pollLoop() 收到 Update
+    │
+    ├── 用户白名单检查 → 未授权则静默丢弃
+    │
+    ├── 文本消息 → 提交任务到 TaskQueue (ConcurrencyLimiter=1)
+    │       │
+    │       ▼ (排队执行)
+    │   AxionRuntime.execute(buildConfig, runOverrides)
+    │       ├── AgentBuilder.build() → agent
+    │       ├── agent.stream(task) → SDK Agent Loop
+    │       │       ├── LLM 规划 + 工具调用
+    │       │       │       ├── MCP tools (Helper) → AX 桌面操作
+    │       │       │       └── Bash tool → 代码执行
+    │       │       └── EventBus emit AgentEvents
+    │       │               ├── TGEventHandler → TG 推送进展（节流 5 秒）
+    │       │               ├── EventBridge → SSE (AxionBar)
+    │       │               └── TraceEventHandler → trace 记录
+    │       │
+    │       └── 完成 → TG 推送最终结果
+    │
+    ├── /status 命令 → 查询 GatewayRunner 状态
+    └── /skills 命令 → 查询 SkillRegistry
+
+    ▼ run 完成后（后台审查）
+ReviewScheduler 监听 AgentCompletedEvent
+    │
+    ├── ReviewScheduleConfig.shouldReview() → 是
+    │
+    └── AgentBuilder.buildReviewAgent() → 独立 agent 实例
+            ├── 工具白名单：memory + skill（无 MCP/Helper）
+            ├── 复用 buildFullSystemPrompt()（前缀缓存共享）
+            └── 审查结果 → FactStore + SkillRegistry 写入
+
+    ▼ 空闲时（Curator 自动调度）
+CuratorScheduler 检查：lastTaskTime + curatorIdleHours < now
+                     && lastCuratorTime + curatorIntervalHours < now
+    │
+    └── IntelligentCurator.execute()
+            ├── LLMSkillEvolver → SKILL.md 内容更新
+            ├── 合并重叠技能
+            ├── 归档长期未用技能（永不自动删除）
+            └── 结果 → .curator_state 持久化
 ```
 
 ### Takeover 数据流（Epic 7）
