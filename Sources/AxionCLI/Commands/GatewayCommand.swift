@@ -83,6 +83,57 @@ struct GatewayStartCommand: AsyncParsableCommand {
             traceDir: traceDir
         )
 
+        // CuratorScheduler: assemble IntelligentCurator + dependencies
+        let curatorIdleHours = config.gatewayCuratorIdleHours ?? 2.0
+        let curatorIntervalHours = config.gatewayCuratorIntervalHours ?? 168.0
+
+        let skillsDir = (ConfigManager.defaultConfigDirectory as NSString).appendingPathComponent("skills")
+        let memoryDir = (ConfigManager.defaultConfigDirectory as NSString).appendingPathComponent("memory")
+        let curatorUsageStore = SkillUsageStore(skillsDir: skillsDir)
+        let curatorStore = SkillCuratorStore(skillsDir: skillsDir)
+        let curatorFactStore = FactStore(memoryDir: memoryDir)
+        let curatorSkillRegistry = SkillRegistry()
+        AxionBuiltInSkills.registerAll(into: curatorSkillRegistry)
+        _ = curatorSkillRegistry.registerDiscoveredSkills()
+        let curatorConfig = SkillCuratorConfig(
+            intervalHours: curatorIntervalHours,
+            staleAfterDays: config.curatorStaleAfterDays ?? 30,
+            archiveAfterDays: config.curatorArchiveAfterDays ?? 90,
+            dryRun: config.curatorDryRun ?? false,
+            enabled: config.curatorEnabled ?? true
+        )
+        let curatorSkillCurator = SkillCurator(
+            usageStore: curatorUsageStore,
+            curatorStore: curatorStore,
+            config: curatorConfig
+        )
+        let notifyCuratorResults = config.gatewayNotifyCuratorResults ?? false
+        let curatorScheduler: CuratorScheduler?
+        if let apiKey = config.apiKey, !apiKey.isEmpty {
+            let evolverClient = AnthropicClient(apiKey: apiKey, baseURL: config.baseURL)
+            let evolutionModel = config.reviewModel ?? AxionConfig.defaultReviewModel
+            let curatorEvolver = LLMSkillEvolver(client: evolverClient, evolutionModel: evolutionModel)
+            let intelligentCurator = IntelligentCurator(
+                skillCurator: curatorSkillCurator,
+                factStore: curatorFactStore,
+                skillRegistry: curatorSkillRegistry,
+                skillEvolver: curatorEvolver,
+                usageStore: curatorUsageStore,
+                curatorStore: curatorStore
+            )
+            curatorScheduler = CuratorScheduler(
+                curatorIdleHours: curatorIdleHours,
+                curatorIntervalHours: curatorIntervalHours,
+                curator: intelligentCurator,
+                agentProvider: { [weak reviewDataContext] in
+                    reviewDataContext?.agent
+                },
+                traceDir: traceDir
+            )
+        } else {
+            curatorScheduler = nil
+        }
+
         let server = AgentHTTPServer(
             agent: placeholderAgent,
             host: host,
@@ -94,7 +145,7 @@ struct GatewayStartCommand: AsyncParsableCommand {
 
         let runner = GatewayRunner(server: server)
 
-        server.runHandler = { [runCoordinator, config, runtimeManager, runner, reviewScheduler, reviewDataContext] task, request, tracker, broadcaster, persistence, limiter in
+        server.runHandler = { [runCoordinator, config, runtimeManager, runner, reviewScheduler, curatorScheduler, reviewDataContext] task, request, tracker, broadcaster, persistence, limiter in
             guard await runner.isAcceptingTasks else { return }
 
             await runner.taskStarted()
@@ -139,7 +190,7 @@ struct GatewayStartCommand: AsyncParsableCommand {
                     buildConfig: buildConfig,
                     eventBus: eventBus,
                     runOverrides: runOverrides,
-                    extraHandlers: [reviewScheduler]
+                    extraHandlers: [reviewScheduler] + (curatorScheduler.map { [$0] } ?? [])
                 )
             } catch {
                 await bridge.stop()
@@ -228,7 +279,7 @@ struct GatewayStartCommand: AsyncParsableCommand {
                 runtimeManager: runtimeManager,
                 config: config,
                 runner: runner,
-                extraHandlers: [reviewScheduler],
+                extraHandlers: [reviewScheduler] + (curatorScheduler.map { [$0] } ?? []),
                 replyHandler: { [weak adapter] chatId, message in
                     guard let adapter else { return }
                     await adapter.sendReply(message, to: chatId)
@@ -243,12 +294,36 @@ struct GatewayStartCommand: AsyncParsableCommand {
                 tgStatus: { [weak adapter] in adapter?.statusValue },
                 reviewStatus: { [weak reviewScheduler] in reviewScheduler?.lastReviewAtValue },
                 reviewSummary: { [weak reviewScheduler] in reviewScheduler?.lastReviewSummaryValue },
-                curatorStatus: nil
+                curatorStatus: { [weak curatorScheduler] in curatorScheduler?.lastCuratorAtValue }
             )
+
+            // Wire curator result callback for TG push
+            let tgChatIds: [Int64] = allowedUsers.compactMap { Int64($0) }
+            if notifyCuratorResults {
+                await curatorScheduler?.setOnCuratorResult { [weak adapter] info in
+                    guard info.success else {
+                        for chatId in tgChatIds {
+                            await adapter?.sendReply("⚠️ 后台策展失败: \(info.error ?? "unknown error")", to: chatId)
+                        }
+                        return
+                    }
+                    guard info.consolidations > 0 || info.prunings > 0 else { return }
+                    var parts: [String] = []
+                    if info.consolidations > 0 {
+                        parts.append("合并 \(info.consolidations) 个技能")
+                    }
+                    if info.prunings > 0 {
+                        parts.append("归档 \(info.prunings) 个技能")
+                    }
+                    let message = "🔧 策展完成: \(parts.joined(separator: ", "))"
+                    for chatId in tgChatIds {
+                        await adapter?.sendReply(message, to: chatId)
+                    }
+                }
+            }
 
             // Wire review result callback: the per-request EventBus is stopped before
             // the detached review task completes, so we use a direct callback instead.
-            let tgChatIds: [Int64] = allowedUsers.compactMap { Int64($0) }
             await reviewScheduler.setOnReviewResult { [weak adapter] event in
                 guard event.success else {
                     for chatId in tgChatIds {
@@ -283,7 +358,7 @@ struct GatewayStartCommand: AsyncParsableCommand {
                 tgStatus: { "disabled" },
                 reviewStatus: { [weak reviewScheduler] in reviewScheduler?.lastReviewAtValue },
                 reviewSummary: { [weak reviewScheduler] in reviewScheduler?.lastReviewSummaryValue },
-                curatorStatus: nil
+                curatorStatus: { [weak curatorScheduler] in curatorScheduler?.lastCuratorAtValue }
             )
         }
 
