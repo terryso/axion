@@ -104,6 +104,7 @@ actor GatewayRunner {
     private let server: any GatewayHTTPControlling
 
     private var startTime: ContinuousClock.Instant?
+    private var _telegramAdapter: TelegramAdapter?
     private var _tgStatusProvider: (@Sendable () -> String?)?
     private var _reviewStatusProvider: (@Sendable () -> String?)?
     private var _curatorStatusProvider: (@Sendable () -> String?)?
@@ -132,6 +133,10 @@ actor GatewayRunner {
     func stop(graceful: Bool) async {
         guard _state == .running else { return }
         _state = .stopping
+
+        if let adapter = _telegramAdapter {
+            await adapter.stop()
+        }
 
         if graceful && _activeTaskCount > 0 {
             let deadline = ContinuousClock.now + .seconds(maxDrainSeconds)
@@ -173,6 +178,10 @@ actor GatewayRunner {
             lastReviewAt: _reviewStatusProvider?(),
             lastCuratorAt: _curatorStatusProvider?()
         )
+    }
+
+    func setTelegramAdapter(_ adapter: TelegramAdapter) {
+        _telegramAdapter = adapter
     }
 
     func setStatusProviders(
