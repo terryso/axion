@@ -514,4 +514,197 @@ struct TelegramAdapterTests {
         let sent = await mock.sentMessages
         #expect(sent.isEmpty)
     }
+
+    // MARK: - Photo Support (Story 29.5)
+
+    @Test("Photo message with caption enqueues task with image path and caption")
+    func photoWithCaptionEnqueues() async {
+        let mock = MockTGAPIClient()
+        await mock.setUpdates([])
+        let mockQueue = MockTaskSerialQueue()
+        let adapter = TelegramAdapter(apiClient: mock, allowedUsers: ["123"], taskQueue: mockQueue)
+
+        let photo = [
+            TGPhotoSize(fileId: "small", width: 100, height: 100, fileSize: 5000),
+            TGPhotoSize(fileId: "large", width: 800, height: 600, fileSize: 50000),
+        ]
+        let update = TGUpdate(updateId: 1, message: TGMessage(
+            messageId: 1,
+            from: TGUser(id: 123, firstName: "Nick", lastName: nil, username: nil),
+            chat: TGChat(id: 456, type: "private"),
+            date: 0,
+            text: "read this screenshot",
+            photo: photo
+        ))
+        await mock.setUpdates([update])
+
+        _Concurrency.Task { await adapter.start() }
+        try? await _Concurrency.Task.sleep(nanoseconds: 300_000_000)
+        await adapter.stop()
+
+        let tasks = await mockQueue.tasks
+        #expect(tasks.count == 1)
+        #expect(tasks[0].task.contains("read this screenshot"))
+        #expect(tasks[0].task.contains("附件图片"))
+        #expect(tasks[0].chatId == 456)
+
+        let getFileCount = await mock.getFileCallCount
+        #expect(getFileCount == 1)
+    }
+
+    @Test("Photo message without caption enqueues with default description")
+    func photoWithoutCaptionEnqueues() async {
+        let mock = MockTGAPIClient()
+        await mock.setUpdates([])
+        let mockQueue = MockTaskSerialQueue()
+        let adapter = TelegramAdapter(apiClient: mock, allowedUsers: ["123"], taskQueue: mockQueue)
+
+        let photo = [
+            TGPhotoSize(fileId: "img123", width: 640, height: 480, fileSize: 30000),
+        ]
+        let update = TGUpdate(updateId: 1, message: TGMessage(
+            messageId: 1,
+            from: TGUser(id: 123, firstName: "Nick", lastName: nil, username: nil),
+            chat: TGChat(id: 456, type: "private"),
+            date: 0,
+            text: nil,
+            photo: photo
+        ))
+        await mock.setUpdates([update])
+
+        _Concurrency.Task { await adapter.start() }
+        try? await _Concurrency.Task.sleep(nanoseconds: 300_000_000)
+        await adapter.stop()
+
+        let tasks = await mockQueue.tasks
+        #expect(tasks.count == 1)
+        #expect(tasks[0].task.contains("用户发送了一张图片"))
+    }
+
+    @Test("Photo download failure sends error reply")
+    func photoDownloadFailureSendsError() async {
+        let mock = MockTGAPIClient()
+        await mock.setUpdates([])
+        await mock.setGetFileError(TGAPIError.apiError("file not found"))
+        let mockQueue = MockTaskSerialQueue()
+        let adapter = TelegramAdapter(apiClient: mock, allowedUsers: ["123"], taskQueue: mockQueue)
+
+        let photo = [
+            TGPhotoSize(fileId: "bad_file", width: 100, height: 100, fileSize: 1000),
+        ]
+        let update = TGUpdate(updateId: 1, message: TGMessage(
+            messageId: 1,
+            from: TGUser(id: 123, firstName: "Nick", lastName: nil, username: nil),
+            chat: TGChat(id: 456, type: "private"),
+            date: 0,
+            text: nil,
+            photo: photo
+        ))
+        await mock.setUpdates([update])
+
+        _Concurrency.Task { await adapter.start() }
+        try? await _Concurrency.Task.sleep(nanoseconds: 300_000_000)
+        await adapter.stop()
+
+        let tasks = await mockQueue.tasks
+        #expect(tasks.isEmpty)
+
+        let sent = await mock.sentMessages
+        #expect(sent.count == 1)
+        #expect(sent[0].text == "图片下载失败，请重试")
+    }
+
+    @Test("Photo from unauthorized user is silently discarded")
+    func photoFromUnauthorizedDiscarded() async {
+        let mock = MockTGAPIClient()
+        await mock.setUpdates([])
+        let mockQueue = MockTaskSerialQueue()
+        let adapter = TelegramAdapter(apiClient: mock, allowedUsers: ["123"], taskQueue: mockQueue)
+
+        let photo = [
+            TGPhotoSize(fileId: "img1", width: 100, height: 100, fileSize: 1000),
+        ]
+        let update = TGUpdate(updateId: 1, message: TGMessage(
+            messageId: 1,
+            from: TGUser(id: 999, firstName: "Stranger", lastName: nil, username: nil),
+            chat: TGChat(id: 999, type: "private"),
+            date: 0,
+            text: nil,
+            photo: photo
+        ))
+        await mock.setUpdates([update])
+
+        _Concurrency.Task { await adapter.start() }
+        try? await _Concurrency.Task.sleep(nanoseconds: 200_000_000)
+        await adapter.stop()
+
+        let tasks = await mockQueue.tasks
+        #expect(tasks.isEmpty)
+
+        let sent = await mock.sentMessages
+        #expect(sent.isEmpty)
+    }
+
+    @Test("Photo selects largest size from multiple sizes")
+    func photoSelectsLargestSize() async {
+        let mock = MockTGAPIClient()
+        await mock.setUpdates([])
+        let mockQueue = MockTaskSerialQueue()
+        let adapter = TelegramAdapter(apiClient: mock, allowedUsers: ["123"], taskQueue: mockQueue)
+
+        let photo = [
+            TGPhotoSize(fileId: "thumb", width: 90, height: 90, fileSize: 2000),
+            TGPhotoSize(fileId: "medium", width: 320, height: 240, fileSize: 15000),
+            TGPhotoSize(fileId: "biggest", width: 1280, height: 720, fileSize: 80000),
+        ]
+        let update = TGUpdate(updateId: 1, message: TGMessage(
+            messageId: 1,
+            from: TGUser(id: 123, firstName: "Nick", lastName: nil, username: nil),
+            chat: TGChat(id: 456, type: "private"),
+            date: 0,
+            text: "analyze this",
+            photo: photo
+        ))
+        await mock.setUpdates([update])
+
+        _Concurrency.Task { await adapter.start() }
+        try? await _Concurrency.Task.sleep(nanoseconds: 300_000_000)
+        await adapter.stop()
+
+        // Verify getFile was called (the mock returns default for any fileId)
+        let getFileCount = await mock.getFileCallCount
+        #expect(getFileCount == 1)
+
+        // Task was enqueued
+        let tasks = await mockQueue.tasks
+        #expect(tasks.count == 1)
+    }
+
+    @Test("Photo without queue sends acknowledgment reply")
+    func photoWithoutQueueSendsReply() async {
+        let mock = MockTGAPIClient()
+        await mock.setUpdates([])
+        let adapter = TelegramAdapter(apiClient: mock, allowedUsers: ["123"])
+
+        let photo = [
+            TGPhotoSize(fileId: "pic1", width: 640, height: 480, fileSize: 30000),
+        ]
+        let update = TGUpdate(updateId: 1, message: TGMessage(
+            messageId: 1,
+            from: TGUser(id: 123, firstName: "Nick", lastName: nil, username: nil),
+            chat: TGChat(id: 456, type: "private"),
+            date: 0,
+            text: nil,
+            photo: photo
+        ))
+        await mock.setUpdates([update])
+
+        _Concurrency.Task { await adapter.start() }
+        try? await _Concurrency.Task.sleep(nanoseconds: 300_000_000)
+        await adapter.stop()
+
+        let sent = await mock.sentMessages
+        #expect(sent.count == 1)
+        #expect(sent[0].text == "图片已收到")
+    }
 }

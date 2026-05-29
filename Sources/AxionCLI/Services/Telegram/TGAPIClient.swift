@@ -5,6 +5,8 @@ import Foundation
 protocol TGAPIClientProtocol: Sendable {
     func getUpdates(offset: Int64?, timeout: Int) async throws -> [TGUpdate]
     func sendMessage(chatId: Int64, text: String) async throws -> TGMessage
+    func getFile(fileId: String) async throws -> TGFile
+    func downloadFile(filePath: String) async throws -> Data
 }
 
 // MARK: - Implementation
@@ -57,6 +59,30 @@ struct TGAPIClient: TGAPIClientProtocol {
             throw TGAPIError.apiError(response.description ?? "sendMessage failed")
         }
         return message
+    }
+
+    func getFile(fileId: String) async throws -> TGFile {
+        guard let url = URL(string: "https://api.telegram.org/bot\(token)/getFile?file_id=\(fileId)") else {
+            throw TGAPIError.apiError("Invalid URL for getFile")
+        }
+        let request = URLRequest(url: url, timeoutInterval: 30)
+        let response: TGResponse<TGFile> = try await performRequest(request, retries: maxRetries)
+        guard response.ok, let file = response.result else {
+            throw TGAPIError.apiError(response.description ?? "getFile failed")
+        }
+        return file
+    }
+
+    func downloadFile(filePath: String) async throws -> Data {
+        guard let url = URL(string: "https://api.telegram.org/file/bot\(token)/\(filePath)") else {
+            throw TGAPIError.apiError("Invalid URL for file download")
+        }
+        let request = URLRequest(url: url, timeoutInterval: 60)
+        let (data, httpResponse) = try await session.data(for: request)
+        if let http = httpResponse as? HTTPURLResponse, !(200...299).contains(http.statusCode) {
+            throw TGAPIError.apiError("File download failed: HTTP \(http.statusCode)")
+        }
+        return data
     }
 
     // MARK: - Retry Logic

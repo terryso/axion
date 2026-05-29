@@ -85,6 +85,66 @@ struct TGAPIClientTests {
         let message = try await client.sendMessage(chatId: 123, text: "hi")
         #expect(message.messageId == 1)
     }
+
+    // MARK: - getFile Protocol Mock
+
+    @Test("MockTGAPIClient getFile returns default result")
+    func mockGetFileDefault() async throws {
+        let mock = MockTGAPIClient()
+        let client: any TGAPIClientProtocol = mock
+
+        let file = try await client.getFile(fileId: "test123")
+        #expect(file.fileId == "test123")
+        #expect(file.filePath == "photos/file_0.jpg")
+    }
+
+    @Test("MockTGAPIClient getFile returns custom result")
+    func mockGetFileCustom() async throws {
+        let mock = MockTGAPIClient()
+        await mock.setGetFileResult(TGFile(fileId: "custom", filePath: "photos/custom.png"))
+
+        let file = try await mock.getFile(fileId: "custom")
+        #expect(file.filePath == "photos/custom.png")
+    }
+
+    @Test("MockTGAPIClient getFile throws configured error")
+    func mockGetFileError() async {
+        let mock = MockTGAPIClient()
+        await mock.setGetFileError(TGAPIError.apiError("file not found"))
+
+        do {
+            _ = try await mock.getFile(fileId: "bad")
+            #expect(Bool(false), "Should have thrown")
+        } catch let error as TGAPIError {
+            #expect(error.errorDescription == "file not found")
+        } catch {
+            #expect(Bool(false), "Unexpected error type")
+        }
+    }
+
+    @Test("MockTGAPIClient downloadFile returns default data")
+    func mockDownloadFileDefault() async throws {
+        let mock = MockTGAPIClient()
+        let client: any TGAPIClientProtocol = mock
+
+        let data = try await client.downloadFile(filePath: "photos/test.jpg")
+        #expect(!data.isEmpty)
+    }
+
+    @Test("MockTGAPIClient downloadFile throws configured error")
+    func mockDownloadFileError() async {
+        let mock = MockTGAPIClient()
+        await mock.setDownloadFileError(TGAPIError.apiError("download failed"))
+
+        do {
+            _ = try await mock.downloadFile(filePath: "bad/path.jpg")
+            #expect(Bool(false), "Should have thrown")
+        } catch let error as TGAPIError {
+            #expect(error.errorDescription == "download failed")
+        } catch {
+            #expect(Bool(false), "Unexpected error type")
+        }
+    }
 }
 
 // MARK: - Shared Mock
@@ -96,9 +156,17 @@ actor MockTGAPIClient: TGAPIClientProtocol {
     private var _getUpdatesError: Error?
     private var _sendMessageError: Error?
     private var _getUpdatesCallCount = 0
+    private var _getFileResult: TGFile?
+    private var _getFileError: Error?
+    private var _downloadFileResult: Data?
+    private var _downloadFileError: Error?
+    private var _getFileCallCount = 0
+    private var _downloadFileCallCount = 0
 
     var sentMessages: [(chatId: Int64, text: String)] { _sentMessages }
     var getUpdatesCallCount: Int { _getUpdatesCallCount }
+    var getFileCallCount: Int { _getFileCallCount }
+    var downloadFileCallCount: Int { _downloadFileCallCount }
 
     func setUpdates(_ updates: [TGUpdate]) {
         _updates = updates
@@ -110,6 +178,22 @@ actor MockTGAPIClient: TGAPIClientProtocol {
 
     func setSendMessageError(_ error: Error?) {
         _sendMessageError = error
+    }
+
+    func setGetFileResult(_ result: TGFile?) {
+        _getFileResult = result
+    }
+
+    func setGetFileError(_ error: Error?) {
+        _getFileError = error
+    }
+
+    func setDownloadFileResult(_ data: Data?) {
+        _downloadFileResult = data
+    }
+
+    func setDownloadFileError(_ error: Error?) {
+        _downloadFileError = error
     }
 
     func getUpdates(offset: Int64?, timeout: Int) async throws -> [TGUpdate] {
@@ -130,7 +214,20 @@ actor MockTGAPIClient: TGAPIClientProtocol {
             from: nil,
             chat: TGChat(id: chatId, type: "private"),
             date: 0,
-            text: text
+            text: text,
+            photo: nil
         )
+    }
+
+    func getFile(fileId: String) async throws -> TGFile {
+        _getFileCallCount += 1
+        if let error = _getFileError { throw error }
+        return _getFileResult ?? TGFile(fileId: fileId, filePath: "photos/file_0.jpg")
+    }
+
+    func downloadFile(filePath: String) async throws -> Data {
+        _downloadFileCallCount += 1
+        if let error = _downloadFileError { throw error }
+        return _downloadFileResult ?? Data("fake-image-data".utf8)
     }
 }

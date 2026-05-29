@@ -32,10 +32,20 @@ struct TGMessage: Codable, Sendable, Equatable {
     let chat: TGChat
     let date: Int
     let text: String?
+    let photo: [TGPhotoSize]?
 
     enum CodingKeys: String, CodingKey {
         case messageId = "message_id"
-        case from, chat, date, text
+        case from, chat, date, text, photo
+    }
+
+    init(messageId: Int64, from: TGUser? = nil, chat: TGChat, date: Int, text: String? = nil, photo: [TGPhotoSize]? = nil) {
+        self.messageId = messageId
+        self.from = from
+        self.chat = chat
+        self.date = date
+        self.text = text
+        self.photo = photo
     }
 }
 
@@ -73,5 +83,32 @@ struct TGSendMessageRequest: Codable, Sendable {
         case chatId = "chat_id"
         case text
         case parseMode = "parse_mode"
+    }
+}
+
+// MARK: - Photo Size
+
+struct TGPhotoSize: Codable, Sendable, Equatable {
+    let fileId: String
+    let width: Int
+    let height: Int
+    let fileSize: Int?
+
+    enum CodingKeys: String, CodingKey {
+        case fileId = "file_id"
+        case width, height
+        case fileSize = "file_size"
+    }
+}
+
+// MARK: - File
+
+struct TGFile: Codable, Sendable, Equatable {
+    let fileId: String
+    let filePath: String?
+
+    enum CodingKeys: String, CodingKey {
+        case fileId = "file_id"
+        case filePath = "file_path"
     }
 }

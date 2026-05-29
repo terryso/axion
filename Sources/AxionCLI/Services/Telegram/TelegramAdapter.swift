@@ -59,6 +59,13 @@ actor TelegramAdapter {
     private func processMessage(_ message: TGMessage) async {
         guard let userId = message.from?.id else { return }
         guard isAuthorized(userId: userId) else { return }
+
+        // Handle photo messages
+        if let photo = message.photo, !photo.isEmpty {
+            await processPhoto(photo, caption: message.text, chatId: message.chat.id)
+            return
+        }
+
         guard let text = message.text, !text.isEmpty else { return }
 
         if let reply = await commandRouter?.handle(text) {
@@ -72,6 +79,47 @@ actor TelegramAdapter {
             await queue.enqueue(task: text, chatId: message.chat.id)
         } else {
             await sendReply("任务已收到", to: message.chat.id)
+        }
+    }
+
+    private func processPhoto(_ sizes: [TGPhotoSize], caption: String?, chatId: Int64) async {
+        let largest = sizes.max(by: { (a, b) in (a.fileSize ?? 0) < (b.fileSize ?? 0) }) ?? sizes.last!
+        var tmpPath: String?
+
+        do {
+            let file = try await apiClient.getFile(fileId: largest.fileId)
+            guard let filePath = file.filePath else {
+                await sendReply("图片下载失败，请重试", to: chatId)
+                return
+            }
+            let data = try await apiClient.downloadFile(filePath: filePath)
+
+            let ext = filePath.hasSuffix(".jpg") || filePath.hasSuffix(".jpeg") ? "jpg" : "png"
+            let tmpFile = FileManager.default.temporaryDirectory
+                .appendingPathComponent("tg_\(largest.fileId.suffix(8)).\(ext)")
+            try data.write(to: tmpFile)
+            tmpPath = tmpFile.path
+
+            let taskText: String
+            if let caption, !caption.isEmpty {
+                taskText = "\(caption)\n\n[附件图片: \(tmpFile.path)]"
+            } else {
+                taskText = "[用户发送了一张图片，保存在 \(tmpFile.path)]"
+            }
+
+            fputs("[axion] Telegram photo task submitted: \"\(taskText.prefix(50))\"\n", stderr)
+
+            if let queue = taskQueue {
+                await queue.enqueue(task: taskText, chatId: chatId)
+            } else {
+                await sendReply("图片已收到", to: chatId)
+            }
+        } catch {
+            if let path = tmpPath {
+                try? FileManager.default.removeItem(atPath: path)
+            }
+            fputs("[axion] Telegram photo download failed: \(error.localizedDescription)\n", stderr)
+            await sendReply("图片下载失败，请重试", to: chatId)
         }
     }
 

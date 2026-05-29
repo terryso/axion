@@ -148,5 +148,94 @@ struct TGModelsTests {
         #expect(msg.messageId == 5)
         #expect(msg.from == nil)
         #expect(msg.text == nil)
+        #expect(msg.photo == nil)
+    }
+
+    // MARK: - Photo Support (Story 29.5)
+
+    @Test("TGPhotoSize round-trip")
+    func photoSizeRoundTrip() throws {
+        let photo = TGPhotoSize(fileId: "abc123", width: 800, height: 600, fileSize: 50000)
+
+        let data = try JSONEncoder().encode(photo)
+        let decoded = try JSONDecoder().decode(TGPhotoSize.self, from: data)
+
+        #expect(decoded == photo)
+        #expect(decoded.fileId == "abc123")
+        #expect(decoded.width == 800)
+        #expect(decoded.height == 600)
+        #expect(decoded.fileSize == 50000)
+    }
+
+    @Test("TGPhotoSize decodes from snake_case JSON")
+    func photoSizeDecodeSnakeCase() throws {
+        let json = """
+        {"file_id": "xyz", "width": 100, "height": 100, "file_size": 2000}
+        """
+        let data = try #require(json.data(using: .utf8))
+        let photo = try JSONDecoder().decode(TGPhotoSize.self, from: data)
+
+        #expect(photo.fileId == "xyz")
+        #expect(photo.fileSize == 2000)
+    }
+
+    @Test("TGFile round-trip")
+    func fileRoundTrip() throws {
+        let file = TGFile(fileId: "f1", filePath: "photos/file_0.jpg")
+
+        let data = try JSONEncoder().encode(file)
+        let decoded = try JSONDecoder().decode(TGFile.self, from: data)
+
+        #expect(decoded == file)
+        #expect(decoded.filePath == "photos/file_0.jpg")
+    }
+
+    @Test("TGFile decodes from snake_case JSON")
+    func fileDecodeSnakeCase() throws {
+        let json = """
+        {"file_id": "f2", "file_path": "documents/report.pdf"}
+        """
+        let data = try #require(json.data(using: .utf8))
+        let file = try JSONDecoder().decode(TGFile.self, from: data)
+
+        #expect(file.fileId == "f2")
+        #expect(file.filePath == "documents/report.pdf")
+    }
+
+    @Test("TGMessage with photo array decodes correctly")
+    func messageWithPhotoDecodes() throws {
+        let json = """
+        {
+            "message_id": 42,
+            "from": {"id": 123, "first_name": "Nick"},
+            "chat": {"id": 123, "type": "private"},
+            "date": 1700000000,
+            "text": "check this",
+            "photo": [
+                {"file_id": "small", "width": 90, "height": 90, "file_size": 2000},
+                {"file_id": "big", "width": 800, "height": 600, "file_size": 50000}
+            ]
+        }
+        """
+        let data = try #require(json.data(using: .utf8))
+        let msg = try JSONDecoder().decode(TGMessage.self, from: data)
+
+        #expect(msg.text == "check this")
+        #expect(msg.photo?.count == 2)
+        #expect(msg.photo?[0].fileId == "small")
+        #expect(msg.photo?[1].fileId == "big")
+        #expect(msg.photo?[1].width == 800)
+    }
+
+    @Test("TGMessage without photo field decodes with nil photo")
+    func messageWithoutPhotoDecodes() throws {
+        let json = """
+        {"message_id": 1, "chat": {"id": 123, "type": "private"}, "date": 0, "text": "hello"}
+        """
+        let data = try #require(json.data(using: .utf8))
+        let msg = try JSONDecoder().decode(TGMessage.self, from: data)
+
+        #expect(msg.text == "hello")
+        #expect(msg.photo == nil)
     }
 }
