@@ -693,7 +693,7 @@ Axion server 可注册为 macOS 用户级 launchd 守护进程，实现开机自
 
 **核心文件：**
 ```
-Sources/AxionCLI/Services/DaemonService.swift    # plist 生成、launchctl 调用、状态查询
+Sources/AxionCLI/Services/DaemonService.swift    # plist 生成、launchctl 调用、状态查询（参数化支持 Gateway 和 daemon）
 Sources/AxionCLI/Commands/DaemonCommand.swift     # CLI 子命令入口
 ```
 

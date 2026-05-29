@@ -26,67 +26,67 @@ So that 我可以确认 Gateway 是否正常运行、当前任务情况、上次
 
 6. **Given** Gateway 运行中且正执行任务 **When** GatewayRunner 查询自身状态 **Then** `activeTaskCount` 和 `currentState` 反映真实运行时状态
 
-## Tasks / Subtasks
+## 任务清单
 
-- [x] Task 1: Add status query method to GatewayRunner (AC: #4, #6)
-  - [x] 1.1 Add `GatewayRunnerStatus` struct (Codable, Sendable) with fields: state, activeTaskCount, uptimeSeconds, label, tgConnected (optional), lastReviewAt (optional), lastCuratorAt (optional)
-  - [x] 1.2 Add `startTime: ContinuousClock.Instant` stored property to GatewayRunner (set in `start()`)
-  - [x] 1.3 Add `func getStatus() -> GatewayRunnerStatus` to GatewayRunner that returns current runtime state
-  - [x] 1.4 Add `func setStatusProviders(tgStatus: (@Sendable () -> String?)?, reviewStatus: (@Sendable () -> String?)?, curatorStatus: (@Sendable () -> String?)?)` for future Epic injection
-- [x] Task 2: Add `/v1/gateway/status` HTTP endpoint (AC: #4)
-  - [x] 2.1 Add `GatewayStatusResponse` Codable struct in `Sources/AxionCLI/API/` with all status fields
-  - [x] 2.2 Register `GET /v1/gateway/status` route in AxionAPI.registerCustomRoutes — if GatewayRunner is available, query it; otherwise return 503
-  - [x] 2.3 Pass GatewayRunner reference to AxionAPI route registration (extend registerCustomRoutes signature or use closure injection)
-- [x] Task 3: Enhance GatewayStatusCommand to query live endpoint (AC: #1, #2, #3, #5)
-  - [x] 3.1 GatewayStatusCommand first attempts `GET /v1/gateway/status` via URLSession to `localhost:{port}` (read port from plist via DaemonService)
-  - [x] 3.2 Parse JSON response and print rich status: PID, state, active tasks, uptime
-  - [x] 3.3 If HTTP query fails (connection refused / timeout), fall back to DaemonService.status() (current behavior)
-  - [x] 3.4 Print placeholder fields for TG/review/curator with `(pending Epic 29/30)` suffix
-- [x] Task 4: Add unit tests (AC: #1–#6)
-  - [x] 4.1 Test GatewayRunnerStatus struct Codable round-trip
-  - [x] 4.2 Test GatewayRunner.getStatus() returns correct state and task count
-  - [x] 4.3 Test GatewayRunner.getStatus() computes uptime from startTime
-  - [x] 4.4 Test GET /v1/gateway/status route returns correct JSON
-  - [x] 4.5 Test GatewayStatusCommand fallback to DaemonService when HTTP fails
-  - [x] 4.6 Test GatewayStatusCommand parses HTTP response correctly
+- [x] 任务 1：向 GatewayRunner 添加状态查询方法 (AC: #4, #6)
+  - [x] 1.1 添加 `GatewayRunnerStatus` struct（Codable, Sendable），包含字段：state、activeTaskCount、uptimeSeconds、label、tgConnected（可选）、lastReviewAt（可选）、lastCuratorAt（可选）
+  - [x] 1.2 向 GatewayRunner 添加 `startTime: ContinuousClock.Instant` 存储属性（在 `start()` 中设置）
+  - [x] 1.3 向 GatewayRunner 添加 `func getStatus() -> GatewayRunnerStatus`，返回当前运行时状态
+  - [x] 1.4 添加 `func setStatusProviders(tgStatus:reviewStatus:curatorStatus:)` 用于未来 Epic 注入
+- [x] 任务 2：添加 `/v1/gateway/status` HTTP 端点 (AC: #4)
+  - [x] 2.1 在 `Sources/AxionCLI/API/` 中添加 `GatewayStatusResponse` Codable struct
+  - [x] 2.2 在 AxionAPI.registerCustomRoutes 中注册 `GET /v1/gateway/status` 路由 — GatewayRunner 可用时查询，否则返回 503
+  - [x] 2.3 将 GatewayRunner 引用传递给 AxionAPI 路由注册（扩展 registerCustomRoutes 签名或使用闭包注入）
+- [x] 任务 3：增强 GatewayStatusCommand 查询实时端点 (AC: #1, #2, #3, #5)
+  - [x] 3.1 GatewayStatusCommand 首先通过 URLSession 尝试 `GET /v1/gateway/status` 到 `localhost:{port}`（通过 DaemonService 从 plist 读取端口）
+  - [x] 3.2 解析 JSON 响应并打印丰富状态：PID、状态、活跃任务、运行时长
+  - [x] 3.3 HTTP 查询失败时（连接拒绝/超时），回退到 DaemonService.status()（当前行为）
+  - [x] 3.4 打印 TG/review/curator 的占位字段，加 `(pending Epic 29/30)` 后缀
+- [x] 任务 4：添加单元测试 (AC: #1–#6)
+  - [x] 4.1 测试 GatewayRunnerStatus struct 的 Codable 往返
+  - [x] 4.2 测试 GatewayRunner.getStatus() 返回正确的状态和任务计数
+  - [x] 4.3 测试 GatewayRunner.getStatus() 从 startTime 计算运行时长
+  - [x] 4.4 测试 GET /v1/gateway/status 路由返回正确的 JSON
+  - [x] 4.5 测试 GatewayStatusCommand 在 HTTP 失败时回退到 DaemonService
+  - [x] 4.6 测试 GatewayStatusCommand 正确解析 HTTP 响应
 
-## Dev Notes
+## 开发说明
 
-### Story Scope Clarification
+### Story 范围说明
 
-**CRITICAL:** Story 28.3 already implemented basic `GatewayStatusCommand` that queries `DaemonService.status()` for launchd-level status (PID, running/stopped/not_installed, plist path, log paths). This story **enriches** the status command with:
+**重要：** Story 28.3 已经实现了基础的 `GatewayStatusCommand`，通过 `DaemonService.status()` 查询 launchd 级别的状态（PID、running/stopped/not_installed、plist 路径、日志路径）。本 Story **增强**状态命令，添加：
 
-1. **Live runtime status** — query the running GatewayRunner actor (not just launchd process state)
-2. **HTTP API endpoint** — `GET /v1/gateway/status` for programmatic access
-3. **Fallback strategy** — HTTP query → DaemonService query (graceful degradation)
+1. **实时运行时状态** — 查询运行中的 GatewayRunner actor（不只是 launchd 进程状态）
+2. **HTTP API 端点** — `GET /v1/gateway/status`，供程序化访问
+3. **回退策略** — HTTP 查询 → DaemonService 查询（优雅降级）
 
-The existing `GatewayStatusCommand.run()` in `GatewayCommand.swift` (lines 256-296) needs to be enhanced, not replaced.
+`GatewayCommand.swift` 中现有的 `GatewayStatusCommand.run()`（第 256-296 行）需要增强，不需要替换。
 
-### Files to MODIFY (read first)
+### 需要修改的文件（先阅读）
 
-**`Sources/AxionCLI/Services/GatewayRunner.swift`** (77 lines) — Add status query capability.
+**`Sources/AxionCLI/Services/GatewayRunner.swift`**（77 行）— 添加状态查询能力。
 
-Current state: GatewayRunner actor has `State` enum (created/running/stopping/stopped), `activeTaskCount`, `currentState`, `isAcceptingTasks`. No status query method, no uptime tracking, no status provider injection.
+当前状态：GatewayRunner actor 有 `State` 枚举（created/running/stopping/stopped）、`activeTaskCount`、`currentState`、`isAcceptingTasks`。无状态查询方法、无运行时长追踪、无状态提供者注入。
 
-What this story changes: Add `startTime` property, `getStatus()` method, `GatewayRunnerStatus` struct, optional status provider closures for TG/review/curator.
+本故事的变更：添加 `startTime` 属性、`getStatus()` 方法、`GatewayRunnerStatus` struct、TG/review/curator 的可选状态提供者闭包。
 
-What must be preserved: All existing GatewayRunner behavior (start/stop/taskStarted/taskFinished), actor isolation, signal handling.
+必须保留的内容：所有现有 GatewayRunner 行为（start/stop/taskStarted/taskFinished）、actor 隔离、信号处理。
 
-**`Sources/AxionCLI/Commands/GatewayCommand.swift`** (321 lines) — Enhance GatewayStatusCommand.
+**`Sources/AxionCLI/Commands/GatewayCommand.swift`**（321 行）— 增强 GatewayStatusCommand。
 
-Current state: `GatewayStatusCommand.run()` (lines 256-296) creates a `DaemonService` with gateway params, calls `service.status()`, prints status + placeholder fields.
+当前状态：`GatewayStatusCommand.run()`（第 256-296 行）创建带 gateway 参数的 `DaemonService`，调用 `service.status()`，打印状态 + 占位字段。
 
-What this story changes: Add HTTP query attempt before DaemonService fallback. Parse JSON response. Print richer output.
+本故事的变更：在 DaemonService 回退之前添加 HTTP 查询尝试。解析 JSON 响应。打印更丰富的输出。
 
-What must be preserved: DaemonService-based status query as fallback when HTTP fails. Existing output format for basic fields (PID, label, plist path, log paths).
+必须保留的内容：HTTP 失败时基于 DaemonService 的状态查询作为回退。现有基本字段的输出格式（PID、label、plist 路径、日志路径）。
 
-**`Sources/AxionCLI/API/AxionAPI.swift`** — Add gateway status endpoint.
+**`Sources/AxionCLI/API/AxionAPI.swift`** — 添加 gateway 状态端点。
 
-Current state: `registerCustomRoutes()` registers all HTTP API routes. No gateway-specific status endpoint exists.
+当前状态：`registerCustomRoutes()` 注册所有 HTTP API 路由。不存在 gateway 专用状态端点。
 
-What this story changes: Add `GET /v1/gateway/status` route. Needs access to GatewayRunner reference — use closure injection (similar to `runHandler` pattern in GatewayStartCommand).
+本故事的变更：添加 `GET /v1/gateway/status` 路由。需要访问 GatewayRunner 引用 — 使用闭包注入（与 GatewayStartCommand 中的 `runHandler` 模式类似）。
 
-### GatewayRunnerStatus Design
+### GatewayRunnerStatus 设计
 
 ```swift
 struct GatewayRunnerStatus: Codable, Sendable, Equatable {
@@ -95,26 +95,26 @@ struct GatewayRunnerStatus: Codable, Sendable, Equatable {
     let uptimeSeconds: Double
     let label: String
     let pid: Int?               // ProcessInfo.processInfo.processIdentifier
-    let tgConnected: String?    // null until Epic 29
-    let lastReviewAt: String?   // null until Epic 30
-    let lastCuratorAt: String?  // null until Epic 30
+    let tgConnected: String?    // null 直到 Epic 29
+    let lastReviewAt: String?   // null 直到 Epic 30
+    let lastCuratorAt: String?  // null 直到 Epic 30
 }
 ```
 
-### GatewayRunner Changes
+### GatewayRunner 变更
 
 ```swift
 actor GatewayRunner {
-    // Add stored properties
+    // 添加存储属性
     private var startTime: ContinuousClock.Instant?
     private var _tgStatusProvider: (@Sendable () -> String?)?
     private var _reviewStatusProvider: (@Sendable () -> String?)?
     private var _curatorStatusProvider: (@Sendable () -> String?)?
 
-    // In start():
-    // self.startTime = .now  (set before try await server.start())
+    // 在 start() 中：
+    // self.startTime = .now  （在 try await server.start() 之前设置）
 
-    // New method:
+    // 新方法：
     func getStatus() -> GatewayRunnerStatus {
         let uptime: Double
         if let startTime {
@@ -136,16 +136,16 @@ actor GatewayRunner {
 }
 ```
 
-### HTTP Endpoint Design
+### HTTP 端点设计
 
-The endpoint needs access to GatewayRunner. Use the same injection pattern as `runHandler` — add a `statusProvider` closure on `AgentHTTPServer` or pass it through the route registration closure.
+端点需要访问 GatewayRunner。使用与 `runHandler` 相同的注入模式 — 在 `AgentHTTPServer` 上添加 `statusProvider` 闭包，或通过路由注册闭包传递。
 
-**Preferred approach:** Add a `statusProvider` closure property to `GatewayStartCommand` or to the `customRouteBuilder` context, similar to how `runHandler` is set on the server.
+**推荐方案：** 在 `GatewayStartCommand` 或 `customRouteBuilder` 上下文中添加 `statusProvider` 闭包属性，类似于 server 上设置 `runHandler` 的方式。
 
 ```swift
-// In GatewayStartCommand.run():
+// 在 GatewayStartCommand.run() 中：
 server.customRouteBuilder = { [runner, ...] router, ... in
-    // Existing routes...
+    // 现有路由...
     router.get("/v1/gateway/status") { _, _ -> GatewayStatusResponse in
         let status = await runner.getStatus()
         return GatewayStatusResponse(from: status)
@@ -153,20 +153,20 @@ server.customRouteBuilder = { [runner, ...] router, ... in
 }
 ```
 
-**Alternative:** Extend `registerCustomRoutes` to accept an optional `gatewayStatusProvider` closure. This is cleaner but changes the existing API surface.
+**替代方案：** 扩展 `registerCustomRoutes` 接受可选的 `gatewayStatusProvider` 闭包。更整洁但改变了现有 API 接口。
 
-### GatewayStatusCommand HTTP Query
+### GatewayStatusCommand HTTP 查询
 
 ```swift
 struct GatewayStatusCommand: AsyncParsableCommand {
     func run() async throws {
-        // Step 1: Try HTTP query to running gateway
+        // 步骤 1：尝试 HTTP 查询运行中的 gateway
         if let httpStatus = try? await queryLiveStatus() {
             printLiveStatus(httpStatus)
             return
         }
 
-        // Step 2: Fallback to DaemonService (launchd-level)
+        // 步骤 2：回退到 DaemonService（launchd 级别）
         let service = DaemonService(
             label: "dev.axion.gateway",
             subcommand: "gateway start",
@@ -174,11 +174,11 @@ struct GatewayStatusCommand: AsyncParsableCommand {
             errLogFileName: "gateway.err.log"
         )
         let status = service.status()
-        // ... existing print logic (keep as-is)
+        // ... 现有打印逻辑（保持不变）
     }
 
     private func queryLiveStatus() async throws -> GatewayRunnerStatus {
-        // Read port from plist via DaemonService
+        // 通过 DaemonService 从 plist 读取端口
         let service = DaemonService(label: "dev.axion.gateway", ...)
         let daemonStatus = service.status()
         guard daemonStatus.status == .running else { return nil }
@@ -191,55 +191,55 @@ struct GatewayStatusCommand: AsyncParsableCommand {
 }
 ```
 
-### Testing Requirements
+### 测试要求
 
-**Framework:** Swift Testing (`import Testing`, `@Suite`, `@Test`, `#expect`)
-**Test files:** Update existing `GatewayCommandTests.swift` and `GatewayDaemonTests.swift`, add tests to existing test files.
+**框架：** Swift Testing（`import Testing`、`@Suite`、`@Test`、`#expect`）
+**测试文件：** 更新现有 `GatewayCommandTests.swift` 和 `GatewayDaemonTests.swift`，在现有测试文件中添加测试。
 
-**Unit tests (must mock external dependencies):**
-- `GatewayRunnerStatus` Codable round-trip test
-- `GatewayRunner.getStatus()` returns correct state
-- `GatewayRunner.getStatus()` computes uptime correctly (use mock time if needed, or just verify > 0)
-- HTTP endpoint returns correct JSON (mock GatewayRunner)
-- GatewayStatusCommand HTTP query success path
-- GatewayStatusCommand fallback to DaemonService on connection refused
+**单元测试（必须 mock 外部依赖）：**
+- `GatewayRunnerStatus` Codable 往返测试
+- `GatewayRunner.getStatus()` 返回正确的状态
+- `GatewayRunner.getStatus()` 正确计算运行时长（如需要使用 mock 时间，或只验证 > 0）
+- HTTP 端点返回正确的 JSON（mock GatewayRunner）
+- GatewayStatusCommand HTTP 查询成功路径
+- GatewayStatusCommand 在连接拒绝时回退到 DaemonService
 
-**Mock strategy:** Use existing `GatewayHTTPControlling` protocol for server mock. Use mock `GatewayRunner` (or direct actor) for status query tests. URLSession can be tested with localhost or by extracting HTTP call into injectable closure.
+**Mock 策略：** 使用现有 `GatewayHTTPControlling` 协议模拟 server。使用 mock `GatewayRunner`（或直接 actor）进行状态查询测试。URLSession 可通过 localhost 测试或将 HTTP 调用提取为可注入的闭包。
 
-**Run tests:** `swift test --filter "AxionCLITests.Services.GatewayDaemonTests" --filter "AxionCLITests.Commands.GatewayCommandTests"`
+**运行测试：** `swift test --filter "AxionCLITests.Services.GatewayDaemonTests" --filter "AxionCLITests.Commands.GatewayCommandTests"`
 
-### Project Structure Notes
+### 项目结构说明
 
-- No new files needed — all changes to existing files
-- `GatewayRunnerStatus` struct can go in `GatewayRunner.swift` (small struct, tightly coupled)
-- `GatewayStatusResponse` can be the same as `GatewayRunnerStatus` or a separate API layer struct (developer's choice — keep simple)
-- HTTP endpoint registered in existing `customRouteBuilder` closure in `GatewayStartCommand`
+- 不需要新建文件 — 所有变更都在现有文件中
+- `GatewayRunnerStatus` struct 放在 `GatewayRunner.swift` 中（小型 struct，紧密耦合）
+- `GatewayStatusResponse` 可以与 `GatewayRunnerStatus` 相同，或单独的 API 层 struct（开发者自选 — 保持简单）
+- HTTP 端点注册在 `GatewayStartCommand` 现有的 `customRouteBuilder` 闭包中
 
-### Previous Story Intelligence (28.3)
+### 前置 Story 信息（28.3）
 
-- Story 28.3 parameterized DaemonService for Gateway reuse (label, subcommand, log files, KeepAlive, env vars)
-- GatewayStatusCommand already exists with basic DaemonService.status() output
-- 20+ gateway tests pass (GatewayDaemonTests + GatewayCommandTests)
-- Key review finding from 28.3: `maxConcurrentRuns` hardcoded to 10 (not this story's scope)
-- Key review finding from 28.3: `runHandler` duplicated from ServerCommand (not this story's scope)
-- DaemonService.status() parses PID from `launchctl print` output, host/port from plist XML
+- Story 28.3 将 DaemonService 参数化以供 Gateway 复用（label、subcommand、日志文件、KeepAlive、环境变量）
+- GatewayStatusCommand 已存在，有基础的 DaemonService.status() 输出
+- 20+ gateway 测试通过（GatewayDaemonTests + GatewayCommandTests）
+- 28.3 关键 Review 发现：`maxConcurrentRuns` 硬编码为 10（非本 Story 范围）
+- 28.3 关键 Review 发现：`runHandler` 从 ServerCommand 复制粘贴（非本 Story 范围）
+- DaemonService.status() 从 `launchctl print` 输出解析 PID，从 plist XML 解析 host/port
 
-### References
+### 参考资料
 
-- [Source: docs/epics/epic-28-gateway-foundation.md#Story 28.4 — Gateway 状态查询]
-- [Source: docs/epics/epic-28-gateway-foundation.md#GatewayCommand 子命令结构]
-- [Source: _bmad-output/planning-artifacts/prds/prd-axion-gateway-2026-05-29/prd.md#FR-1.3 — gateway status]
-- [Source: _bmad-output/planning-artifacts/prds/prd-axion-gateway-2026-05-29/prd.md#FR-2.7 — /status TG command]
-- [Source: _bmad-output/planning-artifacts/prds/prd-axion-gateway-2026-05-29/prd.md#FR-4.5 — curator_state in status]
-- [Source: _bmad-output/planning-artifacts/prds/prd-axion-gateway-2026-05-29/prd.md#NFR-1 — 进程稳定性]
-- [Source: _bmad-output/planning-artifacts/architecture.md#D9 — Gateway 进程模型]
-- [Source: _bmad-output/planning-artifacts/architecture.md#D10 — /status command queries GatewayRunner]
-- [Source: _bmad-output/project-context.md#Gateway 模式 — GatewayRunner, TG, ReviewScheduler, CuratorScheduler]
-- [Source: _bmad-output/project-context.md#Actor 隔离边界 — GatewayRunner actor 职责]
-- [Source: Sources/AxionCLI/Services/GatewayRunner.swift — existing actor to extend]
-- [Source: Sources/AxionCLI/Commands/GatewayCommand.swift — existing GatewayStatusCommand to enhance]
-- [Source: Sources/AxionCLI/Services/DaemonService.swift — status() fallback mechanism]
-- [Source: _bmad-output/implementation-artifacts/28-3-launchd-daemon-management.md — previous story learnings]
+- [来源：docs/epics/epic-28-gateway-foundation.md#Story 28.4 — Gateway 状态查询]
+- [来源：docs/epics/epic-28-gateway-foundation.md#GatewayCommand 子命令结构]
+- [来源：_bmad-output/planning-artifacts/prds/prd-axion-gateway-2026-05-29/prd.md#FR-1.3 — gateway status]
+- [来源：_bmad-output/planning-artifacts/prds/prd-axion-gateway-2026-05-29/prd.md#FR-2.7 — /status TG 命令]
+- [来源：_bmad-output/planning-artifacts/prds/prd-axion-gateway-2026-05-29/prd.md#FR-4.5 — curator_state in status]
+- [来源：_bmad-output/planning-artifacts/prds/prd-axion-gateway-2026-05-29/prd.md#NFR-1 — 进程稳定性]
+- [来源：_bmad-output/planning-artifacts/architecture.md#D9 — Gateway 进程模型]
+- [来源：_bmad-output/planning-artifacts/architecture.md#D10 — /status 命令查询 GatewayRunner]
+- [来源：_bmad-output/project-context.md#Gateway 模式 — GatewayRunner、TG、ReviewScheduler、CuratorScheduler]
+- [来源：_bmad-output/project-context.md#Actor 隔离边界 — GatewayRunner actor 职责]
+- [来源：Sources/AxionCLI/Services/GatewayRunner.swift — 现有 actor（待扩展）]
+- [来源：Sources/AxionCLI/Commands/GatewayCommand.swift — 现有 GatewayStatusCommand（待增强）]
+- [来源：Sources/AxionCLI/Services/DaemonService.swift — status() 回退机制]
+- [来源：_bmad-output/implementation-artifacts/28-3-launchd-daemon-management.md — 前置 Story 经验]
 
 ## Dev Agent Record
 

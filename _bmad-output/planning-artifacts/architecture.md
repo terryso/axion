@@ -550,8 +550,8 @@ axion gateway (单个 Swift executable)
 
 | 文件 | 行数估计 | 说明 |
 |------|---------|------|
-| `Sources/AxionCLI/Commands/GatewayCommand.swift` | ~120 | CLI 入口（start/install/status/uninstall） |
-| `Sources/AxionCLI/Services/GatewayRunner.swift` | ~250 | 编排器（启停、信号处理、生命周期） |
+| `Sources/AxionCLI/Commands/GatewayCommand.swift` | ~390 | CLI 入口（start/install/status/uninstall） |
+| `Sources/AxionCLI/Services/GatewayRunner.swift` | ~190 | 编排器（启停、信号处理、HTTP API 复用、状态查询） |
 | `Sources/AxionCLI/Services/TelegramAdapter.swift` | ~350 | TG Bot API 对接（长轮询、消息收发） |
 | `Sources/AxionCLI/Services/ReviewScheduler.swift` | ~100 | 审查调度（监听事件 + 间隔检查） |
 | `Sources/AxionCLI/Services/CuratorScheduler.swift` | ~80 | Curator 调度（空闲检测 + 定时触发） |
@@ -559,14 +559,14 @@ axion gateway (单个 Swift executable)
 **配置扩展（AxionConfig）：**
 
 ```swift
-// 新增字段（decodeIfPresent + 默认值）
-var gatewayEnabled: Bool?          // 默认 false
-var gatewayTelegramBotToken: String? // 环境变量 AXION_TELEGRAM_BOT_TOKEN
-var gatewayTelegramAllowedUsers: String? // 环境变量 AXION_TELEGRAM_ALLOWED_USERS
-var gatewayCuratorIdleHours: Double?    // 默认 2.0
-var gatewayCuratorIntervalHours: Double? // 默认 168.0（复用 curatorIntervalHours）
-var gatewayTaskTimeoutMinutes: Double?  // 默认 10.0
-var gatewayNotifyCuratorResults: Bool?  // 默认 false
+// 新增字段（decodeIfPresent, Optional, nil defaults）
+var gatewayEnabled: Bool?                     // 有效默认 false
+var gatewayCuratorIdleHours: Double?          // 有效默认 2.0
+var gatewayCuratorIntervalHours: Double?      // 有效默认 168.0
+var gatewayTaskTimeoutMinutes: Double?        // 有效默认 10.0
+var gatewayNotifyCuratorResults: Bool?        // 有效默认 false
+// 注：TG token/whitelist 不写入 config.json，通过环境变量传入：
+// AXION_TELEGRAM_BOT_TOKEN, AXION_TELEGRAM_ALLOWED_USERS
 ```
 
 **launchd plist：**
@@ -636,7 +636,7 @@ TelegramAdapter (actor)
 ```swift
 // 用户授权检查（参考 Hermes _is_user_authorized）
 func isAuthorized(userId: Int64) -> Bool {
-    guard let allowed = config.gatewayTelegramAllowedUsers else { return false }
+    guard let allowed = ProcessInfo.processInfo.environment["AXION_TELEGRAM_ALLOWED_USERS"] else { return false }
     let allowedIds = allowed.split(separator: ",").map { $0.trimmingCharacters(in: .whitespaces) }
     return allowedIds.contains(String(userId))
 }

@@ -26,73 +26,73 @@ So that Gateway 在 Mac 开机时自动运行，崩溃后自动重启.
 
 6. **Given** Gateway 守护进程已安装但已停止 **When** 用户执行 `axion gateway status` **Then** 输出 `status: stopped`，显示上次已知 PID
 
-## Tasks / Subtasks
+## 任务清单
 
-- [x] Task 1: Parameterize DaemonService for Gateway reuse (AC: #1, #2, #3)
-  - [x] 1.1 Add `label` parameter to `DaemonService.init` (default: "dev.axion.server")
-  - [x] 1.2 Add `subcommand` parameter to `DaemonService.init` (default: "server") — controls ProgramArguments
-  - [x] 1.3 Add `logFileName` parameter to `DaemonService.init` (default: "server.log")
-  - [x] 1.4 Add `errLogFileName` parameter to `DaemonService.init` (default: "server.err.log")
-  - [x] 1.5 Add `keepAliveCrashOnly` parameter to `DaemonService.init` (default: false) — controls KeepAlive format
-  - [x] 1.6 Add `environmentVariables` parameter to `DaemonService.init` (default: nil) — extra env vars for plist
-  - [x] 1.7 Update `buildPlist()` to use init parameters instead of hardcoded values
-  - [x] 1.8 Update `plistPath` default derivation to use `label` parameter
-  - [x] 1.9 Update all static methods and `install()`/`uninstall()`/`status()` to use instance `label`
-  - [x] 1.10 Update existing `DaemonCommand` to pass explicit default params (preserving behavior)
-- [x] Task 2: Implement GatewayInstallCommand (AC: #1, #3)
-  - [x] 2.1 Add `--host`, `--port`, `--auth-key` options to `GatewayInstallCommand`
-  - [x] 2.2 Create `DaemonService` instance with gateway label/subcommand/log config
-  - [x] 2.3 Pass TG environment variables (`AXION_TELEGRAM_BOT_TOKEN`, `AXION_TELEGRAM_ALLOWED_USERS`) to plist
-  - [x] 2.4 Call `service.install()` and print success message
-- [x] Task 3: Implement GatewayUninstallCommand (AC: #2)
-  - [x] 3.1 Add `--keep-logs` flag to `GatewayUninstallCommand`
-  - [x] 3.2 Create `DaemonService` instance with gateway label
-  - [x] 3.3 Call `service.uninstall()` and print success message
-- [x] Task 4: Implement GatewayStatusCommand (AC: #4, #5, #6)
-  - [x] 4.1 Create `DaemonService` instance with gateway label
-  - [x] 4.2 Call `service.status()` and print status output
-  - [x] 4.3 Add placeholder fields for TG connection, last review time, last curator time
-- [x] Task 5: Add unit tests (AC: #1–#6)
-  - [x] 5.1 Test DaemonService parameterized init with gateway label produces correct plist XML
-  - [x] 5.2 Test gateway plist has KeepAlive(Crashed=true) not KeepAlive(true)
-  - [x] 5.3 Test gateway plist ProgramArguments uses "gateway" "start" subcommand
-  - [x] 5.4 Test gateway plist log paths are gateway.log/gateway.err.log
-  - [x] 5.5 Test gateway plist includes TG environment variables when set
-  - [x] 5.6 Test AXION_BIN env var resolves to correct path in plist
-  - [x] 5.7 Test DaemonCommand still works with explicit default params (regression)
-  - [x] 5.8 Test GatewayInstallCommand option parsing
-  - [x] 5.9 Test GatewayStatusCommand output format
-  - [x] 5.10 Test GatewayUninstallCommand with --keep-logs flag
+- [x] 任务 1：参数化 DaemonService 以供 Gateway 复用 (AC: #1, #2, #3)
+  - [x] 1.1 向 `DaemonService.init` 添加 `label` 参数（默认值："dev.axion.server"）
+  - [x] 1.2 向 `DaemonService.init` 添加 `subcommand` 参数（默认值："server"）— 控制 ProgramArguments
+  - [x] 1.3 向 `DaemonService.init` 添加 `logFileName` 参数（默认值："server.log"）
+  - [x] 1.4 向 `DaemonService.init` 添加 `errLogFileName` 参数（默认值："server.err.log"）
+  - [x] 1.5 向 `DaemonService.init` 添加 `keepAliveCrashOnly` 参数（默认值：false）— 控制 KeepAlive 格式
+  - [x] 1.6 向 `DaemonService.init` 添加 `environmentVariables` 参数（默认值：nil）— plist 的额外环境变量
+  - [x] 1.7 更新 `buildPlist()` 使用 init 参数代替硬编码值
+  - [x] 1.8 更新 `plistPath` 默认值推导，使用 `label` 参数
+  - [x] 1.9 更新所有静态方法和 `install()`/`uninstall()`/`status()` 使用实例 `label`
+  - [x] 1.10 更新现有 `DaemonCommand` 传递显式默认参数（保持行为不变）
+- [x] 任务 2：实现 GatewayInstallCommand (AC: #1, #3)
+  - [x] 2.1 向 `GatewayInstallCommand` 添加 `--host`、`--port`、`--auth-key` 选项
+  - [x] 2.2 使用 gateway 的 label/subcommand/日志配置创建 `DaemonService` 实例
+  - [x] 2.3 将 TG 环境变量（`AXION_TELEGRAM_BOT_TOKEN`、`AXION_TELEGRAM_ALLOWED_USERS`）传入 plist
+  - [x] 2.4 调用 `service.install()` 并打印成功信息
+- [x] 任务 3：实现 GatewayUninstallCommand (AC: #2)
+  - [x] 3.1 向 `GatewayUninstallCommand` 添加 `--keep-logs` 标志
+  - [x] 3.2 使用 gateway 的 label 创建 `DaemonService` 实例
+  - [x] 3.3 调用 `service.uninstall()` 并打印成功信息
+- [x] 任务 4：实现 GatewayStatusCommand (AC: #4, #5, #6)
+  - [x] 4.1 使用 gateway 的 label 创建 `DaemonService` 实例
+  - [x] 4.2 调用 `service.status()` 并打印状态输出
+  - [x] 4.3 添加 TG 连接、上次审查时间、上次 curator 时间的占位字段
+- [x] 任务 5：添加单元测试 (AC: #1–#6)
+  - [x] 5.1 测试 DaemonService 使用 gateway 参数初始化生成正确的 plist XML
+  - [x] 5.2 测试 gateway plist 的 KeepAlive 是 Crashed=true 而非 always-true
+  - [x] 5.3 测试 gateway plist 的 ProgramArguments 包含 "gateway" "start" 子命令
+  - [x] 5.4 测试 gateway plist 的日志路径为 gateway.log/gateway.err.log
+  - [x] 5.5 测试 gateway plist 在设置时包含 TG 环境变量
+  - [x] 5.6 测试 AXION_BIN 环境变量在 plist 中解析为正确路径
+  - [x] 5.7 测试 DaemonCommand 传递显式默认参数后行为不变（回归测试）
+  - [x] 5.8 测试 GatewayInstallCommand 的选项解析
+  - [x] 5.9 测试 GatewayStatusCommand 的输出格式
+  - [x] 5.10 测试 GatewayUninstallCommand 的 --keep-logs 标志
 
-## Dev Notes
+## 开发说明
 
-### Files to MODIFY (read first)
+### 需要修改的文件（先阅读）
 
-**`Sources/AxionCLI/Services/DaemonService.swift`** (369 lines) — The primary file to modify.
+**`Sources/AxionCLI/Services/DaemonService.swift`**（369 行）— 主要修改文件。
 
-Current state: Hardcodes `daemonLabel = "dev.axion.server"`, plist path, log paths, subcommand "server", KeepAlive `<true/>`. All path resolution methods are static.
+当前状态：硬编码了 `daemonLabel = "dev.axion.server"`、plist 路径、日志路径、子命令 "server"、KeepAlive `<true/>`。所有路径解析方法都是静态的。
 
-What this story changes: Parameterize the label, subcommand, log file names, and KeepAlive behavior so Gateway can reuse the same class with different values. The init already accepts `plistPath` as optional override — extend this pattern.
+本故事的变更：将 label、subcommand、日志文件名和 KeepAlive 行为参数化，使 Gateway 可以用不同的值复用同一个类。init 已经接受 `plistPath` 作为可选覆盖 — 扩展这个模式。
 
-What must be preserved: All existing behavior when used by `DaemonCommand` (default params must produce identical plist output and identical runtime behavior). The `runLaunchctl`, `fileManager`, `resolveBin` injection points for testing must remain.
+必须保留的内容：`DaemonCommand` 使用时的所有现有行为（默认参数必须产生完全相同的 plist 输出和运行时行为）。`runLaunchctl`、`fileManager`、`resolveBin` 测试注入点必须保留。
 
-**`Sources/AxionCLI/Commands/GatewayCommand.swift`** (244 lines) — Replace placeholder subcommands.
+**`Sources/AxionCLI/Commands/GatewayCommand.swift`**（244 行）— 替换占位子命令。
 
-Current state: `GatewayInstallCommand`, `GatewayStatusCommand`, `GatewayUninstallCommand` are placeholders that throw `GatewayNotImplementedError`.
+当前状态：`GatewayInstallCommand`、`GatewayStatusCommand`、`GatewayUninstallCommand` 是抛出 `GatewayNotImplementedError` 的占位实现。
 
-What this story changes: Replace placeholder `run()` methods with real implementations using parameterized `DaemonService`.
+本故事的变更：用使用参数化 `DaemonService` 的真实实现替换占位 `run()` 方法。
 
-What must be preserved: `GatewayCommand` group structure, `GatewayStartCommand`, `GatewayNotImplementedError` (can be removed since all subcommands are now real, or kept for future use — developer's choice).
+必须保留的内容：`GatewayCommand` 组结构、`GatewayStartCommand`、`GatewayNotImplementedError`（所有子命令已实现，可删除或保留备用）。
 
-**`Sources/AxionCLI/Commands/DaemonCommand.swift`** (94 lines) — Minor update to pass explicit params.
+**`Sources/AxionCLI/Commands/DaemonCommand.swift`**（94 行）— 微调，传递显式参数。
 
-Current state: Creates `DaemonService()` with no args.
+当前状态：创建 `DaemonService()` 不传参数。
 
-What this story changes: Pass explicit default params to `DaemonService()` to maintain backward compatibility while proving the parameterization works. This is a no-op behaviorally.
+本故事的变更：向 `DaemonService()` 传递显式默认参数，保持向后兼容同时证明参数化可行。行为上是无操作。
 
-### DaemonService Parameterization Design
+### DaemonService 参数化设计
 
-Add these init parameters with defaults that preserve existing behavior:
+添加以下带默认值的 init 参数，保留现有行为：
 
 ```swift
 init(
@@ -109,53 +109,53 @@ init(
 )
 ```
 
-Key changes to `buildPlist()`:
-- Replace `Self.daemonLabel` → `label` (instance property)
-- Replace `"server"` in ProgramArguments → `subcommand` parameter
-- Replace `"server.log"` / `"server.err.log"` → `logFileName` / `errLogFileName`
-- Replace `<true/>` KeepAlive → conditional:
+`buildPlist()` 的关键变更：
+- 将 `Self.daemonLabel` 替换为 `label`（实例属性）
+- 将 ProgramArguments 中的 `"server"` 替换为 `subcommand` 参数
+- 将 `"server.log"` / `"server.err.log"` 替换为 `logFileName` / `errLogFileName`
+- 将 `<true/>` KeepAlive 替换为条件逻辑：
   ```xml
-  <!-- keepAliveCrashOnly == false (default, daemon behavior) -->
+  <!-- keepAliveCrashOnly == false（默认，daemon 行为）-->
   <key>KeepAlive</key>
   <true/>
 
-  <!-- keepAliveCrashOnly == true (gateway behavior) -->
+  <!-- keepAliveCrashOnly == true（gateway 行为）-->
   <key>KeepAlive</key>
   <dict>
       <key>Crashed</key>
       <true/>
   </dict>
   ```
-- Add `environmentVariables` support: if non-nil, merge with authKey env vars in the `<dict>` section
+- 添加 `environmentVariables` 支持：非 nil 时，与 authKey 环境变量合并到 `<dict>` 节
 
-Key changes to `install()`:
-- Replace `Self.daemonLabel` → `label` in kickstart path
+`install()` 的关键变更：
+- 将 kickstart 路径中的 `Self.daemonLabel` 替换为 `label`
 
-Key changes to `uninstall()`:
-- Replace hardcoded log file names → `logFileName` / `errLogFileName`
+`uninstall()` 的关键变更：
+- 将硬编码日志文件名替换为 `logFileName` / `errLogFileName`
 
-Key changes to `status()`:
-- Replace `Self.daemonLabel` → `label` in service path and DaemonStatus
+`status()` 的关键变更：
+- 将服务路径和 DaemonStatus 中的 `Self.daemonLabel` 替换为 `label`
 
-Key changes to `plistPath` default:
-- Derive from `label`: `~/Library/LaunchAgents/{label}.plist`
+`plistPath` 默认值的关键变更：
+- 从 `label` 推导：`~/Library/LaunchAgents/{label}.plist`
 
-Remove or deprecate `static let daemonLabel` — replace with instance `label` property.
+删除或弃用 `static let daemonLabel` — 替换为实例 `label` 属性。
 
-### Gateway plist Specification
+### Gateway plist 规格
 
-Gateway plist differs from daemon plist:
+Gateway plist 与 daemon plist 的差异：
 
-| Field | Daemon (`dev.axion.server`) | Gateway (`dev.axion.gateway`) |
-|-------|---------------------------|-------------------------------|
+| 字段 | Daemon（`dev.axion.server`） | Gateway（`dev.axion.gateway`） |
+|------|---------------------------|-------------------------------|
 | Label | `dev.axion.server` | `dev.axion.gateway` |
-| Plist path | `~/Library/LaunchAgents/dev.axion.server.plist` | `~/Library/LaunchAgents/dev.axion.gateway.plist` |
+| Plist 路径 | `~/Library/LaunchAgents/dev.axion.server.plist` | `~/Library/LaunchAgents/dev.axion.gateway.plist` |
 | ProgramArguments | `[bin, "server", "--host", ..., "--port", ...]` | `[bin, "gateway", "start", "--host", ..., "--port", ...]` |
-| KeepAlive | `<true/>` (always restart) | `<dict><key>Crashed</key><true/></dict>` (crash-only restart) |
-| Logs | `~/.axion/server.log` + `server.err.log` | `~/.axion/gateway.log` + `gateway.err.log` |
-| Env vars | `AXION_AUTH_KEY` (optional) | `AXION_AUTH_KEY` + `AXION_TELEGRAM_BOT_TOKEN` + `AXION_TELEGRAM_ALLOWED_USERS` (optional) |
+| KeepAlive | `<true/>`（始终重启） | `<dict><key>Crashed</key><true/></dict>`（仅崩溃时重启） |
+| 日志 | `~/.axion/server.log` + `server.err.log` | `~/.axion/gateway.log` + `gateway.err.log` |
+| 环境变量 | `AXION_AUTH_KEY`（可选） | `AXION_AUTH_KEY` + `AXION_TELEGRAM_BOT_TOKEN` + `AXION_TELEGRAM_ALLOWED_USERS`（可选） |
 
-### GatewayInstallCommand Design
+### GatewayInstallCommand 设计
 
 ```swift
 struct GatewayInstallCommand: AsyncParsableCommand {
@@ -192,63 +192,63 @@ struct GatewayInstallCommand: AsyncParsableCommand {
         let path = try service.install(host: host, port: port, authKey: authKey)
         print("Gateway installed successfully")
         print("  Plist: \(path)")
-        // ... status output
+        // ... 状态输出
     }
 }
 ```
 
-**Note on `subcommand` parameter:** Gateway needs `"gateway" "start"` as two arguments, while daemon uses `"server"` as one argument. The `subcommand` parameter should support space-separated arguments split into array elements.
+**关于 `subcommand` 参数的说明：** Gateway 需要 `"gateway" "start"` 作为两个参数，而 daemon 使用 `"server"` 作为一个参数。`subcommand` 参数应支持空格分隔的参数拆分为数组元素。
 
-### Testing Requirements
+### 测试要求
 
-**Framework:** Swift Testing (`import Testing`, `@Suite`, `@Test`, `#expect`)
-**File:** `Tests/AxionCLITests/Services/GatewayDaemonTests.swift` (new file, gateway-specific tests)
-**File:** `Tests/AxionCLITests/Services/DaemonServiceTests.swift` (existing, add parameterization tests)
+**框架：** Swift Testing（`import Testing`、`@Suite`、`@Test`、`#expect`）
+**文件：** `Tests/AxionCLITests/Services/GatewayDaemonTests.swift`（新建，gateway 专用测试）
+**文件：** `Tests/AxionCLITests/Services/DaemonServiceTests.swift`（现有，添加参数化测试）
 
-**Unit tests (must mock external dependencies):**
-- DaemonService with gateway params builds correct plist XML — check Label, ProgramArguments, KeepAlive, log paths
-- Gateway KeepAlive is crash-only (not always-restart)
-- Gateway ProgramArguments contains `["gateway", "start"]` not `["server"]`
-- TG environment variables appear in plist when set
-- AXION_BIN resolution works for gateway
-- DaemonCommand regression: existing DaemonService() with no args still produces identical behavior
+**单元测试（必须 mock 外部依赖）：**
+- DaemonService 使用 gateway 参数构建正确的 plist XML — 检查 Label、ProgramArguments、KeepAlive、日志路径
+- Gateway KeepAlive 是仅崩溃重启（不是始终重启）
+- Gateway ProgramArguments 包含 `["gateway", "start"]` 而非 `["server"]`
+- TG 环境变量在设置时出现在 plist 中
+- AXION_BIN 解析对 gateway 有效
+- DaemonCommand 回归测试：不传参数的 DaemonService() 仍产生相同行为
 
-**Mock strategy:** Use existing `runLaunchctl` and `resolveBin` injection points in DaemonService. Tests only need to verify `buildPlist()` output and `status()` parsing.
+**Mock 策略：** 使用 DaemonService 现有的 `runLaunchctl` 和 `resolveBin` 注入点。测试只需验证 `buildPlist()` 输出和 `status()` 解析。
 
-**Run tests:** `swift test --filter "AxionCLITests.Services.GatewayDaemonTests" --filter "AxionCLITests.Services.DaemonServiceTests" --filter "AxionCLITests.Commands.GatewayCommandTests"`
+**运行测试：** `swift test --filter "AxionCLITests.Services.GatewayDaemonTests" --filter "AxionCLITests.Services.DaemonServiceTests" --filter "AxionCLITests.Commands.GatewayCommandTests"`
 
-### Project Structure Notes
+### 项目结构说明
 
-- `DaemonService.swift` lives in `Sources/AxionCLI/Services/` — being parameterized, not duplicated
-- No new service files needed — Gateway reuses `DaemonService` with different init params
-- `GatewayCommand.swift` placeholder subcommands get real implementations
-- Test files: new `GatewayDaemonTests.swift` + updates to existing `DaemonServiceTests.swift` and `GatewayCommandTests.swift`
+- `DaemonService.swift` 位于 `Sources/AxionCLI/Services/` — 被参数化，不被复制
+- 不需要新建服务文件 — Gateway 用不同的 init 参数复用 `DaemonService`
+- `GatewayCommand.swift` 的占位子命令获得真实实现
+- 测试文件：新建 `GatewayDaemonTests.swift` + 更新现有 `DaemonServiceTests.swift` 和 `GatewayCommandTests.swift`
 
-### Previous Story Intelligence (28.2)
+### 前置 Story 信息（28.2）
 
-- Story 28.2 created GatewayRunner actor + GatewayCommand with placeholder install/status/uninstall subcommands
-- GatewayCommand mirrors DaemonCommand subcommand pattern
-- `GatewayNotImplementedError` was created for placeholders — remove or keep at developer's discretion
-- 26 gateway tests pass (GatewayRunner + GatewayCommand), 1419 total
-- Key review finding: `maxConcurrentRuns` hardcoded to 10 (not this story's scope)
-- Key review finding: `runHandler` duplicated from ServerCommand (not this story's scope)
-- GatewayCommand registered in AxionCLI subcommands (no change needed)
+- Story 28.2 创建了 GatewayRunner actor + 带占位 install/status/uninstall 子命令的 GatewayCommand
+- GatewayCommand 复用了 DaemonCommand 子命令模式
+- `GatewayNotImplementedError` 用于占位 — 可删除或保留
+- 26 个 gateway 测试通过（GatewayRunner + GatewayCommand），共 1419 个
+- 关键 Review 发现：`maxConcurrentRuns` 硬编码为 10（非本 Story 范围）
+- 关键 Review 发现：`runHandler` 从 ServerCommand 复制粘贴（非本 Story 范围）
+- GatewayCommand 已注册到 AxionCLI 子命令中（无需修改）
 
-### References
+### 参考资料
 
-- [Source: docs/epics/epic-28-gateway-foundation.md#Story 28.3 — launchd 守护进程管理]
-- [Source: docs/epics/epic-28-gateway-foundation.md#launchd plist 规格 — Gateway vs Daemon 差异]
-- [Source: docs/epics/epic-28-gateway-foundation.md#DaemonService 参数化策略]
-- [Source: docs/epics/epic-28-gateway-foundation.md#环境变量 — AXION_BIN, TG env vars]
-- [Source: _bmad-output/planning-artifacts/architecture.md#D9 — Gateway 进程模型]
-- [Source: _bmad-output/planning-artifacts/prds/prd-axion-gateway-2026-05-29/prd.md#FR-1.2 — gateway install]
-- [Source: _bmad-output/planning-artifacts/prds/prd-axion-gateway-2026-05-29/prd.md#FR-1.3 — gateway status]
-- [Source: _bmad-output/planning-artifacts/prds/prd-axion-gateway-2026-05-29/prd.md#FR-1.4 — gateway uninstall]
-- [Source: _bmad-output/planning-artifacts/prds/prd-axion-gateway-2026-05-29/prd.md#NFR-1 — 进程稳定性]
-- [Source: Sources/AxionCLI/Services/DaemonService.swift — existing plist + launchctl logic to parameterize]
-- [Source: Sources/AxionCLI/Commands/DaemonCommand.swift — subcommand pattern reference]
-- [Source: Sources/AxionCLI/Commands/GatewayCommand.swift — placeholder subcommands to replace]
-- [Source: _bmad-output/project-context.md#Daemon 模式 — DaemonService, plist 管理, binary path resolution]
+- [来源：docs/epics/epic-28-gateway-foundation.md#Story 28.3 — launchd 守护进程管理]
+- [来源：docs/epics/epic-28-gateway-foundation.md#launchd plist 规格 — Gateway vs Daemon 差异]
+- [来源：docs/epics/epic-28-gateway-foundation.md#DaemonService 参数化策略]
+- [来源：docs/epics/epic-28-gateway-foundation.md#环境变量 — AXION_BIN, TG 环境变量]
+- [来源：_bmad-output/planning-artifacts/architecture.md#D9 — Gateway 进程模型]
+- [来源：_bmad-output/planning-artifacts/prds/prd-axion-gateway-2026-05-29/prd.md#FR-1.2 — gateway install]
+- [来源：_bmad-output/planning-artifacts/prds/prd-axion-gateway-2026-05-29/prd.md#FR-1.3 — gateway status]
+- [来源：_bmad-output/planning-artifacts/prds/prd-axion-gateway-2026-05-29/prd.md#FR-1.4 — gateway uninstall]
+- [来源：_bmad-output/planning-artifacts/prds/prd-axion-gateway-2026-05-29/prd.md#NFR-1 — 进程稳定性]
+- [来源：Sources/AxionCLI/Services/DaemonService.swift — 现有 plist + launchctl 逻辑（待参数化）]
+- [来源：Sources/AxionCLI/Commands/DaemonCommand.swift — 子命令模式参考]
+- [来源：Sources/AxionCLI/Commands/GatewayCommand.swift — 待替换的占位子命令]
+- [来源：_bmad-output/project-context.md#Daemon 模式 — DaemonService、plist 管理、二进制路径解析]
 
 ## Dev Agent Record
 

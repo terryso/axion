@@ -76,11 +76,33 @@
 |---|---------|---------|---------|
 | 7.1 | MCP `tools/list` via stdio | 返回 Helper 工具 + run_task 等 | ✅ 通过。47 个工具：23 个 axion-helper 工具 + SDK 内建工具 + run_task/query_task_status |
 
+## 10. Gateway 模式（6 项）
+
+验证 Epic 28 引入的 Gateway 长驻进程、launchd 守护进程管理、状态查询。
+
+| # | 测试步骤 | 预期行为 | 实际结果 |
+|---|---------|---------|---------|
+| 10.1 | `swift run AxionCLI gateway start --port 4243 &` → `curl -s http://127.0.0.1:4243/v1/health` | Gateway 前台启动 HTTP 服务，health 端点返回 `{"status":"ok"}` | ✅ 通过。返回 `{"version":"1.0.0","status":"ok"}` |
+| 10.2 | `curl -s http://127.0.0.1:4243/v1/gateway/status` | 返回 JSON 含 `status:"running"`、`active_tasks`、`uptime_seconds`、`label:"dev.axion.gateway"` | ✅ 通过。含 status/active_tasks:0/uptime_seconds:5.46/pid/label，预留字段为 null |
+| 10.3 | 先 kill 10.1 的进程 → `swift run AxionCLI gateway status` | 显示 `status: not_installed`（未安装 daemon 时） | ✅ 通过。显示 `Gateway status: not_installed`，含 label/plist/log/占位字段 |
+| 10.4 | `swift run AxionCLI gateway install` | 创建 `~/Library/LaunchAgents/dev.axion.gateway.plist`，launchctl bootstrap 成功，输出 plist 路径和日志路径 | ✅ 通过。plist 含 label:dev.axion.gateway、gateway start、KeepAlive:Crashed、日志路径 |
+| 10.5 | `swift run AxionCLI gateway status` | 显示 `status: running`，含 PID、活跃任务数、运行时长、日志路径 | ✅ 通过。PID:36978、Active tasks:0、Uptime:18s、含 TG/review/curator 占位 |
+| 10.6 | `swift run AxionCLI gateway uninstall` | launchctl bootout 成功，plist 文件删除，进程停止 | ✅ 通过。plist 已删除，status 回到 not_installed |
+
+### 10.x 说明
+
+- 10.1 验证 `gateway start` 复用 ServerCommand 的 HTTP API（Story 28.2 AC#1）
+- 10.2 验证 `GET /v1/gateway/status` 返回实时运行时状态（Story 28.4 AC#4）
+- 10.3 验证未安装 daemon 时 status 降级输出（Story 28.4 AC#2）
+- 10.4 验证 plist 生成：label=`dev.axion.gateway`、KeepAlive=Crashed、日志=`gateway.log`/`gateway.err.log`（Story 28.3 AC#1）
+- 10.5 验证运行中 gateway 的 status 含实时数据 + HTTP 查询成功（Story 28.4 AC#1）
+- 10.6 验证 uninstall 清理完整（Story 28.3 AC#2）
+
 ---
 
 ## 验收总结
 
-**28/29 通过，1 项跳过（无预录制技能）。**
+**34/35 通过，1 项跳过（无预录制技能）。**
 
 | 组别 | 通过 | 总数 | 说明 |
 |------|------|------|------|
@@ -93,6 +115,7 @@
 | MCP Server | 1 | 1 | tools/list 返回完整工具集 |
 | Self-Evolution | 4 | 4 | --no-review/curator status/doctor/help 正常 |
 | Agent Runtime | 5 | 5 | Session/Resume/持久化全部通过 |
+| Gateway 模式 | 6 | 6 | gateway start/install/uninstall/status 全部通过 |
 
 ## 8. Self-Evolution（Review & Curator）（4 项）
 

@@ -18,52 +18,52 @@ So that 我可以自定义 Gateway 行为而无需修改命令行参数.
 
 2. **Given** `~/.axion/config.json` 包含 `{"gatewayCuratorIdleHours": 4.0}` **When** ConfigManager 加载配置 **Then** `curatorIdleHours` 为 4.0，其余 gateway 字段保持默认值
 
-## Tasks / Subtasks
+## 任务清单
 
-- [x] Task 1: Add gateway fields to AxionConfig (AC: #1, #2)
-  - [x] 1.1 Add 5 new Optional properties to `AxionConfig` struct
-  - [x] 1.2 Add default values to `AxionConfig.default` static let
-  - [x] 1.3 Add parameters to memberwise `init`
-  - [x] 1.4 Add CodingKeys for new fields
-  - [x] 1.5 Add `decodeIfPresent` lines in `init(from decoder:)`
-- [x] Task 2: Add unit tests (AC: #1, #2)
-  - [x] 2.1 Test default values include gateway fields
-  - [x] 2.2 Test partial JSON decode fills gateway defaults
-  - [x] 2.3 Test gateway fields Codable round-trip
-  - [x] 2.4 Test explicit gateway values decode correctly
-  - [x] 2.5 Test nil gateway fields are omitted from JSON output
+- [x] 任务 1：在 AxionConfig 中添加 gateway 字段 (AC: #1, #2)
+  - [x] 1.1 在 `AxionConfig` struct 中添加 5 个新的 Optional 属性
+  - [x] 1.2 在 `AxionConfig.default` 静态常量中添加默认值
+  - [x] 1.3 在 memberwise `init` 中添加参数
+  - [x] 1.4 为新字段添加 CodingKeys
+  - [x] 1.5 在 `init(from decoder:)` 中添加 `decodeIfPresent` 行
+- [x] 任务 2：添加单元测试 (AC: #1, #2)
+  - [x] 2.1 测试默认值包含 gateway 字段
+  - [x] 2.2 测试部分 JSON 解码时 gateway 字段使用默认值
+  - [x] 2.3 测试 gateway 字段 Codable 往返
+  - [x] 2.4 测试显式 gateway 值正确解码
+  - [x] 2.5 测试 nil 的 gateway 字段不出现在 JSON 输出中
 
-## Dev Notes
+## 开发说明
 
-### Files to MODIFY (read first)
+### 需要修改的文件（先阅读）
 
-**`Sources/AxionCore/Models/AxionConfig.swift`** (131 lines) — The only file to modify.
+**`Sources/AxionCore/Models/AxionConfig.swift`**（131 行）— 唯一需要修改的文件。
 
-Current state: Defines `AxionConfig` struct with `Equatable, Sendable, Codable` conformance. Has ~20 fields split into core fields (required with defaults) and optional fields (review/curator). The `decodeIfPresent` pattern is well-established.
+当前状态：定义了 `AxionConfig` struct，遵循 `Equatable, Sendable, Codable` 协议。包含约 20 个字段，分为核心字段（必填带默认值）和可选字段（review/curator）。`decodeIfPresent` 模式已经建立成熟。
 
-What this story changes: Add 5 new gateway-specific Optional fields following the exact same pattern as existing `curator*` fields.
+本故事的变更：添加 5 个新的 gateway 相关 Optional 字段，完全复用现有 `curator*` 字段的模式。
 
-What must be preserved: All existing fields, CodingKeys, init, Codable conformance, default values. The `decodeIfPresent` + `?? Self.default.xxx` pattern for required fields, and bare `decodeIfPresent` for Optional fields.
+必须保留的内容：所有现有字段、CodingKeys、init、Codable 一致性、默认值。必填字段使用 `decodeIfPresent` + `?? Self.default.xxx` 模式，Optional 字段使用裸 `decodeIfPresent`。
 
-### New Fields to Add
+### 新增字段
 
-Add these 5 Optional fields to AxionConfig — all following the existing `curatorEnabled`/`curatorDryRun` Optional pattern (no `?? Self.default.xxx` fallback since they are Optional):
+向 AxionConfig 添加以下 5 个 Optional 字段 — 全部复用现有 `curatorEnabled`/`curatorDryRun` 的 Optional 模式（不加 `?? Self.default.xxx` 回退，因为它们是 Optional）：
 
-| Property | Type | Default in static let | Config key (camelCase) |
-|----------|------|-----------------------|------------------------|
-| `gatewayEnabled` | `Bool?` | `false` (as Optional) | `gatewayEnabled` |
-| `gatewayCuratorIdleHours` | `Double?` | `2.0` (as Optional) | `gatewayCuratorIdleHours` |
-| `gatewayCuratorIntervalHours` | `Double?` | `168.0` (as Optional) | `gatewayCuratorIntervalHours` |
-| `gatewayTaskTimeoutMinutes` | `Double?` | `10.0` (as Optional) | `gatewayTaskTimeoutMinutes` |
-| `gatewayNotifyCuratorResults` | `Bool?` | `false` (as Optional) | `gatewayNotifyCuratorResults` |
+| 属性 | 类型 | 静态默认值 | 配置键（camelCase） |
+|------|------|-----------|---------------------|
+| `gatewayEnabled` | `Bool?` | `nil` | `gatewayEnabled` |
+| `gatewayCuratorIdleHours` | `Double?` | `nil` | `gatewayCuratorIdleHours` |
+| `gatewayCuratorIntervalHours` | `Double?` | `nil` | `gatewayCuratorIntervalHours` |
+| `gatewayTaskTimeoutMinutes` | `Double?` | `nil` | `gatewayTaskTimeoutMinutes` |
+| `gatewayNotifyCuratorResults` | `Bool?` | `nil` | `gatewayNotifyCuratorResults` |
 
-**Important:** Do NOT add `gatewayTelegramBotToken` or `gatewayTelegramAllowedUsers` — these come from environment variables (`AXION_TELEGRAM_BOT_TOKEN`, `AXION_TELEGRAM_ALLOWED_USERS`), never from config.json.
+**重要：** 不要添加 `gatewayTelegramBotToken` 或 `gatewayTelegramAllowedUsers` — 这些来自环境变量（`AXION_TELEGRAM_BOT_TOKEN`、`AXION_TELEGRAM_ALLOWED_USERS`），绝不出现在 config.json 中。
 
-### Exact Pattern to Follow
+### 需严格遵循的模式
 
-Follow the curator fields pattern exactly. In AxionConfig.swift:
+严格遵循 curator 字段模式。在 AxionConfig.swift 中：
 
-**1. Properties** (after `curatorArchiveAfterDays`, ~line 30):
+**1. 属性声明**（在 `curatorArchiveAfterDays` 之后，约第 30 行）：
 ```swift
 public var gatewayEnabled: Bool?
 public var gatewayCuratorIdleHours: Double?
@@ -72,16 +72,16 @@ public var gatewayTaskTimeoutMinutes: Double?
 public var gatewayNotifyCuratorResults: Bool?
 ```
 
-**2. Static default** (add to `AxionConfig.default`, after `curatorArchiveAfterDays: nil`):
+**2. 静态默认值**（添加到 `AxionConfig.default`，在 `curatorArchiveAfterDays: nil` 之后）：
 ```swift
-gatewayEnabled: false,
-gatewayCuratorIdleHours: 2.0,
-gatewayCuratorIntervalHours: 168.0,
-gatewayTaskTimeoutMinutes: 10.0,
-gatewayNotifyCuratorResults: false
+gatewayEnabled: nil,
+gatewayCuratorIdleHours: nil,
+gatewayCuratorIntervalHours: nil,
+gatewayTaskTimeoutMinutes: nil,
+gatewayNotifyCuratorResults: nil
 ```
 
-**3. Memberwise init** (add parameters with default `nil`, after `curatorArchiveAfterDays: Int? = nil`):
+**3. 成员初始化器**（添加带默认值 `nil` 的参数，在 `curatorArchiveAfterDays: Int? = nil` 之后）：
 ```swift
 gatewayEnabled: Bool? = nil,
 gatewayCuratorIdleHours: Double? = nil,
@@ -90,7 +90,7 @@ gatewayTaskTimeoutMinutes: Double? = nil,
 gatewayNotifyCuratorResults: Bool? = nil
 ```
 
-**4. Init body** (add assignments):
+**4. init 方法体**（添加赋值语句）：
 ```swift
 self.gatewayEnabled = gatewayEnabled
 self.gatewayCuratorIdleHours = gatewayCuratorIdleHours
@@ -99,12 +99,12 @@ self.gatewayTaskTimeoutMinutes = gatewayTaskTimeoutMinutes
 self.gatewayNotifyCuratorResults = gatewayNotifyCuratorResults
 ```
 
-**5. CodingKeys** (add to existing comma-separated list):
+**5. CodingKeys**（添加到现有逗号分隔列表）：
 ```swift
 case gatewayEnabled, gatewayCuratorIdleHours, gatewayCuratorIntervalHours, gatewayTaskTimeoutMinutes, gatewayNotifyCuratorResults
 ```
 
-**6. init(from decoder:)** (add `decodeIfPresent` — bare, no `??` fallback since Optional):
+**6. init(from decoder:)**（添加 `decodeIfPresent` — 裸调用，不加 `??` 回退，因为是 Optional）：
 ```swift
 gatewayEnabled = try c.decodeIfPresent(Bool.self, forKey: .gatewayEnabled)
 gatewayCuratorIdleHours = try c.decodeIfPresent(Double.self, forKey: .gatewayCuratorIdleHours)
@@ -113,33 +113,33 @@ gatewayTaskTimeoutMinutes = try c.decodeIfPresent(Double.self, forKey: .gatewayT
 gatewayNotifyCuratorResults = try c.decodeIfPresent(Bool.self, forKey: .gatewayNotifyCuratorResults)
 ```
 
-### Testing Requirements
+### 测试要求
 
-**Framework:** Swift Testing (`import Testing`, `@Suite`, `@Test`, `#expect`)
-**File:** `Tests/AxionCoreTests/AxionConfigTests.swift` (existing file, add tests at end)
+**框架：** Swift Testing（`import Testing`、`@Suite`、`@Test`、`#expect`）
+**文件：** `Tests/AxionCoreTests/AxionConfigTests.swift`（现有文件，在末尾追加）
 
-Add a new `// MARK: - Gateway Config` section with these tests:
+添加一个新的 `// MARK: - Gateway Config` 分节，包含以下测试：
 
-1. **Gateway defaults** — Verify `AxionConfig.default` has expected gateway values
-2. **Gateway partial JSON** — Decode `{"gatewayCuratorIdleHours": 4.0}` and verify only that field is set, others nil
-3. **Gateway round-trip** — Create config with all gateway fields set, encode/decode, verify all match
-4. **Gateway nil not encoded** — Default config encodes without any gateway keys in JSON
-5. **Gateway empty JSON defaults** — `{}` decodes with all gateway fields as nil (not default values)
+1. **Gateway 默认值** — 验证 `AxionConfig.default` 中 gateway 字段为 nil
+2. **Gateway 部分 JSON** — 解码 `{"gatewayCuratorIdleHours": 4.0}`，验证只有该字段有值，其余为 nil
+3. **Gateway 往返编解码** — 创建所有 gateway 字段均有值的 config，编码/解码，验证全部匹配
+4. **Gateway nil 不编码** — 默认 config 编码后 JSON 中不包含任何 gateway 键
+5. **Gateway 空 JSON 解码** — `{}` 解码后所有 gateway 字段为 nil（不是静态默认值）
 
-**Run tests:** `swift test --filter "AxionCoreTests"`
+**运行测试：** `swift test --filter "AxionCoreTests"`
 
-### Project Structure Notes
+### 项目结构说明
 
-- `AxionConfig.swift` lives in `AxionCore/` — pure model, zero external dependencies
-- Tests live in `Tests/AxionCoreTests/` — mirrors source structure
-- No new files needed — only modify AxionConfig.swift + AxionConfigTests.swift
+- `AxionConfig.swift` 位于 `AxionCore/` — 纯模型，零外部依赖
+- 测试位于 `Tests/AxionCoreTests/` — 与源文件结构镜像
+- 不需要新建文件 — 仅修改 AxionConfig.swift 和 AxionConfigTests.swift
 
-### References
+### 参考资料
 
-- [Source: docs/epics/epic-28-gateway-foundation.md#Story 28.1]
-- [Source: _bmad-output/planning-artifacts/prds/prd-axion-gateway-2026-05-29/prd.md#FR-6]
-- [Source: _bmad-output/planning-artifacts/architecture.md#D9 — Gateway config fields]
-- [Source: _bmad-output/project-context.md#配置系统 — decodeIfPresent pattern]
+- [来源：docs/epics/epic-28-gateway-foundation.md#Story 28.1]
+- [来源：_bmad-output/planning-artifacts/prds/prd-axion-gateway-2026-05-29/prd.md#FR-6]
+- [来源：_bmad-output/planning-artifacts/architecture.md#D9 — Gateway 配置字段]
+- [来源：_bmad-output/project-context.md#配置系统 — decodeIfPresent 模式]
 
 ## Dev Agent Record
 
