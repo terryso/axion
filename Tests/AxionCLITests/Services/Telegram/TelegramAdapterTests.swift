@@ -370,4 +370,148 @@ struct TelegramAdapterTests {
         #expect(sent.count == 1)
         #expect(sent[0].text == "任务已收到")
     }
+
+    // MARK: - Command Router Integration (AC #1, #2, #3)
+
+    @Test("Command message routes to commandRouter instead of queue")
+    func commandMessageRoutesToRouter() async {
+        let mock = MockTGAPIClient()
+        await mock.setUpdates([])
+        let mockQueue = MockTaskSerialQueue()
+        let commandRouter = TGCommandRouter(
+            statusProvider: {
+                GatewayRunnerStatus(
+                    state: "running",
+                    activeTaskCount: 1,
+                    uptimeSeconds: 60,
+                    label: "dev.axion.gateway",
+                    tgConnected: "connected"
+                )
+            },
+            skillsProvider: { [] }
+        )
+        let adapter = TelegramAdapter(apiClient: mock, allowedUsers: ["123"], taskQueue: mockQueue, commandRouter: commandRouter)
+
+        let update = TGUpdate(updateId: 1, message: TGMessage(
+            messageId: 1,
+            from: TGUser(id: 123, firstName: "Nick", lastName: nil, username: nil),
+            chat: TGChat(id: 456, type: "private"),
+            date: 0,
+            text: "/status"
+        ))
+        await mock.setUpdates([update])
+
+        _Concurrency.Task { await adapter.start() }
+        try? await _Concurrency.Task.sleep(nanoseconds: 200_000_000)
+        await adapter.stop()
+
+        // Command routed to reply, NOT enqueued
+        let tasks = await mockQueue.tasks
+        #expect(tasks.isEmpty)
+
+        let sent = await mock.sentMessages
+        #expect(sent.count == 1)
+        #expect(sent[0].text.contains("running"))
+    }
+
+    @Test("Non-command text still enqueues normally with commandRouter present")
+    func nonCommandStillEnqueuesWithRouter() async {
+        let mock = MockTGAPIClient()
+        await mock.setUpdates([])
+        let mockQueue = MockTaskSerialQueue()
+        let commandRouter = TGCommandRouter(
+            statusProvider: {
+                GatewayRunnerStatus(
+                    state: "running",
+                    activeTaskCount: 0,
+                    uptimeSeconds: 0,
+                    label: "dev.axion.gateway"
+                )
+            },
+            skillsProvider: { [] }
+        )
+        let adapter = TelegramAdapter(apiClient: mock, allowedUsers: ["123"], taskQueue: mockQueue, commandRouter: commandRouter)
+
+        let update = TGUpdate(updateId: 1, message: TGMessage(
+            messageId: 1,
+            from: TGUser(id: 123, firstName: "Nick", lastName: nil, username: nil),
+            chat: TGChat(id: 456, type: "private"),
+            date: 0,
+            text: "open calculator"
+        ))
+        await mock.setUpdates([update])
+
+        _Concurrency.Task { await adapter.start() }
+        try? await _Concurrency.Task.sleep(nanoseconds: 200_000_000)
+        await adapter.stop()
+
+        // Normal text still goes to queue
+        let tasks = await mockQueue.tasks
+        #expect(tasks.count == 1)
+        #expect(tasks[0].task == "open calculator")
+
+        let sent = await mock.sentMessages
+        #expect(sent.isEmpty)
+    }
+
+    @Test("Without commandRouter all messages enqueue normally (backward compat)")
+    func withoutCommandRouterBackwardCompat() async {
+        let mock = MockTGAPIClient()
+        await mock.setUpdates([])
+        let mockQueue = MockTaskSerialQueue()
+        let adapter = TelegramAdapter(apiClient: mock, allowedUsers: ["123"], taskQueue: mockQueue)
+
+        let update = TGUpdate(updateId: 1, message: TGMessage(
+            messageId: 1,
+            from: TGUser(id: 123, firstName: "Nick", lastName: nil, username: nil),
+            chat: TGChat(id: 456, type: "private"),
+            date: 0,
+            text: "/status"
+        ))
+        await mock.setUpdates([update])
+
+        _Concurrency.Task { await adapter.start() }
+        try? await _Concurrency.Task.sleep(nanoseconds: 200_000_000)
+        await adapter.stop()
+
+        // Without commandRouter, /status is treated as regular task text
+        let tasks = await mockQueue.tasks
+        #expect(tasks.count == 1)
+        #expect(tasks[0].task == "/status")
+    }
+
+    @Test("Authorization check happens before command routing")
+    func authCheckBeforeCommandRouting() async {
+        let mock = MockTGAPIClient()
+        await mock.setUpdates([])
+        let commandRouter = TGCommandRouter(
+            statusProvider: {
+                GatewayRunnerStatus(
+                    state: "running",
+                    activeTaskCount: 0,
+                    uptimeSeconds: 0,
+                    label: "dev.axion.gateway"
+                )
+            },
+            skillsProvider: { [] }
+        )
+        let adapter = TelegramAdapter(apiClient: mock, allowedUsers: ["123"], commandRouter: commandRouter)
+
+        let update = TGUpdate(updateId: 1, message: TGMessage(
+            messageId: 1,
+            from: TGUser(id: 999, firstName: "Stranger", lastName: nil, username: nil),
+            chat: TGChat(id: 999, type: "private"),
+            date: 0,
+            text: "/status"
+        ))
+        await mock.setUpdates([update])
+
+        _Concurrency.Task { await adapter.start() }
+        try? await _Concurrency.Task.sleep(nanoseconds: 200_000_000)
+        await adapter.stop()
+
+        // Unauthorized user — no reply, no task queued
+        let sent = await mock.sentMessages
+        #expect(sent.isEmpty)
+    }
 }

@@ -3,16 +3,18 @@ import Foundation
 actor TelegramAdapter {
     private let apiClient: any TGAPIClientProtocol
     private let allowedUsers: Set<String>
+    private let commandRouter: TGCommandRouter?
     private var taskQueue: (any TaskSerialQueueProtocol)?
     private var lastUpdateId: Int64 = 0
     private var isRunning = false
 
     nonisolated(unsafe) private(set) var statusValue: String = "disabled"
 
-    init(apiClient: any TGAPIClientProtocol, allowedUsers: Set<String>, taskQueue: (any TaskSerialQueueProtocol)? = nil) {
+    init(apiClient: any TGAPIClientProtocol, allowedUsers: Set<String>, taskQueue: (any TaskSerialQueueProtocol)? = nil, commandRouter: TGCommandRouter? = nil) {
         self.apiClient = apiClient
         self.allowedUsers = allowedUsers
         self.taskQueue = taskQueue
+        self.commandRouter = commandRouter
     }
 
     func start() async {
@@ -58,6 +60,11 @@ actor TelegramAdapter {
         guard let userId = message.from?.id else { return }
         guard isAuthorized(userId: userId) else { return }
         guard let text = message.text, !text.isEmpty else { return }
+
+        if let reply = await commandRouter?.handle(text) {
+            await sendReply(reply, to: message.chat.id)
+            return
+        }
 
         fputs("[axion] Telegram task submitted: \"\(text.prefix(50))\"\n", stderr)
 

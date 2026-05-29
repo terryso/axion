@@ -200,7 +200,13 @@ struct GatewayStartCommand: AsyncParsableCommand {
             })
 
             let tgClient = TGAPIClient(token: tgToken)
-            let adapter = TelegramAdapter(apiClient: tgClient, allowedUsers: allowedUsers)
+
+            let commandRouter = TGCommandRouter(
+                statusProvider: { [runner] in await runner.getStatus() },
+                skillsProvider: { [skillRegistry] in skillRegistry.userInvocableSkills }
+            )
+
+            let adapter = TelegramAdapter(apiClient: tgClient, allowedUsers: allowedUsers, commandRouter: commandRouter)
 
             let taskSerialQueue = TaskSerialQueue(
                 runtimeManager: runtimeManager,

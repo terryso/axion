@@ -84,6 +84,8 @@
 
 generated: 2026-05-08
 last_updated: 2026-05-29
+# story-29-4-started: 2026-05-29
+# story-29.4-created: 2026-05-29
 # story-29.3-created: 2026-05-29
 # story-29.2-created: 2026-05-29
 # story-28-4-started: 2026-05-29
@@ -407,7 +409,7 @@ development_status:
   29-1-telegramadapter-core-communication: done
   29-2-task-serial-execution-queue: done
   29-3-tgeventhandler-event-push: done
-  29-4-tg-command-support: backlog
+  29-4-tg-command-support: done
   29-5-tg-image-support: backlog
   epic-29-retrospective: optional
 
