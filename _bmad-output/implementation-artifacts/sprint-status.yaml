@@ -404,7 +404,7 @@ development_status:
   # Epic 29: Telegram 远程交互
   epic-29: in-progress
   29-1-telegramadapter-core-communication: done
-  29-2-task-serial-execution-queue: review
+  29-2-task-serial-execution-queue: done
   29-3-tgeventhandler-event-push: backlog
   29-4-tg-command-support: backlog
   29-5-tg-image-support: backlog

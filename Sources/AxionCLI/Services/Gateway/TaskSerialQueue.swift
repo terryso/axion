@@ -59,64 +59,57 @@ actor TaskSerialQueue: TaskSerialQueueProtocol {
     }
 
     func startProcessing() async {
-        await processNext()
-    }
-
-    private func processNext() async {
-        if queue.isEmpty {
-            isExecuting = false
-            guard !isShuttingDown else { return }
-            await withCheckedContinuation { (cont: CheckedContinuation<Void, Never>) in
-                self.newTaskContinuation = cont
-            }
-            guard !isShuttingDown else { return }
+        while !isShuttingDown {
             if queue.isEmpty {
                 isExecuting = false
-                return
-            }
-        }
-        isExecuting = true
-        let pending = queue.removeFirst()
-
-        await replyHandler(pending.chatId, "任务开始执行: \"\(pending.task.prefix(50))\"")
-        await runner.taskStarted()
-
-        do {
-            let timeoutMinutes = config.gatewayTaskTimeoutMinutes ?? 10.0
-            let result = try await withThrowingTaskGroup(of: AxionRunResult.self) { group in
-                group.addTask {
-                    let request = OpenAgentSDK.CreateRunRequest(task: pending.task)
-                    let buildConfig = AgentBuilder.BuildConfig.forAPI(
-                        config: self.config,
-                        task: pending.task,
-                        request: request
-                    )
-                    return try await self.runtimeManager.executeRun(
-                        task: pending.task,
-                        buildConfig: buildConfig,
-                        eventBus: EventBus(),
-                        runOverrides: .default
-                    )
+                await withCheckedContinuation { (cont: CheckedContinuation<Void, Never>) in
+                    self.newTaskContinuation = cont
                 }
-                group.addTask {
-                    try await _Concurrency.Task.sleep(nanoseconds: UInt64(timeoutMinutes * 60 * 1_000_000_000))
-                    throw TaskTimeoutError()
-                }
-                let result = try await group.next()!
-                group.cancelAll()
-                return result
+                guard !isShuttingDown else { return }
+                if queue.isEmpty { return }
             }
-            let summary = Self.summarize(result)
-            await replyHandler(pending.chatId, summary)
-        } catch is TaskTimeoutError {
-            let timeoutMinutes = config.gatewayTaskTimeoutMinutes ?? 10.0
-            await replyHandler(pending.chatId, "任务超时已取消 (\(Int(timeoutMinutes)) 分钟)")
-        } catch {
-            await replyHandler(pending.chatId, "任务执行失败: \(error.localizedDescription)")
-        }
+            isExecuting = true
+            let pending = queue.removeFirst()
 
-        await runner.taskFinished()
-        await processNext()
+            await replyHandler(pending.chatId, "任务开始执行: \"\(pending.task.prefix(50))\"")
+            await runner.taskStarted()
+
+            let timeoutMinutes = config.gatewayTaskTimeoutMinutes ?? 10.0
+
+            do {
+                let result = try await withThrowingTaskGroup(of: AxionRunResult.self) { group in
+                    group.addTask {
+                        let request = OpenAgentSDK.CreateRunRequest(task: pending.task)
+                        let buildConfig = AgentBuilder.BuildConfig.forAPI(
+                            config: self.config,
+                            task: pending.task,
+                            request: request
+                        )
+                        return try await self.runtimeManager.executeRun(
+                            task: pending.task,
+                            buildConfig: buildConfig,
+                            eventBus: EventBus(),
+                            runOverrides: .default
+                        )
+                    }
+                    group.addTask {
+                        try await _Concurrency.Task.sleep(nanoseconds: UInt64(timeoutMinutes * 60 * 1_000_000_000))
+                        throw TaskTimeoutError()
+                    }
+                    let result = try await group.next()!
+                    group.cancelAll()
+                    return result
+                }
+                let summary = Self.summarize(result)
+                await replyHandler(pending.chatId, summary)
+            } catch is TaskTimeoutError {
+                await replyHandler(pending.chatId, "任务超时已取消 (\(Int(timeoutMinutes)) 分钟)")
+            } catch {
+                await replyHandler(pending.chatId, "任务执行失败: \(error.localizedDescription)")
+            }
+
+            await runner.taskFinished()
+        }
     }
 
     func cancelAll() async {
@@ -132,7 +125,7 @@ actor TaskSerialQueue: TaskSerialQueueProtocol {
     var pendingCount: Int { queue.count }
     var isProcessing: Bool { isExecuting }
 
-    private static func summarize(_ result: AxionRunResult) -> String {
+    static func summarize(_ result: AxionRunResult) -> String {
         let maxLen = 500
         var summary: String
         if let error = result.errorMessage {

@@ -276,7 +276,7 @@ struct TaskSerialQueueTests {
             errorMessage: longError,
             createdAt: Date()
         )
-        let summary = TaskSerialQueueTests.callSummarize(result)
+        let summary = TaskSerialQueue.summarize(result)
         #expect(summary.count > 500)
         #expect(summary.contains("完整结果"))
     }
@@ -292,7 +292,7 @@ struct TaskSerialQueueTests {
             runSucceeded: true,
             createdAt: Date()
         )
-        let summary = TaskSerialQueueTests.callSummarize(result)
+        let summary = TaskSerialQueue.summarize(result)
         #expect(summary.contains("任务完成"))
         #expect(!summary.contains("完整结果"))
     }
@@ -309,7 +309,7 @@ struct TaskSerialQueueTests {
             errorMessage: "something went wrong",
             createdAt: Date()
         )
-        let summary = TaskSerialQueueTests.callSummarize(result)
+        let summary = TaskSerialQueue.summarize(result)
         #expect(summary.contains("任务失败"))
         #expect(summary.contains("something went wrong"))
     }
@@ -409,17 +409,4 @@ struct TaskSerialQueueTests {
         await server.stop()
     }
 
-    // Access to summarize through a wrapper since it's private
-    static func callSummarize(_ result: AxionRunResult) -> String {
-        // Mirror the summarize logic since it's private
-        let maxLen = 500
-        var summary: String
-        if let error = result.errorMessage {
-            summary = "❌ 任务失败: \(error)"
-        } else {
-            summary = "✅ 任务完成 (\(result.totalSteps) 步, \(result.durationMs / 1000)s)"
-        }
-        guard summary.count > maxLen else { return summary }
-        return "\(summary.prefix(maxLen))...(完整结果 \(summary.count) 字符)"
-    }
 }

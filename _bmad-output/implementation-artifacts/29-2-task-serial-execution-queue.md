@@ -4,7 +4,7 @@ baseline_commit: 2b4d817
 
 # Story 29.2: Task Serial Execution Queue
 
-Status: review
+Status: done
 
 ## Story
 
@@ -411,6 +411,7 @@ No blocking issues encountered.
 ### Change Log
 
 - 2026-05-29: Implemented TaskSerialQueue + integrated with TelegramAdapter and GatewayRunner. All tasks complete, 14 new tests passing.
+- 2026-05-29: **Senior Developer Review (AI)** — 0 CRITICAL, 3 HIGH, 3 MEDIUM, 1 LOW. Fixed: (1) recursive processNext → while loop (HIGH), (2) summarize() private → internal + removed duplicated test helper (HIGH), (3) duplicate timeoutMinutes read eliminated (MEDIUM), (4) File List updated with deleted/modified test files (HIGH). Noted: timeout cooperative cancellation limitation (MEDIUM-2). All 28 tests pass post-fix.
 
 ### File List
 
@@ -420,3 +421,5 @@ No blocking issues encountered.
 - Sources/AxionCLI/Commands/GatewayCommand.swift (modified)
 - Tests/AxionCLITests/Services/Gateway/TaskSerialQueueTests.swift (new)
 - Tests/AxionCLITests/Services/Telegram/TelegramAdapterTests.swift (modified)
+- Tests/AxionCLITests/Services/Telegram/GatewayTelegramIntegrationTests.swift (deleted — tests migrated to TaskSerialQueueTests)
+- Tests/AxionCLITests/Services/Telegram/TGAPIClientTests.swift (modified — MockTGAPIClient busy-loop fix)
