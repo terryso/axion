@@ -65,7 +65,8 @@ struct ResumeCommand: AsyncParsableCommand {
             json: json,
             noVisualDelta: noVisualDelta,
             noReview: noReview,
-            onReviewCompleted: nil
+            onReviewCompleted: nil,
+            reviewDataContext: nil
         )
 
         let result: AxionRunResult

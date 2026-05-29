@@ -548,7 +548,7 @@ extension AxionRuntimeTests {
             task: task, fast: false, dryrun: true, json: false,
             noMemory: true, noVisualDelta: true, allowForeground: false,
             maxSteps: 1, config: AxionConfig(apiKey: "test"),
-            noReview: true, onReviewCompleted: nil, eventBus: nil
+            noReview: true, onReviewCompleted: nil, eventBus: nil, reviewDataContext: nil
         )
     }
 

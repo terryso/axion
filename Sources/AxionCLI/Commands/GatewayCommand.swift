@@ -75,6 +75,14 @@ struct GatewayStartCommand: AsyncParsableCommand {
         let traceDir = (ConfigManager.defaultConfigDirectory as NSString).appendingPathComponent("runs")
         let runtimeManager = Self.createRuntimeManager(traceDir)
 
+        let reviewDataContext = ReviewDataContext()
+        let reviewScheduler = ReviewScheduler(
+            noReview: false,
+            noMemory: false,
+            reviewDataContext: reviewDataContext,
+            traceDir: traceDir
+        )
+
         let server = AgentHTTPServer(
             agent: placeholderAgent,
             host: host,
@@ -86,7 +94,7 @@ struct GatewayStartCommand: AsyncParsableCommand {
 
         let runner = GatewayRunner(server: server)
 
-        server.runHandler = { [runCoordinator, config, runtimeManager, runner] task, request, tracker, broadcaster, persistence, limiter in
+        server.runHandler = { [runCoordinator, config, runtimeManager, runner, reviewScheduler, reviewDataContext] task, request, tracker, broadcaster, persistence, limiter in
             guard await runner.isAcceptingTasks else { return }
 
             await runner.taskStarted()
@@ -119,11 +127,19 @@ struct GatewayStartCommand: AsyncParsableCommand {
 
             let result: AxionRunResult
             do {
+                let runOverrides = AxionRuntime.RunOverrides(
+                    json: false,
+                    noVisualDelta: false,
+                    noReview: false,
+                    onReviewCompleted: nil,
+                    reviewDataContext: reviewDataContext
+                )
                 result = try await runtimeManager.executeRun(
                     task: task,
                     buildConfig: buildConfig,
                     eventBus: eventBus,
-                    runOverrides: .default
+                    runOverrides: runOverrides,
+                    extraHandlers: [reviewScheduler]
                 )
             } catch {
                 await bridge.stop()
@@ -224,7 +240,7 @@ struct GatewayStartCommand: AsyncParsableCommand {
 
             await runner.setStatusProviders(
                 tgStatus: { [weak adapter] in adapter?.statusValue },
-                reviewStatus: nil,
+                reviewStatus: { [weak reviewScheduler] in reviewScheduler?.lastReviewAtValue },
                 curatorStatus: nil
             )
 
@@ -239,7 +255,7 @@ struct GatewayStartCommand: AsyncParsableCommand {
             fputs("[axion] Telegram bot token not configured, adapter disabled\n", stderr)
             await runner.setStatusProviders(
                 tgStatus: { "disabled" },
-                reviewStatus: nil,
+                reviewStatus: { [weak reviewScheduler] in reviewScheduler?.lastReviewAtValue },
                 curatorStatus: nil
             )
         }

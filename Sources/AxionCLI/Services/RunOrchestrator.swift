@@ -4,6 +4,40 @@ import OpenAgentSDK
 
 import AxionCore
 
+/// Thread-safe box for sharing agent + messages with ReviewScheduler.
+final class ReviewDataContext: @unchecked Sendable {
+    private let lock = NSLock()
+    private var _agent: Agent?
+    private var _messages: [SDKMessage] = []
+    private var _reviewOrchestrator: (any ReviewOrchestrating)?
+
+    var agent: Agent? {
+        lock.lock()
+        defer { lock.unlock() }
+        return _agent
+    }
+
+    var messages: [SDKMessage] {
+        lock.lock()
+        defer { lock.unlock() }
+        return _messages
+    }
+
+    var reviewOrchestrator: (any ReviewOrchestrating)? {
+        lock.lock()
+        defer { lock.unlock() }
+        return _reviewOrchestrator
+    }
+
+    func update(agent: Agent, messages: [SDKMessage], reviewOrchestrator: (any ReviewOrchestrating)?) {
+        lock.lock()
+        _agent = agent
+        _messages = messages
+        _reviewOrchestrator = reviewOrchestrator
+        lock.unlock()
+    }
+}
+
 /// Encapsulates the full agent execution pipeline: stream loop with output rendering,
 /// takeover handling, and post-run processing (review + curator).
 ///
@@ -27,6 +61,7 @@ enum RunOrchestrator {
         let noReview: Bool
         let onReviewCompleted: (@Sendable (String) -> Void)?
         let eventBus: EventBus?
+        let reviewDataContext: ReviewDataContext?
     }
 
     struct RunResult: Sendable {
@@ -188,6 +223,13 @@ enum RunOrchestrator {
         }
 
         // Post-stream
+
+        // Store agent + messages for ReviewScheduler (Gateway mode)
+        runConfig.reviewDataContext?.update(
+            agent: agent,
+            messages: collectedMessages,
+            reviewOrchestrator: buildResult.reviewOrchestrator
+        )
 
         // Extract last assistant response text for notification summary
         let responseText = collectedMessages.last(where: {

@@ -1,5 +1,5 @@
 # generated: 2026-05-08
-# last_updated: 2026-05-29
+# last_updated: 2026-05-30
 # story-29-1-started: 2026-05-29
 # story-29.1-created: 2026-05-29
 # retro-epic-28: 2026-05-29
@@ -83,7 +83,7 @@
 # - Dev moves story to 'review', then runs code-review (fresh context, different LLM recommended)
 
 generated: 2026-05-08
-last_updated: 2026-05-29
+last_updated: 2026-05-30
 # story-29-4-started: 2026-05-29
 # story-29.4-created: 2026-05-29
 # story-29.3-created: 2026-05-29
@@ -414,8 +414,8 @@ development_status:
   epic-29-retrospective: done
 
   # Epic 30: 自进化调度
-  epic-30: backlog
-  30-1-reviewscheduler-isolated-review-agent: backlog
+  epic-30: in-progress
+  30-1-reviewscheduler-isolated-review-agent: done
   30-2-review-result-handling-optional-push: backlog
   30-3-curatorscheduler-auto-scheduling: backlog
   epic-30-retrospective: optional

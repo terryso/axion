@@ -33,9 +33,10 @@ public actor AxionRuntime: AxionRuntimeRunning, AxionRuntimeResuming, SessionLis
         let noVisualDelta: Bool
         let noReview: Bool
         let onReviewCompleted: (@Sendable (String) -> Void)?
+        let reviewDataContext: ReviewDataContext?
 
         static let `default` = RunOverrides(
-            json: false, noVisualDelta: false, noReview: false, onReviewCompleted: nil
+            json: false, noVisualDelta: false, noReview: false, onReviewCompleted: nil, reviewDataContext: nil
         )
     }
 
@@ -82,7 +83,8 @@ public actor AxionRuntime: AxionRuntimeRunning, AxionRuntimeResuming, SessionLis
             config: runConfig.config,
             noReview: runConfig.noReview,
             onReviewCompleted: runConfig.onReviewCompleted,
-            eventBus: eventBus
+            eventBus: eventBus,
+            reviewDataContext: runConfig.reviewDataContext
         )
 
         do {
@@ -197,7 +199,8 @@ public actor AxionRuntime: AxionRuntimeRunning, AxionRuntimeResuming, SessionLis
             config: buildConfig.config,
             noReview: runOverrides.noReview,
             onReviewCompleted: runOverrides.onReviewCompleted,
-            eventBus: eventBus
+            eventBus: eventBus,
+            reviewDataContext: runOverrides.reviewDataContext
         )
 
         return try await run(task: buildConfig.task, buildResult: buildResult, runConfig: runConfig, resumeSessionId: sid)
@@ -379,7 +382,8 @@ public actor AxionRuntime: AxionRuntimeRunning, AxionRuntimeResuming, SessionLis
             config: buildConfig.config,
             noReview: runOverrides.noReview,
             onReviewCompleted: runOverrides.onReviewCompleted,
-            eventBus: eventBus
+            eventBus: eventBus,
+            reviewDataContext: runOverrides.reviewDataContext
         )
 
         return try await run(
