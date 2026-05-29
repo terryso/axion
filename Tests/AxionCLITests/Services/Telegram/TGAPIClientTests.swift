@@ -115,6 +115,8 @@ actor MockTGAPIClient: TGAPIClientProtocol {
     func getUpdates(offset: Int64?, timeout: Int) async throws -> [TGUpdate] {
         _getUpdatesCallCount += 1
         if let error = _getUpdatesError { throw error }
+        // Yield to prevent busy-loop in pollLoop; tests drive state via setUpdates
+        try? await _Concurrency.Task.sleep(nanoseconds: 10_000_000) // 10ms
         let result = _updates
         _updates = []
         return result
