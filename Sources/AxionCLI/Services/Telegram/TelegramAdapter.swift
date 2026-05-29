@@ -3,14 +3,16 @@ import Foundation
 actor TelegramAdapter {
     private let apiClient: any TGAPIClientProtocol
     private let allowedUsers: Set<String>
+    private var taskQueue: (any TaskSerialQueueProtocol)?
     private var lastUpdateId: Int64 = 0
     private var isRunning = false
 
     nonisolated(unsafe) private(set) var statusValue: String = "disabled"
 
-    init(apiClient: any TGAPIClientProtocol, allowedUsers: Set<String>) {
+    init(apiClient: any TGAPIClientProtocol, allowedUsers: Set<String>, taskQueue: (any TaskSerialQueueProtocol)? = nil) {
         self.apiClient = apiClient
         self.allowedUsers = allowedUsers
+        self.taskQueue = taskQueue
     }
 
     func start() async {
@@ -55,10 +57,19 @@ actor TelegramAdapter {
     private func processMessage(_ message: TGMessage) async {
         guard let userId = message.from?.id else { return }
         guard isAuthorized(userId: userId) else { return }
-        guard message.text != nil else { return }
+        guard let text = message.text, !text.isEmpty else { return }
 
-        fputs("[axion] Telegram message received from \(userId)\n", stderr)
-        await sendReply("任务已收到", to: message.chat.id)
+        fputs("[axion] Telegram task submitted: \"\(text.prefix(50))\"\n", stderr)
+
+        if let queue = taskQueue {
+            await queue.enqueue(task: text, chatId: message.chat.id)
+        } else {
+            await sendReply("任务已收到", to: message.chat.id)
+        }
+    }
+
+    func setTaskQueue(_ queue: any TaskSerialQueueProtocol) {
+        self.taskQueue = queue
     }
 
     func sendReply(_ text: String, to chatId: Int64) async {

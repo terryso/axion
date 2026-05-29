@@ -2,6 +2,36 @@ import Testing
 import Foundation
 @testable import AxionCLI
 
+// MARK: - Mock TaskSerialQueue
+
+actor MockTaskSerialQueue: TaskSerialQueueProtocol {
+    private var enqueuedTasks: [(task: String, chatId: Int64)] = []
+    private var _startProcessingCalled = false
+    private var _cancelAllCalled = false
+    private var _pendingCount = 0
+    private var _isProcessing = false
+
+    var startProcessingCalled: Bool { _startProcessingCalled }
+    var cancelAllCalled: Bool { _cancelAllCalled }
+    var tasks: [(task: String, chatId: Int64)] { enqueuedTasks }
+
+    func enqueue(task: String, chatId: Int64) async {
+        enqueuedTasks.append((task, chatId))
+    }
+
+    func startProcessing() async {
+        _startProcessingCalled = true
+    }
+
+    func cancelAll() async {
+        _cancelAllCalled = true
+        enqueuedTasks.removeAll()
+    }
+
+    var pendingCount: Int { _pendingCount }
+    var isProcessing: Bool { _isProcessing }
+}
+
 @Suite("TelegramAdapter")
 struct TelegramAdapterTests {
 
@@ -235,5 +265,109 @@ struct TelegramAdapterTests {
 
         let sent = await mock.sentMessages
         #expect(sent.isEmpty) // Failed, so no successful sends
+    }
+
+    // MARK: - Task Queue Integration (AC #1, #2, #8)
+
+    @Test("Text message submits to task queue")
+    func textMessageSubmitsToQueue() async {
+        let mock = MockTGAPIClient()
+        await mock.setUpdates([])
+        let mockQueue = MockTaskSerialQueue()
+        let adapter = TelegramAdapter(apiClient: mock, allowedUsers: ["123"], taskQueue: mockQueue)
+
+        let update = TGUpdate(updateId: 1, message: TGMessage(
+            messageId: 1,
+            from: TGUser(id: 123, firstName: "Nick", lastName: nil, username: nil),
+            chat: TGChat(id: 456, type: "private"),
+            date: 0,
+            text: "do something"
+        ))
+        await mock.setUpdates([update])
+
+        _Concurrency.Task { await adapter.start() }
+        try? await _Concurrency.Task.sleep(nanoseconds: 200_000_000)
+        await adapter.stop()
+
+        let tasks = await mockQueue.tasks
+        #expect(tasks.count == 1)
+        #expect(tasks[0].task == "do something")
+        #expect(tasks[0].chatId == 456)
+
+        // No direct reply sent — queue handles notifications
+        let sent = await mock.sentMessages
+        #expect(sent.isEmpty)
+    }
+
+    @Test("Empty text message is silently ignored")
+    func emptyTextMessageIgnored() async {
+        let mock = MockTGAPIClient()
+        await mock.setUpdates([])
+        let mockQueue = MockTaskSerialQueue()
+        let adapter = TelegramAdapter(apiClient: mock, allowedUsers: ["123"], taskQueue: mockQueue)
+
+        let update = TGUpdate(updateId: 1, message: TGMessage(
+            messageId: 1,
+            from: TGUser(id: 123, firstName: "Nick", lastName: nil, username: nil),
+            chat: TGChat(id: 456, type: "private"),
+            date: 0,
+            text: ""
+        ))
+        await mock.setUpdates([update])
+
+        _Concurrency.Task { await adapter.start() }
+        try? await _Concurrency.Task.sleep(nanoseconds: 200_000_000)
+        await adapter.stop()
+
+        let tasks = await mockQueue.tasks
+        #expect(tasks.isEmpty)
+    }
+
+    @Test("Non-text message is silently ignored")
+    func nonTextMessageIgnored() async {
+        let mock = MockTGAPIClient()
+        await mock.setUpdates([])
+        let mockQueue = MockTaskSerialQueue()
+        let adapter = TelegramAdapter(apiClient: mock, allowedUsers: ["123"], taskQueue: mockQueue)
+
+        let update = TGUpdate(updateId: 1, message: TGMessage(
+            messageId: 1,
+            from: TGUser(id: 123, firstName: "Nick", lastName: nil, username: nil),
+            chat: TGChat(id: 456, type: "private"),
+            date: 0,
+            text: nil
+        ))
+        await mock.setUpdates([update])
+
+        _Concurrency.Task { await adapter.start() }
+        try? await _Concurrency.Task.sleep(nanoseconds: 200_000_000)
+        await adapter.stop()
+
+        let tasks = await mockQueue.tasks
+        #expect(tasks.isEmpty)
+    }
+
+    @Test("Without queue falls back to MVP reply")
+    func withoutQueueFallsBackToMVP() async {
+        let mock = MockTGAPIClient()
+        await mock.setUpdates([])
+        let adapter = TelegramAdapter(apiClient: mock, allowedUsers: ["123"])
+
+        let update = TGUpdate(updateId: 1, message: TGMessage(
+            messageId: 1,
+            from: TGUser(id: 123, firstName: "Nick", lastName: nil, username: nil),
+            chat: TGChat(id: 456, type: "private"),
+            date: 0,
+            text: "hello"
+        ))
+        await mock.setUpdates([update])
+
+        _Concurrency.Task { await adapter.start() }
+        try? await _Concurrency.Task.sleep(nanoseconds: 200_000_000)
+        await adapter.stop()
+
+        let sent = await mock.sentMessages
+        #expect(sent.count == 1)
+        #expect(sent[0].text == "任务已收到")
     }
 }

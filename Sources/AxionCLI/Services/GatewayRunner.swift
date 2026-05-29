@@ -105,6 +105,7 @@ actor GatewayRunner {
 
     private var startTime: ContinuousClock.Instant?
     private var _telegramAdapter: TelegramAdapter?
+    private var _taskSerialQueue: (any TaskSerialQueueProtocol)?
     private var _tgStatusProvider: (@Sendable () -> String?)?
     private var _reviewStatusProvider: (@Sendable () -> String?)?
     private var _curatorStatusProvider: (@Sendable () -> String?)?
@@ -133,6 +134,10 @@ actor GatewayRunner {
     func stop(graceful: Bool) async {
         guard _state == .running else { return }
         _state = .stopping
+
+        if let queue = _taskSerialQueue {
+            await queue.cancelAll()
+        }
 
         if let adapter = _telegramAdapter {
             await adapter.stop()
@@ -182,6 +187,10 @@ actor GatewayRunner {
 
     func setTelegramAdapter(_ adapter: TelegramAdapter) {
         _telegramAdapter = adapter
+    }
+
+    func setTaskSerialQueue(_ queue: any TaskSerialQueueProtocol) {
+        _taskSerialQueue = queue
     }
 
     func setStatusProviders(

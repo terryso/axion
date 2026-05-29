@@ -202,6 +202,18 @@ struct GatewayStartCommand: AsyncParsableCommand {
             let tgClient = TGAPIClient(token: tgToken)
             let adapter = TelegramAdapter(apiClient: tgClient, allowedUsers: allowedUsers)
 
+            let taskSerialQueue = TaskSerialQueue(
+                runtimeManager: runtimeManager,
+                config: config,
+                runner: runner,
+                replyHandler: { [weak adapter] chatId, message in
+                    guard let adapter else { return }
+                    await adapter.sendReply(message, to: chatId)
+                }
+            )
+
+            await adapter.setTaskQueue(taskSerialQueue)
+            await runner.setTaskSerialQueue(taskSerialQueue)
             await runner.setTelegramAdapter(adapter)
 
             await runner.setStatusProviders(
@@ -210,7 +222,12 @@ struct GatewayStartCommand: AsyncParsableCommand {
                 curatorStatus: nil
             )
 
-            _Concurrency.Task { await adapter.start() }
+            _Concurrency.Task {
+                await taskSerialQueue.startProcessing()
+            }
+            _Concurrency.Task {
+                await adapter.start()
+            }
             fputs("[axion] Telegram adapter starting\n", stderr)
         } else {
             fputs("[axion] Telegram bot token not configured, adapter disabled\n", stderr)
