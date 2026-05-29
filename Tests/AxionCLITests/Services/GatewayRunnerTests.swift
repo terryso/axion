@@ -195,6 +195,7 @@ struct GatewayRunnerTests {
             pid: 12345,
             tgConnected: nil,
             lastReviewAt: "2026-05-29T10:00:00Z",
+            lastReviewSummary: "新增 2 条记忆, 更新 1 个技能",
             lastCuratorAt: nil
         )
 
@@ -209,6 +210,7 @@ struct GatewayRunnerTests {
         #expect(decoded.pid == 12345)
         #expect(decoded.tgConnected == nil)
         #expect(decoded.lastReviewAt == "2026-05-29T10:00:00Z")
+        #expect(decoded.lastReviewSummary == "新增 2 条记忆, 更新 1 个技能")
         #expect(decoded.lastCuratorAt == nil)
     }
 
@@ -232,6 +234,7 @@ struct GatewayRunnerTests {
         #expect(json.contains("\"uptime_seconds\""))
         #expect(json.contains("\"tg_connected\":null"))
         #expect(json.contains("\"last_review_at\":null"))
+        #expect(json.contains("\"last_review_summary\":null"))
         #expect(json.contains("\"last_curator_at\":null"))
     }
 
@@ -294,12 +297,14 @@ struct GatewayRunnerTests {
         await runner.setStatusProviders(
             tgStatus: { "connected" },
             reviewStatus: { "2026-05-29T10:00:00Z" },
+            reviewSummary: { "新增 1 条记忆" },
             curatorStatus: nil
         )
 
         let status = await runner.getStatus()
         #expect(status.tgConnected == "connected")
         #expect(status.lastReviewAt == "2026-05-29T10:00:00Z")
+        #expect(status.lastReviewSummary == "新增 1 条记忆")
         #expect(status.lastCuratorAt == nil)
     }
 
@@ -311,6 +316,7 @@ struct GatewayRunnerTests {
         let status = await runner.getStatus()
         #expect(status.tgConnected == nil)
         #expect(status.lastReviewAt == nil)
+        #expect(status.lastReviewSummary == nil)
         #expect(status.lastCuratorAt == nil)
     }
 }

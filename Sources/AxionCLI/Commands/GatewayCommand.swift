@@ -228,6 +228,7 @@ struct GatewayStartCommand: AsyncParsableCommand {
                 runtimeManager: runtimeManager,
                 config: config,
                 runner: runner,
+                extraHandlers: [reviewScheduler],
                 replyHandler: { [weak adapter] chatId, message in
                     guard let adapter else { return }
                     await adapter.sendReply(message, to: chatId)
@@ -241,8 +242,33 @@ struct GatewayStartCommand: AsyncParsableCommand {
             await runner.setStatusProviders(
                 tgStatus: { [weak adapter] in adapter?.statusValue },
                 reviewStatus: { [weak reviewScheduler] in reviewScheduler?.lastReviewAtValue },
+                reviewSummary: { [weak reviewScheduler] in reviewScheduler?.lastReviewSummaryValue },
                 curatorStatus: nil
             )
+
+            // Wire review result callback: the per-request EventBus is stopped before
+            // the detached review task completes, so we use a direct callback instead.
+            let tgChatIds: [Int64] = allowedUsers.compactMap { Int64($0) }
+            await reviewScheduler.setOnReviewResult { [weak adapter] event in
+                guard event.success else {
+                    for chatId in tgChatIds {
+                        await adapter?.sendReply("⚠️ 后台审查失败", to: chatId)
+                    }
+                    return
+                }
+                guard !event.memoryChanges.isEmpty || !event.skillChanges.isEmpty else { return }
+                var parts: [String] = []
+                if !event.memoryChanges.isEmpty {
+                    parts.append("新增 \(event.memoryChanges.count) 条记忆")
+                }
+                if !event.skillChanges.isEmpty {
+                    parts.append("更新 \(event.skillChanges.count) 个技能")
+                }
+                let message = "📊 审查完成: \(parts.joined(separator: ", "))"
+                for chatId in tgChatIds {
+                    await adapter?.sendReply(message, to: chatId)
+                }
+            }
 
             _Concurrency.Task {
                 await taskSerialQueue.startProcessing()
@@ -256,6 +282,7 @@ struct GatewayStartCommand: AsyncParsableCommand {
             await runner.setStatusProviders(
                 tgStatus: { "disabled" },
                 reviewStatus: { [weak reviewScheduler] in reviewScheduler?.lastReviewAtValue },
+                reviewSummary: { [weak reviewScheduler] in reviewScheduler?.lastReviewSummaryValue },
                 curatorStatus: nil
             )
         }
@@ -400,6 +427,9 @@ struct GatewayStatusCommand: AsyncParsableCommand {
         print("  TG connection: \(tgStatus)")
         let reviewStatus = status.lastReviewAt ?? "(pending Epic 29/30)"
         print("  Last review: \(reviewStatus)")
+        if let reviewSummary = status.lastReviewSummary {
+            print("  Last review summary: \(reviewSummary)")
+        }
         let curatorStatus = status.lastCuratorAt ?? "(pending Epic 29/30)"
         print("  Last curator: \(curatorStatus)")
     }

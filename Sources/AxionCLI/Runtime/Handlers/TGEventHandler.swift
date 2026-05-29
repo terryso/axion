@@ -12,6 +12,7 @@ actor TGEventHandler: EventHandler {
         ToolCompletedEvent.self,
         AgentCompletedEvent.self,
         AgentFailedEvent.self,
+        ReviewResultEvent.self,
     ]
 
     let chatId: Int64
@@ -36,6 +37,8 @@ actor TGEventHandler: EventHandler {
             await handleCompleted(completedEvent)
         case let failedEvent as AgentFailedEvent:
             await handleFailed(failedEvent)
+        case let reviewEvent as ReviewResultEvent:
+            await handleReviewResult(reviewEvent)
         default:
             break
         }
@@ -86,6 +89,24 @@ actor TGEventHandler: EventHandler {
 
     private func handleFailed(_ event: AgentFailedEvent) async {
         let message = "❌ 任务失败: \(event.error)"
+        await sendMessage(message, chatId)
+    }
+
+    private func handleReviewResult(_ event: ReviewResultEvent) async {
+        guard event.success else {
+            await sendMessage("⚠️ 后台审查失败", chatId)
+            return
+        }
+        guard !event.memoryChanges.isEmpty || !event.skillChanges.isEmpty else { return }
+
+        var parts: [String] = []
+        if !event.memoryChanges.isEmpty {
+            parts.append("新增 \(event.memoryChanges.count) 条记忆")
+        }
+        if !event.skillChanges.isEmpty {
+            parts.append("更新 \(event.skillChanges.count) 个技能")
+        }
+        let message = "📊 审查完成: \(parts.joined(separator: ", "))"
         await sendMessage(message, chatId)
     }
 }

@@ -26,9 +26,10 @@ struct GatewayRunnerStatus: Sendable, Equatable, Codable {
     let pid: Int?
     let tgConnected: String?
     let lastReviewAt: String?
+    let lastReviewSummary: String?
     let lastCuratorAt: String?
 
-    init(state: String, activeTaskCount: Int, uptimeSeconds: Double, label: String, pid: Int? = nil, tgConnected: String? = nil, lastReviewAt: String? = nil, lastCuratorAt: String? = nil) {
+    init(state: String, activeTaskCount: Int, uptimeSeconds: Double, label: String, pid: Int? = nil, tgConnected: String? = nil, lastReviewAt: String? = nil, lastReviewSummary: String? = nil, lastCuratorAt: String? = nil) {
         self.state = state
         self.activeTaskCount = activeTaskCount
         self.uptimeSeconds = uptimeSeconds
@@ -36,6 +37,7 @@ struct GatewayRunnerStatus: Sendable, Equatable, Codable {
         self.pid = pid
         self.tgConnected = tgConnected
         self.lastReviewAt = lastReviewAt
+        self.lastReviewSummary = lastReviewSummary
         self.lastCuratorAt = lastCuratorAt
     }
 
@@ -47,6 +49,7 @@ struct GatewayRunnerStatus: Sendable, Equatable, Codable {
         case pid
         case tgConnected = "tg_connected"
         case lastReviewAt = "last_review_at"
+        case lastReviewSummary = "last_review_summary"
         case lastCuratorAt = "last_curator_at"
     }
 
@@ -59,6 +62,7 @@ struct GatewayRunnerStatus: Sendable, Equatable, Codable {
         pid = try container.decodeIfPresent(Int.self, forKey: .pid)
         tgConnected = try container.decodeIfPresent(String.self, forKey: .tgConnected)
         lastReviewAt = try container.decodeIfPresent(String.self, forKey: .lastReviewAt)
+        lastReviewSummary = try container.decodeIfPresent(String.self, forKey: .lastReviewSummary)
         lastCuratorAt = try container.decodeIfPresent(String.self, forKey: .lastCuratorAt)
     }
 
@@ -82,6 +86,11 @@ struct GatewayRunnerStatus: Sendable, Equatable, Codable {
             try container.encode(lastReviewAt, forKey: .lastReviewAt)
         } else {
             try container.encodeNil(forKey: .lastReviewAt)
+        }
+        if let lastReviewSummary {
+            try container.encode(lastReviewSummary, forKey: .lastReviewSummary)
+        } else {
+            try container.encodeNil(forKey: .lastReviewSummary)
         }
         if let lastCuratorAt {
             try container.encode(lastCuratorAt, forKey: .lastCuratorAt)
@@ -108,6 +117,7 @@ actor GatewayRunner {
     private var _taskSerialQueue: (any TaskSerialQueueProtocol)?
     private var _tgStatusProvider: (@Sendable () -> String?)?
     private var _reviewStatusProvider: (@Sendable () -> String?)?
+    private var _reviewSummaryProvider: (@Sendable () -> String?)?
     private var _curatorStatusProvider: (@Sendable () -> String?)?
 
     var currentState: State { _state }
@@ -181,6 +191,7 @@ actor GatewayRunner {
             pid: Int(ProcessInfo.processInfo.processIdentifier),
             tgConnected: _tgStatusProvider?(),
             lastReviewAt: _reviewStatusProvider?(),
+            lastReviewSummary: _reviewSummaryProvider?(),
             lastCuratorAt: _curatorStatusProvider?()
         )
     }
@@ -196,10 +207,12 @@ actor GatewayRunner {
     func setStatusProviders(
         tgStatus: (@Sendable () -> String?)?,
         reviewStatus: (@Sendable () -> String?)?,
+        reviewSummary: (@Sendable () -> String?)?,
         curatorStatus: (@Sendable () -> String?)?
     ) {
         _tgStatusProvider = tgStatus
         _reviewStatusProvider = reviewStatus
+        _reviewSummaryProvider = reviewSummary
         _curatorStatusProvider = curatorStatus
     }
 }

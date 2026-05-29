@@ -67,7 +67,8 @@ struct TGEventHandlerTests {
         #expect(typeNames.contains("ToolCompletedEvent"))
         #expect(typeNames.contains("AgentCompletedEvent"))
         #expect(typeNames.contains("AgentFailedEvent"))
-        #expect(types.count == 4)
+        #expect(typeNames.contains("ReviewResultEvent"))
+        #expect(types.count == 5)
     }
 
     // MARK: - Task 4.2: ToolCompletedEvent push content format
@@ -242,5 +243,68 @@ struct TGEventHandlerTests {
         #expect(collector.messages.count == 1)
         #expect(collector.messages[0].message.contains("任务完成"))
         #expect(collector.messages[0].message.contains("3"))
+    }
+
+    // MARK: - ReviewResultEvent handling
+
+    @Test("ReviewResultEvent with changes pushes review summary")
+    func reviewResultWithChangesPushes() async {
+        let collector = MessageCollector()
+        let handler = makeHandler(collector: collector)
+        let context = makeContext()
+
+        let event = ReviewResultEvent(
+            summary: "review done",
+            memoryChanges: ["mem-1", "mem-2"],
+            skillChanges: ["skill-1"],
+            success: true,
+            durationMs: 500,
+            sessionId: "s-1"
+        )
+        await handler.handle(event, context: context)
+
+        #expect(collector.messages.count == 1)
+        #expect(collector.messages[0].message.contains("审查完成"))
+        #expect(collector.messages[0].message.contains("2 条记忆"))
+        #expect(collector.messages[0].message.contains("1 个技能"))
+    }
+
+    @Test("ReviewResultEvent failure pushes warning message")
+    func reviewResultFailurePushesWarning() async {
+        let collector = MessageCollector()
+        let handler = makeHandler(collector: collector)
+        let context = makeContext()
+
+        let event = ReviewResultEvent(
+            summary: "failed",
+            memoryChanges: [],
+            skillChanges: [],
+            success: false,
+            durationMs: 100,
+            sessionId: "s-fail"
+        )
+        await handler.handle(event, context: context)
+
+        #expect(collector.messages.count == 1)
+        #expect(collector.messages[0].message.contains("审查失败"))
+    }
+
+    @Test("ReviewResultEvent success with no changes does not push")
+    func reviewResultSuccessNoChangesNoPush() async {
+        let collector = MessageCollector()
+        let handler = makeHandler(collector: collector)
+        let context = makeContext()
+
+        let event = ReviewResultEvent(
+            summary: "nothing to change",
+            memoryChanges: [],
+            skillChanges: [],
+            success: true,
+            durationMs: 50,
+            sessionId: "s-noop"
+        )
+        await handler.handle(event, context: context)
+
+        #expect(collector.messages.isEmpty)
     }
 }

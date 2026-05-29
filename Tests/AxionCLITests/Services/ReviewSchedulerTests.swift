@@ -6,6 +6,22 @@ import OpenAgentSDK
 
 // MARK: - Mock ReviewOrchestrator
 
+/// Thread-safe box for capturing a single optional ReviewResultEvent in tests.
+final class ReviewEventBox: @unchecked Sendable {
+    private let lock = NSLock()
+    private var _value: ReviewResultEvent?
+    var value: ReviewResultEvent? {
+        lock.lock()
+        defer { lock.unlock() }
+        return _value
+    }
+    func set(_ newValue: ReviewResultEvent) {
+        lock.lock()
+        _value = newValue
+        lock.unlock()
+    }
+}
+
 struct MockReviewOrchestrator: ReviewOrchestrating, Sendable {
     var shouldReviewResult: (memory: Bool, skill: Bool) = (false, false)
     var reviewResult: ReviewAgentResult? = nil
@@ -386,5 +402,327 @@ struct ReviewSchedulerTests {
         try? await _Concurrency.Task.sleep(nanoseconds: 100_000_000)
 
         #expect(!mockOrchestrator.callTracker.executeReviewCalled)
+    }
+
+    // MARK: - Task 2: ReviewResultEvent emission
+
+    @Test("ReviewResultEvent published on successful review")
+    func testEventPublishedOnSuccess() async {
+        let mockOrchestrator = MockReviewOrchestrator(
+            shouldReviewResult: (memory: true, skill: false),
+            reviewResult: ReviewAgentResult(
+                memoryChanges: ["created memory"],
+                skillChanges: [],
+                summary: "Review done",
+                reviewMessages: []
+            )
+        )
+
+        let reviewDataContext = ReviewDataContext()
+        let placeholderAgent = Agent(options: AgentOptions(model: "placeholder"))
+        reviewDataContext.update(
+            agent: placeholderAgent,
+            messages: [.userMessage(.init(message: "test"))],
+            reviewOrchestrator: mockOrchestrator
+        )
+
+        let scheduler = ReviewScheduler(
+            noReview: false,
+            noMemory: false,
+            reviewDataContext: reviewDataContext,
+            traceDir: "/tmp/test-trace-\(UUID().uuidString)"
+        )
+
+        let eventBus = EventBus()
+        let context = makeContextWithEventBus(eventBus, runCompleteContext: makeRunCompleteContext(numTurns: 8))
+        let event = makeCompletedEvent()
+
+        let eventBox = ReviewEventBox()
+        let subscription = await eventBus.subscribe(ReviewResultEvent.self)
+        let listenerTask = _Concurrency.Task {
+            for await e in subscription {
+                eventBox.set(e)
+                return
+            }
+        }
+
+        await scheduler.handle(event, context: context)
+        try? await _Concurrency.Task.sleep(nanoseconds: 500_000_000)
+
+        let receivedEvent = eventBox.value
+        #expect(receivedEvent != nil)
+        #expect(receivedEvent!.success == true)
+        #expect(receivedEvent!.summary == "Review done")
+        #expect(receivedEvent!.memoryChanges == ["created memory"])
+        #expect(receivedEvent!.sessionId == "test-session")
+
+        listenerTask.cancel()
+    }
+
+    @Test("ReviewResultEvent published on review failure (nil result)")
+    func testEventPublishedOnFailure() async {
+        let mockOrchestrator = MockReviewOrchestrator(
+            shouldReviewResult: (memory: true, skill: false),
+            reviewResult: nil
+        )
+
+        let reviewDataContext = ReviewDataContext()
+        let placeholderAgent = Agent(options: AgentOptions(model: "placeholder"))
+        reviewDataContext.update(
+            agent: placeholderAgent,
+            messages: [.userMessage(.init(message: "test"))],
+            reviewOrchestrator: mockOrchestrator
+        )
+
+        let scheduler = ReviewScheduler(
+            noReview: false,
+            noMemory: false,
+            reviewDataContext: reviewDataContext,
+            traceDir: "/tmp/test-trace-\(UUID().uuidString)"
+        )
+
+        let eventBus = EventBus()
+        let context = makeContextWithEventBus(eventBus, runCompleteContext: makeRunCompleteContext(numTurns: 8))
+        let event = makeCompletedEvent()
+
+        let eventBox = ReviewEventBox()
+        let subscription = await eventBus.subscribe(ReviewResultEvent.self)
+        let listenerTask = _Concurrency.Task {
+            for await e in subscription {
+                eventBox.set(e)
+                return
+            }
+        }
+
+        await scheduler.handle(event, context: context)
+        try? await _Concurrency.Task.sleep(nanoseconds: 500_000_000)
+
+        let receivedEvent = eventBox.value
+        #expect(receivedEvent != nil)
+        #expect(receivedEvent!.success == false)
+        #expect(receivedEvent!.memoryChanges.isEmpty)
+
+        listenerTask.cancel()
+    }
+
+    @Test("No event published when eventBus is nil")
+    func testNoEventWhenEventBusNil() async {
+        let mockOrchestrator = MockReviewOrchestrator(
+            shouldReviewResult: (memory: true, skill: false),
+            reviewResult: ReviewAgentResult(
+                memoryChanges: ["mem"],
+                skillChanges: [],
+                summary: "done",
+                reviewMessages: []
+            )
+        )
+
+        let reviewDataContext = ReviewDataContext()
+        let placeholderAgent = Agent(options: AgentOptions(model: "placeholder"))
+        reviewDataContext.update(
+            agent: placeholderAgent,
+            messages: [.userMessage(.init(message: "test"))],
+            reviewOrchestrator: mockOrchestrator
+        )
+
+        let scheduler = ReviewScheduler(
+            noReview: false,
+            noMemory: false,
+            reviewDataContext: reviewDataContext,
+            traceDir: "/tmp/test-trace-\(UUID().uuidString)"
+        )
+
+        let context = makeContext(runCompleteContext: makeRunCompleteContext(numTurns: 8))
+        let event = makeCompletedEvent()
+
+        // Should not crash when eventBus is nil
+        await scheduler.handle(event, context: context)
+        try? await _Concurrency.Task.sleep(nanoseconds: 500_000_000)
+
+        #expect(mockOrchestrator.callTracker.executeReviewCalled)
+    }
+
+    @Test("lastReviewSummaryValue is set after successful review with changes")
+    func testLastReviewSummarySetAfterReview() async {
+        let mockOrchestrator = MockReviewOrchestrator(
+            shouldReviewResult: (memory: true, skill: true),
+            reviewResult: ReviewAgentResult(
+                memoryChanges: ["m1"],
+                skillChanges: ["s1"],
+                summary: "Full review summary",
+                reviewMessages: []
+            )
+        )
+
+        let reviewDataContext = ReviewDataContext()
+        let placeholderAgent = Agent(options: AgentOptions(model: "placeholder"))
+        reviewDataContext.update(
+            agent: placeholderAgent,
+            messages: [.userMessage(.init(message: "test"))],
+            reviewOrchestrator: mockOrchestrator
+        )
+
+        let scheduler = ReviewScheduler(
+            noReview: false,
+            noMemory: false,
+            reviewDataContext: reviewDataContext,
+            traceDir: "/tmp/test-trace-\(UUID().uuidString)"
+        )
+
+        #expect(scheduler.lastReviewSummaryValue == nil)
+
+        let context = makeContext(runCompleteContext: makeRunCompleteContext(numTurns: 8))
+        let event = makeCompletedEvent()
+
+        await scheduler.handle(event, context: context)
+        try? await _Concurrency.Task.sleep(nanoseconds: 500_000_000)
+
+        let summary = scheduler.lastReviewSummaryValue
+        #expect(summary != nil)
+        #expect(summary!.contains("1 条记忆"))
+        #expect(summary!.contains("1 个技能"))
+    }
+
+    // MARK: - onReviewResult callback
+
+    @Test("onReviewResult callback is invoked on successful review")
+    func testOnReviewResultCallbackSuccess() async {
+        let mockOrchestrator = MockReviewOrchestrator(
+            shouldReviewResult: (memory: true, skill: false),
+            reviewResult: ReviewAgentResult(
+                memoryChanges: ["mem-1"],
+                skillChanges: [],
+                summary: "Review done",
+                reviewMessages: []
+            )
+        )
+
+        let reviewDataContext = ReviewDataContext()
+        let placeholderAgent = Agent(options: AgentOptions(model: "placeholder"))
+        reviewDataContext.update(
+            agent: placeholderAgent,
+            messages: [.userMessage(.init(message: "test"))],
+            reviewOrchestrator: mockOrchestrator
+        )
+
+        let callbackBox = ReviewEventBox()
+        let scheduler = ReviewScheduler(
+            noReview: false,
+            noMemory: false,
+            reviewDataContext: reviewDataContext,
+            traceDir: "/tmp/test-trace-\(UUID().uuidString)",
+            onReviewResult: { event in
+                callbackBox.set(event)
+            }
+        )
+
+        let context = makeContext(runCompleteContext: makeRunCompleteContext(numTurns: 8))
+        let event = makeCompletedEvent()
+
+        await scheduler.handle(event, context: context)
+        try? await _Concurrency.Task.sleep(nanoseconds: 500_000_000)
+
+        let received = callbackBox.value
+        #expect(received != nil)
+        #expect(received!.success == true)
+        #expect(received!.memoryChanges == ["mem-1"])
+        #expect(received!.sessionId == "test-session")
+    }
+
+    @Test("onReviewResult callback is invoked on review failure")
+    func testOnReviewResultCallbackFailure() async {
+        let mockOrchestrator = MockReviewOrchestrator(
+            shouldReviewResult: (memory: true, skill: false),
+            reviewResult: nil
+        )
+
+        let reviewDataContext = ReviewDataContext()
+        let placeholderAgent = Agent(options: AgentOptions(model: "placeholder"))
+        reviewDataContext.update(
+            agent: placeholderAgent,
+            messages: [.userMessage(.init(message: "test"))],
+            reviewOrchestrator: mockOrchestrator
+        )
+
+        let callbackBox = ReviewEventBox()
+        let scheduler = ReviewScheduler(
+            noReview: false,
+            noMemory: false,
+            reviewDataContext: reviewDataContext,
+            traceDir: "/tmp/test-trace-\(UUID().uuidString)",
+            onReviewResult: { event in
+                callbackBox.set(event)
+            }
+        )
+
+        let context = makeContext(runCompleteContext: makeRunCompleteContext(numTurns: 8))
+        let event = makeCompletedEvent()
+
+        await scheduler.handle(event, context: context)
+        try? await _Concurrency.Task.sleep(nanoseconds: 500_000_000)
+
+        let received = callbackBox.value
+        #expect(received != nil)
+        #expect(received!.success == false)
+        #expect(received!.memoryChanges.isEmpty)
+    }
+
+    @Test("setOnReviewResult updates callback after init")
+    func testSetOnReviewResultUpdatesCallback() async {
+        let mockOrchestrator = MockReviewOrchestrator(
+            shouldReviewResult: (memory: true, skill: false),
+            reviewResult: ReviewAgentResult(
+                memoryChanges: ["mem"],
+                skillChanges: [],
+                summary: "done",
+                reviewMessages: []
+            )
+        )
+
+        let reviewDataContext = ReviewDataContext()
+        let placeholderAgent = Agent(options: AgentOptions(model: "placeholder"))
+        reviewDataContext.update(
+            agent: placeholderAgent,
+            messages: [.userMessage(.init(message: "test"))],
+            reviewOrchestrator: mockOrchestrator
+        )
+
+        let callbackBox = ReviewEventBox()
+        let scheduler = ReviewScheduler(
+            noReview: false,
+            noMemory: false,
+            reviewDataContext: reviewDataContext,
+            traceDir: "/tmp/test-trace-\(UUID().uuidString)"
+        )
+
+        await scheduler.setOnReviewResult { event in
+            callbackBox.set(event)
+        }
+
+        let context = makeContext(runCompleteContext: makeRunCompleteContext(numTurns: 8))
+        let event = makeCompletedEvent()
+
+        await scheduler.handle(event, context: context)
+        try? await _Concurrency.Task.sleep(nanoseconds: 500_000_000)
+
+        #expect(callbackBox.value != nil)
+        #expect(callbackBox.value!.success == true)
+    }
+
+    private func makeContextWithEventBus(
+        _ eventBus: EventBus,
+        sessionId: String = "test-session",
+        runCompleteContext: RunCompleteContext? = nil
+    ) -> EventHandlerContext {
+        EventHandlerContext(
+            sessionId: sessionId,
+            config: AxionConfig(apiKey: ""),
+            eventBus: eventBus,
+            externallyModified: false,
+            externallyModifiedFlag: nil,
+            takeoverEvent: nil,
+            runCompleteContext: runCompleteContext,
+            sessionStore: SessionStore(sessionsDir: nil)
+        )
     }
 }

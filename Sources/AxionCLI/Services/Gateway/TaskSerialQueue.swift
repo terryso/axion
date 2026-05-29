@@ -30,17 +30,20 @@ actor TaskSerialQueue: TaskSerialQueueProtocol {
     private let runtimeManager: any DaemonRuntimeManaging
     private let config: AxionConfig
     private let runner: GatewayRunner
+    private let extraHandlers: [any EventHandler]
     private let replyHandler: @Sendable (Int64, String) async -> Void
 
     init(
         runtimeManager: any DaemonRuntimeManaging,
         config: AxionConfig,
         runner: GatewayRunner,
+        extraHandlers: [any EventHandler] = [],
         replyHandler: @Sendable @escaping (Int64, String) async -> Void
     ) {
         self.runtimeManager = runtimeManager
         self.config = config
         self.runner = runner
+        self.extraHandlers = extraHandlers
         self.replyHandler = replyHandler
     }
 
@@ -91,12 +94,13 @@ actor TaskSerialQueue: TaskSerialQueueProtocol {
                         ) { [weak self] message, chatId in
                             await self?.replyHandler(chatId, message)
                         }
+                        let allHandlers: [any EventHandler] = [tgHandler] + self.extraHandlers
                         return try await self.runtimeManager.executeRun(
                             task: pending.task,
                             buildConfig: buildConfig,
                             eventBus: eventBus,
                             runOverrides: .default,
-                            extraHandlers: [tgHandler]
+                            extraHandlers: allHandlers
                         )
                     }
                     group.addTask {

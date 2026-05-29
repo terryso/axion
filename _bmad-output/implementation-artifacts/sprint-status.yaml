@@ -1,5 +1,6 @@
 # generated: 2026-05-08
 # last_updated: 2026-05-30
+# story-30.2-created: 2026-05-30
 # story-29-1-started: 2026-05-29
 # story-29.1-created: 2026-05-29
 # retro-epic-28: 2026-05-29
@@ -416,6 +417,6 @@ development_status:
   # Epic 30: 自进化调度
   epic-30: in-progress
   30-1-reviewscheduler-isolated-review-agent: done
-  30-2-review-result-handling-optional-push: backlog
+  30-2-review-result-handling-optional-push: done
   30-3-curatorscheduler-auto-scheduling: backlog
   epic-30-retrospective: optional
