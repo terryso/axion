@@ -8,6 +8,7 @@ import OpenAgentSDK
 actor TGEventHandler: EventHandler {
     let identifier = "telegram-push"
     let subscribedEventTypes: [any AgentEvent.Type] = [
+        ToolStartedEvent.self,
         ToolCompletedEvent.self,
         AgentCompletedEvent.self,
         AgentFailedEvent.self,
@@ -18,6 +19,7 @@ actor TGEventHandler: EventHandler {
     private var lastPushTime: Date = .distantPast
     private let pushInterval: TimeInterval = 5.0
     private var stepCount: Int = 0
+    private var pendingInputs: [String: String] = [:]
 
     init(chatId: Int64, sendMessage: @escaping @Sendable (String, Int64) async -> Void) {
         self.chatId = chatId
@@ -26,6 +28,8 @@ actor TGEventHandler: EventHandler {
 
     func handle(_ event: any AgentEvent, context: EventHandlerContext) async {
         switch event {
+        case let started as ToolStartedEvent:
+            await handleToolStarted(started)
         case let toolEvent as ToolCompletedEvent:
             await handleToolCompleted(toolEvent)
         case let completedEvent as AgentCompletedEvent:
@@ -37,15 +41,39 @@ actor TGEventHandler: EventHandler {
         }
     }
 
+    private func handleToolStarted(_ event: ToolStartedEvent) async {
+        if let input = event.input, !input.isEmpty {
+            pendingInputs[event.toolUseId] = input
+        }
+    }
+
     private func handleToolCompleted(_ event: ToolCompletedEvent) async {
         stepCount += 1
         let now = Date()
-        guard now.timeIntervalSince(lastPushTime) >= pushInterval else { return }
+        guard now.timeIntervalSince(lastPushTime) >= pushInterval else {
+            pendingInputs.removeValue(forKey: event.toolUseId)
+            return
+        }
         lastPushTime = now
 
         let statusEmoji = event.isError ? "❌" : "✓"
-        let message = "步骤 \(stepCount): \(event.toolName) (\(event.durationMs)ms) \(statusEmoji)"
+        let input = pendingInputs.removeValue(forKey: event.toolUseId)
+        let detail = summarizeToolInput(toolName: event.toolName, input: input)
+        let message = "步骤 \(stepCount): \(detail) (\(event.durationMs)ms) \(statusEmoji)"
         await sendMessage(message, chatId)
+    }
+
+    private func summarizeToolInput(toolName: String, input: String?) -> String {
+        guard let input, !input.isEmpty else { return toolName }
+        // For JSON input, try to extract the meaningful field
+        if toolName == "Bash", let data = input.data(using: .utf8),
+           let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+           let command = json["command"] as? String {
+            return "Bash: \(command.prefix(80))"
+        }
+        // For other tools, show truncated input
+        let truncated = String(input.prefix(80))
+        return "\(toolName): \(truncated)"
     }
 
     private func handleCompleted(_ event: AgentCompletedEvent) async {

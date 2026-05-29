@@ -63,10 +63,11 @@ struct TGEventHandlerTests {
         let types = await handler.subscribedEventTypes.map { $0 }
         let typeNames = Set(types.map { String(describing: $0) })
 
+        #expect(typeNames.contains("ToolStartedEvent"))
         #expect(typeNames.contains("ToolCompletedEvent"))
         #expect(typeNames.contains("AgentCompletedEvent"))
         #expect(typeNames.contains("AgentFailedEvent"))
-        #expect(types.count == 3)
+        #expect(types.count == 4)
     }
 
     // MARK: - Task 4.2: ToolCompletedEvent push content format

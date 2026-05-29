@@ -405,13 +405,13 @@ development_status:
   epic-28-retrospective: done
 
   # Epic 29: Telegram 远程交互
-  epic-29: in-progress
+  epic-29: done
   29-1-telegramadapter-core-communication: done
   29-2-task-serial-execution-queue: done
   29-3-tgeventhandler-event-push: done
   29-4-tg-command-support: done
-  29-5-tg-image-support: backlog
-  epic-29-retrospective: optional
+  29-5-tg-image-support: done
+  epic-29-retrospective: done
 
   # Epic 30: 自进化调度
   epic-30: backlog

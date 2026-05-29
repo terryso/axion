@@ -62,8 +62,11 @@ actor DaemonRuntimeManager: DaemonRuntimeManaging {
             throw error
         }
 
-        eventLoopTask.cancel()
+        // Stop the event loop gracefully: finish() on the AsyncStream lets
+        // in-flight handler calls (e.g. TGEventHandler sending completion)
+        // complete before the `for await` loop exits.
         await runtime.stopEventLoop()
+        _ = await eventLoopTask.result
 
         sessionHistory[result.sessionId] = DaemonSessionInfo(
             sessionId: result.sessionId,
@@ -115,8 +118,10 @@ actor DaemonRuntimeManager: DaemonRuntimeManaging {
             throw error
         }
 
-        eventLoopTask.cancel()
+        // Stop the event loop gracefully: finish() on the AsyncStream lets
+        // in-flight handler calls complete before the `for await` loop exits.
         await runtime.stopEventLoop()
+        _ = await eventLoopTask.result
 
         sessionHistory[result.sessionId] = DaemonSessionInfo(
             sessionId: result.sessionId,
