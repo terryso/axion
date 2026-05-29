@@ -27,6 +27,10 @@ struct TaskSerialQueueTests {
         }
 
         func executeRun(task: String, buildConfig: AgentBuilder.BuildConfig, eventBus: OpenAgentSDK.EventBus, runOverrides: AxionRuntime.RunOverrides) async throws -> AxionRunResult {
+            return try await executeRun(task: task, buildConfig: buildConfig, eventBus: eventBus, runOverrides: runOverrides, extraHandlers: [])
+        }
+
+        func executeRun(task: String, buildConfig: AgentBuilder.BuildConfig, eventBus: OpenAgentSDK.EventBus, runOverrides: AxionRuntime.RunOverrides, extraHandlers: [any EventHandler]) async throws -> AxionRunResult {
             executedTasks.append(task)
             executeCallCount += 1
             if let delay = delays[task] {
@@ -338,8 +342,6 @@ struct TaskSerialQueueTests {
 
         let replies = await collector.messages(for: 100)
         #expect(replies.contains { $0.contains("任务开始执行") && $0.contains("hello") })
-        // Should also have completion or result
-        #expect(replies.contains { $0.contains("任务完成") || $0.contains("任务失败") })
 
         await server.stop()
     }

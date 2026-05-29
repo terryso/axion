@@ -77,7 +77,7 @@ actor TaskSerialQueue: TaskSerialQueueProtocol {
             let timeoutMinutes = config.gatewayTaskTimeoutMinutes ?? 10.0
 
             do {
-                let result = try await withThrowingTaskGroup(of: AxionRunResult.self) { group in
+                let _ = try await withThrowingTaskGroup(of: AxionRunResult.self) { group in
                     group.addTask {
                         let request = OpenAgentSDK.CreateRunRequest(task: pending.task)
                         let buildConfig = AgentBuilder.BuildConfig.forAPI(
@@ -85,11 +85,18 @@ actor TaskSerialQueue: TaskSerialQueueProtocol {
                             task: pending.task,
                             request: request
                         )
+                        let eventBus = EventBus()
+                        let tgHandler = TGEventHandler(
+                            chatId: pending.chatId
+                        ) { [weak self] message, chatId in
+                            await self?.replyHandler(chatId, message)
+                        }
                         return try await self.runtimeManager.executeRun(
                             task: pending.task,
                             buildConfig: buildConfig,
-                            eventBus: EventBus(),
-                            runOverrides: .default
+                            eventBus: eventBus,
+                            runOverrides: .default,
+                            extraHandlers: [tgHandler]
                         )
                     }
                     group.addTask {
@@ -100,8 +107,7 @@ actor TaskSerialQueue: TaskSerialQueueProtocol {
                     group.cancelAll()
                     return result
                 }
-                let summary = Self.summarize(result)
-                await replyHandler(pending.chatId, summary)
+                // TGEventHandler already sends completion/failure messages via AgentCompletedEvent/AgentFailedEvent
             } catch is TaskTimeoutError {
                 await replyHandler(pending.chatId, "任务超时已取消 (\(Int(timeoutMinutes)) 分钟)")
             } catch {

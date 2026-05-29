@@ -123,6 +123,19 @@ final class MockDaemonRuntimeManager: DaemonRuntimeManaging, @unchecked Sendable
         eventBus: EventBus,
         runOverrides: AxionRuntime.RunOverrides
     ) async throws -> AxionRunResult {
+        return try await executeRun(
+            task: task, buildConfig: buildConfig, eventBus: eventBus,
+            runOverrides: runOverrides, extraHandlers: []
+        )
+    }
+
+    func executeRun(
+        task: String,
+        buildConfig: AgentBuilder.BuildConfig,
+        eventBus: EventBus,
+        runOverrides: AxionRuntime.RunOverrides,
+        extraHandlers: [any EventHandler]
+    ) async throws -> AxionRunResult {
         _executeCount.increment()
         if let error { throw error }
         guard let result else { fatalError("MockDaemonRuntimeManager: no result and no error") }

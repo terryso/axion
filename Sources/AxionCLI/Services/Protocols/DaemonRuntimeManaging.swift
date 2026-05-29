@@ -17,6 +17,15 @@ protocol DaemonRuntimeManaging: Sendable {
         runOverrides: AxionRuntime.RunOverrides
     ) async throws -> AxionRunResult
 
+    /// Execute a run with additional event handlers (e.g. TGEventHandler).
+    func executeRun(
+        task: String,
+        buildConfig: AgentBuilder.BuildConfig,
+        eventBus: EventBus,
+        runOverrides: AxionRuntime.RunOverrides,
+        extraHandlers: [any EventHandler]
+    ) async throws -> AxionRunResult
+
     /// Execute a skill through a per-request AxionRuntime with pre-registered API handlers.
     func executeSkill(
         skill: OpenAgentSDK.Skill,

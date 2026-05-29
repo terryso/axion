@@ -27,10 +27,29 @@ actor DaemonRuntimeManager: DaemonRuntimeManaging {
         eventBus: EventBus,
         runOverrides: AxionRuntime.RunOverrides = .default
     ) async throws -> AxionRunResult {
+        return try await executeRun(
+            task: task,
+            buildConfig: buildConfig,
+            eventBus: eventBus,
+            runOverrides: runOverrides,
+            extraHandlers: []
+        )
+    }
+
+    func executeRun(
+        task: String,
+        buildConfig: AgentBuilder.BuildConfig,
+        eventBus: EventBus,
+        runOverrides: AxionRuntime.RunOverrides = .default,
+        extraHandlers: [any EventHandler]
+    ) async throws -> AxionRunResult {
         let runtime = runtimeFactory(eventBus)
 
         await runtime.registerHandler(CostEventHandler())
         await runtime.registerHandler(TraceEventHandler(traceDir: traceDir))
+        for handler in extraHandlers {
+            await runtime.registerHandler(handler)
+        }
 
         let eventLoopTask = _Concurrency.Task { await runtime.startEventLoop() }
 
