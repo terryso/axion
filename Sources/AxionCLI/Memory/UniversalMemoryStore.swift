@@ -31,6 +31,15 @@ actor UniversalMemoryStore {
         Self.ensureFilesExistSync(in: self.memoryDir)
     }
 
+    /// Read-only initializer that skips file/directory creation.
+    /// Use for listing/inspection where creating files would be a side effect.
+    init(readOnlyMemoryDir: String) {
+        let expanded = (readOnlyMemoryDir as NSString).expandingTildeInPath
+        self.memoryDir = URL(fileURLWithPath: expanded)
+        self.maxMemoryChars = 4000
+        self.maxUserChars = 2000
+    }
+
     // MARK: - Read / Write
 
     func read(target: MemoryTarget) -> String {
@@ -99,6 +108,41 @@ actor UniversalMemoryStore {
         read(target: target).count
     }
 
+    // MARK: - Entry Count
+
+    /// Number of §-delimited entries in the target file.
+    func entryCount(target: MemoryTarget) -> Int {
+        let content = read(target: target)
+        return parseEntries(from: content).count
+    }
+
+    /// Last modification date of the target file, or nil if not found.
+    func lastModifiedDate(target: MemoryTarget) -> Date? {
+        let url = fileURL(for: target)
+        guard let attrs = try? fileManager.attributesOfItem(atPath: url.path),
+              let date = attrs[.modificationDate] as? Date else {
+            return nil
+        }
+        return date
+    }
+
+    /// Summary info for a target: entry count and last modified date in one call.
+    func summary(target: MemoryTarget) -> (count: Int, lastModified: Date?) {
+        let content = read(target: target)
+        let count = parseEntries(from: content).count
+        let url = fileURL(for: target)
+        let date = (try? fileManager.attributesOfItem(atPath: url.path))?[.modificationDate] as? Date
+        return (count, date)
+    }
+
+    /// Parse §-delimited entries from raw content.
+    func parseEntries(from content: String) -> [String] {
+        let parts = content.components(separatedBy: "§")
+        return parts
+            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+            .filter { !$0.isEmpty }
+    }
+
     // MARK: - Private
 
     private func fileURL(for target: MemoryTarget) -> URL {
@@ -126,14 +170,6 @@ actor UniversalMemoryStore {
         } catch {
             fputs("UniversalMemoryStore init error: \(error)\n", stderr)
         }
-    }
-
-    /// Parse §-delimited entries from file content.
-    private func parseEntries(from content: String) -> [String] {
-        let parts = content.components(separatedBy: "§")
-        return parts
-            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
-            .filter { !$0.isEmpty }
     }
 
     /// Serialize entries back to §-delimited format.

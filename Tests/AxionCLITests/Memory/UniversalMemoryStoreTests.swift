@@ -216,6 +216,89 @@ struct UniversalMemoryStoreTests {
         #expect(count == 0)
     }
 
+    // MARK: - Entry Count
+
+    @Test("entryCount returns 0 for empty file")
+    func entryCountEmpty() async {
+        let dir = makeTempDir()
+        defer { cleanup(dir) }
+
+        let store = UniversalMemoryStore(memoryDir: dir.path)
+        let count = await store.entryCount(target: .memory)
+        #expect(count == 0)
+    }
+
+    @Test("entryCount returns correct count for populated file")
+    func entryCountPopulated() async {
+        let dir = makeTempDir()
+        defer { cleanup(dir) }
+
+        let store = UniversalMemoryStore(memoryDir: dir.path, maxMemoryChars: 1000)
+        _ = await store.add(target: .memory, content: "first entry")
+        _ = await store.add(target: .memory, content: "second entry")
+        _ = await store.add(target: .memory, content: "third entry")
+
+        let count = await store.entryCount(target: .memory)
+        #expect(count == 3)
+    }
+
+    @Test("entryCount counts entries independently for each target")
+    func entryCountPerTarget() async {
+        let dir = makeTempDir()
+        defer { cleanup(dir) }
+
+        let store = UniversalMemoryStore(memoryDir: dir.path, maxMemoryChars: 1000, maxUserChars: 1000)
+        _ = await store.add(target: .memory, content: "mem1")
+        _ = await store.add(target: .memory, content: "mem2")
+        _ = await store.add(target: .user, content: "user1")
+
+        let memCount = await store.entryCount(target: .memory)
+        let userCount = await store.entryCount(target: .user)
+        #expect(memCount == 2)
+        #expect(userCount == 1)
+    }
+
+    // MARK: - Last Modified Date
+
+    @Test("lastModifiedDate returns nil for missing file")
+    func lastModifiedDateMissing() async {
+        let dir = makeTempDir()
+        defer { cleanup(dir) }
+
+        let store = UniversalMemoryStore(memoryDir: dir.path)
+        // Delete the file after init
+        let url = dir.appendingPathComponent("MEMORY.md")
+        try? FileManager.default.removeItem(at: url)
+
+        let date = await store.lastModifiedDate(target: .memory)
+        #expect(date == nil)
+    }
+
+    @Test("lastModifiedDate returns date for existing file")
+    func lastModifiedDateExists() async {
+        let dir = makeTempDir()
+        defer { cleanup(dir) }
+
+        let store = UniversalMemoryStore(memoryDir: dir.path)
+        await store.write(target: .memory, content: "some content")
+
+        let date = await store.lastModifiedDate(target: .memory)
+        #expect(date != nil, "Should return a modification date for an existing file")
+    }
+
+    // MARK: - Parse Entries (public)
+
+    @Test("parseEntries splits § delimited content")
+    func parseEntriesPublic() async {
+        let dir = makeTempDir()
+        defer { cleanup(dir) }
+
+        let store = UniversalMemoryStore(memoryDir: dir.path)
+        let content = "§\nalpha\n§\n§\nbeta\n§\n"
+        let entries = await store.parseEntries(from: content)
+        #expect(entries == ["alpha", "beta"])
+    }
+
     // MARK: - Default limits
 
     @Test("default char limits are 4000 and 2000")
@@ -228,5 +311,47 @@ struct UniversalMemoryStoreTests {
         let userLimit = await store.maxUserChars
         #expect(memLimit == 4000)
         #expect(userLimit == 2000)
+    }
+
+    // MARK: - Summary
+
+    @Test("summary returns count and date in one call")
+    func summaryReturnsCountAndDate() async {
+        let dir = makeTempDir()
+        defer { cleanup(dir) }
+
+        let store = UniversalMemoryStore(memoryDir: dir.path, maxMemoryChars: 1000)
+        _ = await store.add(target: .memory, content: "first")
+        _ = await store.add(target: .memory, content: "second")
+
+        let info = await store.summary(target: .memory)
+        #expect(info.count == 2, "Summary should report 2 entries")
+        #expect(info.lastModified != nil, "Summary should return a modification date")
+    }
+
+    @Test("summary returns 0 count and nil date for missing file")
+    func summaryMissingFile() async {
+        let dir = makeTempDir()
+        defer { cleanup(dir) }
+
+        let store = UniversalMemoryStore(readOnlyMemoryDir: "/tmp/axion-test-nonexistent-\(UUID().uuidString)")
+        let info = await store.summary(target: .memory)
+        #expect(info.count == 0, "Summary should report 0 entries for missing file")
+        #expect(info.lastModified == nil, "Summary should return nil date for missing file")
+    }
+
+    // MARK: - Read-only init
+
+    @Test("readOnlyMemoryDir init does not create files")
+    func readOnlyInitNoSideEffects() async {
+        let dir = makeTempDir()
+        defer { cleanup(dir) }
+
+        let nestedDir = dir.appendingPathComponent("sub-\(UUID().uuidString)")
+        let store = UniversalMemoryStore(readOnlyMemoryDir: nestedDir.path)
+        let content = await store.read(target: .memory)
+        #expect(content == "", "Read should return empty for missing directory")
+        #expect(!FileManager.default.fileExists(atPath: nestedDir.path),
+            "Read-only init should NOT create the directory")
     }
 }
