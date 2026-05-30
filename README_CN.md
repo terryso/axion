@@ -1,4 +1,8 @@
-# Open Agent SDK (Swift)
+<div align="center">
+
+<img src="https://i.v2ex.co/K1Ou9x2Ml.png" alt="Open Agent SDK (Swift)" width="100%">
+
+[![Product Hunt](https://api.producthunt.com/widgets/embed-image/v1/featured.svg?post_id=1158873&theme=light)](https://www.producthunt.com/products/openagent-sdk-for-swift?embed=true&utm_source=badge-featured&utm_medium=badge&utm_campaign=badge-openagent-sdk-for-swift)
 
 [![Swift](https://img.shields.io/badge/Swift-6.1-orange)](https://swift.org)
 [![Platform](https://img.shields.io/badge/platform-macOS%2013%2B-blue)](https://developer.apple.com/macos/)
@@ -15,6 +19,8 @@
 > **灵感来自** [open-agent-sdk-typescript](https://github.com/codeany-ai/open-agent-sdk-typescript) — 将相同的 Agent 架构引入 Swift 生态。
 
 其他语言版本：**TypeScript**: [open-agent-sdk-typescript](https://github.com/codeany-ai/open-agent-sdk-typescript) | **Go**: [open-agent-sdk-go](https://github.com/codeany-ai/open-agent-sdk-go)
+
+</div>
 
 ## 特性亮点
 

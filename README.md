@@ -1,4 +1,8 @@
-# Open Agent SDK (Swift)
+<div align="center">
+
+<img src="https://i.v2ex.co/K1Ou9x2Ml.png" alt="Open Agent SDK (Swift)" width="100%">
+
+[![Product Hunt](https://api.producthunt.com/widgets/embed-image/v1/featured.svg?post_id=1158873&theme=light)](https://www.producthunt.com/products/openagent-sdk-for-swift?embed=true&utm_source=badge-featured&utm_medium=badge&utm_campaign=badge-openagent-sdk-for-swift)
 
 [![Swift](https://img.shields.io/badge/Swift-6.1-orange)](https://swift.org)
 [![Platform](https://img.shields.io/badge/platform-macOS%2013%2B-blue)](https://developer.apple.com/macos/)
@@ -15,6 +19,8 @@ Open-source Agent SDK for Swift — run the full agent loop **in-process** with 
 > **Inspired by** [open-agent-sdk-typescript](https://github.com/codeany-ai/open-agent-sdk-typescript) — bringing the same agentic architecture to the Swift ecosystem.
 
 Also available in **TypeScript**: [open-agent-sdk-typescript](https://github.com/codeany-ai/open-agent-sdk-typescript) | **Go**: [open-agent-sdk-go](https://github.com/codeany-ai/open-agent-sdk-go)
+
+</div>
 
 ## Highlights
 
