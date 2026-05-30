@@ -14,6 +14,9 @@ enum MemoryScanResult: Equatable, Sendable {
 /// - **Load-time** (`scanOnLoad`): Returns warnings for suspicious entries without blocking.
 struct MemorySecurityScanner: Sendable {
 
+    /// Unicode scalar values for invisible characters that should be flagged.
+    private static let invisibleScalarValues: [UInt32] = [0x200B, 0x200C, 0x200D, 0xFEFF]
+
     // MARK: - Write-time scan
 
     /// Scan content before writing. Returns `.rejected` for threats, `.safe` otherwise.
@@ -43,6 +46,23 @@ struct MemorySecurityScanner: Sendable {
         return .safe
     }
 
+    // MARK: - Entry-level scan (Story 31.4)
+
+    /// Scan a single entry for load-time filtering. Combines write-time and
+    /// load-time checks to decide whether the entry should be injected.
+    func scanEntry(content: String) -> MemoryScanResult {
+        let writeResult = scan(content: content)
+        if case .rejected = writeResult { return writeResult }
+
+        for scalarValue in Self.invisibleScalarValues {
+            if content.unicodeScalars.contains(where: { $0.value == scalarValue }) {
+                return .warning(message: "Invisible Unicode character detected")
+            }
+        }
+
+        return .safe
+    }
+
     // MARK: - Load-time scan
 
     /// Scan persisted content at load time. Returns a list of warning strings
@@ -51,8 +71,7 @@ struct MemorySecurityScanner: Sendable {
         var warnings: [String] = []
 
         // Invisible Unicode detection (zero-width characters, BOM)
-        let invisibleScalarValues: [UInt32] = [0x200B, 0x200C, 0x200D, 0xFEFF]
-        for scalarValue in invisibleScalarValues {
+        for scalarValue in Self.invisibleScalarValues {
             if content.unicodeScalars.contains(where: { $0.value == scalarValue }) {
                 warnings.append("Invisible Unicode character detected")
                 break

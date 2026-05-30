@@ -87,6 +87,8 @@
 
 generated: 2026-05-08
 last_updated: 2026-05-31
+# story-31-4-started: 2026-05-31
+# story-31.4-created: 2026-05-31
 # story-31.3-created: 2026-05-31
 # story-31.2-created: 2026-05-31
 # story-31.1-created: 2026-05-31
@@ -437,6 +439,6 @@ development_status:
   31-1-dual-track-memory-storage: done
   31-2-memory-operation-tool: done
   31-3-review-agent-universal-memory-tool: done
-  31-4-security-scanner-frozen-snapshot: backlog
+  31-4-security-scanner-frozen-snapshot: done
   31-5-cli-memory-management: backlog
   epic-31-retrospective: optional
