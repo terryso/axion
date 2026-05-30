@@ -68,18 +68,27 @@ public struct ReviewOrchestrator: Sendable {
     /// Usage store for skill usage data.
     public let usageStore: SkillUsageStore
 
+    /// Additional tools to inject alongside the built-in review tools.
+    ///
+    /// Use this to extend the review agent with domain-specific memory tools
+    /// (e.g., a tool that writes to MEMORY.md / USER.md alongside FactStore).
+    /// These tools are appended after the five built-in review tools.
+    public let additionalReviewTools: [ToolProtocol]
+
     public init(
         scheduleConfig: ReviewScheduleConfig,
         factStore: FactStore,
         skillRegistry: SkillRegistry,
         skillEvolver: any SkillEvolver,
-        usageStore: SkillUsageStore
+        usageStore: SkillUsageStore,
+        additionalReviewTools: [ToolProtocol] = []
     ) {
         self.scheduleConfig = scheduleConfig
         self.factStore = factStore
         self.skillRegistry = skillRegistry
         self.skillEvolver = skillEvolver
         self.usageStore = usageStore
+        self.additionalReviewTools = additionalReviewTools
     }
 
     // MARK: - shouldReview
@@ -128,7 +137,7 @@ public struct ReviewOrchestrator: Sendable {
             skillEvolver: skillEvolver,
             usageStore: usageStore
         )
-        reviewAgent.options.tools = reviewTools
+        reviewAgent.options.tools = reviewTools + additionalReviewTools
 
         // 4. Build conversation context
         let conversationContext = Self.formatMessagesForReview(messages)
