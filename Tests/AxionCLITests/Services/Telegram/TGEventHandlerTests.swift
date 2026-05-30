@@ -145,6 +145,66 @@ struct TGEventHandlerTests {
         #expect(messages[0].message.contains("The task is done successfully."))
     }
 
+    // MARK: - extractLastResultSection
+
+    @Test("extractLastResultSection returns full text when no [结果] marker")
+    func extractResultNoMarker() {
+        let text = "Task completed successfully."
+        #expect(TGEventHandler.extractLastResultSection(from: text) == text)
+    }
+
+    @Test("extractLastResultSection returns full text when single [结果] marker")
+    func extractResultSingleMarker() {
+        let text = "Some work done.\n[结果] Task completed."
+        #expect(TGEventHandler.extractLastResultSection(from: text) == text)
+    }
+
+    @Test("extractLastResultSection trims stale observations from previous session task")
+    func extractResultTrimsStaleSection() {
+        let text = """
+        计算器已经打开了，看起来之前输入过 5+3，显示 8。
+        ✅ 计算结果：5 + 3 = 8
+        [结果] 计算器已打开，5+3=8 计算完成
+
+        先清除之前的计算，然后点击 5、+、9、8、=
+        ✅ 计算完成：5 + 98 = 103
+        从计算器确认：5+98=103
+        [结果] 计算器已计算 5+98=103
+        """
+        let result = TGEventHandler.extractLastResultSection(from: text)
+        #expect(!result.contains("5+3=8"))
+        #expect(!result.contains("计算器已经打开了"))
+        #expect(result.contains("5+98=103"))
+        #expect(result.contains("[结果] 计算器已计算 5+98=103"))
+    }
+
+    @Test("AgentCompletedEvent with stale session history only pushes current task result")
+    func agentCompletedTrimsStaleHistory() async {
+        let collector = MessageCollector()
+        let handler = makeHandler(collector: collector)
+        let context = makeContext()
+
+        let text = """
+        计算器已打开，之前有 5+3=8。
+        [结果] 5+3=8 完成
+        清除后执行 5+98=103
+        ✅ 5 + 98 = 103
+        [结果] 计算器已计算 5+98=103
+        """
+        let event = AgentCompletedEvent(
+            sessionId: nil,
+            totalSteps: 9,
+            durationMs: 733_000,
+            resultText: text
+        )
+        await handler.handle(event, context: context)
+
+        let msg = collector.messages[0].message
+        #expect(!msg.contains("5+3=8"))
+        #expect(msg.contains("5+98=103"))
+        #expect(msg.contains("任务完成"))
+    }
+
     // MARK: - Task 4.5: AgentFailedEvent pushes error (no API key)
 
     @Test("AgentFailedEvent pushes error message without API key")

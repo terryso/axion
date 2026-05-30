@@ -13,7 +13,7 @@ struct SelectorQuery: Codable, Equatable, Sendable {
     enum CodingKeys: String, CodingKey {
         case title
         case titleContains = "title_contains"
-        case axId = "ax_id"
+        case axId = "identifier"
         case role
         case ordinal
     }

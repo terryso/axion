@@ -62,6 +62,8 @@ final class MockCuratorCallTracker: @unchecked Sendable {
 final class CuratorResultBox: @unchecked Sendable {
     private let lock = NSLock()
     private var _value: CuratorResultInfo?
+    private let _signal = DispatchSemaphore(value: 0)
+
     var value: CuratorResultInfo? {
         lock.lock()
         defer { lock.unlock() }
@@ -71,6 +73,11 @@ final class CuratorResultBox: @unchecked Sendable {
         lock.lock()
         _value = newValue
         lock.unlock()
+        _signal.signal()
+    }
+    func wait(timeout: TimeInterval) -> CuratorResultInfo? {
+        let result = _signal.wait(timeout: .now() + timeout)
+        return result == .success ? value : nil
     }
 }
 
@@ -210,8 +217,12 @@ struct CuratorSchedulerTests {
         let event = AgentCompletedEvent(sessionId: "s1", totalSteps: 5, durationMs: 1000, resultText: "done")
 
         await scheduler.handle(event, context: context)
-        try? await _Concurrency.Task.sleep(nanoseconds: 20_000_000)
 
+        // Wait for the launched task to complete
+        let deadline = ContinuousClock.now + .seconds(2)
+        while !mockCurator.callTracker.executeCalled, ContinuousClock.now < deadline {
+            try? await _Concurrency.Task.sleep(nanoseconds: 10_000_000)
+        }
         #expect(mockCurator.callTracker.executeCalled)
     }
 
@@ -236,8 +247,12 @@ struct CuratorSchedulerTests {
         let event = AgentCompletedEvent(sessionId: "s1", totalSteps: 5, durationMs: 1000, resultText: "done")
 
         await scheduler.handle(event, context: context)
-        try? await _Concurrency.Task.sleep(nanoseconds: 20_000_000)
 
+        // Wait for the launched task to set lastCuratorAt
+        let deadline = ContinuousClock.now + .seconds(2)
+        while scheduler.lastCuratorAtValue == nil, ContinuousClock.now < deadline {
+            try? await _Concurrency.Task.sleep(nanoseconds: 10_000_000)
+        }
         #expect(scheduler.lastCuratorAtValue != nil)
     }
 
@@ -278,10 +293,14 @@ struct CuratorSchedulerTests {
         let event = AgentCompletedEvent(sessionId: "s1", totalSteps: 5, durationMs: 1000, resultText: "done")
 
         await scheduler.handle(event, context: context)
-        try? await _Concurrency.Task.sleep(nanoseconds: 20_000_000)
 
+        // Wait for the launched task to complete
+        let deadline = ContinuousClock.now + .seconds(2)
+        while !mockCurator.callTracker.executeCalled, ContinuousClock.now < deadline {
+            try? await _Concurrency.Task.sleep(nanoseconds: 10_000_000)
+        }
         #expect(mockCurator.callTracker.executeCalled)
-        let info = callbackBox.value
+        let info = callbackBox.wait(timeout: 3)
         #expect(info != nil)
         #expect(info!.success == false)
         #expect(info!.error != nil)
@@ -316,9 +335,8 @@ struct CuratorSchedulerTests {
         let event = AgentCompletedEvent(sessionId: "s1", totalSteps: 5, durationMs: 1000, resultText: "done")
 
         await scheduler.handle(event, context: context)
-        try? await _Concurrency.Task.sleep(nanoseconds: 20_000_000)
 
-        let info = callbackBox.value
+        let info = callbackBox.wait(timeout: 3)
         #expect(info != nil)
         #expect(info!.success == true)
         #expect(info!.consolidations == 1)
@@ -344,10 +362,10 @@ struct CuratorSchedulerTests {
         let event = AgentCompletedEvent(sessionId: "s1", totalSteps: 5, durationMs: 1000, resultText: "done")
 
         await scheduler.handle(event, context: context)
-        try? await _Concurrency.Task.sleep(nanoseconds: 20_000_000)
 
-        #expect(callbackBox.value != nil)
-        #expect(callbackBox.value!.success == true)
+        let callbackResult = callbackBox.wait(timeout: 3)
+        #expect(callbackResult != nil)
+        #expect(callbackResult!.success == true)
     }
 
     // MARK: - Identifier and subscription

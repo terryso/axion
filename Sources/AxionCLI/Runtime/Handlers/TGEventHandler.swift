@@ -82,9 +82,40 @@ actor TGEventHandler: EventHandler {
     private func handleCompleted(_ event: AgentCompletedEvent) async {
         var result = "✅ 任务完成 (\(event.totalSteps) 步, \(event.durationMs / 1000)s)"
         if let text = event.resultText, !text.isEmpty {
-            result += "\n\n\(text)"
+            // In persistent sessions the agent may narrate stale observations
+            // from previous tasks before addressing the current one.  Extract
+            // only the last "[结果]" section so the TG completion message
+            // contains the current task's outcome, not old history.
+            let trimmed = Self.extractLastResultSection(from: text)
+            result += "\n\n\(trimmed)"
         }
         await sendMessage(result, chatId)
+    }
+
+    /// Returns the section after the second-to-last `[结果]` line,
+    /// which corresponds to the current task's outcome in a resumed session.
+    /// Falls back to the full text when fewer than 2 `[结果]` markers are found.
+    static func extractLastResultSection(from text: String) -> String {
+        let marker = "[结果]"
+        var markerPositions: [String.Index] = []
+        var searchStart = text.startIndex
+        while let range = text.range(of: marker, range: searchStart..<text.endIndex) {
+            markerPositions.append(range.lowerBound)
+            searchStart = range.upperBound
+        }
+
+        guard markerPositions.count >= 2 else { return text }
+
+        // Find the end of the line containing the second-to-last marker
+        let secondLastPos = markerPositions[markerPositions.count - 2]
+        let afterMarker = text[secondLastPos...]
+        let lineEnd = afterMarker.firstIndex(of: "\n") ?? text.endIndex
+
+        // Start from the character after the newline
+        let start = lineEnd < text.endIndex ? text.index(after: lineEnd) : text.endIndex
+        guard start < text.endIndex else { return text }
+
+        return String(text[start...]).trimmingCharacters(in: .whitespacesAndNewlines)
     }
 
     private func handleFailed(_ event: AgentFailedEvent) async {

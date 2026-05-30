@@ -265,8 +265,8 @@ struct GatewayStartCommand: AsyncParsableCommand {
         setupSignalHandlers(runner: runner)
 
         // Telegram adapter setup
-        if let tgToken = ProcessInfo.processInfo.environment["AXION_TELEGRAM_BOT_TOKEN"] {
-            let allowedUsersStr = ProcessInfo.processInfo.environment["AXION_TELEGRAM_ALLOWED_USERS"] ?? ""
+        if let tgToken = config.telegramBotToken {
+            let allowedUsersStr = config.telegramAllowedUsers ?? ""
             let allowedUsers = Set(allowedUsersStr.split(separator: ",").map {
                 $0.trimmingCharacters(in: .whitespaces)
             })

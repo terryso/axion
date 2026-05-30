@@ -300,8 +300,9 @@ struct DaemonRuntimeManagerTests {
         let res1 = try await r1
         let res2 = try await r2
 
-        #expect(res1.sessionId == "session-alpha")
-        #expect(res2.sessionId == "session-beta")
+        // Concurrent calls may complete in any order; verify both results are present
+        let sessionIds = Set([res1.sessionId, res2.sessionId])
+        #expect(sessionIds == ["session-alpha", "session-beta"])
         #expect(mock1.executeCount == 1)
         #expect(mock2.executeCount == 1)
     }

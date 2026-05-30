@@ -149,11 +149,13 @@ struct TaskSerialQueueTests {
 
         let processingTask = _Concurrency.Task { await queue.startProcessing() }
 
+        // Enqueue sequentially to avoid data race on non-actor TaskSerialQueue.queue
         await queue.enqueue(task: "task-A", chatId: 100)
-        await queue.enqueue(task: "task-B", chatId: 100)
+        await waitUntil { await runtime.tasks.count >= 1 }
 
-        // Wait for processing
-        try await _Concurrency.Task.sleep(nanoseconds: 200_000_000)
+        await queue.enqueue(task: "task-B", chatId: 100)
+        await waitUntil { await runtime.tasks.count >= 2 }
+
         await queue.cancelAll()
         processingTask.cancel()
 
@@ -184,7 +186,8 @@ struct TaskSerialQueueTests {
         let processingTask = _Concurrency.Task { await queue.startProcessing() }
 
         await queue.enqueue(task: "task-A", chatId: 100)
-        try await _Concurrency.Task.sleep(nanoseconds: 50_000_000) // let task-A start
+        // Wait for task-A to start processing (start message sent → isExecuting is true)
+        await waitUntil { await collector.messages(for: 100).contains { $0.contains("任务开始执行") } }
         await queue.enqueue(task: "task-B", chatId: 200)
 
         // Check queue notification
@@ -192,7 +195,7 @@ struct TaskSerialQueueTests {
         #expect(repliesForB.contains { $0.contains("已排队") })
 
         // Wait for both to complete
-        try await _Concurrency.Task.sleep(nanoseconds: 500_000_000)
+        await waitUntil { await runtime.tasks.count >= 2 }
         await queue.cancelAll()
         processingTask.cancel()
 
@@ -225,8 +228,10 @@ struct TaskSerialQueueTests {
 
         await queue.enqueue(task: "slow-task", chatId: 100)
 
-        // Wait for timeout to trigger
-        try await _Concurrency.Task.sleep(nanoseconds: 500_000_000)
+        // Wait for timeout reply to appear
+        await waitUntil {
+            await collector.messages(for: 100).contains { $0.contains("超时已取消") || $0.contains("任务执行失败") }
+        }
         await queue.cancelAll()
         processingTask.cancel()
 
@@ -255,7 +260,8 @@ struct TaskSerialQueueTests {
         let processingTask = _Concurrency.Task { await queue.startProcessing() }
 
         await queue.enqueue(task: "running-task", chatId: 100)
-        try await _Concurrency.Task.sleep(nanoseconds: 50_000_000)
+        // Wait for running-task to start processing (isExecuting will be true)
+        await waitUntil { await collector.messages(for: 100).contains { $0.contains("任务开始执行") } }
 
         await queue.enqueue(task: "queued-1", chatId: 200)
         await queue.enqueue(task: "queued-2", chatId: 300)
@@ -367,7 +373,7 @@ struct TaskSerialQueueTests {
         let processingTask = _Concurrency.Task { await queue.startProcessing() }
         await queue.enqueue(task: "hello", chatId: 100)
 
-        try await _Concurrency.Task.sleep(nanoseconds: 200_000_000)
+        await waitUntil { await runtime.tasks.count >= 1 }
         await queue.cancelAll()
         processingTask.cancel()
 
@@ -393,9 +399,10 @@ struct TaskSerialQueueTests {
         let processingTask = _Concurrency.Task { await queue.startProcessing() }
 
         await queue.enqueue(task: "first", chatId: 100)
-        await queue.enqueue(task: "second", chatId: 100)
+        await waitUntil { await runtime.tasks.count >= 1 }
 
-        try await _Concurrency.Task.sleep(nanoseconds: 300_000_000)
+        await queue.enqueue(task: "second", chatId: 100)
+        await waitUntil { await runtime.tasks.count >= 2 }
         await queue.cancelAll()
         processingTask.cancel()
 
@@ -432,7 +439,7 @@ struct TaskSerialQueueTests {
         let countDuringExecution = await runner.activeTaskCount
         #expect(countDuringExecution == 1)
 
-        try await _Concurrency.Task.sleep(nanoseconds: 600_000_000) // wait for completion
+        await waitUntil { await runner.activeTaskCount == 0 }
         await queue.cancelAll()
         processingTask.cancel()
 
@@ -460,10 +467,13 @@ struct TaskSerialQueueTests {
         let processingTask = _Concurrency.Task { await queue.startProcessing() }
 
         await queue.enqueue(task: "open calculator", chatId: 100)
-        try await _Concurrency.Task.sleep(nanoseconds: 200_000_000)
+        await waitUntil { await runtime.tasks.count >= 1 }
+        // Wait for the processing loop to finish updateSession — it runs in a parent
+        // task after the child TaskGroup completes, so we need a longer yield under load.
+        try? await _Concurrency.Task.sleep(nanoseconds: 200_000_000)
 
         await queue.enqueue(task: "what was the result", chatId: 100)
-        try await _Concurrency.Task.sleep(nanoseconds: 200_000_000)
+        await waitUntil { await runtime.tasks.count >= 2 }
 
         await queue.cancelAll()
         processingTask.cancel()
@@ -497,12 +507,12 @@ struct TaskSerialQueueTests {
         let processingTask = _Concurrency.Task { await queue.startProcessing() }
 
         await queue.enqueue(task: "first task", chatId: 100)
-        try await _Concurrency.Task.sleep(nanoseconds: 200_000_000)
+        await waitUntil { await runtime.tasks.count >= 1 }
 
         await queue.clearSession(chatId: 100)
 
         await queue.enqueue(task: "second task", chatId: 100)
-        try await _Concurrency.Task.sleep(nanoseconds: 200_000_000)
+        await waitUntil { await runtime.tasks.count >= 2 }
 
         await queue.cancelAll()
         processingTask.cancel()
@@ -534,11 +544,11 @@ struct TaskSerialQueueTests {
         let processingTask = _Concurrency.Task { await queue.startProcessing() }
 
         await queue.enqueue(task: "first", chatId: 100)
-        try await _Concurrency.Task.sleep(nanoseconds: 200_000_000)
+        await waitUntil { await runtime.tasks.count >= 1 }
 
         await runtime.setResumeError(NSError(domain: "test", code: 1, userInfo: [NSLocalizedDescriptionKey: "session corrupted"]))
         await queue.enqueue(task: "second", chatId: 100)
-        try await _Concurrency.Task.sleep(nanoseconds: 300_000_000)
+        await waitUntil { await runtime.tasks.count >= 2 }
 
         await queue.cancelAll()
         processingTask.cancel()
@@ -573,7 +583,9 @@ struct TaskSerialQueueTests {
 
         // First task completes quickly, creating a session
         await queue.enqueue(task: "first", chatId: 100)
-        try await _Concurrency.Task.sleep(nanoseconds: 200_000_000)
+        await waitUntil { await runtime.tasks.count >= 1 }
+        // Wait for the processing loop to finish updateSession.
+        try? await _Concurrency.Task.sleep(nanoseconds: 200_000_000)
 
         // Second task enqueued while no task running — sees active session, freezes resume decision
         await queue.enqueue(task: "follow-up", chatId: 100)
@@ -584,7 +596,7 @@ struct TaskSerialQueueTests {
         // Third task after clear — should NOT resume
         await queue.enqueue(task: "after-clear", chatId: 100)
 
-        try await _Concurrency.Task.sleep(nanoseconds: 500_000_000)
+        await waitUntil { await runtime.tasks.count >= 3 }
         await queue.cancelAll()
         processingTask.cancel()
 
@@ -617,15 +629,17 @@ struct TaskSerialQueueTests {
 
         await queue.enqueue(task: "task-A", chatId: 100)
         await queue.enqueue(task: "task-B", chatId: 200)
-        try await _Concurrency.Task.sleep(nanoseconds: 400_000_000)
+        await waitUntil { await runtime.tasks.count >= 2 }
+        // Wait for the processing loop to finish updateSession for both tasks.
+        try? await _Concurrency.Task.sleep(nanoseconds: 200_000_000)
 
         await queue.clearSession(chatId: 100)
 
         await queue.enqueue(task: "follow-up-200", chatId: 200)
-        try await _Concurrency.Task.sleep(nanoseconds: 200_000_000)
+        await waitUntil { await runtime.tasks.count >= 3 }
 
         await queue.enqueue(task: "follow-up-100", chatId: 100)
-        try await _Concurrency.Task.sleep(nanoseconds: 200_000_000)
+        await waitUntil { await runtime.tasks.count >= 4 }
 
         await queue.cancelAll()
         processingTask.cancel()
@@ -634,5 +648,19 @@ struct TaskSerialQueueTests {
         #expect(resumeCount == 1)
 
         await server.stop()
+    }
+}
+
+extension TaskSerialQueueTests {
+    /// Poll `condition` every 50ms until it returns true or `timeout` expires.
+    func waitUntil(
+        timeout: Duration = .seconds(3),
+        condition: @escaping () async -> Bool
+    ) async {
+        let deadline = ContinuousClock.now + timeout
+        while ContinuousClock.now < deadline {
+            if await condition() { return }
+            try? await _Concurrency.Task.sleep(nanoseconds: 50_000_000)
+        }
     }
 }

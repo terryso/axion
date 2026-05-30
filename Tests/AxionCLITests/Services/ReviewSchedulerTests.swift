@@ -10,15 +10,25 @@ import OpenAgentSDK
 final class ReviewEventBox: @unchecked Sendable {
     private let lock = NSLock()
     private var _value: ReviewResultEvent?
+    private let _signal = DispatchSemaphore(value: 0)
+
     var value: ReviewResultEvent? {
         lock.lock()
         defer { lock.unlock() }
         return _value
     }
+
     func set(_ newValue: ReviewResultEvent) {
         lock.lock()
         _value = newValue
         lock.unlock()
+        _signal.signal()
+    }
+
+    /// Block until `set()` is called or timeout expires.
+    func wait(timeout: TimeInterval) -> ReviewResultEvent? {
+        let result = _signal.wait(timeout: .now() + timeout)
+        return result == .success ? value : nil
     }
 }
 
@@ -146,9 +156,11 @@ struct ReviewSchedulerTests {
 
         await scheduler.handle(event, context: context)
 
-        // Give detached task time to complete
-        try? await _Concurrency.Task.sleep(nanoseconds: 500_000_000)
-
+        // Wait for the detached task to complete
+        let deadline = ContinuousClock.now + .seconds(3)
+        while !mockOrchestrator.callTracker.executeReviewCalled, ContinuousClock.now < deadline {
+            try? await _Concurrency.Task.sleep(nanoseconds: 50_000_000)
+        }
         #expect(mockOrchestrator.callTracker.executeReviewCalled)
     }
 
@@ -197,8 +209,12 @@ struct ReviewSchedulerTests {
         let event = makeCompletedEvent()
 
         await scheduler.handle(event, context: context)
-        try? await _Concurrency.Task.sleep(nanoseconds: 500_000_000)
 
+        // Wait for the detached task to set lastReviewAt
+        let deadline = ContinuousClock.now + .seconds(3)
+        while scheduler.lastReviewAtValue == nil, ContinuousClock.now < deadline {
+            try? await _Concurrency.Task.sleep(nanoseconds: 50_000_000)
+        }
         #expect(scheduler.lastReviewAtValue != nil)
     }
 
@@ -447,9 +463,8 @@ struct ReviewSchedulerTests {
         }
 
         await scheduler.handle(event, context: context)
-        try? await _Concurrency.Task.sleep(nanoseconds: 500_000_000)
 
-        let receivedEvent = eventBox.value
+        let receivedEvent = eventBox.wait(timeout: 3)
         #expect(receivedEvent != nil)
         #expect(receivedEvent!.success == true)
         #expect(receivedEvent!.summary == "Review done")
@@ -495,9 +510,8 @@ struct ReviewSchedulerTests {
         }
 
         await scheduler.handle(event, context: context)
-        try? await _Concurrency.Task.sleep(nanoseconds: 500_000_000)
 
-        let receivedEvent = eventBox.value
+        let receivedEvent = eventBox.wait(timeout: 3)
         #expect(receivedEvent != nil)
         #expect(receivedEvent!.success == false)
         #expect(receivedEvent!.memoryChanges.isEmpty)
@@ -537,7 +551,12 @@ struct ReviewSchedulerTests {
 
         // Should not crash when eventBus is nil
         await scheduler.handle(event, context: context)
-        try? await _Concurrency.Task.sleep(nanoseconds: 500_000_000)
+
+        // Wait for the detached task to complete
+        let deadline = ContinuousClock.now + .seconds(3)
+        while !mockOrchestrator.callTracker.executeReviewCalled, ContinuousClock.now < deadline {
+            try? await _Concurrency.Task.sleep(nanoseconds: 50_000_000)
+        }
 
         #expect(mockOrchestrator.callTracker.executeReviewCalled)
     }
@@ -575,7 +594,12 @@ struct ReviewSchedulerTests {
         let event = makeCompletedEvent()
 
         await scheduler.handle(event, context: context)
-        try? await _Concurrency.Task.sleep(nanoseconds: 500_000_000)
+
+        // Wait for the detached task to set lastReviewSummary
+        let deadline = ContinuousClock.now + .seconds(3)
+        while scheduler.lastReviewSummaryValue == nil, ContinuousClock.now < deadline {
+            try? await _Concurrency.Task.sleep(nanoseconds: 50_000_000)
+        }
 
         let summary = scheduler.lastReviewSummaryValue
         #expect(summary != nil)
@@ -620,9 +644,8 @@ struct ReviewSchedulerTests {
         let event = makeCompletedEvent()
 
         await scheduler.handle(event, context: context)
-        try? await _Concurrency.Task.sleep(nanoseconds: 500_000_000)
 
-        let received = callbackBox.value
+        let received = callbackBox.wait(timeout: 3)
         #expect(received != nil)
         #expect(received!.success == true)
         #expect(received!.memoryChanges == ["mem-1"])
@@ -659,9 +682,8 @@ struct ReviewSchedulerTests {
         let event = makeCompletedEvent()
 
         await scheduler.handle(event, context: context)
-        try? await _Concurrency.Task.sleep(nanoseconds: 500_000_000)
 
-        let received = callbackBox.value
+        let received = callbackBox.wait(timeout: 3)
         #expect(received != nil)
         #expect(received!.success == false)
         #expect(received!.memoryChanges.isEmpty)
@@ -703,10 +725,10 @@ struct ReviewSchedulerTests {
         let event = makeCompletedEvent()
 
         await scheduler.handle(event, context: context)
-        try? await _Concurrency.Task.sleep(nanoseconds: 500_000_000)
 
-        #expect(callbackBox.value != nil)
-        #expect(callbackBox.value!.success == true)
+        let callbackResult = callbackBox.wait(timeout: 3)
+        #expect(callbackResult != nil)
+        #expect(callbackResult!.success == true)
     }
 
     private func makeContextWithEventBus(
