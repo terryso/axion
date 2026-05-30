@@ -86,7 +86,7 @@
 # - Dev moves story to 'review', then runs code-review (fresh context, different LLM recommended)
 
 generated: 2026-05-08
-last_updated: 2026-05-30
+last_updated: 2026-05-31
 # story-29-4-started: 2026-05-29
 # story-29.4-created: 2026-05-29
 # story-29.3-created: 2026-05-29
@@ -148,6 +148,8 @@ last_updated: 2026-05-30
 # phase-9-added: 2026-05-27
 # phase-10-added: 2026-05-29
 # epic-28-30-added: 2026-05-29
+# phase-11-added: 2026-05-31
+# epic-31-added: 2026-05-31
 
 project_key: NOKEY
 tracking_system: file-system
@@ -422,3 +424,16 @@ development_status:
   30-2-review-result-handling-optional-push: done
   30-3-curatorscheduler-auto-scheduling: done
   epic-30-retrospective: done
+
+  # ============================================================
+  # Phase 11 — 通用记忆系统
+  # ============================================================
+
+  # Epic 31: 通用记忆系统 — 对齐 Hermes 自进化闭环
+  epic-31: backlog
+  31-1-dual-track-memory-storage: backlog
+  31-2-memory-operation-tool: backlog
+  31-3-review-agent-universal-memory-tool: backlog
+  31-4-security-scanner-frozen-snapshot: backlog
+  31-5-cli-memory-management: backlog
+  epic-31-retrospective: optional
