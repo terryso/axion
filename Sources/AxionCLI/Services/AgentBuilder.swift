@@ -321,12 +321,15 @@ enum AgentBuilder {
                 client: evolverClient,
                 evolutionModel: config.reviewModel ?? AxionConfig.defaultReviewModel
             )
+            let universalMemoryStore = UniversalMemoryStore(memoryDir: memoryDir)
+            let reviewSaveMemoryTool = ReviewSaveUniversalMemoryTool(store: universalMemoryStore)
             reviewOrchestrator = ReviewOrchestrator(
                 scheduleConfig: scheduleConfig,
                 factStore: reviewFactStore,
                 skillRegistry: skillRegistry,
                 skillEvolver: skillEvolver,
-                usageStore: concreteStore
+                usageStore: concreteStore,
+                additionalReviewTools: [reviewSaveMemoryTool]
             )
 
             // IntelligentCurator — reuses deps from ReviewOrchestrator block

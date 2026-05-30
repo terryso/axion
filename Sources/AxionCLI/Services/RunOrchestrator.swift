@@ -302,17 +302,19 @@ enum RunOrchestrator {
 
         // Post-run review — after memory processing, before lock release
         if let orchestrator = buildResult.reviewOrchestrator, !runConfig.dryrun, !runConfig.noMemory, !runConfig.noReview {
-            let reviewConfig = ReviewAgentConfig()
+            var reviewConfig = ReviewAgentConfig()
+            reviewConfig.allowedTools.append("review_save_universal_memory")
             let (doMemory, doSkill) = orchestrator.shouldReview(
                 sessionId: runId,
                 messageCount: collectedMessages.count,
                 config: reviewConfig
             )
             if doMemory || doSkill {
-                let tunedConfig = ReviewAgentConfig(
+                var tunedConfig = ReviewAgentConfig(
                     reviewMemory: doMemory,
                     reviewSkills: doSkill
                 )
+                tunedConfig.allowedTools.append("review_save_universal_memory")
                 let result = await orchestrator.executeReview(
                     parentAgent: agent,
                     messages: collectedMessages,
