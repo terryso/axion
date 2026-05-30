@@ -249,6 +249,12 @@ enum AgentBuilder {
             agentTools.append(createSkillTool(registry: skillRegistry))
         }
 
+        // Memory tool — Agent can actively read/write MEMORY.md and USER.md
+        if !buildConfig.noMemory, !buildConfig.dryrun {
+            let universalStore = UniversalMemoryStore(memoryDir: memoryDir)
+            agentTools.append(MemoryTool(store: universalStore))
+        }
+
         // 9. Build AgentOptions
         let effectiveMaxSteps = buildConfig.dryrun ? 1 : (buildConfig.maxSteps ?? config.maxSteps)
         let effectiveMaxTokens = buildConfig.maxTokens ?? 4096
