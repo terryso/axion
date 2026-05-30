@@ -345,9 +345,10 @@ try await withTaskCancellationHandler {
 10. **测试中硬编码字符串而非调用真实方法** — 测试必须调用被测方法/函数，不允许测试纯字面量（bogus test）
 11. **JSON 输出使用手动字符串拼接** — 必须使用 JSONEncoder + Codable struct
 12. **AxionBar 测试写入真实文件系统** — 必须使用临时目录
-13. **审查 agent 连接 Helper/操作桌面** — 审查 agent 工具白名单只有 memory + skill，通过 `AgentBuilder.buildReviewAgent()` 创建（D11）
+13. **审查 agent 连接 Helper/操作桌面** — 审查 agent 工具白名单只有 memory + skill，通过 `ReviewOrchestrator.executeReview()` 创建隔离 agent（D11）
 14. **TG bot token 写入 config.json** — 必须通过环境变量 `AXION_TELEGRAM_BOT_TOKEN` 传入
 15. **未授权 TG 消息回复错误信息** — 静默丢弃，不泄露任何信息
+16. **Detached Task 使用 EventBus 通信** — per-request EventBus 在请求完成时停止；detached Tasks 必须使用直接回调（onReviewResult、onCuratorResult），不依赖 EventBus
 
 ---
 

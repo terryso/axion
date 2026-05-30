@@ -239,7 +239,7 @@ axion gateway (长驻进程)
 | `Sources/AxionCLI/Commands/GatewayCommand.swift` | AxionCLI | gateway CLI 入口 |
 | `Sources/AxionCLI/Services/GatewayRunner.swift` | AxionCLI | gateway 编排器 |
 | `Sources/AxionCLI/Services/TelegramAdapter.swift` | AxionCLI | TG Bot API 对接 |
-| `Sources/AxionCLI/Services/BackgroundReviewScheduler.swift` | AxionCLI | 审查调度 |
+| `Sources/AxionCLI/Services/ReviewScheduler.swift` | AxionCLI | 审查调度 |
 | `Sources/AxionCLI/Services/CuratorScheduler.swift` | AxionCLI | Curator 调度 |
 | `AxionCore/` | — | 无新增（复用现有 Skill/Curator 模型） |
 

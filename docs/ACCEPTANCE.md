@@ -126,9 +126,34 @@
 
 ---
 
+## 12. 自进化调度（Epic 30）（5 项）
+
+验证 ReviewScheduler 自动审查、CuratorScheduler 自动策展、审查结果 TG 推送。
+
+**前置条件：** Gateway 已 install 并运行（Section 10 通过），API Key 已配置。
+
+| # | 测试步骤 | 预期行为 | 实际结果 |
+|---|---------|---------|---------|
+| 12.1 | Gateway 运行中 → 提交任务 → 等待完成 → 检查 stderr（需 config 设置 `reviewMinMessages=1` `reviewMemoryInterval=1`） | ReviewScheduler 自动触发审查，detached Task 正常完成 | ✅ 通过。配置 reviewMinMessages=1 + reviewMemoryInterval=1 后，2-step 任务触发 review，detached Task 成功完成 |
+| 12.2 | 上一步完成后 → `swift run AxionCLI gateway status` | `Last review:` 显示 ISO8601 时间戳；`Last review summary:` 显示审查摘要 | ✅ 通过。显示 `Last review: 2026-05-30T02:52:37.034Z`，`Last review summary: Review completed. No actions taken.` |
+| 12.3 | 12.1 完成后，如 TG 已连接 → 检查 TG 是否收到审查结果推送 | TG 收到 `📊 审查完成:` 格式的推送消息 | ⏭️ 跳过。测试环境未配置 TG Bot Token |
+| 12.4 | Gateway 首次启动（未执行过 curator） → `swift run AxionCLI gateway status` | `Last curator:` 显示 `(pending Epic 29/30)` | ✅ 通过。显示 `Last curator: (pending Epic 29/30)` |
+| 12.5 | `swift run AxionCLI run "1+1等于几" --no-review` | CLI 模式正常完成，不触发后台审查 | ✅ 通过。正常返回 `[结果] 1+1=2`，无 review 输出 |
+
+### 12.x 说明
+
+- 12.1 验证 ReviewScheduler 自动触发审查 + detached Task 不阻塞主任务（Story 30.1 AC#1-5）
+- 12.2 验证 gateway status 展示 last_review_at 和 last_review_summary（Story 30.1 AC#7, Story 30.2 AC#6）
+- 12.3 验证审查结果通过 onReviewResult 回调推送到 TG（Story 30.2 AC#3）
+- 12.4 验证 CuratorScheduler 未执行时 status 显示 pending（Story 30.3 AC#6）
+- 12.5 验证 CLI 路径不受 Gateway EventHandler 影响（Story 30.2 AC#5）
+- CuratorScheduler 实际触发需空闲 2h + 间隔 7d，手工验收不覆盖自动策展触发；单元测试已覆盖 shouldCurate() 条件逻辑（20 个测试）
+
+---
+
 ## 验收总结
 
-**39/42 通过，2 项跳过，1 项跳过（无预录制技能）。**
+**43/47 通过，3 项跳过，1 项跳过（无预录制技能）。**
 
 | 组别 | 通过 | 总数 | 说明 |
 |------|------|------|------|
@@ -143,6 +168,7 @@
 | Agent Runtime | 5 | 5 | Session/Resume/持久化全部通过 |
 | Gateway 模式 | 6 | 6 | gateway start/install/uninstall/status 全部通过 |
 | TG 远程交互 | 6 | 7 | 文本/命令/排队/图片下载通过；白名单测试跳过（无第二账号） |
+| 自进化调度 | 4 | 5 | ReviewScheduler + status + curator pending + --no-review 通过；TG 推送跳过（未配置） |
 
 ## 8. Self-Evolution（Review & Curator）（4 项）
 

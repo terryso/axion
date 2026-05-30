@@ -73,10 +73,12 @@ actor ReviewScheduler: EventHandler {
     func handle(_ event: any AgentEvent, context: EventHandlerContext) async {
         guard !noReview else { return }
         guard !noMemory else { return }
-        guard event is AgentCompletedEvent else { return }
+        guard let completedEvent = event as? AgentCompletedEvent else { return }
         guard let orchestrator = reviewDataContext.reviewOrchestrator else { return }
 
-        let messageCount = context.runCompleteContext?.numTurns ?? 0
+        // Use totalSteps from the event itself — context.runCompleteContext is nil
+        // during event dispatch because the run hasn't returned yet.
+        let messageCount = completedEvent.totalSteps
         let reviewConfig = ReviewAgentConfig()
         let (doMemory, doSkill) = orchestrator.shouldReview(
             sessionId: context.sessionId ?? "",
@@ -91,7 +93,9 @@ actor ReviewScheduler: EventHandler {
             logger.warning("Review scheduled but agent not available — skipping")
             return
         }
-        let messages = reviewDataContext.messages
+        // Capture reviewDataContext reference so detached Task reads messages lazily
+        // (messages may not be populated until post-stream update completes)
+        let dataContext = self.reviewDataContext
         let tunedConfig = ReviewAgentConfig(reviewMemory: doMemory, reviewSkills: doSkill)
         let sessionId = context.sessionId ?? "unknown"
         let traceDir = self.traceDir
@@ -102,7 +106,10 @@ actor ReviewScheduler: EventHandler {
         let onReviewResult = self._onReviewResult
         let reviewStartTime = ContinuousClock.now
 
-        _Concurrency.Task.detached { [orchestrator, agent, messages, tunedConfig, sessionId, traceDir, lastReviewAtBox, lastReviewSummaryBox, eventBus, onReviewResult, reviewStartTime] in
+        _Concurrency.Task.detached { [orchestrator, agent, dataContext, tunedConfig, sessionId, traceDir, lastReviewAtBox, lastReviewSummaryBox, eventBus, onReviewResult, reviewStartTime] in
+            // Wait for post-stream messages — RunOrchestrator writes them after the
+            // stream ends, which may race with this detached Task.
+            let messages = await dataContext.waitForMessages()
             let result = await orchestrator.executeReview(
                 parentAgent: agent,
                 messages: messages,

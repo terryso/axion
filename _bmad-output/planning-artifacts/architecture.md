@@ -525,11 +525,13 @@ axion gateway (单个 Swift executable)
     ├── ReviewScheduler (actor) — 后台审查调度
     │       ├── 监听 AgentCompletedEvent
     │       ├── 检查 ReviewScheduleConfig 间隔
-    │       └── 触发时创建审查 agent（通过 AxionRuntime）
+    │       ├── 触发时调用 ReviewOrchestrator.executeReview()
+    │       └── 结果通过 onReviewResult 回调推送（非 EventBus）
     │
     ├── CuratorScheduler (actor) — Curator 自动调度
     │       ├── 定时检查：空闲 > curatorIdleHours && 距上次 > curatorIntervalHours
-    │       └── 触发时调用 IntelligentCurator.execute()
+    │       ├── 触发时调用 IntelligentCurator.execute()
+    │       └── 结果通过 onCuratorResult 回调推送（非 EventBus）
     │
     └── EventBus (SDK) — 事件分发
             ├── → TG adapter（推送进展/结果）
@@ -690,12 +692,17 @@ ReviewScheduler (actor)
 
 **关键隔离点：**
 1. **审查 agent 不连接 Helper** — 工具白名单只有 memory/skill，没有 AX 操作
-2. **审查 agent 不共享 AxionRuntime** — 独立创建 Agent 实例
+2. **审查 agent 不共享 AxionRuntime** — 通过 ReviewOrchestrator.executeReview() 创建独立 Agent 实例
 3. **审查 agent 不写入 EventBus** — 直接操作 FactStore 和 SkillRegistry
-4. **审查 agent 不发 TG 通知** — 结果只写 trace
+4. **审查结果可选推送 TG** — 通过直接回调 onReviewResult（非 EventBus），由 GatewayCommand 在构建时注入
+
+**Detached Task 通信约束：**
+- per-request EventBus 在请求完成时停止，不跨越 detached Task 生命周期
+- 后台任务（ReviewScheduler、CuratorScheduler）使用直接回调（onReviewResult、onCuratorResult）进行跨组件通信
+- EventBus 仅用于同步、请求内的事件传播
 
 **AgentBuilder 扩展：**
-- 新增 `buildReviewAgent()` 方法，返回受限的 Agent 实例
+- 审查 agent 通过 `ReviewOrchestrator.executeReview(parentAgent:messages:config:)` 创建
 - 复用 buildFullSystemPrompt()（前缀缓存共享策略）
 - 工具集：FactStore 操作 + SkillRegistry 操作（白名单）
 

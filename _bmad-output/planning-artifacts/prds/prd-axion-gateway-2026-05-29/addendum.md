@@ -11,8 +11,8 @@
 | 语言 | Python | Swift |
 | Memory 模型 | MEMORY.md + USER.md（双轨文件） | AppMemoryFact（per-app domain，evidence/confidence 状态机） |
 | Skill 模型 | SKILL.md（Markdown） | JSON 录制 + SKILL.md（Markdown） |
-| 审查触发 | conversation_loop 结尾 fork thread | ReviewHandler（EventBus handler on AgentCompletedEvent） |
-| 审查执行 | fork AIAgent + 共享前缀缓存 | 需增强：通过 AxionRuntime 创建独立 agent 实例 |
+| 审查触发 | conversation_loop 结尾 fork thread | ReviewScheduler（EventHandler on AgentCompletedEvent） |
+| 审查执行 | fork AIAgent + 共享前缀缓存 | ReviewOrchestrator.executeReview() 创建独立 agent，工具白名单隔离 |
 | Curator 触发 | 空闲 2h + 7 天间隔 | CuratorScheduler（gateway 进程内定时检查） |
 | Curator 执行 | fork AIAgent + 工具白名单 | IntelligentCurator + LLMSkillEvolver（已有） |
 | 渠道 | 20+ 平台 adapter | MVP: TG only |
@@ -101,9 +101,10 @@ func handle(_ event: any AgentEvent, context: EventHandlerContext) async {
 }
 ```
 
-Gateway 需要：
-1. 在 ReviewHandler 中增加审查执行逻辑（通过 AxionRuntime 创建审查 agent）
-2. 或者由 CuratorScheduler 在 run 完成后检查并触发
+Gateway 已实现：
+1. ReviewScheduler（替代 ReviewHandler stub）作为 EventHandler 监听 AgentCompletedEvent，通过 ReviewOrchestrator.executeReview() 执行审查
+2. CuratorScheduler 作为 EventHandler 监听 AgentCompletedEvent/AgentFailedEvent，空闲时触发 IntelligentCurator.execute()
+3. 两者通过直接回调（onReviewResult/onCuratorResult）推送结果，不使用 EventBus
 
 ## CuratorCommand 已有功能
 
