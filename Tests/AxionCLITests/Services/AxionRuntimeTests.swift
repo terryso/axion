@@ -62,12 +62,13 @@ extension AxionRuntimeTests {
         executorError: Error? = nil,
         builderResult: AgentBuildResult? = nil,
         builderError: Error? = nil,
-        eventBus: EventBus? = nil
+        eventBus: EventBus? = nil,
+        sessionStore: SessionStore? = nil
     ) -> AxionRuntime {
         let result = executorResult ?? successResult()
         let executor = MockRunExecutor(runResult: result, error: executorError)
         let builder = MockAgentBuilder(buildResult: builderResult, error: builderError)
-        return AxionRuntime(eventBus: eventBus, executor: executor, builder: builder)
+        return AxionRuntime(eventBus: eventBus, executor: executor, builder: builder, sessionStore: sessionStore)
     }
 
     static func dummyBuildResult() -> AgentBuildResult {
@@ -408,7 +409,8 @@ struct AxionRuntimeTests {
 
     @Test("listSessions() returns array without crashing")
     func listSessionsNoCrash() async throws {
-        let runtime = Self.makeRuntime()
+        let emptyStore = SessionStore(sessionsDir: "/tmp/axion-test-empty-\(UUID().uuidString)")
+        let runtime = Self.makeRuntime(sessionStore: emptyStore)
         let sessions = try await runtime.listSessions()
         #expect(type(of: sessions) == [SessionInfo].self)
     }

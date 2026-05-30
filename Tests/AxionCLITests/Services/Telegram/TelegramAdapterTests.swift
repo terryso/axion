@@ -46,10 +46,8 @@ struct TelegramAdapterTests {
     @Test("Authorized user passes whitelist check")
     func authorizedUserPasses() async {
         let mock = MockTGAPIClient()
-        await mock.setUpdates([])
-        let adapter = TelegramAdapter(apiClient: mock, allowedUsers: ["123", "456"])
+        let adapter = TelegramAdapter(apiClient: mock, allowedUsers: ["123", "456"], log: { _ in })
 
-        // Send a message from authorized user
         let update = TGUpdate(updateId: 1, message: TGMessage(
             messageId: 1,
             from: TGUser(id: 123, firstName: "Nick", lastName: nil, username: nil),
@@ -57,12 +55,7 @@ struct TelegramAdapterTests {
             date: 0,
             text: "hello"
         ))
-        await mock.setUpdates([update])
-
-        // Start adapter briefly to process one update
-        _Concurrency.Task { await adapter.start() }
-        try? await _Concurrency.Task.sleep(nanoseconds: 100_000_000)
-        await adapter.stop()
+        await adapter.processUpdates([update])
 
         let sent = await mock.sentMessages
         #expect(sent.count == 1)
@@ -72,8 +65,7 @@ struct TelegramAdapterTests {
     @Test("Unauthorized user is silently discarded")
     func unauthorizedUserDiscarded() async {
         let mock = MockTGAPIClient()
-        await mock.setUpdates([])
-        let adapter = TelegramAdapter(apiClient: mock, allowedUsers: ["123"])
+        let adapter = TelegramAdapter(apiClient: mock, allowedUsers: ["123"], log: { _ in })
 
         let update = TGUpdate(updateId: 1, message: TGMessage(
             messageId: 1,
@@ -82,11 +74,7 @@ struct TelegramAdapterTests {
             date: 0,
             text: "hello"
         ))
-        await mock.setUpdates([update])
-
-        _Concurrency.Task { await adapter.start() }
-        try? await _Concurrency.Task.sleep(nanoseconds: 100_000_000)
-        await adapter.stop()
+        await adapter.processUpdates([update])
 
         let sent = await mock.sentMessages
         #expect(sent.isEmpty)
@@ -95,8 +83,7 @@ struct TelegramAdapterTests {
     @Test("Message without user is discarded")
     func messageWithoutUserDiscarded() async {
         let mock = MockTGAPIClient()
-        await mock.setUpdates([])
-        let adapter = TelegramAdapter(apiClient: mock, allowedUsers: ["123"])
+        let adapter = TelegramAdapter(apiClient: mock, allowedUsers: ["123"], log: { _ in })
 
         let update = TGUpdate(updateId: 1, message: TGMessage(
             messageId: 1,
@@ -105,11 +92,7 @@ struct TelegramAdapterTests {
             date: 0,
             text: "hello"
         ))
-        await mock.setUpdates([update])
-
-        _Concurrency.Task { await adapter.start() }
-        try? await _Concurrency.Task.sleep(nanoseconds: 100_000_000)
-        await adapter.stop()
+        await adapter.processUpdates([update])
 
         let sent = await mock.sentMessages
         #expect(sent.isEmpty)
@@ -118,8 +101,7 @@ struct TelegramAdapterTests {
     @Test("Message without text is discarded")
     func messageWithoutTextDiscarded() async {
         let mock = MockTGAPIClient()
-        await mock.setUpdates([])
-        let adapter = TelegramAdapter(apiClient: mock, allowedUsers: ["123"])
+        let adapter = TelegramAdapter(apiClient: mock, allowedUsers: ["123"], log: { _ in })
 
         let update = TGUpdate(updateId: 1, message: TGMessage(
             messageId: 1,
@@ -128,11 +110,7 @@ struct TelegramAdapterTests {
             date: 0,
             text: nil
         ))
-        await mock.setUpdates([update])
-
-        _Concurrency.Task { await adapter.start() }
-        try? await _Concurrency.Task.sleep(nanoseconds: 100_000_000)
-        await adapter.stop()
+        await adapter.processUpdates([update])
 
         let sent = await mock.sentMessages
         #expect(sent.isEmpty)
@@ -143,7 +121,7 @@ struct TelegramAdapterTests {
     @Test("Short message is not split")
     func shortMessageNotSplit() async {
         let mock = MockTGAPIClient()
-        let adapter = TelegramAdapter(apiClient: mock, allowedUsers: ["123"])
+        let adapter = TelegramAdapter(apiClient: mock, allowedUsers: ["123"], log: { _ in })
 
         await adapter.sendReply("short message", to: 123)
 
@@ -155,7 +133,7 @@ struct TelegramAdapterTests {
     @Test("Message over 4096 chars is split")
     func longMessageSplit() async {
         let mock = MockTGAPIClient()
-        let adapter = TelegramAdapter(apiClient: mock, allowedUsers: ["123"])
+        let adapter = TelegramAdapter(apiClient: mock, allowedUsers: ["123"], log: { _ in })
 
         let longText = String(repeating: "A", count: 5000)
         await adapter.sendReply(longText, to: 123)
@@ -164,7 +142,6 @@ struct TelegramAdapterTests {
         #expect(sent.count == 2)
         #expect(sent[0].text.count <= 4096)
         #expect(sent[1].text.count <= 4096)
-        // Total content preserved
         let total = sent.map(\.text).joined()
         #expect(total == longText)
     }
@@ -172,9 +149,8 @@ struct TelegramAdapterTests {
     @Test("Long message splits at newline boundaries")
     func splitAtNewlines() async {
         let mock = MockTGAPIClient()
-        let adapter = TelegramAdapter(apiClient: mock, allowedUsers: ["123"])
+        let adapter = TelegramAdapter(apiClient: mock, allowedUsers: ["123"], log: { _ in })
 
-        // 4090 chars + newline + 10 chars + newline + 10 chars = 4112
         let line1 = String(repeating: "A", count: 4090)
         let line2 = String(repeating: "B", count: 10)
         let line3 = String(repeating: "C", count: 10)
@@ -191,7 +167,7 @@ struct TelegramAdapterTests {
     @Test("Exactly 4096 chars is not split")
     func exactlyMaxLengthNotSplit() async {
         let mock = MockTGAPIClient()
-        let adapter = TelegramAdapter(apiClient: mock, allowedUsers: ["123"])
+        let adapter = TelegramAdapter(apiClient: mock, allowedUsers: ["123"], log: { _ in })
 
         let text = String(repeating: "X", count: 4096)
         await adapter.sendReply(text, to: 123)
@@ -205,7 +181,7 @@ struct TelegramAdapterTests {
     @Test("Initial status is disabled")
     func initialStatusDisabled() async {
         let mock = MockTGAPIClient()
-        let adapter = TelegramAdapter(apiClient: mock, allowedUsers: [])
+        let adapter = TelegramAdapter(apiClient: mock, allowedUsers: [], log: { _ in })
 
         #expect(adapter.statusValue == "disabled")
     }
@@ -214,7 +190,7 @@ struct TelegramAdapterTests {
     func statusConnectedAfterStart() async {
         let mock = MockTGAPIClient()
         await mock.setUpdates([])
-        let adapter = TelegramAdapter(apiClient: mock, allowedUsers: [])
+        let adapter = TelegramAdapter(apiClient: mock, allowedUsers: [], log: { _ in })
 
         _Concurrency.Task { await adapter.start() }
         try? await _Concurrency.Task.sleep(nanoseconds: 100_000_000)
@@ -228,7 +204,7 @@ struct TelegramAdapterTests {
     func statusErrorOnFailure() async {
         let mock = MockTGAPIClient()
         await mock.setGetUpdatesError(TGAPIError.apiError("network failure"))
-        let adapter = TelegramAdapter(apiClient: mock, allowedUsers: [])
+        let adapter = TelegramAdapter(apiClient: mock, allowedUsers: [], log: { _ in })
 
         _Concurrency.Task { await adapter.start() }
         try? await _Concurrency.Task.sleep(nanoseconds: 500_000_000)
@@ -244,7 +220,7 @@ struct TelegramAdapterTests {
     func stopPreventsPolling() async {
         let mock = MockTGAPIClient()
         await mock.setUpdates([])
-        let adapter = TelegramAdapter(apiClient: mock, allowedUsers: [])
+        let adapter = TelegramAdapter(apiClient: mock, allowedUsers: [], log: { _ in })
 
         _Concurrency.Task { await adapter.start() }
         try? await _Concurrency.Task.sleep(nanoseconds: 100_000_000)
@@ -264,13 +240,12 @@ struct TelegramAdapterTests {
     func sendReplyHandlesFailure() async {
         let mock = MockTGAPIClient()
         await mock.setSendMessageError(TGAPIError.apiError("rate limited"))
-        let adapter = TelegramAdapter(apiClient: mock, allowedUsers: ["123"])
+        let adapter = TelegramAdapter(apiClient: mock, allowedUsers: ["123"], log: { _ in })
 
-        // Should not throw - errors are caught internally
         await adapter.sendReply("test", to: 123)
 
         let sent = await mock.sentMessages
-        #expect(sent.isEmpty) // Failed, so no successful sends
+        #expect(sent.isEmpty)
     }
 
     // MARK: - Task Queue Integration (AC #1, #2, #8)
@@ -278,9 +253,8 @@ struct TelegramAdapterTests {
     @Test("Text message submits to task queue")
     func textMessageSubmitsToQueue() async {
         let mock = MockTGAPIClient()
-        await mock.setUpdates([])
         let mockQueue = MockTaskSerialQueue()
-        let adapter = TelegramAdapter(apiClient: mock, allowedUsers: ["123"], taskQueue: mockQueue)
+        let adapter = TelegramAdapter(apiClient: mock, allowedUsers: ["123"], taskQueue: mockQueue, log: { _ in })
 
         let update = TGUpdate(updateId: 1, message: TGMessage(
             messageId: 1,
@@ -289,18 +263,13 @@ struct TelegramAdapterTests {
             date: 0,
             text: "do something"
         ))
-        await mock.setUpdates([update])
-
-        _Concurrency.Task { await adapter.start() }
-        try? await _Concurrency.Task.sleep(nanoseconds: 200_000_000)
-        await adapter.stop()
+        await adapter.processUpdates([update])
 
         let tasks = await mockQueue.tasks
         #expect(tasks.count == 1)
         #expect(tasks[0].task == "do something")
         #expect(tasks[0].chatId == 456)
 
-        // No direct reply sent — queue handles notifications
         let sent = await mock.sentMessages
         #expect(sent.isEmpty)
     }
@@ -308,9 +277,8 @@ struct TelegramAdapterTests {
     @Test("Empty text message is silently ignored")
     func emptyTextMessageIgnored() async {
         let mock = MockTGAPIClient()
-        await mock.setUpdates([])
         let mockQueue = MockTaskSerialQueue()
-        let adapter = TelegramAdapter(apiClient: mock, allowedUsers: ["123"], taskQueue: mockQueue)
+        let adapter = TelegramAdapter(apiClient: mock, allowedUsers: ["123"], taskQueue: mockQueue, log: { _ in })
 
         let update = TGUpdate(updateId: 1, message: TGMessage(
             messageId: 1,
@@ -319,11 +287,7 @@ struct TelegramAdapterTests {
             date: 0,
             text: ""
         ))
-        await mock.setUpdates([update])
-
-        _Concurrency.Task { await adapter.start() }
-        try? await _Concurrency.Task.sleep(nanoseconds: 200_000_000)
-        await adapter.stop()
+        await adapter.processUpdates([update])
 
         let tasks = await mockQueue.tasks
         #expect(tasks.isEmpty)
@@ -332,9 +296,8 @@ struct TelegramAdapterTests {
     @Test("Non-text message is silently ignored")
     func nonTextMessageIgnored() async {
         let mock = MockTGAPIClient()
-        await mock.setUpdates([])
         let mockQueue = MockTaskSerialQueue()
-        let adapter = TelegramAdapter(apiClient: mock, allowedUsers: ["123"], taskQueue: mockQueue)
+        let adapter = TelegramAdapter(apiClient: mock, allowedUsers: ["123"], taskQueue: mockQueue, log: { _ in })
 
         let update = TGUpdate(updateId: 1, message: TGMessage(
             messageId: 1,
@@ -343,11 +306,7 @@ struct TelegramAdapterTests {
             date: 0,
             text: nil
         ))
-        await mock.setUpdates([update])
-
-        _Concurrency.Task { await adapter.start() }
-        try? await _Concurrency.Task.sleep(nanoseconds: 200_000_000)
-        await adapter.stop()
+        await adapter.processUpdates([update])
 
         let tasks = await mockQueue.tasks
         #expect(tasks.isEmpty)
@@ -356,8 +315,7 @@ struct TelegramAdapterTests {
     @Test("Without queue falls back to MVP reply")
     func withoutQueueFallsBackToMVP() async {
         let mock = MockTGAPIClient()
-        await mock.setUpdates([])
-        let adapter = TelegramAdapter(apiClient: mock, allowedUsers: ["123"])
+        let adapter = TelegramAdapter(apiClient: mock, allowedUsers: ["123"], log: { _ in })
 
         let update = TGUpdate(updateId: 1, message: TGMessage(
             messageId: 1,
@@ -366,11 +324,7 @@ struct TelegramAdapterTests {
             date: 0,
             text: "hello"
         ))
-        await mock.setUpdates([update])
-
-        _Concurrency.Task { await adapter.start() }
-        try? await _Concurrency.Task.sleep(nanoseconds: 200_000_000)
-        await adapter.stop()
+        await adapter.processUpdates([update])
 
         let sent = await mock.sentMessages
         #expect(sent.count == 1)
@@ -382,7 +336,6 @@ struct TelegramAdapterTests {
     @Test("Command message routes to commandRouter instead of queue")
     func commandMessageRoutesToRouter() async {
         let mock = MockTGAPIClient()
-        await mock.setUpdates([])
         let mockQueue = MockTaskSerialQueue()
         let commandRouter = TGCommandRouter(
             statusProvider: {
@@ -396,7 +349,7 @@ struct TelegramAdapterTests {
             },
             skillsProvider: { [] }
         )
-        let adapter = TelegramAdapter(apiClient: mock, allowedUsers: ["123"], taskQueue: mockQueue, commandRouter: commandRouter)
+        let adapter = TelegramAdapter(apiClient: mock, allowedUsers: ["123"], taskQueue: mockQueue, commandRouter: commandRouter, log: { _ in })
 
         let update = TGUpdate(updateId: 1, message: TGMessage(
             messageId: 1,
@@ -405,13 +358,8 @@ struct TelegramAdapterTests {
             date: 0,
             text: "/status"
         ))
-        await mock.setUpdates([update])
+        await adapter.processUpdates([update])
 
-        _Concurrency.Task { await adapter.start() }
-        try? await _Concurrency.Task.sleep(nanoseconds: 200_000_000)
-        await adapter.stop()
-
-        // Command routed to reply, NOT enqueued
         let tasks = await mockQueue.tasks
         #expect(tasks.isEmpty)
 
@@ -423,7 +371,6 @@ struct TelegramAdapterTests {
     @Test("Non-command text still enqueues normally with commandRouter present")
     func nonCommandStillEnqueuesWithRouter() async {
         let mock = MockTGAPIClient()
-        await mock.setUpdates([])
         let mockQueue = MockTaskSerialQueue()
         let commandRouter = TGCommandRouter(
             statusProvider: {
@@ -436,7 +383,7 @@ struct TelegramAdapterTests {
             },
             skillsProvider: { [] }
         )
-        let adapter = TelegramAdapter(apiClient: mock, allowedUsers: ["123"], taskQueue: mockQueue, commandRouter: commandRouter)
+        let adapter = TelegramAdapter(apiClient: mock, allowedUsers: ["123"], taskQueue: mockQueue, commandRouter: commandRouter, log: { _ in })
 
         let update = TGUpdate(updateId: 1, message: TGMessage(
             messageId: 1,
@@ -445,13 +392,8 @@ struct TelegramAdapterTests {
             date: 0,
             text: "open calculator"
         ))
-        await mock.setUpdates([update])
+        await adapter.processUpdates([update])
 
-        _Concurrency.Task { await adapter.start() }
-        try? await _Concurrency.Task.sleep(nanoseconds: 200_000_000)
-        await adapter.stop()
-
-        // Normal text still goes to queue
         let tasks = await mockQueue.tasks
         #expect(tasks.count == 1)
         #expect(tasks[0].task == "open calculator")
@@ -463,9 +405,8 @@ struct TelegramAdapterTests {
     @Test("Without commandRouter all messages enqueue normally (backward compat)")
     func withoutCommandRouterBackwardCompat() async {
         let mock = MockTGAPIClient()
-        await mock.setUpdates([])
         let mockQueue = MockTaskSerialQueue()
-        let adapter = TelegramAdapter(apiClient: mock, allowedUsers: ["123"], taskQueue: mockQueue)
+        let adapter = TelegramAdapter(apiClient: mock, allowedUsers: ["123"], taskQueue: mockQueue, log: { _ in })
 
         let update = TGUpdate(updateId: 1, message: TGMessage(
             messageId: 1,
@@ -474,13 +415,8 @@ struct TelegramAdapterTests {
             date: 0,
             text: "/status"
         ))
-        await mock.setUpdates([update])
+        await adapter.processUpdates([update])
 
-        _Concurrency.Task { await adapter.start() }
-        try? await _Concurrency.Task.sleep(nanoseconds: 200_000_000)
-        await adapter.stop()
-
-        // Without commandRouter, /status is treated as regular task text
         let tasks = await mockQueue.tasks
         #expect(tasks.count == 1)
         #expect(tasks[0].task == "/status")
@@ -489,7 +425,6 @@ struct TelegramAdapterTests {
     @Test("Authorization check happens before command routing")
     func authCheckBeforeCommandRouting() async {
         let mock = MockTGAPIClient()
-        await mock.setUpdates([])
         let commandRouter = TGCommandRouter(
             statusProvider: {
                 GatewayRunnerStatus(
@@ -501,7 +436,7 @@ struct TelegramAdapterTests {
             },
             skillsProvider: { [] }
         )
-        let adapter = TelegramAdapter(apiClient: mock, allowedUsers: ["123"], commandRouter: commandRouter)
+        let adapter = TelegramAdapter(apiClient: mock, allowedUsers: ["123"], commandRouter: commandRouter, log: { _ in })
 
         let update = TGUpdate(updateId: 1, message: TGMessage(
             messageId: 1,
@@ -510,13 +445,8 @@ struct TelegramAdapterTests {
             date: 0,
             text: "/status"
         ))
-        await mock.setUpdates([update])
+        await adapter.processUpdates([update])
 
-        _Concurrency.Task { await adapter.start() }
-        try? await _Concurrency.Task.sleep(nanoseconds: 200_000_000)
-        await adapter.stop()
-
-        // Unauthorized user — no reply, no task queued
         let sent = await mock.sentMessages
         #expect(sent.isEmpty)
     }
@@ -526,9 +456,8 @@ struct TelegramAdapterTests {
     @Test("Photo message with caption enqueues task with image path and caption")
     func photoWithCaptionEnqueues() async {
         let mock = MockTGAPIClient()
-        await mock.setUpdates([])
         let mockQueue = MockTaskSerialQueue()
-        let adapter = TelegramAdapter(apiClient: mock, allowedUsers: ["123"], taskQueue: mockQueue)
+        let adapter = TelegramAdapter(apiClient: mock, allowedUsers: ["123"], taskQueue: mockQueue, log: { _ in })
 
         let photo = [
             TGPhotoSize(fileId: "small", width: 100, height: 100, fileSize: 5000),
@@ -542,11 +471,7 @@ struct TelegramAdapterTests {
             text: "read this screenshot",
             photo: photo
         ))
-        await mock.setUpdates([update])
-
-        _Concurrency.Task { await adapter.start() }
-        try? await _Concurrency.Task.sleep(nanoseconds: 300_000_000)
-        await adapter.stop()
+        await adapter.processUpdates([update])
 
         let tasks = await mockQueue.tasks
         #expect(tasks.count == 1)
@@ -561,9 +486,8 @@ struct TelegramAdapterTests {
     @Test("Photo message without caption enqueues with default description")
     func photoWithoutCaptionEnqueues() async {
         let mock = MockTGAPIClient()
-        await mock.setUpdates([])
         let mockQueue = MockTaskSerialQueue()
-        let adapter = TelegramAdapter(apiClient: mock, allowedUsers: ["123"], taskQueue: mockQueue)
+        let adapter = TelegramAdapter(apiClient: mock, allowedUsers: ["123"], taskQueue: mockQueue, log: { _ in })
 
         let photo = [
             TGPhotoSize(fileId: "img123", width: 640, height: 480, fileSize: 30000),
@@ -576,11 +500,7 @@ struct TelegramAdapterTests {
             text: nil,
             photo: photo
         ))
-        await mock.setUpdates([update])
-
-        _Concurrency.Task { await adapter.start() }
-        try? await _Concurrency.Task.sleep(nanoseconds: 300_000_000)
-        await adapter.stop()
+        await adapter.processUpdates([update])
 
         let tasks = await mockQueue.tasks
         #expect(tasks.count == 1)
@@ -590,10 +510,9 @@ struct TelegramAdapterTests {
     @Test("Photo download failure sends error reply")
     func photoDownloadFailureSendsError() async {
         let mock = MockTGAPIClient()
-        await mock.setUpdates([])
         await mock.setGetFileError(TGAPIError.apiError("file not found"))
         let mockQueue = MockTaskSerialQueue()
-        let adapter = TelegramAdapter(apiClient: mock, allowedUsers: ["123"], taskQueue: mockQueue)
+        let adapter = TelegramAdapter(apiClient: mock, allowedUsers: ["123"], taskQueue: mockQueue, log: { _ in })
 
         let photo = [
             TGPhotoSize(fileId: "bad_file", width: 100, height: 100, fileSize: 1000),
@@ -606,11 +525,7 @@ struct TelegramAdapterTests {
             text: nil,
             photo: photo
         ))
-        await mock.setUpdates([update])
-
-        _Concurrency.Task { await adapter.start() }
-        try? await _Concurrency.Task.sleep(nanoseconds: 300_000_000)
-        await adapter.stop()
+        await adapter.processUpdates([update])
 
         let tasks = await mockQueue.tasks
         #expect(tasks.isEmpty)
@@ -623,9 +538,8 @@ struct TelegramAdapterTests {
     @Test("Photo from unauthorized user is silently discarded")
     func photoFromUnauthorizedDiscarded() async {
         let mock = MockTGAPIClient()
-        await mock.setUpdates([])
         let mockQueue = MockTaskSerialQueue()
-        let adapter = TelegramAdapter(apiClient: mock, allowedUsers: ["123"], taskQueue: mockQueue)
+        let adapter = TelegramAdapter(apiClient: mock, allowedUsers: ["123"], taskQueue: mockQueue, log: { _ in })
 
         let photo = [
             TGPhotoSize(fileId: "img1", width: 100, height: 100, fileSize: 1000),
@@ -638,11 +552,7 @@ struct TelegramAdapterTests {
             text: nil,
             photo: photo
         ))
-        await mock.setUpdates([update])
-
-        _Concurrency.Task { await adapter.start() }
-        try? await _Concurrency.Task.sleep(nanoseconds: 200_000_000)
-        await adapter.stop()
+        await adapter.processUpdates([update])
 
         let tasks = await mockQueue.tasks
         #expect(tasks.isEmpty)
@@ -654,9 +564,8 @@ struct TelegramAdapterTests {
     @Test("Photo selects largest size from multiple sizes")
     func photoSelectsLargestSize() async {
         let mock = MockTGAPIClient()
-        await mock.setUpdates([])
         let mockQueue = MockTaskSerialQueue()
-        let adapter = TelegramAdapter(apiClient: mock, allowedUsers: ["123"], taskQueue: mockQueue)
+        let adapter = TelegramAdapter(apiClient: mock, allowedUsers: ["123"], taskQueue: mockQueue, log: { _ in })
 
         let photo = [
             TGPhotoSize(fileId: "thumb", width: 90, height: 90, fileSize: 2000),
@@ -671,17 +580,11 @@ struct TelegramAdapterTests {
             text: "analyze this",
             photo: photo
         ))
-        await mock.setUpdates([update])
+        await adapter.processUpdates([update])
 
-        _Concurrency.Task { await adapter.start() }
-        try? await _Concurrency.Task.sleep(nanoseconds: 300_000_000)
-        await adapter.stop()
-
-        // Verify getFile was called (the mock returns default for any fileId)
         let getFileCount = await mock.getFileCallCount
         #expect(getFileCount == 1)
 
-        // Task was enqueued
         let tasks = await mockQueue.tasks
         #expect(tasks.count == 1)
     }
@@ -689,8 +592,7 @@ struct TelegramAdapterTests {
     @Test("Photo without queue sends acknowledgment reply")
     func photoWithoutQueueSendsReply() async {
         let mock = MockTGAPIClient()
-        await mock.setUpdates([])
-        let adapter = TelegramAdapter(apiClient: mock, allowedUsers: ["123"])
+        let adapter = TelegramAdapter(apiClient: mock, allowedUsers: ["123"], log: { _ in })
 
         let photo = [
             TGPhotoSize(fileId: "pic1", width: 640, height: 480, fileSize: 30000),
@@ -703,11 +605,7 @@ struct TelegramAdapterTests {
             text: nil,
             photo: photo
         ))
-        await mock.setUpdates([update])
-
-        _Concurrency.Task { await adapter.start() }
-        try? await _Concurrency.Task.sleep(nanoseconds: 300_000_000)
-        await adapter.stop()
+        await adapter.processUpdates([update])
 
         let sent = await mock.sentMessages
         #expect(sent.count == 1)
@@ -719,7 +617,6 @@ struct TelegramAdapterTests {
     @Test("/new command triggers clearSession and sends immediate reply")
     func newCommandClearsAndReplies() async {
         let mock = MockTGAPIClient()
-        await mock.setUpdates([])
         let mockQueue = MockTaskSerialQueue()
         final class ChatIdCollector: @unchecked Sendable {
             var ids: [Int64] = []
@@ -740,7 +637,7 @@ struct TelegramAdapterTests {
                 collector.add(chatId)
             }
         )
-        let adapter = TelegramAdapter(apiClient: mock, allowedUsers: ["123"], taskQueue: mockQueue, commandRouter: commandRouter)
+        let adapter = TelegramAdapter(apiClient: mock, allowedUsers: ["123"], taskQueue: mockQueue, commandRouter: commandRouter, log: { _ in })
 
         let update = TGUpdate(updateId: 1, message: TGMessage(
             messageId: 1,
@@ -749,11 +646,7 @@ struct TelegramAdapterTests {
             date: 0,
             text: "/new"
         ))
-        await mock.setUpdates([update])
-
-        _Concurrency.Task { await adapter.start() }
-        try? await _Concurrency.Task.sleep(nanoseconds: 200_000_000)
-        await adapter.stop()
+        await adapter.processUpdates([update])
 
         let tasks = await mockQueue.tasks
         #expect(tasks.isEmpty)
@@ -769,7 +662,6 @@ struct TelegramAdapterTests {
     @Test("/new does not enqueue as task")
     func newCommandDoesNotEnqueue() async {
         let mock = MockTGAPIClient()
-        await mock.setUpdates([])
         let mockQueue = MockTaskSerialQueue()
         let commandRouter = TGCommandRouter(
             statusProvider: {
@@ -783,7 +675,7 @@ struct TelegramAdapterTests {
             skillsProvider: { [] },
             clearSession: { _ in }
         )
-        let adapter = TelegramAdapter(apiClient: mock, allowedUsers: ["123"], taskQueue: mockQueue, commandRouter: commandRouter)
+        let adapter = TelegramAdapter(apiClient: mock, allowedUsers: ["123"], taskQueue: mockQueue, commandRouter: commandRouter, log: { _ in })
 
         let update = TGUpdate(updateId: 1, message: TGMessage(
             messageId: 1,
@@ -792,11 +684,7 @@ struct TelegramAdapterTests {
             date: 0,
             text: "/new"
         ))
-        await mock.setUpdates([update])
-
-        _Concurrency.Task { await adapter.start() }
-        try? await _Concurrency.Task.sleep(nanoseconds: 200_000_000)
-        await adapter.stop()
+        await adapter.processUpdates([update])
 
         let tasks = await mockQueue.tasks
         #expect(tasks.isEmpty)

@@ -9,14 +9,20 @@ protocol TGAPIClientProtocol: Sendable {
     func downloadFile(filePath: String) async throws -> Data
 }
 
+protocol URLSessionProtocol: Sendable {
+    func data(for request: URLRequest) async throws -> (Data, URLResponse)
+}
+
+extension URLSession: URLSessionProtocol {}
+
 // MARK: - Implementation
 
 struct TGAPIClient: TGAPIClientProtocol {
     private let token: String
-    private let session: URLSession
+    private let session: any URLSessionProtocol
     private let maxRetries: Int
 
-    init(token: String, session: URLSession = .shared, maxRetries: Int = 3) {
+    init(token: String, session: any URLSessionProtocol = URLSession.shared, maxRetries: Int = 3) {
         self.token = token
         self.session = session
         self.maxRetries = maxRetries

@@ -98,9 +98,9 @@
 - 10.5 验证运行中 gateway 的 status 含实时数据 + HTTP 查询成功（Story 28.4 AC#1）
 - 10.6 验证 uninstall 清理完整（Story 28.3 AC#2）
 
-## 11. Telegram 远程交互（7 项）
+## 11. Telegram 远程交互（11 项）
 
-验证 Epic 29 引入的 TG Bot 通信、任务执行、命令、图片支持。
+验证 Epic 29 引入的 TG Bot 通信、任务执行、命令、图片支持，以及 TG 持久会话（Epic 28 后续）。
 
 **前置条件：** `AXION_TELEGRAM_BOT_TOKEN` 和 `AXION_TELEGRAM_ALLOWED_USERS` 环境变量已设置，Gateway 已 install 并运行。
 
@@ -123,6 +123,17 @@
 - 11.5 验证非白名单用户消息静默丢弃（Story 29.1 AC#3）
 - 11.6 验证图片下载 + agent 附件传递（Story 29.5 AC#1）
 - 11.7 验证任务排队 + 自动执行 + 排队通知（Story 29.2 AC#2-4）
+- 11.8 验证持久会话：follow-up 消息恢复同一 session，agent 有历史上下文（TG Persistent Sessions AC#1）
+- 11.9 验证 30 分钟超时自动新建会话（TG Persistent Sessions AC#2）
+- 11.10 验证 `/new` 命令清除会话映射（TG Persistent Sessions AC#3）
+- 11.11 验证 `/new` 不影响已排队任务的冻结会话决策（TG Persistent Sessions AC#5）
+
+| # | 测试步骤 | 预期行为 | 实际结果 |
+|---|---------|---------|---------|
+| 11.8 | 白名单用户发送 `打开计算器计算 5+3` → 等待完成 → 发送 `刚才结果是多少` | 第二条回复包含历史上下文（如 "5+3=8"），agent 基于同一 session 回答 | |
+| 11.9 | 11.8 完成后 → 等待 >30 分钟（或临时调低超时） → 发送 `1+1等于几` | 回复以 "新会话已开始" 开头，agent 无历史上下文 | |
+| 11.10 | 白名单用户发送 `/new` | 立即回复 "新会话已开始"；再发任意任务，创建新 session（无历史） | |
+| 11.11 | 任务 A 执行中时发送 `/new` → 再发送任务 B | 任务 A 不受影响正常完成（保留冻结的会话决策）；任务 B 使用新 session（无历史） | |
 
 ---
 
@@ -153,7 +164,7 @@
 
 ## 验收总结
 
-**43/47 通过，3 项跳过，1 项跳过（无预录制技能）。**
+**43/51 通过，3 项跳过，1 项跳过（无预录制技能），4 项待验收（11.8-11.11）。**
 
 | 组别 | 通过 | 总数 | 说明 |
 |------|------|------|------|
@@ -167,7 +178,7 @@
 | Self-Evolution | 4 | 4 | --no-review/curator status/doctor/help 正常 |
 | Agent Runtime | 5 | 5 | Session/Resume/持久化全部通过 |
 | Gateway 模式 | 6 | 6 | gateway start/install/uninstall/status 全部通过 |
-| TG 远程交互 | 6 | 7 | 文本/命令/排队/图片下载通过；白名单测试跳过（无第二账号） |
+| TG 远程交互 | 6 | 11 | 文本/命令/排队/图片下载通过；白名单测试跳过（无第二账号）；持久会话 11.8-11.11 待验收 |
 | 自进化调度 | 4 | 5 | ReviewScheduler + status + curator pending + --no-review 通过；TG 推送跳过（未配置） |
 
 ## 8. Self-Evolution（Review & Curator）（4 项）

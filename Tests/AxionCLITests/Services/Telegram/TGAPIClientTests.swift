@@ -32,30 +32,37 @@ struct TGAPIClientTests {
 
     // MARK: - Retry Logic
 
-    @Test("TGAPIClient retries on network failure")
+    @Test("TGAPIClient retries on network failure via mock session")
     func retriesOnFailure() async {
-        let client = TGAPIClient(token: "bad_token", maxRetries: 1)
+        // Use a mock URLSession that always fails — no real network calls
+        let session = MockFailingURLSession()
+        let client = TGAPIClient(token: "test_token", session: session, maxRetries: 2)
 
         do {
             _ = try await client.sendMessage(chatId: 123, text: "test")
+            #expect(Bool(false), "Should have thrown")
         } catch {
-            // Expected — validates error path for network failures
+            // Expected — network failure after retries
         }
+        #expect(session.attemptCount == 2) // initial + 1 retry
     }
 
-    @Test("TGAPIClient does not retry on 4xx HTTP errors")
+    @Test("TGAPIClient does not retry on 4xx HTTP errors via mock session")
     func noRetryOnClientError() async {
-        let client = TGAPIClient(token: "test_token", maxRetries: 3)
-        // A bad token will get a 401 from TG API — should fail immediately, not retry 3 times
-        // We verify the error type is TGAPIError
+        // Use a mock URLSession that returns 401 immediately
+        let session = MockHTTPErrorURLSession(statusCode: 401)
+        let client = TGAPIClient(token: "test_token", session: session, maxRetries: 3)
+
         do {
             _ = try await client.getUpdates(offset: nil, timeout: 1)
+            #expect(Bool(false), "Should have thrown")
         } catch let error as TGAPIError {
-            // Expected — got a non-retryable error
+            // 4xx errors are thrown as TGAPIError immediately — no retry
             #expect(error.errorDescription != nil)
         } catch {
-            // Network-level error (DNS, timeout) — acceptable
+            // Acceptable fallback
         }
+        #expect(session.attemptCount == 1) // no retry for 4xx
     }
 
     // MARK: - TGAPIError
@@ -229,5 +236,35 @@ actor MockTGAPIClient: TGAPIClientProtocol {
         _downloadFileCallCount += 1
         if let error = _downloadFileError { throw error }
         return _downloadFileResult ?? Data("fake-image-data".utf8)
+    }
+}
+
+// MARK: - Mock URLSession (no real network)
+
+/// Always throws a network-level error (URLError.notConnectedToInternet)
+final class MockFailingURLSession: URLSessionProtocol, @unchecked Sendable {
+    var attemptCount = 0
+
+    func data(for request: URLRequest) async throws -> (Data, URLResponse) {
+        attemptCount += 1
+        throw URLError(.notConnectedToInternet)
+    }
+}
+
+/// Returns an HTTP response with the given status code and empty JSON body
+final class MockHTTPErrorURLSession: URLSessionProtocol, @unchecked Sendable {
+    let statusCode: Int
+    var attemptCount = 0
+
+    init(statusCode: Int) {
+        self.statusCode = statusCode
+    }
+
+    func data(for request: URLRequest) async throws -> (Data, URLResponse) {
+        attemptCount += 1
+        let url = request.url ?? URL(string: "https://example.com")!
+        let httpResp = HTTPURLResponse(url: url, statusCode: statusCode, httpVersion: "HTTP/1.1", headerFields: nil)!
+        let body = Data("{\"ok\":false,\"description\":\"Unauthorized\"}".utf8)
+        return (body, httpResp)
     }
 }

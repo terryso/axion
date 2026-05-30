@@ -7,21 +7,23 @@ actor TelegramAdapter {
     private var taskQueue: (any TaskSerialQueueProtocol)?
     private var lastUpdateId: Int64 = 0
     private var isRunning = false
+    private let log: @Sendable (String) -> Void
 
     nonisolated(unsafe) private(set) var statusValue: String = "disabled"
 
-    init(apiClient: any TGAPIClientProtocol, allowedUsers: Set<String>, taskQueue: (any TaskSerialQueueProtocol)? = nil, commandRouter: TGCommandRouter? = nil) {
+    init(apiClient: any TGAPIClientProtocol, allowedUsers: Set<String>, taskQueue: (any TaskSerialQueueProtocol)? = nil, commandRouter: TGCommandRouter? = nil, log: @Sendable @escaping (String) -> Void = { fputs($0 + "\n", stderr) }) {
         self.apiClient = apiClient
         self.allowedUsers = allowedUsers
         self.taskQueue = taskQueue
         self.commandRouter = commandRouter
+        self.log = log
     }
 
     func start() async {
         guard !isRunning else { return }
         isRunning = true
         statusValue = "connected"
-        fputs("[axion] Telegram adapter connected\n", stderr)
+        log("[axion] Telegram adapter connected")
         await pollLoop()
     }
 
@@ -32,6 +34,17 @@ actor TelegramAdapter {
 
     func statusInfo() -> String? {
         return statusValue
+    }
+
+    // MARK: - Direct Update Processing
+
+    func processUpdates(_ updates: [TGUpdate]) async {
+        for update in updates {
+            lastUpdateId = update.updateId
+            if let message = update.message {
+                await processMessage(message)
+            }
+        }
     }
 
     // MARK: - Poll Loop
@@ -49,7 +62,7 @@ actor TelegramAdapter {
                 }
             } catch {
                 statusValue = "error:\(error.localizedDescription)"
-                fputs("[axion] Telegram getUpdates failed: \(error.localizedDescription)\n", stderr)
+                log("[axion] Telegram getUpdates failed: \(error.localizedDescription)")
             }
         }
     }
@@ -73,7 +86,7 @@ actor TelegramAdapter {
             return
         }
 
-        fputs("[axion] Telegram task submitted: \"\(text.prefix(50))\"\n", stderr)
+        log("[axion] Telegram task submitted: \"\(text.prefix(50))\"")
 
         if let queue = taskQueue {
             await queue.enqueue(task: text, chatId: message.chat.id)
@@ -107,7 +120,7 @@ actor TelegramAdapter {
                 taskText = "[用户发送了一张图片，保存在 \(tmpFile.path)]"
             }
 
-            fputs("[axion] Telegram photo task submitted: \"\(taskText.prefix(50))\"\n", stderr)
+            log("[axion] Telegram photo task submitted: \"\(taskText.prefix(50))\"")
 
             if let queue = taskQueue {
                 await queue.enqueue(task: taskText, chatId: chatId)
@@ -118,7 +131,7 @@ actor TelegramAdapter {
             if let path = tmpPath {
                 try? FileManager.default.removeItem(atPath: path)
             }
-            fputs("[axion] Telegram photo download failed: \(error.localizedDescription)\n", stderr)
+            log("[axion] Telegram photo download failed: \(error.localizedDescription)")
             await sendReply("图片下载失败，请重试", to: chatId)
         }
     }
@@ -133,7 +146,7 @@ actor TelegramAdapter {
             do {
                 _ = try await apiClient.sendMessage(chatId: chatId, text: chunk)
             } catch {
-                fputs("[axion] Telegram sendMessage failed: \(error.localizedDescription)\n", stderr)
+                log("[axion] Telegram sendMessage failed: \(error.localizedDescription)")
             }
         }
     }

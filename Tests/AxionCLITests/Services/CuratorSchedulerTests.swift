@@ -108,7 +108,8 @@ struct CuratorSchedulerTests {
             curator: curator,
             agentProvider: agentProvider,
             traceDir: "/tmp/test-trace-\(UUID().uuidString)",
-            onCuratorResult: onCuratorResult
+            onCuratorResult: onCuratorResult,
+            launchTask: { body in _Concurrency.Task { await body() } }
         )
     }
 
@@ -209,7 +210,7 @@ struct CuratorSchedulerTests {
         let event = AgentCompletedEvent(sessionId: "s1", totalSteps: 5, durationMs: 1000, resultText: "done")
 
         await scheduler.handle(event, context: context)
-        try? await _Concurrency.Task.sleep(nanoseconds: 500_000_000)
+        try? await _Concurrency.Task.sleep(nanoseconds: 20_000_000)
 
         #expect(mockCurator.callTracker.executeCalled)
     }
@@ -235,7 +236,7 @@ struct CuratorSchedulerTests {
         let event = AgentCompletedEvent(sessionId: "s1", totalSteps: 5, durationMs: 1000, resultText: "done")
 
         await scheduler.handle(event, context: context)
-        try? await _Concurrency.Task.sleep(nanoseconds: 500_000_000)
+        try? await _Concurrency.Task.sleep(nanoseconds: 20_000_000)
 
         #expect(scheduler.lastCuratorAtValue != nil)
     }
@@ -255,7 +256,7 @@ struct CuratorSchedulerTests {
         let event = AgentCompletedEvent(sessionId: "s1", totalSteps: 5, durationMs: 1000, resultText: "done")
 
         await scheduler.handle(event, context: context)
-        try? await _Concurrency.Task.sleep(nanoseconds: 100_000_000)
+        try? await _Concurrency.Task.sleep(nanoseconds: 20_000_000)
 
         #expect(!mockCurator.callTracker.executeCalled)
     }
@@ -277,7 +278,7 @@ struct CuratorSchedulerTests {
         let event = AgentCompletedEvent(sessionId: "s1", totalSteps: 5, durationMs: 1000, resultText: "done")
 
         await scheduler.handle(event, context: context)
-        try? await _Concurrency.Task.sleep(nanoseconds: 500_000_000)
+        try? await _Concurrency.Task.sleep(nanoseconds: 20_000_000)
 
         #expect(mockCurator.callTracker.executeCalled)
         let info = callbackBox.value
@@ -315,7 +316,7 @@ struct CuratorSchedulerTests {
         let event = AgentCompletedEvent(sessionId: "s1", totalSteps: 5, durationMs: 1000, resultText: "done")
 
         await scheduler.handle(event, context: context)
-        try? await _Concurrency.Task.sleep(nanoseconds: 500_000_000)
+        try? await _Concurrency.Task.sleep(nanoseconds: 20_000_000)
 
         let info = callbackBox.value
         #expect(info != nil)
@@ -343,7 +344,7 @@ struct CuratorSchedulerTests {
         let event = AgentCompletedEvent(sessionId: "s1", totalSteps: 5, durationMs: 1000, resultText: "done")
 
         await scheduler.handle(event, context: context)
-        try? await _Concurrency.Task.sleep(nanoseconds: 500_000_000)
+        try? await _Concurrency.Task.sleep(nanoseconds: 20_000_000)
 
         #expect(callbackBox.value != nil)
         #expect(callbackBox.value!.success == true)
@@ -380,7 +381,7 @@ struct CuratorSchedulerTests {
         let event = AgentCompletedEvent(sessionId: "s1", totalSteps: 5, durationMs: 1000, resultText: "done")
 
         await scheduler.handle(event, context: context)
-        try? await _Concurrency.Task.sleep(nanoseconds: 100_000_000)
+        try? await _Concurrency.Task.sleep(nanoseconds: 20_000_000)
 
         #expect(!mockCurator.callTracker.executeCalled)
     }
@@ -402,7 +403,7 @@ struct CuratorSchedulerTests {
         // First event — no previous lastTaskAt, so shouldCurate returns false
         let event1 = AgentCompletedEvent(sessionId: "s1", totalSteps: 1, durationMs: 100, resultText: "first")
         await scheduler.handle(event1, context: context)
-        try? await _Concurrency.Task.sleep(nanoseconds: 100_000_000)
+        try? await _Concurrency.Task.sleep(nanoseconds: 20_000_000)
         #expect(!mockCurator.callTracker.executeCalled)
 
         // Simulate time passing by injecting a past lastTaskAt via checkIdle
@@ -431,7 +432,7 @@ struct CuratorSchedulerTests {
         // Second event immediately — previous lastTaskAt was just set, so idle ~0 < 1h
         let event2 = AgentCompletedEvent(sessionId: "s2", totalSteps: 2, durationMs: 200, resultText: "second")
         await scheduler.handle(event2, context: context)
-        try? await _Concurrency.Task.sleep(nanoseconds: 100_000_000)
+        try? await _Concurrency.Task.sleep(nanoseconds: 20_000_000)
 
         #expect(!mockCurator.callTracker.executeCalled)
     }

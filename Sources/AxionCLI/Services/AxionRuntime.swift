@@ -19,13 +19,13 @@ public actor AxionRuntime: AxionRuntimeRunning, AxionRuntimeResuming, SessionLis
     private var handlers: [any EventHandler] = []
     private var eventSubscriptionId: UUID?
 
-    init(eventBus: EventBus? = nil, executor: RunExecuting = DefaultRunExecutor(), builder: AgentBuilding = DefaultAgentBuilder()) {
+    init(eventBus: EventBus? = nil, executor: RunExecuting = DefaultRunExecutor(), builder: AgentBuilding = DefaultAgentBuilder(), sessionStore: SessionStore? = nil) {
         self.eventBus = eventBus
         self.executor = executor
         self.builder = builder
         let dir = (NSHomeDirectory() as NSString).appendingPathComponent(".axion/sessions")
         self.sessionsDir = dir
-        self.sessionStore = SessionStore(sessionsDir: dir)
+        self.sessionStore = sessionStore ?? SessionStore(sessionsDir: dir)
     }
 
     struct RunOverrides: Sendable {

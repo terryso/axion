@@ -43,6 +43,9 @@ actor CuratorScheduler: EventHandler {
 
     private var _onCuratorResult: (@Sendable (CuratorResultInfo) async -> Void)?
 
+    typealias TaskLauncher = @Sendable (@escaping @Sendable () async -> Void) -> Void
+    private let launchTask: TaskLauncher
+
     /// ISO8601-formatted timestamp of the last successful curator, or nil.
     nonisolated var lastCuratorAtValue: String? { _lastCuratorAtBox.value }
 
@@ -52,7 +55,8 @@ actor CuratorScheduler: EventHandler {
         curator: any CuratorExecuting,
         agentProvider: @Sendable @escaping () -> Agent?,
         traceDir: String,
-        onCuratorResult: (@Sendable (CuratorResultInfo) async -> Void)? = nil
+        onCuratorResult: (@Sendable (CuratorResultInfo) async -> Void)? = nil,
+        launchTask: @escaping TaskLauncher = { body in _Concurrency.Task.detached { await body() } }
     ) {
         self.curatorIdleHours = curatorIdleHours
         self.curatorIntervalHours = curatorIntervalHours
@@ -60,6 +64,7 @@ actor CuratorScheduler: EventHandler {
         self.agentProvider = agentProvider
         self.traceDir = traceDir
         self._onCuratorResult = onCuratorResult
+        self.launchTask = launchTask
     }
 
     func setOnCuratorResult(_ handler: (@Sendable (CuratorResultInfo) async -> Void)?) {
@@ -98,7 +103,7 @@ actor CuratorScheduler: EventHandler {
         let lastCuratorAtBox = self._lastCuratorAtBox
         let onCuratorResult = self._onCuratorResult
 
-        _Concurrency.Task.detached { [curator, agent, traceDir, lastCuratorAtBox, onCuratorResult] in
+        launchTask { [curator, agent, traceDir, lastCuratorAtBox, onCuratorResult] in
             await Self.executeCurator(
                 curator: curator,
                 agent: agent,
@@ -131,7 +136,7 @@ actor CuratorScheduler: EventHandler {
         let onCuratorResult = self._onCuratorResult
         let sessionId = context.sessionId ?? "unknown"
 
-        _Concurrency.Task.detached { [curator, agent, traceDir, lastCuratorAtBox, onCuratorResult, sessionId] in
+        launchTask { [curator, agent, traceDir, lastCuratorAtBox, onCuratorResult, sessionId] in
             await Self.executeCurator(
                 curator: curator,
                 agent: agent,
