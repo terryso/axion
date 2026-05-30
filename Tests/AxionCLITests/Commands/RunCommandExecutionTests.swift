@@ -39,7 +39,8 @@ actor MockAxionRuntime: AxionRuntimeRunning {
 
     func execute(
         buildConfig: AgentBuilder.BuildConfig,
-        runOverrides: AxionRuntime.RunOverrides
+        runOverrides: AxionRuntime.RunOverrides,
+        sessionId: String? = nil
     ) async throws -> AxionRunResult {
         executeCallCount += 1
         if let error = executeError { throw error }

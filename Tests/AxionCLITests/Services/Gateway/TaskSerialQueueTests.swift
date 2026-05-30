@@ -35,11 +35,11 @@ struct TaskSerialQueueTests {
             resumeError = error
         }
 
-        func executeRun(task: String, buildConfig: AgentBuilder.BuildConfig, eventBus: OpenAgentSDK.EventBus, runOverrides: AxionRuntime.RunOverrides) async throws -> AxionRunResult {
-            return try await executeRun(task: task, buildConfig: buildConfig, eventBus: eventBus, runOverrides: runOverrides, extraHandlers: [])
+        func executeRun(task: String, buildConfig: AgentBuilder.BuildConfig, eventBus: OpenAgentSDK.EventBus, runOverrides: AxionRuntime.RunOverrides, sessionId: String? = nil) async throws -> AxionRunResult {
+            return try await executeRun(task: task, buildConfig: buildConfig, eventBus: eventBus, runOverrides: runOverrides, extraHandlers: [], sessionId: sessionId)
         }
 
-        func executeRun(task: String, buildConfig: AgentBuilder.BuildConfig, eventBus: OpenAgentSDK.EventBus, runOverrides: AxionRuntime.RunOverrides, extraHandlers: [any EventHandler]) async throws -> AxionRunResult {
+        func executeRun(task: String, buildConfig: AgentBuilder.BuildConfig, eventBus: OpenAgentSDK.EventBus, runOverrides: AxionRuntime.RunOverrides, extraHandlers: [any EventHandler], sessionId: String? = nil) async throws -> AxionRunResult {
             executedTasks.append(task)
             executeCallCount += 1
             if let delay = delays[task] {

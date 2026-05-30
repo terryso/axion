@@ -38,7 +38,8 @@ final class MockDaemonRuntime: AxionRuntimeRunning, @unchecked Sendable {
 
     func execute(
         buildConfig: AgentBuilder.BuildConfig,
-        runOverrides: AxionRuntime.RunOverrides
+        runOverrides: AxionRuntime.RunOverrides,
+        sessionId: String? = nil
     ) async throws -> AxionRunResult {
         _executeCount.increment()
         if let error { throw error }
@@ -132,11 +133,12 @@ final class MockDaemonRuntimeManager: DaemonRuntimeManaging, @unchecked Sendable
         task: String,
         buildConfig: AgentBuilder.BuildConfig,
         eventBus: EventBus,
-        runOverrides: AxionRuntime.RunOverrides
+        runOverrides: AxionRuntime.RunOverrides,
+        sessionId: String? = nil
     ) async throws -> AxionRunResult {
         return try await executeRun(
             task: task, buildConfig: buildConfig, eventBus: eventBus,
-            runOverrides: runOverrides, extraHandlers: []
+            runOverrides: runOverrides, extraHandlers: [], sessionId: sessionId
         )
     }
 
@@ -145,7 +147,8 @@ final class MockDaemonRuntimeManager: DaemonRuntimeManaging, @unchecked Sendable
         buildConfig: AgentBuilder.BuildConfig,
         eventBus: EventBus,
         runOverrides: AxionRuntime.RunOverrides,
-        extraHandlers: [any EventHandler]
+        extraHandlers: [any EventHandler],
+        sessionId: String? = nil
     ) async throws -> AxionRunResult {
         _executeCount.increment()
         if let error { throw error }
@@ -422,6 +425,22 @@ struct DaemonRuntimeManagerTests {
 
         let tasks = Set(sessions.map(\.task))
         #expect(tasks == ["task1", "task2"])
+    }
+
+    @Test("sessionId parameter is forwarded to runtime")
+    func sessionIdForwarded() async throws {
+        let mock = MockDaemonRuntime(result: makeResult(sessionId: "sdk-run-id-abc"))
+        let manager = DaemonRuntimeManager(traceDir: "/tmp/test-traces") { _ in mock }
+
+        _ = try await manager.executeRun(
+            task: "test",
+            buildConfig: makeBuildConfig(),
+            eventBus: EventBus(),
+            runOverrides: AxionRuntime.RunOverrides.default,
+            sessionId: "sdk-run-id-abc"
+        )
+
+        #expect(mock.executeCount == 1)
     }
 }
 

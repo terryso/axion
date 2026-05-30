@@ -74,7 +74,10 @@ struct ServerCommand: AsyncParsableCommand {
         )
 
         server.runHandler = { [runCoordinator, config, runtimeManager] task, request, tracker, broadcaster, persistence, limiter in
-            // Find the runId that SDK's tracker created for this task
+            // SDK boundary limitation: the runHandler callback does not expose the runId
+            // it created, so we find it by matching task text + .queued status. This is
+            // ambiguous when identical tasks are queued concurrently — a fix requires an
+            // SDK API change to pass runId into the callback.
             let runs = await tracker.listRuns()
             let sdkRunId = runs.first(where: { $0.task == task && $0.status == .queued })?.runId
             guard let runId = sdkRunId else {
@@ -108,14 +111,16 @@ struct ServerCommand: AsyncParsableCommand {
                 request: request
             )
 
-            // Execute via DaemonRuntimeManager
+            // Execute via DaemonRuntimeManager — pass sdkRunId so AxionRuntime
+            // uses the same ID for session transcript instead of generating a second one.
             let result: AxionRunResult
             do {
                 result = try await runtimeManager.executeRun(
                     task: task,
                     buildConfig: buildConfig,
                     eventBus: eventBus,
-                    runOverrides: .default
+                    runOverrides: .default,
+                    sessionId: runId
                 )
             } catch {
                 await bridge.stop()

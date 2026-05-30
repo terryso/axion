@@ -269,6 +269,36 @@ struct AxionRuntimeTests {
         #expect(result.state == .completed)
     }
 
+    // MARK: - execute() — sessionId passthrough
+
+    @Test("execute() uses provided sessionId instead of generating one")
+    func executeUsesProvidedSessionId() async throws {
+        let buildResult = Self.dummyBuildResult()
+        let runtime = Self.makeRuntime(builderResult: buildResult)
+
+        let result = try await runtime.execute(
+            buildConfig: Self.makeBuildConfig(),
+            runOverrides: .default,
+            sessionId: "external-run-id-123"
+        )
+
+        #expect(result.sessionId == "external-run-id-123")
+    }
+
+    @Test("execute() auto-generates sessionId when nil is passed")
+    func executeAutoGeneratesSessionIdWhenNil() async throws {
+        let buildResult = Self.dummyBuildResult()
+        let runtime = Self.makeRuntime(builderResult: buildResult)
+
+        let result = try await runtime.execute(
+            buildConfig: Self.makeBuildConfig(),
+            runOverrides: .default,
+            sessionId: nil
+        )
+
+        #expect(!result.sessionId.isEmpty, "Generated sessionId should not be empty")
+    }
+
     // MARK: - execute() — task passthrough
 
     @Test("execute() uses buildConfig.task as runConfig.task")

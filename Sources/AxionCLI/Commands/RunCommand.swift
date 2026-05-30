@@ -175,7 +175,7 @@ struct RunCommand: AsyncParsableCommand {
 
         let result: AxionRunResult
         do {
-            result = try await runtime.execute(buildConfig: buildConfig, runOverrides: overrides)
+            result = try await runtime.execute(buildConfig: buildConfig, runOverrides: overrides, sessionId: nil)
         } catch {
             eventLoopTask.cancel()
             await runtime.stopEventLoop()

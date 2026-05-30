@@ -25,14 +25,16 @@ actor DaemonRuntimeManager: DaemonRuntimeManaging {
         task: String,
         buildConfig: AgentBuilder.BuildConfig,
         eventBus: EventBus,
-        runOverrides: AxionRuntime.RunOverrides = .default
+        runOverrides: AxionRuntime.RunOverrides = .default,
+        sessionId: String? = nil
     ) async throws -> AxionRunResult {
         return try await executeRun(
             task: task,
             buildConfig: buildConfig,
             eventBus: eventBus,
             runOverrides: runOverrides,
-            extraHandlers: []
+            extraHandlers: [],
+            sessionId: sessionId
         )
     }
 
@@ -41,7 +43,8 @@ actor DaemonRuntimeManager: DaemonRuntimeManaging {
         buildConfig: AgentBuilder.BuildConfig,
         eventBus: EventBus,
         runOverrides: AxionRuntime.RunOverrides = .default,
-        extraHandlers: [any EventHandler]
+        extraHandlers: [any EventHandler],
+        sessionId: String? = nil
     ) async throws -> AxionRunResult {
         let runtime = runtimeFactory(eventBus)
 
@@ -55,7 +58,7 @@ actor DaemonRuntimeManager: DaemonRuntimeManaging {
 
         let result: AxionRunResult
         do {
-            result = try await runtime.execute(buildConfig: buildConfig, runOverrides: runOverrides)
+            result = try await runtime.execute(buildConfig: buildConfig, runOverrides: runOverrides, sessionId: sessionId)
         } catch {
             eventLoopTask.cancel()
             await runtime.stopEventLoop()

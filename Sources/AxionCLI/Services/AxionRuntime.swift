@@ -145,11 +145,12 @@ public actor AxionRuntime: AxionRuntimeRunning, AxionRuntimeResuming, SessionLis
 
     func execute(
         buildConfig: AgentBuilder.BuildConfig,
-        runOverrides: RunOverrides = .default
+        runOverrides: RunOverrides = .default,
+        sessionId: String? = nil
     ) async throws -> AxionRunResult {
-        let sid = executor.generateRunId()
+        let sid = (sessionId?.isEmpty == false) ? sessionId! : executor.generateRunId()
         let startedAt = Date()
-        sessionId = sid
+        self.sessionId = sid
         createdAt = startedAt
 
         // Inject sessionId + sessionStore into buildConfig so SDK writes transcript.json

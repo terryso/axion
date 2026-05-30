@@ -150,6 +150,10 @@ struct GatewayStartCommand: AsyncParsableCommand {
 
             await runner.taskStarted()
 
+            // SDK boundary limitation: the runHandler callback does not expose the runId
+            // it created, so we find it by matching task text + .queued status. This is
+            // ambiguous when identical tasks are queued concurrently — a fix requires an
+            // SDK API change to pass runId into the callback.
             let runs = await tracker.listRuns()
             let sdkRunId = runs.first(where: { $0.task == task && $0.status == .queued })?.runId
             guard let runId = sdkRunId else {
@@ -190,7 +194,8 @@ struct GatewayStartCommand: AsyncParsableCommand {
                     buildConfig: buildConfig,
                     eventBus: eventBus,
                     runOverrides: runOverrides,
-                    extraHandlers: [reviewScheduler] + (curatorScheduler.map { [$0] } ?? [])
+                    extraHandlers: [reviewScheduler] + (curatorScheduler.map { [$0] } ?? []),
+                    sessionId: runId
                 )
             } catch {
                 await bridge.stop()

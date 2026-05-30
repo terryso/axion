@@ -196,7 +196,8 @@ actor TaskSerialQueue: TaskSerialQueueProtocol {
                     buildConfig: buildConfig,
                     eventBus: eventBus,
                     runOverrides: .default,
-                    extraHandlers: allHandlers
+                    extraHandlers: allHandlers,
+                    sessionId: nil
                 )
             }
             group.addTask {
