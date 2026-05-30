@@ -238,6 +238,53 @@ struct MemoryContextProvider {
         return ([header] + continuation).joined(separator: "\n")
     }
 
+    // MARK: - Universal Memory Context (Story 31.1)
+
+    /// Build a universal memory context string from MEMORY.md and USER.md.
+    ///
+    /// Loads both files via `UniversalMemoryStore`, runs load-time security scan,
+    /// and formats the result as a `[=== Universal Memory ===]` block.
+    /// Returns `nil` if both files are empty (safe degradation).
+    func buildUniversalMemoryContext(memoryDir: String) async -> String? {
+        let store = UniversalMemoryStore(memoryDir: memoryDir)
+        let scanner = MemorySecurityScanner()
+
+        let memoryContent = await store.read(target: .memory)
+        let userContent = await store.read(target: .user)
+
+        let memoryTrimmed = memoryContent.trimmingCharacters(in: .whitespacesAndNewlines)
+        let userTrimmed = userContent.trimmingCharacters(in: .whitespacesAndNewlines)
+
+        guard !memoryTrimmed.isEmpty || !userTrimmed.isEmpty else {
+            return nil
+        }
+
+        // Load-time security scan — warn but don't block
+        let memoryWarnings = scanner.scanOnLoad(content: memoryContent)
+        let userWarnings = scanner.scanOnLoad(content: userContent)
+
+        var sections: [String] = []
+        sections.append("[=== Universal Memory ===]")
+
+        if !memoryTrimmed.isEmpty {
+            sections.append("MEMORY.md:")
+            sections.append(memoryTrimmed)
+        }
+
+        if !userTrimmed.isEmpty {
+            sections.append("USER.md:")
+            sections.append(userTrimmed)
+        }
+
+        let allWarnings = memoryWarnings + userWarnings
+        if !allWarnings.isEmpty {
+            sections.append("⚠️ Security warnings: " + allWarnings.joined(separator: "; "))
+        }
+
+        sections.append("[=== End Universal Memory ===]")
+        return sections.joined(separator: "\n")
+    }
+
     // MARK: - Domain Inference
 
     /// Infer an App domain from the task description by matching keywords.

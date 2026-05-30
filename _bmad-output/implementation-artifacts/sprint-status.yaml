@@ -87,6 +87,7 @@
 
 generated: 2026-05-08
 last_updated: 2026-05-31
+# story-31.1-created: 2026-05-31
 # story-29-4-started: 2026-05-29
 # story-29.4-created: 2026-05-29
 # story-29.3-created: 2026-05-29
@@ -430,8 +431,8 @@ development_status:
   # ============================================================
 
   # Epic 31: 通用记忆系统 — 对齐 Hermes 自进化闭环
-  epic-31: backlog
-  31-1-dual-track-memory-storage: backlog
+  epic-31: in-progress
+  31-1-dual-track-memory-storage: done
   31-2-memory-operation-tool: backlog
   31-3-review-agent-universal-memory-tool: backlog
   31-4-security-scanner-frozen-snapshot: backlog

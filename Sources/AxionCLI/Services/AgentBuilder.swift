@@ -444,6 +444,7 @@ enum AgentBuilder {
 
         // Memory context
         var memoryContext: String? = nil
+        var universalMemoryContext: String? = nil
         if !noMemory {
             let contextProvider = MemoryContextProvider()
             let factStore = AxionFactStore(memoryDir: memoryDir)
@@ -462,6 +463,9 @@ enum AgentBuilder {
             } catch {
                 // Non-fatal: continue without memory context
             }
+
+            // Universal memory (MEMORY.md + USER.md) — frozen at prompt build time
+            universalMemoryContext = await contextProvider.buildUniversalMemoryContext(memoryDir: memoryDir)
         }
 
         let baseSystemPrompt = (try? PromptBuilder.load(
@@ -478,6 +482,7 @@ enum AgentBuilder {
         let prompt = buildFullSystemPrompt(
             basePrompt: baseSystemPrompt,
             memoryContext: memoryContext,
+            universalMemoryContext: universalMemoryContext,
             skillsPrompt: skillsPrompt
         )
 
@@ -503,16 +508,21 @@ enum AgentBuilder {
         return prompt
     }
 
-    /// Builds the full system prompt with skills section appended.
+    /// Builds the full system prompt with memory context and skills section appended.
     static func buildFullSystemPrompt(
         basePrompt: String,
         memoryContext: String? = nil,
+        universalMemoryContext: String? = nil,
         skillsPrompt: String = ""
     ) -> String {
         var prompt = basePrompt
 
         if let memoryContext, !memoryContext.isEmpty {
             prompt += "\n\n\(memoryContext)"
+        }
+
+        if let universalMemoryContext, !universalMemoryContext.isEmpty {
+            prompt += "\n\n\(universalMemoryContext)"
         }
 
         if !skillsPrompt.isEmpty {
