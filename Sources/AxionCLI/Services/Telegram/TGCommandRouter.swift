@@ -4,7 +4,7 @@ import OpenAgentSDK
 struct TGCommandRouter: Sendable {
     typealias StatusProvider = @Sendable () async -> GatewayRunnerStatus
     typealias SkillsProvider = @Sendable () -> [Skill]
-    typealias ClearSession = @Sendable (Int64) -> Void
+    typealias ClearSession = @Sendable (Int64) async -> Void
 
     private let statusProvider: StatusProvider
     private let skillsProvider: SkillsProvider
@@ -34,7 +34,7 @@ struct TGCommandRouter: Sendable {
         case "/skills":
             return formatSkills()
         case "/new":
-            clearSession?(chatId)
+            await clearSession?(chatId)
             return "新会话已开始"
         default:
             return "未知命令。可用命令：/status, /skills, /new"

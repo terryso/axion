@@ -282,7 +282,7 @@ struct GatewayStartCommand: AsyncParsableCommand {
                 statusProvider: { [runner] in await runner.getStatus() },
                 skillsProvider: { [skillRegistry] in skillRegistry.userInvocableSkills },
                 clearSession: { [taskSerialQueue] chatId in
-                    _Concurrency.Task { await taskSerialQueue.clearSession(chatId: chatId) }
+                    await taskSerialQueue.clearSession(chatId: chatId)
                 }
             )
 
