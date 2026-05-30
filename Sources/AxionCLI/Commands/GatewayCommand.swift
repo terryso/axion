@@ -268,23 +268,31 @@ struct GatewayStartCommand: AsyncParsableCommand {
 
             let tgClient = TGAPIClient(token: tgToken)
 
-            let commandRouter = TGCommandRouter(
-                statusProvider: { [runner] in await runner.getStatus() },
-                skillsProvider: { [skillRegistry] in skillRegistry.userInvocableSkills }
-            )
-
-            let adapter = TelegramAdapter(apiClient: tgClient, allowedUsers: allowedUsers, commandRouter: commandRouter)
-
             let taskSerialQueue = TaskSerialQueue(
                 runtimeManager: runtimeManager,
                 config: config,
                 runner: runner,
                 extraHandlers: [reviewScheduler] + (curatorScheduler.map { [$0] } ?? []),
-                replyHandler: { [weak adapter] chatId, message in
-                    guard let adapter else { return }
-                    await adapter.sendReply(message, to: chatId)
+                replyHandler: { chatId, message in
+                    // Adapter not yet created; will be wired below
                 }
             )
+
+            let commandRouter = TGCommandRouter(
+                statusProvider: { [runner] in await runner.getStatus() },
+                skillsProvider: { [skillRegistry] in skillRegistry.userInvocableSkills },
+                clearSession: { [taskSerialQueue] chatId in
+                    _Concurrency.Task { await taskSerialQueue.clearSession(chatId: chatId) }
+                }
+            )
+
+            let adapter = TelegramAdapter(apiClient: tgClient, allowedUsers: allowedUsers, taskQueue: taskSerialQueue, commandRouter: commandRouter)
+
+            // Re-wire replyHandler to use the now-created adapter
+            await taskSerialQueue.updateReplyHandler({ [weak adapter] chatId, message in
+                guard let adapter else { return }
+                await adapter.sendReply(message, to: chatId)
+            })
 
             await adapter.setTaskQueue(taskSerialQueue)
             await runner.setTaskSerialQueue(taskSerialQueue)

@@ -4,20 +4,24 @@ import OpenAgentSDK
 struct TGCommandRouter: Sendable {
     typealias StatusProvider = @Sendable () async -> GatewayRunnerStatus
     typealias SkillsProvider = @Sendable () -> [Skill]
+    typealias ClearSession = @Sendable (Int64) -> Void
 
     private let statusProvider: StatusProvider
     private let skillsProvider: SkillsProvider
+    private let clearSession: ClearSession?
 
     init(
         statusProvider: @escaping StatusProvider,
-        skillsProvider: @escaping SkillsProvider
+        skillsProvider: @escaping SkillsProvider,
+        clearSession: ClearSession? = nil
     ) {
         self.statusProvider = statusProvider
         self.skillsProvider = skillsProvider
+        self.clearSession = clearSession
     }
 
     /// Returns reply text for a command message, or nil if not a command.
-    func handle(_ text: String) async -> String? {
+    func handle(_ text: String, chatId: Int64) async -> String? {
         guard text.hasPrefix("/") else { return nil }
 
         let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
@@ -29,8 +33,11 @@ struct TGCommandRouter: Sendable {
             return await formatStatus()
         case "/skills":
             return formatSkills()
+        case "/new":
+            clearSession?(chatId)
+            return "新会话已开始"
         default:
-            return "未知命令。可用命令：/status, /skills"
+            return "未知命令。可用命令：/status, /skills, /new"
         }
     }
 

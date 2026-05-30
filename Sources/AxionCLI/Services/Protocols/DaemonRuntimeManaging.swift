@@ -26,6 +26,16 @@ protocol DaemonRuntimeManaging: Sendable {
         extraHandlers: [any EventHandler]
     ) async throws -> AxionRunResult
 
+    /// Resume an existing session with additional event handlers.
+    func resumeRun(
+        sessionId: String,
+        task: String,
+        buildConfig: AgentBuilder.BuildConfig,
+        eventBus: EventBus,
+        runOverrides: AxionRuntime.RunOverrides,
+        extraHandlers: [any EventHandler]
+    ) async throws -> AxionRunResult
+
     /// Execute a skill through a per-request AxionRuntime with pre-registered API handlers.
     func executeSkill(
         skill: OpenAgentSDK.Skill,

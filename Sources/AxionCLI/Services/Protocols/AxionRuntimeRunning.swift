@@ -9,6 +9,12 @@ protocol AxionRuntimeRunning: Sendable {
         buildConfig: AgentBuilder.BuildConfig,
         runOverrides: AxionRuntime.RunOverrides
     ) async throws -> AxionRunResult
+
+    func resumeSession(
+        _ sessionId: String,
+        buildConfig: AgentBuilder.BuildConfig,
+        runOverrides: AxionRuntime.RunOverrides
+    ) async throws -> AxionRunResult
     func executeSkill(
         skill: OpenAgentSDK.Skill,
         task: String,

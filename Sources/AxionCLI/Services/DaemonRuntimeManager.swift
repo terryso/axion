@@ -88,6 +88,55 @@ actor DaemonRuntimeManager: DaemonRuntimeManaging {
         return result
     }
 
+    func resumeRun(
+        sessionId: String,
+        task: String,
+        buildConfig: AgentBuilder.BuildConfig,
+        eventBus: EventBus,
+        runOverrides: AxionRuntime.RunOverrides = .default,
+        extraHandlers: [any EventHandler]
+    ) async throws -> AxionRunResult {
+        let runtime = runtimeFactory(eventBus)
+
+        await runtime.registerHandler(CostEventHandler())
+        await runtime.registerHandler(TraceEventHandler(traceDir: traceDir))
+        for handler in extraHandlers {
+            await runtime.registerHandler(handler)
+        }
+
+        let eventLoopTask = _Concurrency.Task { await runtime.startEventLoop() }
+
+        let result: AxionRunResult
+        do {
+            result = try await runtime.resumeSession(sessionId, buildConfig: buildConfig, runOverrides: runOverrides)
+        } catch {
+            eventLoopTask.cancel()
+            await runtime.stopEventLoop()
+            throw error
+        }
+
+        await runtime.stopEventLoop()
+        _ = await eventLoopTask.result
+
+        sessionHistory[result.sessionId] = DaemonSessionInfo(
+            sessionId: result.sessionId,
+            task: task,
+            startedAt: result.createdAt
+        )
+
+        if sessionHistory.count > maxSessionHistory {
+            let sortedKeys = sessionHistory.keys.sorted {
+                sessionHistory[$0]!.startedAt < sessionHistory[$1]!.startedAt
+            }
+            let excess = sessionHistory.count - maxSessionHistory
+            for key in sortedKeys.prefix(excess) {
+                sessionHistory.removeValue(forKey: key)
+            }
+        }
+
+        return result
+    }
+
     func executeSkill(
         skill: OpenAgentSDK.Skill,
         task: String,

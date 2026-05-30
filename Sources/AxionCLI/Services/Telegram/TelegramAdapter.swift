@@ -68,7 +68,7 @@ actor TelegramAdapter {
 
         guard let text = message.text, !text.isEmpty else { return }
 
-        if let reply = await commandRouter?.handle(text) {
+        if let reply = await commandRouter?.handle(text, chatId: message.chat.id) {
             await sendReply(reply, to: message.chat.id)
             return
         }

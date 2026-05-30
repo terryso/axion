@@ -34,3 +34,8 @@
 ## Deferred from: Epic 29 验收 (2026-05-30)
 
 - TG 持续会话 — 当前每条 TG 消息创建新 agent session（`executeRun()`），用户无法基于上次结果追问。改进方案：`TaskSerialQueue` 维护 `chatId → sessionId` 映射，用 `resumeSession()` 替代 `executeRun()`，30 分钟无消息自动关闭会话，用户可发 `/new` 主动开始新会话。
+
+## Deferred from: TG Persistent Sessions review (2026-05-30)
+
+- Resume degradation double timeout — when `resumeRun()` fails and degrades to `executeNewWithTimeout()`, the task gets a fresh full timeout. Worst case ~20 min wall clock for default 10 min timeout. Acceptable tradeoff for simplicity; could be improved by tracking elapsed time.
+- `chatSessions` unbounded growth — `TaskSerialQueue.chatSessions` has no eviction policy for distinct chatIds. For a small-user-count TG bot this is fine. Should add a max-entries eviction (similar to `DaemonRuntimeManager.maxSessionHistory`) if user count grows.

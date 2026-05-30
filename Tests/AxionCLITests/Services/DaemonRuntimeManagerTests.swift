@@ -58,6 +58,17 @@ final class MockDaemonRuntime: AxionRuntimeRunning, @unchecked Sendable {
         guard let result else { fatalError("MockDaemonRuntime: no result and no error") }
         return result
     }
+
+    func resumeSession(
+        _ sessionId: String,
+        buildConfig: AgentBuilder.BuildConfig,
+        runOverrides: AxionRuntime.RunOverrides
+    ) async throws -> AxionRunResult {
+        _executeCount.increment()
+        if let error { throw error }
+        guard let result else { fatalError("MockDaemonRuntime: no result and no error") }
+        return result
+    }
 }
 
 private final class LockedCounter: @unchecked Sendable {
@@ -149,6 +160,20 @@ final class MockDaemonRuntimeManager: DaemonRuntimeManaging, @unchecked Sendable
         buildConfig: AgentBuilder.BuildConfig,
         eventBus: EventBus = EventBus(),
         runOverrides: AxionRuntime.RunOverrides = .default
+    ) async throws -> AxionRunResult {
+        _executeCount.increment()
+        if let error { throw error }
+        guard let result else { fatalError("MockDaemonRuntimeManager: no result and no error") }
+        return result
+    }
+
+    func resumeRun(
+        sessionId: String,
+        task: String,
+        buildConfig: AgentBuilder.BuildConfig,
+        eventBus: EventBus,
+        runOverrides: AxionRuntime.RunOverrides,
+        extraHandlers: [any EventHandler]
     ) async throws -> AxionRunResult {
         _executeCount.increment()
         if let error { throw error }

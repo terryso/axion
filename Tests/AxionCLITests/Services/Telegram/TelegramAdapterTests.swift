@@ -10,10 +10,12 @@ actor MockTaskSerialQueue: TaskSerialQueueProtocol {
     private var _cancelAllCalled = false
     private var _pendingCount = 0
     private var _isProcessing = false
+    private var _clearedSessions: [Int64] = []
 
     var startProcessingCalled: Bool { _startProcessingCalled }
     var cancelAllCalled: Bool { _cancelAllCalled }
     var tasks: [(task: String, chatId: Int64)] { enqueuedTasks }
+    var clearedSessions: [Int64] { _clearedSessions }
 
     func enqueue(task: String, chatId: Int64) async {
         enqueuedTasks.append((task, chatId))
@@ -26,6 +28,10 @@ actor MockTaskSerialQueue: TaskSerialQueueProtocol {
     func cancelAll() async {
         _cancelAllCalled = true
         enqueuedTasks.removeAll()
+    }
+
+    func clearSession(chatId: Int64) async {
+        _clearedSessions.append(chatId)
     }
 
     var pendingCount: Int { _pendingCount }
@@ -706,5 +712,96 @@ struct TelegramAdapterTests {
         let sent = await mock.sentMessages
         #expect(sent.count == 1)
         #expect(sent[0].text == "图片已收到")
+    }
+
+    // MARK: - /new Command Integration
+
+    @Test("/new command triggers clearSession and sends immediate reply")
+    func newCommandClearsAndReplies() async {
+        let mock = MockTGAPIClient()
+        await mock.setUpdates([])
+        let mockQueue = MockTaskSerialQueue()
+        final class ChatIdCollector: @unchecked Sendable {
+            var ids: [Int64] = []
+            func add(_ id: Int64) { ids.append(id) }
+        }
+        let collector = ChatIdCollector()
+        let commandRouter = TGCommandRouter(
+            statusProvider: {
+                GatewayRunnerStatus(
+                    state: "running",
+                    activeTaskCount: 0,
+                    uptimeSeconds: 0,
+                    label: "dev.axion.gateway"
+                )
+            },
+            skillsProvider: { [] },
+            clearSession: { chatId in
+                collector.add(chatId)
+            }
+        )
+        let adapter = TelegramAdapter(apiClient: mock, allowedUsers: ["123"], taskQueue: mockQueue, commandRouter: commandRouter)
+
+        let update = TGUpdate(updateId: 1, message: TGMessage(
+            messageId: 1,
+            from: TGUser(id: 123, firstName: "Nick", lastName: nil, username: nil),
+            chat: TGChat(id: 456, type: "private"),
+            date: 0,
+            text: "/new"
+        ))
+        await mock.setUpdates([update])
+
+        _Concurrency.Task { await adapter.start() }
+        try? await _Concurrency.Task.sleep(nanoseconds: 200_000_000)
+        await adapter.stop()
+
+        let tasks = await mockQueue.tasks
+        #expect(tasks.isEmpty)
+
+        let sent = await mock.sentMessages
+        #expect(sent.count == 1)
+        #expect(sent[0].text == "新会话已开始")
+        #expect(sent[0].chatId == 456)
+
+        #expect(collector.ids == [456])
+    }
+
+    @Test("/new does not enqueue as task")
+    func newCommandDoesNotEnqueue() async {
+        let mock = MockTGAPIClient()
+        await mock.setUpdates([])
+        let mockQueue = MockTaskSerialQueue()
+        let commandRouter = TGCommandRouter(
+            statusProvider: {
+                GatewayRunnerStatus(
+                    state: "running",
+                    activeTaskCount: 0,
+                    uptimeSeconds: 0,
+                    label: "dev.axion.gateway"
+                )
+            },
+            skillsProvider: { [] },
+            clearSession: { _ in }
+        )
+        let adapter = TelegramAdapter(apiClient: mock, allowedUsers: ["123"], taskQueue: mockQueue, commandRouter: commandRouter)
+
+        let update = TGUpdate(updateId: 1, message: TGMessage(
+            messageId: 1,
+            from: TGUser(id: 123, firstName: "Nick", lastName: nil, username: nil),
+            chat: TGChat(id: 456, type: "private"),
+            date: 0,
+            text: "/new"
+        ))
+        await mock.setUpdates([update])
+
+        _Concurrency.Task { await adapter.start() }
+        try? await _Concurrency.Task.sleep(nanoseconds: 200_000_000)
+        await adapter.stop()
+
+        let tasks = await mockQueue.tasks
+        #expect(tasks.isEmpty)
+
+        let sent = await mock.sentMessages
+        #expect(sent.count == 1)
     }
 }

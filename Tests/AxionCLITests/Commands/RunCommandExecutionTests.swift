@@ -57,6 +57,16 @@ actor MockAxionRuntime: AxionRuntimeRunning {
         if let error = executeError { throw error }
         return executeResult!
     }
+
+    func resumeSession(
+        _ sessionId: String,
+        buildConfig: AgentBuilder.BuildConfig,
+        runOverrides: AxionRuntime.RunOverrides
+    ) async throws -> AxionRunResult {
+        executeCallCount += 1
+        if let error = executeError { throw error }
+        return executeResult!
+    }
 }
 
 // MARK: - Helpers
