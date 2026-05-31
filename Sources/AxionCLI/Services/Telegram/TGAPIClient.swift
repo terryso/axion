@@ -9,6 +9,7 @@ protocol TGAPIClientProtocol: Sendable {
     func editMessageText(chatId: Int64, messageId: Int64, text: String, parseMode: TGParseMode) async throws -> TGMessage
     func getFile(fileId: String) async throws -> TGFile
     func downloadFile(filePath: String) async throws -> Data
+    func sendChatAction(chatId: Int64, action: String) async throws
 }
 
 protocol URLSessionProtocol: Sendable {
@@ -143,6 +144,31 @@ struct TGAPIClient: TGAPIClientProtocol {
             throw TGAPIError.permanentTelegramError("File download failed: HTTP \(http.statusCode)")
         }
         return data
+    }
+
+    func sendChatAction(chatId: Int64, action: String) async throws {
+        guard let url = URL(string: "https://api.telegram.org/bot\(token)/sendChatAction") else {
+            throw TGAPIError.permanentTelegramError("Invalid URL for sendChatAction")
+        }
+        var request = URLRequest(url: url)
+        request.httpMethod = "POST"
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.timeoutInterval = 10
+
+        struct ChatActionRequest: Codable {
+            let chatId: Int64
+            let action: String
+            enum CodingKeys: String, CodingKey {
+                case chatId = "chat_id"
+                case action
+            }
+        }
+        request.httpBody = try JSONEncoder().encode(ChatActionRequest(chatId: chatId, action: action))
+
+        let response: TGResponse<Bool> = try await performRequest(request, retries: 1)
+        guard response.ok else {
+            throw TGAPIError.permanentTelegramError(response.description ?? "sendChatAction failed")
+        }
     }
 
     // MARK: - Retry Logic

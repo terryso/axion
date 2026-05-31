@@ -50,7 +50,6 @@ struct GatewayStartCommand: AsyncParsableCommand {
 
     func run() async throws {
         let resolvedAuthKey = authKey ?? ProcessInfo.processInfo.environment["AXION_AUTH_KEY"]
-
         let config = try await ConfigManager.loadConfig()
 
         let sdkPersistence = RunPersistenceService(baseDirectory: nil)
@@ -74,7 +73,6 @@ struct GatewayStartCommand: AsyncParsableCommand {
 
         let traceDir = (ConfigManager.defaultConfigDirectory as NSString).appendingPathComponent("runs")
         let runtimeManager = Self.createRuntimeManager(traceDir)
-
         let reviewDataContext = ReviewDataContext()
         let reviewScheduler = ReviewScheduler(
             noReview: false,
@@ -82,57 +80,12 @@ struct GatewayStartCommand: AsyncParsableCommand {
             reviewDataContext: reviewDataContext,
             traceDir: traceDir
         )
-
-        // CuratorScheduler: assemble IntelligentCurator + dependencies
-        let curatorIdleHours = config.gatewayCuratorIdleHours ?? 2.0
-        let curatorIntervalHours = config.gatewayCuratorIntervalHours ?? 168.0
-
-        let skillsDir = (ConfigManager.defaultConfigDirectory as NSString).appendingPathComponent("skills")
-        let memoryDir = (ConfigManager.defaultConfigDirectory as NSString).appendingPathComponent("memory")
-        let curatorUsageStore = SkillUsageStore(skillsDir: skillsDir)
-        let curatorStore = SkillCuratorStore(skillsDir: skillsDir)
-        let curatorFactStore = FactStore(memoryDir: memoryDir)
-        let curatorSkillRegistry = SkillRegistry()
-        AxionBuiltInSkills.registerAll(into: curatorSkillRegistry)
-        _ = curatorSkillRegistry.registerDiscoveredSkills()
-        let curatorConfig = SkillCuratorConfig(
-            intervalHours: curatorIntervalHours,
-            staleAfterDays: config.curatorStaleAfterDays ?? 30,
-            archiveAfterDays: config.curatorArchiveAfterDays ?? 90,
-            dryRun: config.curatorDryRun ?? false,
-            enabled: config.curatorEnabled ?? true
-        )
-        let curatorSkillCurator = SkillCurator(
-            usageStore: curatorUsageStore,
-            curatorStore: curatorStore,
-            config: curatorConfig
+        let curatorScheduler = Self.makeCuratorScheduler(
+            config: config,
+            reviewDataContext: reviewDataContext,
+            traceDir: traceDir
         )
         let notifyCuratorResults = config.gatewayNotifyCuratorResults ?? false
-        let curatorScheduler: CuratorScheduler?
-        if let apiKey = config.apiKey, !apiKey.isEmpty {
-            let evolverClient = AnthropicClient(apiKey: apiKey, baseURL: config.baseURL)
-            let evolutionModel = config.reviewModel ?? AxionConfig.defaultReviewModel
-            let curatorEvolver = LLMSkillEvolver(client: evolverClient, evolutionModel: evolutionModel)
-            let intelligentCurator = IntelligentCurator(
-                skillCurator: curatorSkillCurator,
-                factStore: curatorFactStore,
-                skillRegistry: curatorSkillRegistry,
-                skillEvolver: curatorEvolver,
-                usageStore: curatorUsageStore,
-                curatorStore: curatorStore
-            )
-            curatorScheduler = CuratorScheduler(
-                curatorIdleHours: curatorIdleHours,
-                curatorIntervalHours: curatorIntervalHours,
-                curator: intelligentCurator,
-                agentProvider: { [weak reviewDataContext] in
-                    reviewDataContext?.agent
-                },
-                traceDir: traceDir
-            )
-        } else {
-            curatorScheduler = nil
-        }
 
         let server = AgentHTTPServer(
             agent: placeholderAgent,
@@ -145,10 +98,31 @@ struct GatewayStartCommand: AsyncParsableCommand {
 
         let runner = GatewayRunner(server: server)
 
-        server.runHandler = { [runCoordinator, config, runtimeManager, runner, reviewScheduler, curatorScheduler, reviewDataContext] task, request, tracker, broadcaster, persistence, limiter in
+        server.runHandler = { [runCoordinator, runtimeManager, runner, traceDir] task, request, tracker, broadcaster, persistence, limiter in
             guard await runner.isAcceptingTasks else { return }
 
             await runner.taskStarted()
+
+            let currentConfig: AxionConfig
+            do {
+                currentConfig = try await ConfigManager.loadConfig()
+            } catch {
+                await runner.taskFinished()
+                return
+            }
+
+            let reviewDataContext = ReviewDataContext()
+            let reviewScheduler = ReviewScheduler(
+                noReview: false,
+                noMemory: false,
+                reviewDataContext: reviewDataContext,
+                traceDir: traceDir
+            )
+            let curatorScheduler = Self.makeCuratorScheduler(
+                config: currentConfig,
+                reviewDataContext: reviewDataContext,
+                traceDir: traceDir
+            )
 
             // SDK boundary limitation: the runHandler callback does not expose the runId
             // it created, so we find it by matching task text + .queued status. This is
@@ -175,7 +149,7 @@ struct GatewayStartCommand: AsyncParsableCommand {
             await bridge.start(onComplete: { })
 
             let buildConfig = AgentBuilder.BuildConfig.forAPI(
-                config: config,
+                config: currentConfig,
                 task: task,
                 request: request
             )
@@ -285,6 +259,9 @@ struct GatewayStartCommand: AsyncParsableCommand {
                 editHandler: { (chatId: Int64, messageId: Int64, text: String) -> Bool in
                     // Adapter not yet created; will be wired below
                     return false
+                },
+                chatActionHandler: { (chatId: Int64, action: String) in
+                    // Adapter not yet created; will be wired below
                 }
             )
 
@@ -308,6 +285,11 @@ struct GatewayStartCommand: AsyncParsableCommand {
             await taskSerialQueue.updateEditHandler({ [weak adapter] chatId, messageId, text in
                 guard let adapter else { return false }
                 return await adapter.editMessage(chatId: chatId, messageId: messageId, text: text)
+            })
+
+            // Re-wire chatActionHandler to use the now-created adapter
+            await taskSerialQueue.updateChatActionHandler({ [weak adapter] chatId, action in
+                await adapter?.sendChatAction(chatId: chatId, action: action)
             })
 
             await adapter.setTaskQueue(taskSerialQueue)
@@ -387,6 +369,61 @@ struct GatewayStartCommand: AsyncParsableCommand {
         }
 
         try await runner.start()
+    }
+
+    private static func makeCuratorScheduler(
+        config: AxionConfig,
+        reviewDataContext: ReviewDataContext,
+        traceDir: String
+    ) -> CuratorScheduler? {
+        let curatorIdleHours = config.gatewayCuratorIdleHours ?? 2.0
+        let curatorIntervalHours = config.gatewayCuratorIntervalHours ?? 168.0
+
+        let skillsDir = (ConfigManager.defaultConfigDirectory as NSString).appendingPathComponent("skills")
+        let memoryDir = (ConfigManager.defaultConfigDirectory as NSString).appendingPathComponent("memory")
+        let curatorUsageStore = SkillUsageStore(skillsDir: skillsDir)
+        let curatorStore = SkillCuratorStore(skillsDir: skillsDir)
+        let curatorFactStore = FactStore(memoryDir: memoryDir)
+        let curatorSkillRegistry = SkillRegistry()
+        AxionBuiltInSkills.registerAll(into: curatorSkillRegistry)
+        _ = curatorSkillRegistry.registerDiscoveredSkills()
+        let curatorConfig = SkillCuratorConfig(
+            intervalHours: curatorIntervalHours,
+            staleAfterDays: config.curatorStaleAfterDays ?? 30,
+            archiveAfterDays: config.curatorArchiveAfterDays ?? 90,
+            dryRun: config.curatorDryRun ?? false,
+            enabled: config.curatorEnabled ?? true
+        )
+        let curatorSkillCurator = SkillCurator(
+            usageStore: curatorUsageStore,
+            curatorStore: curatorStore,
+            config: curatorConfig
+        )
+
+        guard let apiKey = config.apiKey, !apiKey.isEmpty else {
+            return nil
+        }
+
+        let evolverClient = AnthropicClient(apiKey: apiKey, baseURL: config.baseURL)
+        let evolutionModel = config.reviewModel ?? AxionConfig.defaultReviewModel
+        let curatorEvolver = LLMSkillEvolver(client: evolverClient, evolutionModel: evolutionModel)
+        let intelligentCurator = IntelligentCurator(
+            skillCurator: curatorSkillCurator,
+            factStore: curatorFactStore,
+            skillRegistry: curatorSkillRegistry,
+            skillEvolver: curatorEvolver,
+            usageStore: curatorUsageStore,
+            curatorStore: curatorStore
+        )
+        return CuratorScheduler(
+            curatorIdleHours: curatorIdleHours,
+            curatorIntervalHours: curatorIntervalHours,
+            curator: intelligentCurator,
+            agentProvider: { [weak reviewDataContext] in
+                reviewDataContext?.agent
+            },
+            traceDir: traceDir
+        )
     }
 
     // Test seams

@@ -227,6 +227,37 @@ struct TGAPIClientTests {
         #expect(!data.isEmpty)
     }
 
+    // MARK: - sendChatAction Mock
+
+    @Test("MockTGAPIClient sendChatAction records action")
+    func mockSendChatActionRecords() async throws {
+        let mock = MockTGAPIClient()
+        let client: any TGAPIClientProtocol = mock
+
+        try await client.sendChatAction(chatId: 123, action: "typing")
+        try await client.sendChatAction(chatId: 456, action: "upload_photo")
+
+        let actions = await mock.chatActions
+        #expect(actions.count == 2)
+        #expect(actions[0] == (123, "typing"))
+        #expect(actions[1] == (456, "upload_photo"))
+    }
+
+    @Test("MockTGAPIClient sendChatAction throws configured error")
+    func mockSendChatActionError() async {
+        let mock = MockTGAPIClient()
+        await mock.setSendChatActionError(TGAPIError.permanentTelegramError("forbidden"))
+
+        do {
+            try await mock.sendChatAction(chatId: 123, action: "typing")
+            #expect(Bool(false), "Should have thrown")
+        } catch let error as TGAPIError {
+            #expect(error.errorDescription == "forbidden")
+        } catch {
+            #expect(Bool(false), "Unexpected error type")
+        }
+    }
+
     @Test("MockTGAPIClient downloadFile throws configured error")
     func mockDownloadFileError() async {
         let mock = MockTGAPIClient()
@@ -260,12 +291,15 @@ actor MockTGAPIClient: TGAPIClientProtocol {
     private var _getFileCallCount = 0
     private var _downloadFileCallCount = 0
     private var _editMessageError: Error?
+    private var _chatActions: [(chatId: Int64, action: String)] = []
+    private var _sendChatActionError: Error?
 
     var sentMessages: [(chatId: Int64, text: String, parseMode: TGParseMode?, replyToMessageId: Int64?)] { _sentMessages }
     var editedMessages: [(chatId: Int64, messageId: Int64, text: String, parseMode: TGParseMode)] { _editedMessages }
     var getUpdatesCallCount: Int { _getUpdatesCallCount }
     var getFileCallCount: Int { _getFileCallCount }
     var downloadFileCallCount: Int { _downloadFileCallCount }
+    var chatActions: [(chatId: Int64, action: String)] { _chatActions }
 
     func setUpdates(_ updates: [TGUpdate]) {
         _updates = updates
@@ -297,6 +331,10 @@ actor MockTGAPIClient: TGAPIClientProtocol {
 
     func setEditMessageError(_ error: Error?) {
         _editMessageError = error
+    }
+
+    func setSendChatActionError(_ error: Error?) {
+        _sendChatActionError = error
     }
 
     func getUpdates(offset: Int64?, timeout: Int) async throws -> [TGUpdate] {
@@ -358,6 +396,11 @@ actor MockTGAPIClient: TGAPIClientProtocol {
         _downloadFileCallCount += 1
         if let error = _downloadFileError { throw error }
         return _downloadFileResult ?? Data("fake-image-data".utf8)
+    }
+
+    func sendChatAction(chatId: Int64, action: String) async throws {
+        if let error = _sendChatActionError { throw error }
+        _chatActions.append((chatId, action))
     }
 }
 

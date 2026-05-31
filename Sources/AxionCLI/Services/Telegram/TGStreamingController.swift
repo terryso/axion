@@ -20,12 +20,16 @@ struct TGStreamingConfig: Sendable {
     let bufferThreshold: Int
     let transport: TGStreamingTransport
     let freshFinalAfter: TimeInterval
+    let typingEnabled: Bool
+    let typingInterval: TimeInterval
 
     static let `default` = TGStreamingConfig(
         editInterval: 0.8,
         bufferThreshold: 24,
         transport: .edit,
-        freshFinalAfter: 60
+        freshFinalAfter: 60,
+        typingEnabled: true,
+        typingInterval: 4.0
     )
 }
 
@@ -48,10 +52,12 @@ actor TGStreamingController {
     private var finalized = false
     private var consecutive429Count = 0
     private var segmentParts: [String] = []
+    private var typingTask: _Concurrency.Task<Void, Never>?
 
     private let config: TGStreamingConfig
     private let sendMessage: @Sendable (String, Int64) async -> Int64?
     private let editMessage: @Sendable (Int64, Int64, String) async -> Bool
+    private let sendChatAction: @Sendable (Int64, String) async -> Void
 
     // MARK: - Init
 
@@ -59,13 +65,24 @@ actor TGStreamingController {
         chatId: Int64,
         sendMessage: @escaping @Sendable (String, Int64) async -> Int64?,
         editMessage: @escaping @Sendable (Int64, Int64, String) async -> Bool,
+        sendChatAction: @escaping @Sendable (Int64, String) async -> Void = { _, _ in },
         config: TGStreamingConfig = .default
     ) {
         self.chatId = chatId
         self.sendMessage = sendMessage
         self.editMessage = editMessage
+        self.sendChatAction = sendChatAction
         self.config = config
         self.transport = config.transport
+
+        if config.typingEnabled {
+            self.typingTask = _Concurrency.Task { [sendChatAction, chatId, interval = config.typingInterval] in
+                while !_Concurrency.Task.isCancelled {
+                    await sendChatAction(chatId, "typing")
+                    try? await _Concurrency.Task.sleep(nanoseconds: UInt64(interval * 1_000_000_000))
+                }
+            }
+        }
     }
 
     // MARK: - Event Dispatch
@@ -96,6 +113,7 @@ actor TGStreamingController {
 
         // On first chunk, create preview bubble
         if wasFirstChunk {
+            stopTypingTimer()
             let previewText = "⏳ 思考中..."
             let msgId = await sendMessage(previewText, chatId)
             if let msgId { previewMessageId = msgId }
@@ -178,6 +196,8 @@ actor TGStreamingController {
     private func handleAgentCompleted(_ event: AgentCompletedEvent) async {
         guard !finalized else { return }
 
+        stopTypingTimer()
+
         // Flush any remaining buffer
         if !bufferedText.isEmpty {
             await flushBuffer()
@@ -224,6 +244,7 @@ actor TGStreamingController {
     // MARK: - Cancel
 
     func cancel() {
+        stopTypingTimer()
         finalized = true
         bufferedText = ""
         segmentParts = []
@@ -270,12 +291,28 @@ actor TGStreamingController {
             if success {
                 consecutive429Count = 0
                 lastEditAt = Date()
+                reFireTyping()
             }
         } else {
             // Append mode: send as new message
             let msgId = await sendMessage(displayText, chatId)
             if previewMessageId == nil { previewMessageId = msgId }
+            reFireTyping()
         }
+    }
+
+    // MARK: - Typing Timer
+
+    private func stopTypingTimer() {
+        typingTask?.cancel()
+        typingTask = nil
+    }
+
+    private func reFireTyping() {
+        guard config.typingEnabled else { return }
+        let action = sendChatAction
+        let id = chatId
+        _Concurrency.Task { await action(id, "typing") }
     }
 
     /// Handle a 429 error from editMessage.

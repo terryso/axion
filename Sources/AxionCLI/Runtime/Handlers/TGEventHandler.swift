@@ -25,22 +25,30 @@ actor TGEventHandler: EventHandler {
     let chatId: Int64
     private let sendMessage: @Sendable (String, Int64) async -> Int64?
     private let editMessage: @Sendable (Int64, Int64, String) async -> Bool
+    private let sendChatAction: @Sendable (Int64, String) async -> Void
+    private let streamingConfig: TGStreamingConfig
     private lazy var streamingController: TGStreamingController = {
         TGStreamingController(
             chatId: chatId,
             sendMessage: sendMessage,
-            editMessage: editMessage
+            editMessage: editMessage,
+            sendChatAction: sendChatAction,
+            config: streamingConfig
         )
     }()
 
     init(
         chatId: Int64,
         sendMessage: @escaping @Sendable (String, Int64) async -> Int64?,
-        editMessage: @escaping @Sendable (Int64, Int64, String) async -> Bool = { _, _, _ in false }
+        editMessage: @escaping @Sendable (Int64, Int64, String) async -> Bool = { _, _, _ in false },
+        sendChatAction: @escaping @Sendable (Int64, String) async -> Void = { _, _ in },
+        streamingConfig: TGStreamingConfig = .default
     ) {
         self.chatId = chatId
         self.sendMessage = sendMessage
         self.editMessage = editMessage
+        self.sendChatAction = sendChatAction
+        self.streamingConfig = streamingConfig
     }
 
     func handle(_ event: any AgentEvent, context: EventHandlerContext) async {

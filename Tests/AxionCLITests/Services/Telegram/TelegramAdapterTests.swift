@@ -833,6 +833,8 @@ actor MockFallbackTGAPIClient: TGAPIClientProtocol {
     func downloadFile(filePath: String) async throws -> Data {
         Data("fake".utf8)
     }
+
+    func sendChatAction(chatId: Int64, action: String) async throws {}
 }
 
 /// Mock that succeeds on first MDv2 call, fails on second MDv2 call, then succeeds on HTML.
@@ -873,4 +875,6 @@ actor MockMultiChunkFallbackTGAPIClient: TGAPIClientProtocol {
     func downloadFile(filePath: String) async throws -> Data {
         Data("fake".utf8)
     }
+
+    func sendChatAction(chatId: Int64, action: String) async throws {}
 }

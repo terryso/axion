@@ -14,6 +14,7 @@ struct TGStreamingControllerTests {
         private var _sentMessages: [(text: String, chatId: Int64)] = []
         private var _editedMessages: [(chatId: Int64, messageId: Int64, text: String)] = []
         private var _editResults: [Bool] = []
+        private var _chatActions: [(chatId: Int64, action: String)] = []
 
         var sentMessages: [(text: String, chatId: Int64)] {
             lock.lock(); defer { lock.unlock() }
@@ -27,6 +28,10 @@ struct TGStreamingControllerTests {
             lock.lock(); defer { lock.unlock() }
             return _editResults
         }
+        var chatActions: [(chatId: Int64, action: String)] {
+            lock.lock(); defer { lock.unlock() }
+            return _chatActions
+        }
 
         func appendSend(text: String, chatId: Int64) {
             lock.lock(); _sentMessages.append((text, chatId)); lock.unlock()
@@ -36,6 +41,9 @@ struct TGStreamingControllerTests {
             _editedMessages.append((chatId, messageId, text))
             _editResults.append(result)
             lock.unlock()
+        }
+        func appendChatAction(chatId: Int64, action: String) {
+            lock.lock(); _chatActions.append((chatId, action)); lock.unlock()
         }
     }
 
@@ -55,6 +63,9 @@ struct TGStreamingControllerTests {
                 let result = editResult
                 log.appendEdit(chatId: chatId, messageId: messageId, text: text, result: result)
                 return result
+            },
+            sendChatAction: { chatId, action in
+                log.appendChatAction(chatId: chatId, action: action)
             },
             config: config
         )
@@ -85,7 +96,9 @@ struct TGStreamingControllerTests {
             editInterval: 0,
             bufferThreshold: 5,
             transport: .edit,
-            freshFinalAfter: 60
+            freshFinalAfter: 60,
+            typingEnabled: false,
+            typingInterval: 4.0
         )
         let controller = makeController(log: log, config: config)
 
@@ -102,7 +115,9 @@ struct TGStreamingControllerTests {
             editInterval: 0, // 0 interval = always flush
             bufferThreshold: 1000, // high threshold so interval triggers first
             transport: .edit,
-            freshFinalAfter: 60
+            freshFinalAfter: 60,
+            typingEnabled: false,
+            typingInterval: 4.0
         )
         let controller = makeController(log: log, config: config)
 
@@ -125,7 +140,9 @@ struct TGStreamingControllerTests {
             editInterval: 0,
             bufferThreshold: 1000,
             transport: .edit,
-            freshFinalAfter: 60
+            freshFinalAfter: 60,
+            typingEnabled: false,
+            typingInterval: 4.0
         )
         let controller = makeController(log: log, config: config)
 
@@ -155,7 +172,9 @@ struct TGStreamingControllerTests {
             editInterval: 0,
             bufferThreshold: 1000,
             transport: .edit,
-            freshFinalAfter: 60
+            freshFinalAfter: 60,
+            typingEnabled: false,
+            typingInterval: 4.0
         )
         let controller = makeController(log: log, config: config)
 
@@ -183,7 +202,9 @@ struct TGStreamingControllerTests {
             editInterval: 0,
             bufferThreshold: 1,
             transport: .edit,
-            freshFinalAfter: 60
+            freshFinalAfter: 60,
+            typingEnabled: false,
+            typingInterval: 4.0
         )
         let controller = makeController(log: log, config: config)
 
@@ -240,7 +261,9 @@ struct TGStreamingControllerTests {
             editInterval: 0,
             bufferThreshold: 1000,
             transport: .edit,
-            freshFinalAfter: 60
+            freshFinalAfter: 60,
+            typingEnabled: false,
+            typingInterval: 4.0
         )
         let controller = makeController(log: log, config: config)
 
@@ -272,7 +295,9 @@ struct TGStreamingControllerTests {
             editInterval: 0,
             bufferThreshold: 1000,
             transport: .edit,
-            freshFinalAfter: 60
+            freshFinalAfter: 60,
+            typingEnabled: false,
+            typingInterval: 4.0
         )
         let controller = makeController(log: log, config: config)
 
@@ -302,7 +327,9 @@ struct TGStreamingControllerTests {
             editInterval: 0,
             bufferThreshold: 1000,
             transport: .edit,
-            freshFinalAfter: 0 // Any positive age exceeds 0
+            freshFinalAfter: 0,
+            typingEnabled: false,
+            typingInterval: 4.0
         )
         let controller = makeController(log: log, config: config)
 
@@ -349,7 +376,9 @@ struct TGStreamingControllerTests {
             editInterval: 0,
             bufferThreshold: 1,
             transport: .edit,
-            freshFinalAfter: 60
+            freshFinalAfter: 60,
+            typingEnabled: false,
+            typingInterval: 4.0
         )
         let controller = makeController(log: log, config: config)
 
@@ -366,5 +395,212 @@ struct TGStreamingControllerTests {
         #expect(edit.chatId == 123)
         #expect(edit.messageId == 42)
         #expect(edit.text.contains("second"))
+    }
+
+    // MARK: - Typing Indicator Tests (Story 32.3)
+
+    @Test("Typing action sent on controller init (before first LLM chunk)")
+    func typingSentOnInit() async {
+        let log = CallLog()
+        let config = TGStreamingConfig(
+            editInterval: 0,
+            bufferThreshold: 1000,
+            transport: .edit,
+            freshFinalAfter: 60,
+            typingEnabled: true,
+            typingInterval: 0.05 // 50ms for fast test
+        )
+        let _ = makeController(log: log, config: config)
+
+        // Wait for the typing timer to fire at least once
+        try? await _Concurrency.Task.sleep(nanoseconds: 80_000_000) // 80ms
+
+        let actions = log.chatActions
+        #expect(actions.count >= 1)
+        #expect(actions[0].action == "typing")
+        #expect(actions[0].chatId == 123)
+    }
+
+    @Test("Typing stops after first streaming chunk creates preview")
+    func typingStopsAfterFirstChunk() async {
+        let log = CallLog()
+        let config = TGStreamingConfig(
+            editInterval: 0,
+            bufferThreshold: 1000,
+            transport: .edit,
+            freshFinalAfter: 60,
+            typingEnabled: true,
+            typingInterval: 0.05
+        )
+        let controller = makeController(log: log, config: config)
+
+        // Wait for typing to start
+        try? await _Concurrency.Task.sleep(nanoseconds: 80_000_000)
+        let actionsBefore = log.chatActions.count
+        #expect(actionsBefore >= 1)
+
+        // Send first chunk — should stop typing timer
+        await controller.handle(LLMTokenStreamEvent(sessionId: nil, chunk: "Hello"))
+
+        // Wait and check no more typing actions
+        try? await _Concurrency.Task.sleep(nanoseconds: 120_000_000) // Wait for 2+ typing intervals
+        let actionsAfter = log.chatActions.count
+        // Should not have significantly more actions (at most 1 re-fire from edit)
+        #expect(actionsAfter <= actionsBefore + 2)
+    }
+
+    @Test("Typing re-fires after each successful edit")
+    func typingReFiresAfterEdit() async {
+        let log = CallLog()
+        let config = TGStreamingConfig(
+            editInterval: 0,
+            bufferThreshold: 1,
+            transport: .edit,
+            freshFinalAfter: 60,
+            typingEnabled: true,
+            typingInterval: 0.05 // Short interval for fast test
+        )
+        let controller = makeController(log: log, config: config)
+
+        // Wait for initial typing timer to fire
+        try? await _Concurrency.Task.sleep(nanoseconds: 80_000_000)
+
+        // First chunk creates preview (stops typing timer)
+        await controller.handle(LLMTokenStreamEvent(sessionId: nil, chunk: "first"))
+        await controller.setPreviewMessageId(1)
+
+        let actionsBefore = log.chatActions.count
+
+        // Second chunk triggers edit → re-fire typing
+        await controller.handle(LLMTokenStreamEvent(sessionId: nil, chunk: "second"))
+
+        // Yield to allow the re-fire Task to execute
+        try? await _Concurrency.Task.sleep(nanoseconds: 20_000_000)
+
+        // Should have one more typing action (re-fire after edit)
+        let actionsAfter = log.chatActions
+        #expect(actionsAfter.count > actionsBefore)
+        #expect(actionsAfter.last?.action == "typing")
+    }
+
+    @Test("Typing disabled when typingEnabled is false")
+    func typingDisabledWhenConfigFalse() async {
+        let log = CallLog()
+        let config = TGStreamingConfig(
+            editInterval: 0,
+            bufferThreshold: 1000,
+            transport: .edit,
+            freshFinalAfter: 60,
+            typingEnabled: false,
+            typingInterval: 0.05
+        )
+        let _ = makeController(log: log, config: config)
+
+        // Wait — no typing should occur
+        try? await _Concurrency.Task.sleep(nanoseconds: 150_000_000)
+
+        #expect(log.chatActions.isEmpty)
+    }
+
+    @Test("Typing timer cancelled on AgentCompleted")
+    func typingCancelledOnFinalize() async {
+        let log = CallLog()
+        let config = TGStreamingConfig(
+            editInterval: 0,
+            bufferThreshold: 1000,
+            transport: .edit,
+            freshFinalAfter: 60,
+            typingEnabled: true,
+            typingInterval: 0.05
+        )
+        let controller = makeController(log: log, config: config)
+
+        // Wait for typing to start
+        try? await _Concurrency.Task.sleep(nanoseconds: 80_000_000)
+
+        // Send some tokens then complete
+        await controller.handle(LLMTokenStreamEvent(sessionId: nil, chunk: "thinking..."))
+        await controller.handle(AgentCompletedEvent(
+            sessionId: nil,
+            totalSteps: 3,
+            durationMs: 5_000,
+            resultText: "Done"
+        ))
+
+        let actionsAtCompletion = log.chatActions.count
+
+        // Wait more — no additional typing should fire
+        try? await _Concurrency.Task.sleep(nanoseconds: 150_000_000)
+        let actionsAfter = log.chatActions.count
+        #expect(actionsAfter <= actionsAtCompletion + 1) // +1 for possible re-fire
+    }
+
+    @Test("Typing timer cancelled on cancel()")
+    func typingCancelledOnCancel() async {
+        let log = CallLog()
+        let config = TGStreamingConfig(
+            editInterval: 0,
+            bufferThreshold: 1000,
+            transport: .edit,
+            freshFinalAfter: 60,
+            typingEnabled: true,
+            typingInterval: 0.05
+        )
+        let controller = makeController(log: log, config: config)
+
+        // Wait for typing to start
+        try? await _Concurrency.Task.sleep(nanoseconds: 80_000_000)
+
+        await controller.cancel()
+
+        let actionsAtCancel = log.chatActions.count
+
+        // Wait more — no additional typing should fire
+        try? await _Concurrency.Task.sleep(nanoseconds: 150_000_000)
+        let actionsAfter = log.chatActions.count
+        #expect(actionsAfter == actionsAtCancel)
+    }
+
+    @Test("No-op sendChatAction does not block message delivery")
+    func noOpChatActionDoesNotBlockDelivery() async {
+        let log = CallLog()
+        let config = TGStreamingConfig(
+            editInterval: 0,
+            bufferThreshold: 1000,
+            transport: .edit,
+            freshFinalAfter: 60,
+            typingEnabled: true,
+            typingInterval: 4.0
+        )
+        // Use a controller where sendChatAction throws
+        let controller = TGStreamingController(
+            chatId: 123,
+            sendMessage: { text, chatId in
+                log.appendSend(text: text, chatId: chatId)
+                return Int64(log.sentMessages.count)
+            },
+            editMessage: { chatId, messageId, text in
+                log.appendEdit(chatId: chatId, messageId: messageId, text: text, result: true)
+                return true
+            },
+            sendChatAction: { _, _ in
+                // Simulate failure — but still returns Void (non-blocking)
+            },
+            config: config
+        )
+
+        // Send tokens and complete — message delivery should still work
+        await controller.handle(LLMTokenStreamEvent(sessionId: nil, chunk: "Hello"))
+        await controller.handle(AgentCompletedEvent(
+            sessionId: nil,
+            totalSteps: 1,
+            durationMs: 1_000,
+            resultText: "Task done"
+        ))
+
+        // Message should have been delivered — preview is fresh so final goes via editMessage
+        #expect(log.sentMessages.count >= 1)
+        let allText = log.editedMessages.map(\.text).joined() + log.sentMessages.map(\.text).joined()
+        #expect(allText.contains("任务完成"))
     }
 }

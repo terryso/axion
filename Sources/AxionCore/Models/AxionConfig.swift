@@ -36,6 +36,8 @@ public struct AxionConfig: Equatable, Sendable {
     public var telegramBotToken: String?
     public var telegramChatId: String?
     public var telegramAllowedUsers: String?
+    public var telegramTypingEnabled: Bool?
+    public var telegramTypingInterval: Double?
 
     public static let `default` = AxionConfig(
         apiKey: nil,
@@ -65,7 +67,9 @@ public struct AxionConfig: Equatable, Sendable {
         gatewayNotifyCuratorResults: nil,
         telegramBotToken: nil,
         telegramChatId: nil,
-        telegramAllowedUsers: nil
+        telegramAllowedUsers: nil,
+        telegramTypingEnabled: nil,
+        telegramTypingInterval: nil
     )
 
     public init(
@@ -96,7 +100,9 @@ public struct AxionConfig: Equatable, Sendable {
         gatewayNotifyCuratorResults: Bool? = nil,
         telegramBotToken: String? = nil,
         telegramChatId: String? = nil,
-        telegramAllowedUsers: String? = nil
+        telegramAllowedUsers: String? = nil,
+        telegramTypingEnabled: Bool? = nil,
+        telegramTypingInterval: Double? = nil
     ) {
         self.apiKey = apiKey
         self.provider = provider
@@ -126,7 +132,12 @@ public struct AxionConfig: Equatable, Sendable {
         self.telegramBotToken = telegramBotToken
         self.telegramChatId = telegramChatId
         self.telegramAllowedUsers = telegramAllowedUsers
+        self.telegramTypingEnabled = telegramTypingEnabled
+        self.telegramTypingInterval = telegramTypingInterval
     }
+
+    public var tgTypingEnabled: Bool { telegramTypingEnabled ?? true }
+    public var tgTypingInterval: Double { telegramTypingInterval ?? 4.0 }
 }
 
 extension AxionConfig: Codable {
@@ -135,7 +146,7 @@ extension AxionConfig: Codable {
         case reviewMemoryInterval, reviewSkillInterval, reviewMinMessages, reviewModel
         case curatorEnabled, curatorDryRun, curatorIntervalHours, curatorStaleAfterDays, curatorArchiveAfterDays
         case gatewayEnabled, gatewayCuratorIdleHours, gatewayCuratorIntervalHours, gatewayTaskTimeoutMinutes, gatewayNotifyCuratorResults
-        case telegramBotToken, telegramChatId, telegramAllowedUsers
+        case telegramBotToken, telegramChatId, telegramAllowedUsers, telegramTypingEnabled, telegramTypingInterval
     }
 
     public init(from decoder: Decoder) throws {
@@ -168,5 +179,7 @@ extension AxionConfig: Codable {
         telegramBotToken = try c.decodeIfPresent(String.self, forKey: .telegramBotToken)
         telegramChatId = try c.decodeIfPresent(String.self, forKey: .telegramChatId)
         telegramAllowedUsers = try c.decodeIfPresent(String.self, forKey: .telegramAllowedUsers)
+        telegramTypingEnabled = try c.decodeIfPresent(Bool.self, forKey: .telegramTypingEnabled)
+        telegramTypingInterval = try c.decodeIfPresent(Double.self, forKey: .telegramTypingInterval)
     }
 }

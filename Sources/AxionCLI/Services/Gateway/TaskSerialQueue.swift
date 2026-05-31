@@ -48,6 +48,7 @@ actor TaskSerialQueue: TaskSerialQueueProtocol {
     private let extraHandlers: [any EventHandler]
     private var replyHandler: @Sendable (Int64, String) async -> Int64?
     private var editHandler: @Sendable (Int64, Int64, String) async -> Bool
+    private var chatActionHandler: @Sendable (Int64, String) async -> Void
 
     init(
         runtimeManager: any DaemonRuntimeManaging,
@@ -55,7 +56,8 @@ actor TaskSerialQueue: TaskSerialQueueProtocol {
         runner: GatewayRunner,
         extraHandlers: [any EventHandler] = [],
         replyHandler: @Sendable @escaping (Int64, String) async -> Int64?,
-        editHandler: @Sendable @escaping (Int64, Int64, String) async -> Bool = { _, _, _ in false }
+        editHandler: @Sendable @escaping (Int64, Int64, String) async -> Bool = { _, _, _ in false },
+        chatActionHandler: @Sendable @escaping (Int64, String) async -> Void = { _, _ in }
     ) {
         self.runtimeManager = runtimeManager
         self.config = config
@@ -63,6 +65,7 @@ actor TaskSerialQueue: TaskSerialQueueProtocol {
         self.extraHandlers = extraHandlers
         self.replyHandler = replyHandler
         self.editHandler = editHandler
+        self.chatActionHandler = chatActionHandler
     }
 
     func enqueue(task: String, chatId: Int64) async {
@@ -174,16 +177,32 @@ actor TaskSerialQueue: TaskSerialQueueProtocol {
         self.editHandler = handler
     }
 
+    func updateChatActionHandler(_ handler: @Sendable @escaping (Int64, String) async -> Void) {
+        self.chatActionHandler = handler
+    }
+
     var pendingCount: Int { queue.count }
     var isProcessing: Bool { isExecuting }
 
     // MARK: - Private Execution Helpers
 
+    private func makeStreamingConfig() -> TGStreamingConfig {
+        TGStreamingConfig(
+            editInterval: TGStreamingConfig.default.editInterval,
+            bufferThreshold: TGStreamingConfig.default.bufferThreshold,
+            transport: TGStreamingConfig.default.transport,
+            freshFinalAfter: TGStreamingConfig.default.freshFinalAfter,
+            typingEnabled: config.tgTypingEnabled,
+            typingInterval: config.tgTypingInterval
+        )
+    }
+
     private func executeNewWithTimeout(
         timeoutMinutes: Double,
         pending: PendingTask
     ) async throws -> AxionRunResult {
-        try await withThrowingTaskGroup(of: AxionRunResult.self) { group in
+        let streamingConfig = makeStreamingConfig()
+        return try await withThrowingTaskGroup(of: AxionRunResult.self) { group in
             group.addTask {
                 let request = OpenAgentSDK.CreateRunRequest(task: pending.task)
                 let buildConfig = AgentBuilder.BuildConfig(
@@ -211,7 +230,11 @@ actor TaskSerialQueue: TaskSerialQueueProtocol {
                     },
                     editMessage: { [weak self] chatId, messageId, text in
                         await self?.editHandler(chatId, messageId, text) ?? false
-                    }
+                    },
+                    sendChatAction: { [weak self] chatId, action in
+                        await self?.chatActionHandler(chatId, action)
+                    },
+                    streamingConfig: streamingConfig
                 )
                 let allHandlers: [any EventHandler] = [tgHandler] + self.extraHandlers
                 return try await self.runtimeManager.executeRun(
@@ -238,6 +261,7 @@ actor TaskSerialQueue: TaskSerialQueueProtocol {
         pending: PendingTask,
         sessionId: String
     ) async throws -> AxionRunResult {
+        let streamingConfig = makeStreamingConfig()
         do {
             return try await withThrowingTaskGroup(of: AxionRunResult.self) { group in
                 group.addTask {
@@ -267,7 +291,11 @@ actor TaskSerialQueue: TaskSerialQueueProtocol {
                         },
                         editMessage: { [weak self] chatId, messageId, text in
                             await self?.editHandler(chatId, messageId, text) ?? false
-                        }
+                        },
+                        sendChatAction: { [weak self] chatId, action in
+                            await self?.chatActionHandler(chatId, action)
+                        },
+                        streamingConfig: streamingConfig
                     )
                     let allHandlers: [any EventHandler] = [tgHandler] + self.extraHandlers
                     return try await self.runtimeManager.resumeRun(

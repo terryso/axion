@@ -168,6 +168,14 @@ actor TelegramAdapter {
         }
     }
 
+    func sendChatAction(chatId: Int64, action: String = "typing") async {
+        do {
+            try await apiClient.sendChatAction(chatId: chatId, action: action)
+        } catch {
+            log("[axion] Telegram sendChatAction failed: \(error.localizedDescription)")
+        }
+    }
+
     @discardableResult
     func sendFormatted(_ text: String, to chatId: Int64, replyToMessageId: Int64? = nil) async -> Int64? {
         let (formatted, mode) = TGMessageFormatter.format(text)
