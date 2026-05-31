@@ -296,7 +296,7 @@ struct GatewayStartCommand: AsyncParsableCommand {
             // Re-wire replyHandler to use the now-created adapter
             await taskSerialQueue.updateReplyHandler({ [weak adapter] chatId, message in
                 guard let adapter else { return }
-                await adapter.sendReply(message, to: chatId)
+                await adapter.sendFormatted(message, to: chatId)
             })
 
             await adapter.setTaskQueue(taskSerialQueue)

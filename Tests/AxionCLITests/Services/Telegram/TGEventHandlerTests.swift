@@ -223,10 +223,46 @@ struct TGEventHandlerTests {
         let messages = collector.messages
         #expect(messages.count == 1)
         #expect(messages[0].message.contains("任务失败"))
-        #expect(messages[0].message.contains("Connection timeout"))
-        // Ensure no API key leakage
-        #expect(!messages[0].message.contains("sk-"))
-        #expect(!messages[0].message.contains("api_key"))
+        // Error sanitizer maps timeout to Chinese
+        #expect(messages[0].message.contains("命令执行超时"))
+    }
+
+    @Test("AgentFailedEvent sanitizes API keys from error")
+    func agentFailedSanitizesKeys() async {
+        let collector = MessageCollector()
+        let handler = makeHandler(collector: collector)
+        let context = makeContext()
+
+        let event = AgentFailedEvent(
+            sessionId: nil,
+            error: "Invalid key sk-abc123def456ghi789jkl012mno345 in request",
+            stepsCompleted: 1
+        )
+        await handler.handle(event, context: context)
+
+        let messages = collector.messages
+        #expect(messages.count == 1)
+        #expect(!messages[0].message.contains("sk-abc123"))
+        #expect(messages[0].message.contains("[REDACTED_KEY]"))
+    }
+
+    @Test("AgentFailedEvent sanitizes file paths from error")
+    func agentFailedSanitizesPaths() async {
+        let collector = MessageCollector()
+        let handler = makeHandler(collector: collector)
+        let context = makeContext()
+
+        let event = AgentFailedEvent(
+            sessionId: nil,
+            error: "Error reading /Users/nick/.config/axion/secrets.json",
+            stepsCompleted: 1
+        )
+        await handler.handle(event, context: context)
+
+        let messages = collector.messages
+        #expect(messages.count == 1)
+        #expect(!messages[0].message.contains("Users/nick"))
+        #expect(messages[0].message.contains("secrets.json"))
     }
 
     // MARK: - Task 4.6: Long message splitting

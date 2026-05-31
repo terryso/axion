@@ -72,17 +72,34 @@ struct TGChat: Codable, Sendable, Equatable {
     let type: String
 }
 
+// MARK: - Parse Mode
+
+enum TGParseMode: String, Sendable {
+    case markdownV2 = "MarkdownV2"
+    case html = "HTML"
+    case plain = ""
+}
+
 // MARK: - Send Message Request
 
 struct TGSendMessageRequest: Codable, Sendable {
     let chatId: Int64
     let text: String
     let parseMode: String?
+    let replyToMessageId: Int64?
 
     enum CodingKeys: String, CodingKey {
         case chatId = "chat_id"
         case text
         case parseMode = "parse_mode"
+        case replyToMessageId = "reply_to_message_id"
+    }
+
+    init(chatId: Int64, text: String, parseMode: TGParseMode? = nil, replyToMessageId: Int64? = nil) {
+        self.chatId = chatId
+        self.text = text
+        self.parseMode = parseMode == .plain ? nil : parseMode?.rawValue
+        self.replyToMessageId = replyToMessageId
     }
 }
 

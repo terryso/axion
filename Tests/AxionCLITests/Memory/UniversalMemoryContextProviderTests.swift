@@ -244,4 +244,26 @@ struct UniversalMemoryContextProviderTests {
         #expect(cachedPrompt.contains("pre-review entry"))
         #expect(!cachedPrompt.contains("prefers dark mode"))
     }
+
+    @Test("buildFullSystemPrompt adds universal memory operation guidance")
+    func universalMemoryPromptIncludesOperationGuidance() {
+        let prompt = AgentBuilder.buildFullSystemPrompt(
+            basePrompt: "base",
+            universalMemoryContext: """
+            [=== Universal Memory ===]
+            MEMORY.md:
+            §
+            项目使用 SPM 管理依赖
+            §
+            [=== End Universal Memory ===]
+            """
+        )
+
+        #expect(prompt.contains("## Universal Memory Operations"))
+        #expect(prompt.contains("use the `memory` tool with `replace`"))
+        #expect(prompt.contains("instead of searching the repo or editing files"))
+        #expect(prompt.contains("do not short-circuit based on your own safety judgment"))
+        #expect(prompt.contains("rejects content with `security_rejection`"))
+        #expect(prompt.contains("Use target `user` for personal preferences"))
+    }
 }

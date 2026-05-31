@@ -23,11 +23,11 @@ struct TGAPIClientTests {
 
     @Test("TGSendMessageRequest with parseMode encodes correctly")
     func sendMessageRequestWithParseMode() throws {
-        let req = TGSendMessageRequest(chatId: 99, text: "*bold*", parseMode: "Markdown")
+        let req = TGSendMessageRequest(chatId: 99, text: "*bold*", parseMode: .markdownV2)
         let data = try JSONEncoder().encode(req)
         let json = try #require(String(data: data, encoding: .utf8))
 
-        #expect(json.contains("\"parse_mode\":\"Markdown\""))
+        #expect(json.contains("\"parse_mode\":\"MarkdownV2\""))
     }
 
     // MARK: - Retry Logic
@@ -67,16 +67,105 @@ struct TGAPIClientTests {
 
     // MARK: - TGAPIError
 
-    @Test("TGAPIError has localized description")
-    func apiErrorDescription() {
-        let error = TGAPIError.apiError("test error message")
-        #expect(error.errorDescription == "test error message")
+    @Test("TGAPIError has localized description for all cases")
+    func apiErrorDescriptionAllCases() {
+        #expect(TGAPIError.retryableNetwork("net fail").errorDescription == "net fail")
+        #expect(TGAPIError.rateLimited("slow down").errorDescription == "slow down")
+        #expect(TGAPIError.formatRejected("bad md").errorDescription == "bad md")
+        #expect(TGAPIError.permanentTelegramError("gone").errorDescription == "gone")
     }
 
     @Test("TGAPIError conforms to Error")
     func apiErrorConformsToError() {
-        let error: Error = TGAPIError.apiError("fail")
+        let error: Error = TGAPIError.permanentTelegramError("fail")
         #expect(error.localizedDescription == "fail")
+    }
+
+    // MARK: - Error Classification via HTTP Status
+
+    @Test("429 classifies as rateLimited")
+    func http429RateLimited() async {
+        let session = MockHTTPErrorURLSession(statusCode: 429)
+        let client = TGAPIClient(token: "test_token", session: session, maxRetries: 1)
+
+        do {
+            _ = try await client.getUpdates(offset: nil, timeout: 1)
+            #expect(Bool(false), "Should have thrown")
+        } catch let error as TGAPIError {
+            if case .rateLimited = error {
+                // correct
+            } else {
+                #expect(Bool(false), "Expected rateLimited, got \(error)")
+            }
+        } catch {
+            #expect(Bool(false), "Unexpected error type")
+        }
+    }
+
+    @Test("400 with parse error classifies as formatRejected")
+    func http400FormatRejected() async {
+        let session = MockHTTPErrorURLSession(statusCode: 400, body: "{\"ok\":false,\"description\":\"can't parse entities\"}")
+        let client = TGAPIClient(token: "test_token", session: session, maxRetries: 1)
+
+        do {
+            _ = try await client.getUpdates(offset: nil, timeout: 1)
+            #expect(Bool(false), "Should have thrown")
+        } catch let error as TGAPIError {
+            if case .formatRejected = error {
+                // correct
+            } else {
+                #expect(Bool(false), "Expected formatRejected, got \(error)")
+            }
+        } catch {
+            #expect(Bool(false), "Unexpected error type")
+        }
+    }
+
+    @Test("403 classifies as permanentTelegramError")
+    func http403Permanent() async {
+        let session = MockHTTPErrorURLSession(statusCode: 403)
+        let client = TGAPIClient(token: "test_token", session: session, maxRetries: 1)
+
+        do {
+            _ = try await client.getUpdates(offset: nil, timeout: 1)
+            #expect(Bool(false), "Should have thrown")
+        } catch let error as TGAPIError {
+            if case .permanentTelegramError = error {
+                // correct
+            } else {
+                #expect(Bool(false), "Expected permanentTelegramError, got \(error)")
+            }
+        } catch {
+            #expect(Bool(false), "Unexpected error type")
+        }
+    }
+
+    // MARK: - TGParseMode
+
+    @Test("TGParseMode raw values")
+    func parseModeRawValues() {
+        #expect(TGParseMode.markdownV2.rawValue == "MarkdownV2")
+        #expect(TGParseMode.html.rawValue == "HTML")
+        #expect(TGParseMode.plain.rawValue == "")
+    }
+
+    @Test("TGSendMessageRequest with replyToMessageId encodes correctly")
+    func sendMessageRequestWithReply() throws {
+        let req = TGSendMessageRequest(chatId: 123, text: "reply", parseMode: .markdownV2, replyToMessageId: 456)
+        let data = try JSONEncoder().encode(req)
+        let json = try #require(String(data: data, encoding: .utf8))
+
+        #expect(json.contains("\"reply_to_message_id\":456"))
+        #expect(json.contains("\"parse_mode\":\"MarkdownV2\""))
+    }
+
+    @Test("TGSendMessageRequest plain mode omits parse_mode")
+    func plainModeOmitsParseMode() throws {
+        let req = TGSendMessageRequest(chatId: 123, text: "plain", parseMode: .plain)
+        let data = try JSONEncoder().encode(req)
+        let json = try #require(String(data: data, encoding: .utf8))
+
+        #expect(!json.contains("parse_mode"))
     }
 
     // MARK: - Protocol Mock for Integration Tests
@@ -117,7 +206,7 @@ struct TGAPIClientTests {
     @Test("MockTGAPIClient getFile throws configured error")
     func mockGetFileError() async {
         let mock = MockTGAPIClient()
-        await mock.setGetFileError(TGAPIError.apiError("file not found"))
+        await mock.setGetFileError(TGAPIError.permanentTelegramError("file not found"))
 
         do {
             _ = try await mock.getFile(fileId: "bad")
@@ -141,7 +230,7 @@ struct TGAPIClientTests {
     @Test("MockTGAPIClient downloadFile throws configured error")
     func mockDownloadFileError() async {
         let mock = MockTGAPIClient()
-        await mock.setDownloadFileError(TGAPIError.apiError("download failed"))
+        await mock.setDownloadFileError(TGAPIError.permanentTelegramError("download failed"))
 
         do {
             _ = try await mock.downloadFile(filePath: "bad/path.jpg")
@@ -159,7 +248,8 @@ struct TGAPIClientTests {
 /// Mock TGAPIClient for testing TelegramAdapter
 actor MockTGAPIClient: TGAPIClientProtocol {
     private var _updates: [TGUpdate] = []
-    private var _sentMessages: [(chatId: Int64, text: String)] = []
+    private var _sentMessages: [(chatId: Int64, text: String, parseMode: TGParseMode?, replyToMessageId: Int64?)] = []
+    private var _editedMessages: [(chatId: Int64, messageId: Int64, text: String, parseMode: TGParseMode)] = []
     private var _getUpdatesError: Error?
     private var _sendMessageError: Error?
     private var _getUpdatesCallCount = 0
@@ -170,7 +260,8 @@ actor MockTGAPIClient: TGAPIClientProtocol {
     private var _getFileCallCount = 0
     private var _downloadFileCallCount = 0
 
-    var sentMessages: [(chatId: Int64, text: String)] { _sentMessages }
+    var sentMessages: [(chatId: Int64, text: String, parseMode: TGParseMode?, replyToMessageId: Int64?)] { _sentMessages }
+    var editedMessages: [(chatId: Int64, messageId: Int64, text: String, parseMode: TGParseMode)] { _editedMessages }
     var getUpdatesCallCount: Int { _getUpdatesCallCount }
     var getFileCallCount: Int { _getFileCallCount }
     var downloadFileCallCount: Int { _downloadFileCallCount }
@@ -215,9 +306,34 @@ actor MockTGAPIClient: TGAPIClientProtocol {
 
     func sendMessage(chatId: Int64, text: String) async throws -> TGMessage {
         if let error = _sendMessageError { throw error }
-        _sentMessages.append((chatId, text))
+        _sentMessages.append((chatId, text, nil, nil))
         return TGMessage(
             messageId: Int64(_sentMessages.count),
+            from: nil,
+            chat: TGChat(id: chatId, type: "private"),
+            date: 0,
+            text: text,
+            photo: nil
+        )
+    }
+
+    func sendMessage(chatId: Int64, text: String, parseMode: TGParseMode, replyToMessageId: Int64?) async throws -> TGMessage {
+        if let error = _sendMessageError { throw error }
+        _sentMessages.append((chatId, text, parseMode, replyToMessageId))
+        return TGMessage(
+            messageId: Int64(_sentMessages.count),
+            from: nil,
+            chat: TGChat(id: chatId, type: "private"),
+            date: 0,
+            text: text,
+            photo: nil
+        )
+    }
+
+    func editMessageText(chatId: Int64, messageId: Int64, text: String, parseMode: TGParseMode) async throws -> TGMessage {
+        _editedMessages.append((chatId, messageId, text, parseMode))
+        return TGMessage(
+            messageId: messageId,
             from: nil,
             chat: TGChat(id: chatId, type: "private"),
             date: 0,
@@ -254,17 +370,19 @@ final class MockFailingURLSession: URLSessionProtocol, @unchecked Sendable {
 /// Returns an HTTP response with the given status code and empty JSON body
 final class MockHTTPErrorURLSession: URLSessionProtocol, @unchecked Sendable {
     let statusCode: Int
+    let body: String
     var attemptCount = 0
 
-    init(statusCode: Int) {
+    init(statusCode: Int, body: String = "{\"ok\":false,\"description\":\"Unauthorized\"}") {
         self.statusCode = statusCode
+        self.body = body
     }
 
     func data(for request: URLRequest) async throws -> (Data, URLResponse) {
         attemptCount += 1
         let url = request.url ?? URL(string: "https://example.com")!
         let httpResp = HTTPURLResponse(url: url, statusCode: statusCode, httpVersion: "HTTP/1.1", headerFields: nil)!
-        let body = Data("{\"ok\":false,\"description\":\"Unauthorized\"}".utf8)
-        return (body, httpResp)
+        let bodyData = Data(body.utf8)
+        return (bodyData, httpResp)
     }
 }

@@ -87,6 +87,8 @@
 
 generated: 2026-05-08
 last_updated: 2026-05-31
+# epic-32-started: 2026-05-31
+# story-32.1-created: 2026-05-31
 # epic-32-added: 2026-05-31
 # story-31-5-started: 2026-05-31
 # story-31.5-created: 2026-05-31
@@ -451,8 +453,8 @@ development_status:
   # ============================================================
 
   # Epic 32: Telegram 能力补强与交互体验升级
-  epic-32: backlog
-  32-1-telegram-rich-text-rendering: backlog
+  epic-32: in-progress
+  32-1-telegram-rich-text-rendering: done
   32-2-edit-based-streaming-status-bubble: backlog
   32-3-typing-ux-draft-preview-spike: backlog
   32-4-command-registry-bot-menu: backlog

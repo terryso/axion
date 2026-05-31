@@ -119,7 +119,8 @@ actor TGEventHandler: EventHandler {
     }
 
     private func handleFailed(_ event: AgentFailedEvent) async {
-        let message = "❌ 任务失败: \(event.error)"
+        let sanitizedError = TGErrorSanitizer.sanitizeForTelegramError(event.error)
+        let message = "❌ 任务失败: \(sanitizedError)"
         await sendMessage(message, chatId)
     }
 

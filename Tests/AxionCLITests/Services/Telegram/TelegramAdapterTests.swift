@@ -203,7 +203,7 @@ struct TelegramAdapterTests {
     @Test("Status becomes error when getUpdates fails")
     func statusErrorOnFailure() async {
         let mock = MockTGAPIClient()
-        await mock.setGetUpdatesError(TGAPIError.apiError("network failure"))
+        await mock.setGetUpdatesError(TGAPIError.retryableNetwork("network failure"))
         let adapter = TelegramAdapter(apiClient: mock, allowedUsers: [], log: { _ in })
 
         _Concurrency.Task { await adapter.start() }
@@ -239,7 +239,7 @@ struct TelegramAdapterTests {
     @Test("sendReply handles sendMessage failure gracefully")
     func sendReplyHandlesFailure() async {
         let mock = MockTGAPIClient()
-        await mock.setSendMessageError(TGAPIError.apiError("rate limited"))
+        await mock.setSendMessageError(TGAPIError.permanentTelegramError("rate limited"))
         let adapter = TelegramAdapter(apiClient: mock, allowedUsers: ["123"], log: { _ in })
 
         await adapter.sendReply("test", to: 123)
@@ -510,7 +510,7 @@ struct TelegramAdapterTests {
     @Test("Photo download failure sends error reply")
     func photoDownloadFailureSendsError() async {
         let mock = MockTGAPIClient()
-        await mock.setGetFileError(TGAPIError.apiError("file not found"))
+        await mock.setGetFileError(TGAPIError.permanentTelegramError("file not found"))
         let mockQueue = MockTaskSerialQueue()
         let adapter = TelegramAdapter(apiClient: mock, allowedUsers: ["123"], taskQueue: mockQueue, log: { _ in })
 
@@ -691,5 +691,150 @@ struct TelegramAdapterTests {
 
         let sent = await mock.sentMessages
         #expect(sent.count == 1)
+    }
+
+    // MARK: - Formatted Sending (Story 32.1)
+
+    @Test("sendFormatted sends with MarkdownV2 parse mode")
+    func sendFormattedUsesMarkdownV2() async {
+        let mock = MockTGAPIClient()
+        let adapter = TelegramAdapter(apiClient: mock, allowedUsers: ["123"], log: { _ in })
+
+        await adapter.sendFormatted("# Hello", to: 456)
+
+        let sent = await mock.sentMessages
+        #expect(sent.count == 1)
+        #expect(sent[0].parseMode == .markdownV2)
+        #expect(sent[0].chatId == 456)
+    }
+
+    @Test("sendFormatted with replyToMessageId passes it on first chunk only")
+    func sendFormattedReplyFirstChunk() async {
+        let mock = MockTGAPIClient()
+        let adapter = TelegramAdapter(apiClient: mock, allowedUsers: ["123"], log: { _ in })
+
+        let longText = String(repeating: "A", count: 5000)
+        await adapter.sendFormatted(longText, to: 456, replyToMessageId: 789)
+
+        let sent = await mock.sentMessages
+        #expect(sent.count >= 2)
+        #expect(sent[0].replyToMessageId == 789)
+        #expect(sent[1].replyToMessageId == nil)
+    }
+
+    @Test("sendFormatted falls back from MDv2 to HTML on formatRejected")
+    func sendFormattedFallbackToHTML() async {
+        let mock = MockFallbackTGAPIClient()
+        // First call (MDv2) throws formatRejected, second (HTML) succeeds
+        await mock.setNextError(TGAPIError.formatRejected("can't parse entities"))
+        let adapter = TelegramAdapter(apiClient: mock, allowedUsers: ["123"], log: { _ in })
+
+        await adapter.sendFormatted("# Hello", to: 456)
+
+        let sent = await mock.sentMessages
+        #expect(sent.count == 1)
+        // Should have retried with HTML
+        #expect(sent[0].parseMode == .html)
+    }
+
+    @Test("sendFormatted fallback does not duplicate already-sent chunks")
+    func sendFormattedFallbackNoDuplicates() async {
+        let mock = MockMultiChunkFallbackTGAPIClient()
+        let adapter = TelegramAdapter(apiClient: mock, allowedUsers: ["123"], log: { _ in })
+
+        // Text long enough to produce 2+ chunks; mock fails on second chunk
+        let longText = String(repeating: "A", count: 5000)
+        await adapter.sendFormatted(longText, to: 456)
+
+        let sent = await mock.sentMessages
+        // First chunk (MDv2) sent successfully, then second fails → fallback sends
+        // only the second chunk as HTML. No duplicates.
+        let mdv2Sent = sent.filter { $0.parseMode == .markdownV2 }
+        let htmlSent = sent.filter { $0.parseMode == .html }
+        #expect(mdv2Sent.count == 1) // only first chunk in MDv2
+        #expect(htmlSent.count == 1) // only second chunk in HTML
+    }
+}
+
+// MARK: - Fallback Mock
+
+/// Mock that can inject a one-shot error for testing fallback behavior
+actor MockFallbackTGAPIClient: TGAPIClientProtocol {
+    private var _sentMessages: [(chatId: Int64, text: String, parseMode: TGParseMode?, replyToMessageId: Int64?)] = []
+    private var _nextError: Error?
+    private var _mdv2Attempted = false
+
+    var sentMessages: [(chatId: Int64, text: String, parseMode: TGParseMode?, replyToMessageId: Int64?)] { _sentMessages }
+
+    func setNextError(_ error: Error?) {
+        _nextError = error
+    }
+
+    func getUpdates(offset: Int64?, timeout: Int) async throws -> [TGUpdate] { [] }
+
+    func sendMessage(chatId: Int64, text: String) async throws -> TGMessage {
+        _sentMessages.append((chatId, text, nil, nil))
+        return TGMessage(messageId: Int64(_sentMessages.count), from: nil, chat: TGChat(id: chatId, type: "private"), date: 0, text: text)
+    }
+
+    func sendMessage(chatId: Int64, text: String, parseMode: TGParseMode, replyToMessageId: Int64?) async throws -> TGMessage {
+        if parseMode == .markdownV2, !_mdv2Attempted {
+            _mdv2Attempted = true
+            if let error = _nextError { throw error }
+        }
+        _sentMessages.append((chatId, text, parseMode, replyToMessageId))
+        return TGMessage(messageId: Int64(_sentMessages.count), from: nil, chat: TGChat(id: chatId, type: "private"), date: 0, text: text)
+    }
+
+    func editMessageText(chatId: Int64, messageId: Int64, text: String, parseMode: TGParseMode) async throws -> TGMessage {
+        TGMessage(messageId: messageId, from: nil, chat: TGChat(id: chatId, type: "private"), date: 0, text: text)
+    }
+
+    func getFile(fileId: String) async throws -> TGFile {
+        TGFile(fileId: fileId, filePath: "photos/file_0.jpg")
+    }
+
+    func downloadFile(filePath: String) async throws -> Data {
+        Data("fake".utf8)
+    }
+}
+
+/// Mock that succeeds on first MDv2 call, fails on second MDv2 call, then succeeds on HTML.
+/// Used to test that fallback doesn't duplicate already-sent chunks.
+actor MockMultiChunkFallbackTGAPIClient: TGAPIClientProtocol {
+    private var _sentMessages: [(chatId: Int64, text: String, parseMode: TGParseMode?, replyToMessageId: Int64?)] = []
+    private var _mdv2CallCount = 0
+
+    var sentMessages: [(chatId: Int64, text: String, parseMode: TGParseMode?, replyToMessageId: Int64?)] { _sentMessages }
+
+    func getUpdates(offset: Int64?, timeout: Int) async throws -> [TGUpdate] { [] }
+
+    func sendMessage(chatId: Int64, text: String) async throws -> TGMessage {
+        _sentMessages.append((chatId, text, nil, nil))
+        return TGMessage(messageId: Int64(_sentMessages.count), from: nil, chat: TGChat(id: chatId, type: "private"), date: 0, text: text)
+    }
+
+    func sendMessage(chatId: Int64, text: String, parseMode: TGParseMode, replyToMessageId: Int64?) async throws -> TGMessage {
+        if parseMode == .markdownV2 {
+            _mdv2CallCount += 1
+            if _mdv2CallCount == 2 {
+                // Second MDv2 chunk fails → triggers fallback
+                throw TGAPIError.formatRejected("can't parse entities")
+            }
+        }
+        _sentMessages.append((chatId, text, parseMode, replyToMessageId))
+        return TGMessage(messageId: Int64(_sentMessages.count), from: nil, chat: TGChat(id: chatId, type: "private"), date: 0, text: text)
+    }
+
+    func editMessageText(chatId: Int64, messageId: Int64, text: String, parseMode: TGParseMode) async throws -> TGMessage {
+        TGMessage(messageId: messageId, from: nil, chat: TGChat(id: chatId, type: "private"), date: 0, text: text)
+    }
+
+    func getFile(fileId: String) async throws -> TGFile {
+        TGFile(fileId: fileId, filePath: "photos/file_0.jpg")
+    }
+
+    func downloadFile(filePath: String) async throws -> Data {
+        Data("fake".utf8)
     }
 }

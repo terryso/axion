@@ -5,6 +5,8 @@ import Foundation
 protocol TGAPIClientProtocol: Sendable {
     func getUpdates(offset: Int64?, timeout: Int) async throws -> [TGUpdate]
     func sendMessage(chatId: Int64, text: String) async throws -> TGMessage
+    func sendMessage(chatId: Int64, text: String, parseMode: TGParseMode, replyToMessageId: Int64?) async throws -> TGMessage
+    func editMessageText(chatId: Int64, messageId: Int64, text: String, parseMode: TGParseMode) async throws -> TGMessage
     func getFile(fileId: String) async throws -> TGFile
     func downloadFile(filePath: String) async throws -> Data
 }
@@ -37,20 +39,20 @@ struct TGAPIClient: TGAPIClientProtocol {
         components.queryItems = queryItems
 
         guard let url = components.url else {
-            throw TGAPIError.apiError("Invalid URL for getUpdates")
+            throw TGAPIError.permanentTelegramError("Invalid URL for getUpdates")
         }
         let request = URLRequest(url: url, timeoutInterval: Double(timeout + 10))
 
         let response: TGResponse<[TGUpdate]> = try await performRequest(request, retries: maxRetries)
         guard response.ok else {
-            throw TGAPIError.apiError(response.description ?? "Unknown error")
+            throw TGAPIError.permanentTelegramError(response.description ?? "Unknown error")
         }
         return response.result ?? []
     }
 
     func sendMessage(chatId: Int64, text: String) async throws -> TGMessage {
         guard let url = URL(string: "https://api.telegram.org/bot\(token)/sendMessage") else {
-            throw TGAPIError.apiError("Invalid URL for sendMessage")
+            throw TGAPIError.permanentTelegramError("Invalid URL for sendMessage")
         }
         var request = URLRequest(url: url)
         request.httpMethod = "POST"
@@ -62,31 +64,83 @@ struct TGAPIClient: TGAPIClientProtocol {
 
         let response: TGResponse<TGMessage> = try await performRequest(request, retries: maxRetries)
         guard response.ok, let message = response.result else {
-            throw TGAPIError.apiError(response.description ?? "sendMessage failed")
+            throw TGAPIError.permanentTelegramError(response.description ?? "sendMessage failed")
+        }
+        return message
+    }
+
+    func sendMessage(chatId: Int64, text: String, parseMode: TGParseMode, replyToMessageId: Int64? = nil) async throws -> TGMessage {
+        guard let url = URL(string: "https://api.telegram.org/bot\(token)/sendMessage") else {
+            throw TGAPIError.permanentTelegramError("Invalid URL for sendMessage")
+        }
+        var request = URLRequest(url: url)
+        request.httpMethod = "POST"
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.timeoutInterval = 30
+
+        let body = TGSendMessageRequest(chatId: chatId, text: text, parseMode: parseMode, replyToMessageId: replyToMessageId)
+        request.httpBody = try JSONEncoder().encode(body)
+
+        let response: TGResponse<TGMessage> = try await performRequest(request, retries: maxRetries)
+        guard response.ok, let message = response.result else {
+            throw TGAPIError.permanentTelegramError(response.description ?? "sendMessage failed")
+        }
+        return message
+    }
+
+    func editMessageText(chatId: Int64, messageId: Int64, text: String, parseMode: TGParseMode) async throws -> TGMessage {
+        guard let url = URL(string: "https://api.telegram.org/bot\(token)/editMessageText") else {
+            throw TGAPIError.permanentTelegramError("Invalid URL for editMessageText")
+        }
+        var request = URLRequest(url: url)
+        request.httpMethod = "POST"
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.timeoutInterval = 30
+
+        struct EditMessageRequest: Codable {
+            let chatId: Int64
+            let messageId: Int64
+            let text: String
+            let parseMode: String?
+
+            enum CodingKeys: String, CodingKey {
+                case chatId = "chat_id"
+                case messageId = "message_id"
+                case text
+                case parseMode = "parse_mode"
+            }
+        }
+        let pm: String? = parseMode == .plain ? nil : parseMode.rawValue
+        let body = EditMessageRequest(chatId: chatId, messageId: messageId, text: text, parseMode: pm)
+        request.httpBody = try JSONEncoder().encode(body)
+
+        let response: TGResponse<TGMessage> = try await performRequest(request, retries: maxRetries)
+        guard response.ok, let message = response.result else {
+            throw TGAPIError.permanentTelegramError(response.description ?? "editMessageText failed")
         }
         return message
     }
 
     func getFile(fileId: String) async throws -> TGFile {
         guard let url = URL(string: "https://api.telegram.org/bot\(token)/getFile?file_id=\(fileId)") else {
-            throw TGAPIError.apiError("Invalid URL for getFile")
+            throw TGAPIError.permanentTelegramError("Invalid URL for getFile")
         }
         let request = URLRequest(url: url, timeoutInterval: 30)
         let response: TGResponse<TGFile> = try await performRequest(request, retries: maxRetries)
         guard response.ok, let file = response.result else {
-            throw TGAPIError.apiError(response.description ?? "getFile failed")
+            throw TGAPIError.permanentTelegramError(response.description ?? "getFile failed")
         }
         return file
     }
 
     func downloadFile(filePath: String) async throws -> Data {
         guard let url = URL(string: "https://api.telegram.org/file/bot\(token)/\(filePath)") else {
-            throw TGAPIError.apiError("Invalid URL for file download")
+            throw TGAPIError.permanentTelegramError("Invalid URL for file download")
         }
         let request = URLRequest(url: url, timeoutInterval: 60)
         let (data, httpResponse) = try await session.data(for: request)
         if let http = httpResponse as? HTTPURLResponse, !(200...299).contains(http.statusCode) {
-            throw TGAPIError.apiError("File download failed: HTTP \(http.statusCode)")
+            throw TGAPIError.permanentTelegramError("File download failed: HTTP \(http.statusCode)")
         }
         return data
     }
@@ -98,33 +152,69 @@ struct TGAPIClient: TGAPIClientProtocol {
         for attempt in 0..<retries {
             do {
                 let (data, httpResponse) = try await session.data(for: request)
-                if let http = httpResponse as? HTTPURLResponse, (400...499).contains(http.statusCode) {
+                if let http = httpResponse as? HTTPURLResponse, !(200...299).contains(http.statusCode) {
                     let body = String(data: data, encoding: .utf8) ?? "HTTP \(http.statusCode)"
-                    throw TGAPIError.apiError(body)
+                    throw classifyHTTPError(statusCode: http.statusCode, body: body)
                 }
                 return try JSONDecoder().decode(T.self, from: data)
             } catch let error as TGAPIError {
-                throw error
+                switch error {
+                case .rateLimited:
+                    if attempt < retries - 1 {
+                        try? await _Concurrency.Task.sleep(nanoseconds: 1_000_000_000)
+                        continue
+                    }
+                    throw error
+                case .retryableNetwork:
+                    if attempt < retries - 1 {
+                        let delay = pow(2.0, Double(attempt))
+                        try? await _Concurrency.Task.sleep(nanoseconds: UInt64(delay * 1_000_000_000))
+                        continue
+                    }
+                    throw error
+                case .formatRejected, .permanentTelegramError:
+                    throw error
+                }
             } catch {
                 lastError = error
                 if attempt < retries - 1 {
-                    let delay = pow(2.0, Double(attempt)) // 1s → 2s → 4s
+                    let delay = pow(2.0, Double(attempt))
                     try? await _Concurrency.Task.sleep(nanoseconds: UInt64(delay * 1_000_000_000))
                 }
             }
         }
         throw lastError!
     }
+
+    private func classifyHTTPError(statusCode: Int, body: String) -> TGAPIError {
+        switch statusCode {
+        case 429:
+            return .rateLimited(body)
+        case 400:
+            if body.contains("can't parse entities") || body.contains("Bad Request") {
+                return .formatRejected(body)
+            }
+            return .permanentTelegramError(body)
+        default:
+            return .permanentTelegramError(body)
+        }
+    }
 }
 
 // MARK: - Errors
 
 enum TGAPIError: Error, LocalizedError {
-    case apiError(String)
+    case retryableNetwork(String)
+    case rateLimited(String)
+    case formatRejected(String)
+    case permanentTelegramError(String)
 
     var errorDescription: String? {
         switch self {
-        case .apiError(let message): return message
+        case .retryableNetwork(let msg): return msg
+        case .rateLimited(let msg): return msg
+        case .formatRejected(let msg): return msg
+        case .permanentTelegramError(let msg): return msg
         }
     }
 }

@@ -151,6 +151,64 @@ actor TelegramAdapter {
         }
     }
 
+    func sendFormatted(_ text: String, to chatId: Int64, replyToMessageId: Int64? = nil) async {
+        let (formatted, mode) = TGMessageFormatter.format(text)
+        let chunks = TGMessageFormatter.split(formattedText: formatted, parseMode: mode)
+
+        var sentCount = 0
+        for (index, chunk) in chunks.enumerated() {
+            let replyId = index == 0 ? replyToMessageId : nil
+
+            do {
+                _ = try await apiClient.sendMessage(chatId: chatId, text: chunk, parseMode: mode, replyToMessageId: replyId)
+                sentCount += 1
+            } catch let error as TGAPIError {
+                switch error {
+                case .formatRejected:
+                    // Fallback: re-format and send only unsent chunks
+                    await sendFallbackChunks(text: text, to: chatId, replyToMessageId: replyToMessageId, startIndex: sentCount)
+                    return
+                default:
+                    log("[axion] Telegram sendFormatted failed: \(error.localizedDescription)")
+                }
+            } catch {
+                log("[axion] Telegram sendFormatted failed: \(error.localizedDescription)")
+            }
+        }
+    }
+
+    private func sendFallbackChunks(text: String, to chatId: Int64, replyToMessageId: Int64?, startIndex: Int) async {
+        let (htmlFormatted, htmlMode) = TGMessageFormatter.formatAsHTML(text)
+        let htmlChunks = TGMessageFormatter.split(formattedText: htmlFormatted, parseMode: htmlMode)
+
+        for (hIndex, htmlChunk) in htmlChunks.enumerated() {
+            guard hIndex >= startIndex else { continue }
+            let hReplyId = hIndex == 0 ? replyToMessageId : nil
+            do {
+                _ = try await apiClient.sendMessage(chatId: chatId, text: htmlChunk, parseMode: htmlMode, replyToMessageId: hReplyId)
+            } catch {
+                // Final fallback to plain
+                await sendPlainFallbackChunks(text: text, to: chatId, replyToMessageId: replyToMessageId, startIndex: startIndex)
+                return
+            }
+        }
+    }
+
+    private func sendPlainFallbackChunks(text: String, to chatId: Int64, replyToMessageId: Int64?, startIndex: Int) async {
+        let (plainFormatted, plainMode) = TGMessageFormatter.formatAsPlain(text)
+        let plainChunks = TGMessageFormatter.split(formattedText: plainFormatted, parseMode: plainMode)
+
+        for (pIndex, plainChunk) in plainChunks.enumerated() {
+            guard pIndex >= startIndex else { continue }
+            let pReplyId = pIndex == 0 ? replyToMessageId : nil
+            do {
+                _ = try await apiClient.sendMessage(chatId: chatId, text: plainChunk, parseMode: plainMode, replyToMessageId: pReplyId)
+            } catch {
+                log("[axion] Telegram sendFormatted plain fallback failed: \(error.localizedDescription)")
+            }
+        }
+    }
+
     // MARK: - Authorization
 
     private func isAuthorized(userId: Int64) -> Bool {
