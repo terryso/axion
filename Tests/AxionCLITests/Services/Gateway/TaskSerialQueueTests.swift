@@ -150,10 +150,10 @@ struct TaskSerialQueueTests {
         let processingTask = _Concurrency.Task { await queue.startProcessing() }
 
         // Enqueue sequentially to avoid data race on non-actor TaskSerialQueue.queue
-        await queue.enqueue(task: "task-A", chatId: 100)
+        await queue.enqueue(task: "task-A", chatId: 100, userId: 100)
         await waitUntil { await runtime.tasks.count >= 1 }
 
-        await queue.enqueue(task: "task-B", chatId: 100)
+        await queue.enqueue(task: "task-B", chatId: 100, userId: 100)
         await waitUntil { await runtime.tasks.count >= 2 }
 
         await queue.cancelAll()
@@ -185,10 +185,9 @@ struct TaskSerialQueueTests {
 
         let processingTask = _Concurrency.Task { await queue.startProcessing() }
 
-        await queue.enqueue(task: "task-A", chatId: 100)
-        // Wait for task-A to start processing (start message sent → isExecuting is true)
-        await waitUntil { await collector.messages(for: 100).contains { $0.contains("任务开始执行") } }
-        await queue.enqueue(task: "task-B", chatId: 200)
+        await queue.enqueue(task: "task-A", chatId: 100, userId: 100)
+        await waitUntil { await runtime.tasks.count >= 1 }
+        await queue.enqueue(task: "task-B", chatId: 200, userId: 200)
 
         // Check queue notification
         let repliesForB = await collector.messages(for: 200)
@@ -226,7 +225,7 @@ struct TaskSerialQueueTests {
 
         let processingTask = _Concurrency.Task { await queue.startProcessing() }
 
-        await queue.enqueue(task: "slow-task", chatId: 100)
+        await queue.enqueue(task: "slow-task", chatId: 100, userId: 100)
 
         // Wait for timeout reply to appear
         await waitUntil {
@@ -259,12 +258,11 @@ struct TaskSerialQueueTests {
 
         let processingTask = _Concurrency.Task { await queue.startProcessing() }
 
-        await queue.enqueue(task: "running-task", chatId: 100)
-        // Wait for running-task to start processing (isExecuting will be true)
-        await waitUntil { await collector.messages(for: 100).contains { $0.contains("任务开始执行") } }
+        await queue.enqueue(task: "running-task", chatId: 100, userId: 100)
+        await waitUntil { await runtime.tasks.count >= 1 }
 
-        await queue.enqueue(task: "queued-1", chatId: 200)
-        await queue.enqueue(task: "queued-2", chatId: 300)
+        await queue.enqueue(task: "queued-1", chatId: 200, userId: 200)
+        await queue.enqueue(task: "queued-2", chatId: 300, userId: 300)
 
         await queue.cancelAll()
 
@@ -294,7 +292,7 @@ struct TaskSerialQueueTests {
         )
 
         await queue.cancelAll()
-        await queue.enqueue(task: "late-task", chatId: 100)
+        await queue.enqueue(task: "late-task", chatId: 100, userId: 100)
 
         let replies = await collector.messages(for: 100)
         #expect(replies.contains { $0.contains("正在关闭") })
@@ -357,8 +355,8 @@ struct TaskSerialQueueTests {
 
     // MARK: - Tests: Start Execution Notification (AC #1, #3)
 
-    @Test("First task gets 'started' notification immediately")
-    func firstTaskStartsImmediately() async throws {
+    @Test("First task does not send standalone start notification")
+    func firstTaskDoesNotSendStandaloneStartNotification() async throws {
         let runtime = MockRuntimeManager()
         let collector = ReplyCollector()
         let (runner, server) = makeRunner()
@@ -371,21 +369,22 @@ struct TaskSerialQueueTests {
         )
 
         let processingTask = _Concurrency.Task { await queue.startProcessing() }
-        await queue.enqueue(task: "hello", chatId: 100)
+        await queue.enqueue(task: "hello", chatId: 100, userId: 100)
 
         await waitUntil { await runtime.tasks.count >= 1 }
         await queue.cancelAll()
         processingTask.cancel()
 
         let replies = await collector.messages(for: 100)
-        #expect(replies.contains { $0.contains("任务开始执行") && $0.contains("hello") })
+        #expect(!replies.contains { $0.contains("任务开始执行") && $0.contains("hello") })
 
         await server.stop()
     }
 
-    @Test("Queued task starts after previous completes")
-    func queuedTaskStartsAfterPrevious() async throws {
+    @Test("Queued task keeps queue notice without standalone start banner")
+    func queuedTaskKeepsQueueNoticeWithoutStartBanner() async throws {
         let runtime = MockRuntimeManager()
+        await runtime.setDelay(200_000_000, for: "first")
         let collector = ReplyCollector()
         let (runner, server) = makeRunner()
 
@@ -398,19 +397,17 @@ struct TaskSerialQueueTests {
 
         let processingTask = _Concurrency.Task { await queue.startProcessing() }
 
-        await queue.enqueue(task: "first", chatId: 100)
+        await queue.enqueue(task: "first", chatId: 100, userId: 100)
         await waitUntil { await runtime.tasks.count >= 1 }
 
-        await queue.enqueue(task: "second", chatId: 100)
+        await queue.enqueue(task: "second", chatId: 100, userId: 100)
         await waitUntil { await runtime.tasks.count >= 2 }
         await queue.cancelAll()
         processingTask.cancel()
 
         let replies = await collector.messages(for: 100)
-        let startedMessages = replies.filter { $0.contains("任务开始执行") }
-        #expect(startedMessages.count == 2)
-        #expect(startedMessages[0].contains("first"))
-        #expect(startedMessages[1].contains("second"))
+        #expect(replies.contains { $0.contains("任务已排队") })
+        #expect(!replies.contains { $0.contains("任务开始执行") })
 
         await server.stop()
     }
@@ -433,7 +430,7 @@ struct TaskSerialQueueTests {
 
         let processingTask = _Concurrency.Task { await queue.startProcessing() }
 
-        await queue.enqueue(task: "task", chatId: 100)
+        await queue.enqueue(task: "task", chatId: 100, userId: 100)
         try await _Concurrency.Task.sleep(nanoseconds: 100_000_000) // let task start
 
         let countDuringExecution = await runner.activeTaskCount
@@ -466,13 +463,13 @@ struct TaskSerialQueueTests {
 
         let processingTask = _Concurrency.Task { await queue.startProcessing() }
 
-        await queue.enqueue(task: "open calculator", chatId: 100)
+        await queue.enqueue(task: "open calculator", chatId: 100, userId: 100)
         await waitUntil { await runtime.tasks.count >= 1 }
         // Wait for the processing loop to finish updateSession — it runs in a parent
         // task after the child TaskGroup completes, so we need a longer yield under load.
         try? await _Concurrency.Task.sleep(nanoseconds: 200_000_000)
 
-        await queue.enqueue(task: "what was the result", chatId: 100)
+        await queue.enqueue(task: "what was the result", chatId: 100, userId: 100)
         await waitUntil { await runtime.tasks.count >= 2 }
 
         await queue.cancelAll()
@@ -506,12 +503,12 @@ struct TaskSerialQueueTests {
 
         let processingTask = _Concurrency.Task { await queue.startProcessing() }
 
-        await queue.enqueue(task: "first task", chatId: 100)
+        await queue.enqueue(task: "first task", chatId: 100, userId: 100)
         await waitUntil { await runtime.tasks.count >= 1 }
 
         await queue.clearSession(chatId: 100)
 
-        await queue.enqueue(task: "second task", chatId: 100)
+        await queue.enqueue(task: "second task", chatId: 100, userId: 100)
         await waitUntil { await runtime.tasks.count >= 2 }
 
         await queue.cancelAll()
@@ -543,11 +540,11 @@ struct TaskSerialQueueTests {
 
         let processingTask = _Concurrency.Task { await queue.startProcessing() }
 
-        await queue.enqueue(task: "first", chatId: 100)
+        await queue.enqueue(task: "first", chatId: 100, userId: 100)
         await waitUntil { await runtime.tasks.count >= 1 }
 
         await runtime.setResumeError(NSError(domain: "test", code: 1, userInfo: [NSLocalizedDescriptionKey: "session corrupted"]))
-        await queue.enqueue(task: "second", chatId: 100)
+        await queue.enqueue(task: "second", chatId: 100, userId: 100)
         await waitUntil { await runtime.tasks.count >= 2 }
 
         await queue.cancelAll()
@@ -582,19 +579,19 @@ struct TaskSerialQueueTests {
         let processingTask = _Concurrency.Task { await queue.startProcessing() }
 
         // First task completes quickly, creating a session
-        await queue.enqueue(task: "first", chatId: 100)
+        await queue.enqueue(task: "first", chatId: 100, userId: 100)
         await waitUntil { await runtime.tasks.count >= 1 }
         // Wait for the processing loop to finish updateSession.
         try? await _Concurrency.Task.sleep(nanoseconds: 200_000_000)
 
         // Second task enqueued while no task running — sees active session, freezes resume decision
-        await queue.enqueue(task: "follow-up", chatId: 100)
+        await queue.enqueue(task: "follow-up", chatId: 100, userId: 100)
 
         // Now clear the session (simulating /new)
         await queue.clearSession(chatId: 100)
 
         // Third task after clear — should NOT resume
-        await queue.enqueue(task: "after-clear", chatId: 100)
+        await queue.enqueue(task: "after-clear", chatId: 100, userId: 100)
 
         await waitUntil { await runtime.tasks.count >= 3 }
         await queue.cancelAll()
@@ -627,18 +624,18 @@ struct TaskSerialQueueTests {
 
         let processingTask = _Concurrency.Task { await queue.startProcessing() }
 
-        await queue.enqueue(task: "task-A", chatId: 100)
-        await queue.enqueue(task: "task-B", chatId: 200)
+        await queue.enqueue(task: "task-A", chatId: 100, userId: 100)
+        await queue.enqueue(task: "task-B", chatId: 200, userId: 200)
         await waitUntil { await runtime.tasks.count >= 2 }
         // Wait for the processing loop to finish updateSession for both tasks.
         try? await _Concurrency.Task.sleep(nanoseconds: 200_000_000)
 
         await queue.clearSession(chatId: 100)
 
-        await queue.enqueue(task: "follow-up-200", chatId: 200)
+        await queue.enqueue(task: "follow-up-200", chatId: 200, userId: 200)
         await waitUntil { await runtime.tasks.count >= 3 }
 
-        await queue.enqueue(task: "follow-up-100", chatId: 100)
+        await queue.enqueue(task: "follow-up-100", chatId: 100, userId: 100)
         await waitUntil { await runtime.tasks.count >= 4 }
 
         await queue.cancelAll()
@@ -668,11 +665,11 @@ struct TaskSerialQueueTests {
 
         let processingTask = _Concurrency.Task { await queue.startProcessing() }
 
-        await queue.enqueue(task: "running-task", chatId: 100)
-        await waitUntil { await collector.messages(for: 100).contains { $0.contains("任务开始执行") } }
+        await queue.enqueue(task: "running-task", chatId: 100, userId: 100)
+        await waitUntil { await runtime.tasks.count >= 1 }
 
-        await queue.enqueue(task: "queued-A", chatId: 100)
-        await queue.enqueue(task: "queued-B", chatId: 200)
+        await queue.enqueue(task: "queued-A", chatId: 100, userId: 100)
+        await queue.enqueue(task: "queued-B", chatId: 200, userId: 200)
 
         let count100 = await queue.pendingCount(chatId: 100)
         let count200 = await queue.pendingCount(chatId: 200)
@@ -703,8 +700,8 @@ struct TaskSerialQueueTests {
 
         let processingTask = _Concurrency.Task { await queue.startProcessing() }
 
-        await queue.enqueue(task: "task-100", chatId: 100)
-        await waitUntil { await collector.messages(for: 100).contains { $0.contains("任务开始执行") } }
+        await queue.enqueue(task: "task-100", chatId: 100, userId: 100)
+        await waitUntil { await runtime.tasks.count >= 1 }
 
         let processing100 = await queue.isProcessing(chatId: 100)
         let processing200 = await queue.isProcessing(chatId: 200)
@@ -732,7 +729,7 @@ struct TaskSerialQueueTests {
 
         let processingTask = _Concurrency.Task { await queue.startProcessing() }
 
-        await queue.enqueue(task: "task-A", chatId: 100)
+        await queue.enqueue(task: "task-A", chatId: 100, userId: 100)
         await waitUntil { await runtime.tasks.count >= 1 }
         try? await _Concurrency.Task.sleep(nanoseconds: 200_000_000)
 

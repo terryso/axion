@@ -39,3 +39,11 @@
 
 - Resume degradation double timeout — when `resumeRun()` fails and degrades to `executeNewWithTimeout()`, the task gets a fresh full timeout. Worst case ~20 min wall clock for default 10 min timeout. Acceptable tradeoff for simplicity; could be improved by tracking elapsed time.
 - `chatSessions` unbounded growth — `TaskSerialQueue.chatSessions` has no eviction policy for distinct chatIds. For a small-user-count TG bot this is fine. Should add a max-entries eviction (similar to `DaemonRuntimeManager.maxSessionHistory`) if user count grows.
+
+## Deferred from: TG Message UX Simplification spec split (2026-06-01)
+
+- Broader Hermes-parity polish — add Telegram message reactions / notification-mode tuning / richer processing indicators only after the core chat-noise cleanup ships.
+
+## Deferred from: TG Message UX Simplification review (2026-06-01)
+
+- Group-chat session isolation — `TaskSerialQueue` resumes Telegram sessions by `chatId` only, so different users in the same group chat could inherit each other’s resumed context. Out of scope for this UX cleanup; address in a focused session-keying follow-up.

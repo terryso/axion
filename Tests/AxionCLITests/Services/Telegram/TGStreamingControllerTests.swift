@@ -73,7 +73,7 @@ struct TGStreamingControllerTests {
 
     // MARK: - AC #1: First chunk creates preview bubble
 
-    @Test("First LLMTokenStreamEvent creates preview bubble with 思考中 prefix")
+    @Test("First LLMTokenStreamEvent creates preview bubble with quiet processing prefix")
     func firstChunkCreatesPreview() async {
         let log = CallLog()
         let controller = makeController(log: log)
@@ -83,7 +83,7 @@ struct TGStreamingControllerTests {
 
         let sent = log.sentMessages
         #expect(sent.count == 1)
-        #expect(sent[0].text == "⏳ 思考中...")
+        #expect(sent[0].text == "⏳ 处理中…")
         #expect(sent[0].chatId == 123)
     }
 
@@ -133,7 +133,20 @@ struct TGStreamingControllerTests {
 
     // MARK: - AC #3: Tool segment finalize
 
-    @Test("Tool completed shows ✓ toolName (duration)")
+    @Test("First tool start creates preview bubble")
+    func firstToolStartCreatesPreview() async {
+        let log = CallLog()
+        let controller = makeController(log: log)
+
+        await controller.handle(ToolStartedEvent(
+            sessionId: nil, toolName: "WebSearch", toolUseId: "tu-1", input: nil
+        ))
+
+        #expect(log.sentMessages.count == 1)
+        #expect(log.sentMessages[0].text == "⏳ 处理中…")
+    }
+
+    @Test("Tool completed shows concise tool marker")
     func toolCompletedShowsFinalize() async {
         let log = CallLog()
         let config = TGStreamingConfig(
@@ -160,12 +173,13 @@ struct TGStreamingControllerTests {
             isError: false
         ))
 
-        // Check that the tool finalize marker was sent
-        let allSent = log.sentMessages.map(\.text).joined()
-        #expect(allSent.contains("✓ Bash (1.2s)"))
+        // Check that the tool finalize marker stays concise
+        let allSent = (log.sentMessages.map(\.text) + log.editedMessages.map(\.text)).joined()
+        #expect(allSent.contains("✓ 💻 Bash"))
+        #expect(!allSent.contains("1.2s"))
     }
 
-    @Test("Tool completed with error shows ❌ marker")
+    @Test("Tool completed with error shows concise warning marker")
     func toolCompletedErrorShowsMarker() async {
         let log = CallLog()
         let config = TGStreamingConfig(
@@ -189,8 +203,80 @@ struct TGStreamingControllerTests {
             isError: true
         ))
 
-        let allSent = log.sentMessages.map(\.text).joined()
-        #expect(allSent.contains("❌ Bash (0.5s)"))
+        let allSent = (log.sentMessages.map(\.text) + log.editedMessages.map(\.text)).joined()
+        #expect(allSent.contains("⚠️ 💻 Bash"))
+        #expect(!allSent.contains("0.5s"))
+    }
+
+    @Test("Tool completed omits raw argument preview")
+    func toolCompletedOmitsPreview() async {
+        let log = CallLog()
+        let config = TGStreamingConfig(
+            editInterval: 0,
+            bufferThreshold: 1000,
+            transport: .edit,
+            freshFinalAfter: 60,
+            typingEnabled: false,
+            typingInterval: 4.0
+        )
+        let controller = makeController(log: log, config: config)
+
+        let inputJson = #"{"query":"广州明天天气"}"#
+        await controller.handle(ToolStartedEvent(
+            sessionId: nil, toolName: "WebSearch", toolUseId: "tu-1", input: inputJson
+        ))
+        await controller.handle(ToolCompletedEvent(
+            sessionId: nil,
+            toolUseId: "tu-1",
+            toolName: "WebSearch",
+            durationMs: 1600,
+            isError: false
+        ))
+
+        let allSent = (log.sentMessages.map(\.text) + log.editedMessages.map(\.text)).joined()
+        #expect(allSent.contains("✓ 🔍 WebSearch"))
+        #expect(!allSent.contains("广州明天天气"))
+        #expect(!allSent.contains(#""query""#))
+    }
+
+    @Test("Tool streaming output is suppressed")
+    func toolStreamingSuppressed() async {
+        let log = CallLog()
+        let config = TGStreamingConfig(
+            editInterval: 0,
+            bufferThreshold: 1,
+            transport: .edit,
+            freshFinalAfter: 60,
+            typingEnabled: false,
+            typingInterval: 4.0
+        )
+        let controller = makeController(log: log, config: config)
+
+        await controller.handle(ToolStartedEvent(
+            sessionId: nil, toolName: "Bash", toolUseId: "tu-1", input: nil
+        ))
+
+        // Send tool streaming chunks — should be suppressed
+        await controller.handle(ToolStreamingEvent(
+            sessionId: nil, toolUseId: "tu-1", chunk: "raw output line 1\n"
+        ))
+        await controller.handle(ToolStreamingEvent(
+            sessionId: nil, toolUseId: "tu-1", chunk: "raw output line 2\n"
+        ))
+
+        // Complete tool
+        await controller.handle(ToolCompletedEvent(
+            sessionId: nil,
+            toolUseId: "tu-1",
+            toolName: "Bash",
+            durationMs: 500,
+            isError: false
+        ))
+
+        // Raw output should NOT appear in any sent message
+        let allText = log.sentMessages.map(\.text).joined() + log.editedMessages.map(\.text).joined()
+        #expect(!allText.contains("raw output line 1"))
+        #expect(!allText.contains("raw output line 2"))
     }
 
     // MARK: - AC #4: 429 handling
@@ -252,9 +338,31 @@ struct TGStreamingControllerTests {
         #expect(log.editedMessages.isEmpty)
     }
 
+    @Test("Edit failure falls back to append message")
+    func editFailureFallsBackToAppend() async {
+        let log = CallLog()
+        let config = TGStreamingConfig(
+            editInterval: 0,
+            bufferThreshold: 1,
+            transport: .edit,
+            freshFinalAfter: 60,
+            typingEnabled: false,
+            typingInterval: 4.0
+        )
+        let controller = makeController(log: log, editResult: false, config: config)
+
+        await controller.handle(LLMTokenStreamEvent(sessionId: nil, chunk: "Hi"))
+        await controller.handle(LLMTokenStreamEvent(sessionId: nil, chunk: " there"))
+
+        #expect(log.editedMessages.count == 1)
+        #expect(log.editResults == [false])
+        #expect(log.sentMessages.count == 2)
+        #expect(log.sentMessages.last?.text == "Hi there")
+    }
+
     // MARK: - AC #6: AgentCompleted clears prefix
 
-    @Test("AgentCompletedEvent clears 思考中 and applies final formatting")
+    @Test("AgentCompletedEvent clears processing prefix and keeps final answer concise")
     func agentCompletedClearsPrefix() async {
         let log = CallLog()
         let config = TGStreamingConfig(
@@ -282,8 +390,8 @@ struct TGStreamingControllerTests {
         // Check editedMessages for the final content (not sentMessages).
         let allEdits = log.editedMessages.map(\.text)
         let finalEdit = allEdits.last ?? ""
-        #expect(!finalEdit.contains("⏳ 思考中..."))
-        #expect(finalEdit.contains("任务完成"))
+        #expect(!finalEdit.contains("⏳ 处理中…"))
+        #expect(finalEdit == "The task is done.")
     }
 
     // MARK: - AC #7: Overflow split
@@ -348,7 +456,7 @@ struct TGStreamingControllerTests {
         // so the final message should be sent as a new sendMessage
         #expect(log.sentMessages.count >= 2) // preview + final
         let lastMsg = log.sentMessages.last?.text ?? ""
-        #expect(lastMsg.contains("任务完成"))
+        #expect(lastMsg == "Done")
     }
 
     // MARK: - Cancel
@@ -601,6 +709,52 @@ struct TGStreamingControllerTests {
         // Message should have been delivered — preview is fresh so final goes via editMessage
         #expect(log.sentMessages.count >= 1)
         let allText = log.editedMessages.map(\.text).joined() + log.sentMessages.map(\.text).joined()
-        #expect(allText.contains("任务完成"))
+        #expect(allText.contains("Task done"))
+    }
+
+    @Test("Edit fallback sends cleaned final answer without transcript noise")
+    func editFallbackSendsQuietCleanFinalAnswer() async {
+        let log = CallLog()
+        let config = TGStreamingConfig(
+            editInterval: 0,
+            bufferThreshold: 1000,
+            transport: .edit,
+            freshFinalAfter: 60,
+            typingEnabled: false,
+            typingInterval: 4.0
+        )
+        let controller = makeController(log: log, editResult: false, config: config)
+
+        await controller.handle(LLMTokenStreamEvent(sessionId: nil, chunk: "thinking"))
+        await controller.setPreviewMessageId(99)
+
+        let noisyResult = """
+        🌐 Z.ai Built-in Tool: webReader
+
+        Input:
+        {"url":"https://weather.example.com"}
+
+        *Executing on server...*
+
+        Output:
+        webReader_result_summary: {"text":{"forecast":"sunny"}}
+
+        广州明天多云，气温 26°C 到 32°C。
+        [结果] 广州明天多云，气温 26°C 到 32°C。
+        """
+
+        await controller.handle(AgentCompletedEvent(
+            sessionId: nil,
+            totalSteps: 2,
+            durationMs: 1_500,
+            resultText: noisyResult
+        ))
+
+        let finalSend = log.sentMessages.last?.text ?? ""
+        #expect(finalSend == "广州明天多云，气温 26°C 到 32°C。")
+        #expect(!finalSend.contains("Built-in Tool"))
+        #expect(!finalSend.contains("Input:"))
+        #expect(!finalSend.contains("Output:"))
+        #expect(!finalSend.contains("result_summary"))
     }
 }

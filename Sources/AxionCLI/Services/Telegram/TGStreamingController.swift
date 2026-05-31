@@ -36,6 +36,7 @@ struct TGStreamingConfig: Sendable {
 // MARK: - TGStreamingController
 
 actor TGStreamingController {
+    private static let previewPlaceholder = "⏳ 处理中…"
 
     // MARK: - State
 
@@ -48,7 +49,7 @@ actor TGStreamingController {
     private var lastEditAt: Date = .distantPast
     private var retryAfterUntil: Date = .distantPast
     private var transport: TGStreamingTransport
-    private var toolNameMap: [String: String] = [:]
+    private var toolPreviewMap: [String: String] = [:]
     private var finalized = false
     private var consecutive429Count = 0
     private var segmentParts: [String] = []
@@ -58,6 +59,58 @@ actor TGStreamingController {
     private let sendMessage: @Sendable (String, Int64) async -> Int64?
     private let editMessage: @Sendable (Int64, Int64, String) async -> Bool
     private let sendChatAction: @Sendable (Int64, String) async -> Void
+
+    // MARK: - Tool Preview Helpers
+
+    private static func toolEmoji(_ toolName: String) -> String {
+        let lower = toolName.lowercased()
+        if lower.contains("search") || lower.contains("websearch") { return "🔍" }
+        if lower.contains("bash") || lower.contains("terminal") || lower.contains("shell") { return "💻" }
+        if lower.contains("read") { return "📖" }
+        if lower.contains("write") { return "✍️" }
+        if lower.contains("reader") || lower.contains("fetch") { return "🌐" }
+        if lower.contains("vision") || lower.contains("image") { return "👁️" }
+        if lower.contains("edit") { return "📝" }
+        if lower.contains("screenshot") || lower.contains("screen") { return "📸" }
+        return "⚙️"
+    }
+
+    private static func extractToolPreview(toolName: String, input: String?) -> String? {
+        guard let input, !input.isEmpty else { return nil }
+
+        guard let data = input.data(using: .utf8),
+              let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else {
+            return String(input.prefix(40))
+        }
+
+        let lower = toolName.lowercased()
+
+        if lower.contains("search") || lower.contains("websearch") {
+            if let query = json["query"] as? String { return query }
+            if let q = json["q"] as? String { return q }
+        }
+        if lower.contains("bash") || lower.contains("terminal") || lower.contains("shell") {
+            if let cmd = json["command"] as? String { return cmd }
+        }
+        if lower.contains("read") || lower.contains("write") || lower.contains("file") {
+            if let path = json["file_path"] as? String { return path }
+            if let path = json["path"] as? String { return path }
+        }
+        if lower.contains("reader") || lower.contains("url") || lower.contains("fetch") {
+            if let url = json["url"] as? String { return url }
+        }
+        if lower.contains("vision") || lower.contains("image") || lower.contains("analyze") {
+            if let prompt = json["prompt"] as? String { return String(prompt.prefix(40)) }
+        }
+
+        for (_, value) in json.sorted(by: { $0.key < $1.key }) {
+            if let str = value as? String, !str.isEmpty {
+                return String(str.prefix(40))
+            }
+        }
+
+        return nil
+    }
 
     // MARK: - Init
 
@@ -92,7 +145,7 @@ actor TGStreamingController {
         case let e as LLMTokenStreamEvent:
             await handleLLMTokenStream(e)
         case let e as ToolStartedEvent:
-            handleToolStarted(e)
+            await handleToolStarted(e)
         case let e as ToolStreamingEvent:
             handleToolStreaming(e)
         case let e as ToolCompletedEvent:
@@ -114,7 +167,7 @@ actor TGStreamingController {
         // On first chunk, create preview bubble
         if wasFirstChunk {
             stopTypingTimer()
-            let previewText = "⏳ 思考中..."
+            let previewText = Self.previewPlaceholder
             let msgId = await sendMessage(previewText, chatId)
             if let msgId { previewMessageId = msgId }
             previewCreatedAt = Date()
@@ -143,26 +196,27 @@ actor TGStreamingController {
 
     // MARK: - Tool Started
 
-    private func handleToolStarted(_ event: ToolStartedEvent) {
-        toolNameMap[event.toolUseId] = event.toolName
+    private func handleToolStarted(_ event: ToolStartedEvent) async {
+        guard !finalized else { return }
+
+        if previewCreatedAt == nil {
+            stopTypingTimer()
+            let previewText = Self.previewPlaceholder
+            let msgId = await sendMessage(previewText, chatId)
+            if let msgId { previewMessageId = msgId }
+            previewCreatedAt = Date()
+            lastEditAt = Date()
+        }
+
+        if let preview = Self.extractToolPreview(toolName: event.toolName, input: event.input) {
+            toolPreviewMap[event.toolUseId] = preview
+        }
     }
 
     // MARK: - Tool Streaming
 
     private func handleToolStreaming(_ event: ToolStreamingEvent) {
-        guard !finalized else { return }
-
-        let toolName = toolNameMap[event.toolUseId] ?? event.toolUseId
-
-        // Switch segment if needed
-        if case .tool(let name) = currentSegment, name == toolName {
-            // Same tool, continue
-        } else {
-            currentSegment = .tool(name: toolName)
-        }
-
-        bufferedText += event.chunk
-        segmentParts.append(event.chunk)
+        // Suppress raw MCP output — tool progress shown via started/completed markers
     }
 
     // MARK: - Tool Completed
@@ -170,10 +224,11 @@ actor TGStreamingController {
     private func handleToolCompleted(_ event: ToolCompletedEvent) async {
         guard !finalized else { return }
 
-        let durationSec = String(format: "%.1f", Double(event.durationMs) / 1000.0)
-        let statusEmoji = event.isError ? "❌" : "✓"
+        let statusEmoji = event.isError ? "⚠️" : "✓"
         let toolName = event.toolName
-        let finalizeLine = "\n\(statusEmoji) \(toolName) (\(durationSec)s)\n"
+        let emoji = Self.toolEmoji(toolName)
+        let finalizeLine = "\n\(statusEmoji) \(emoji) \(toolName)\n"
+        toolPreviewMap.removeValue(forKey: event.toolUseId)
 
         // Flush any pending buffer first
         if !bufferedText.isEmpty {
@@ -208,10 +263,10 @@ actor TGStreamingController {
         // Build final text
         var finalText = ""
         if let resultText = event.resultText, !resultText.isEmpty {
-            let trimmed = TGEventHandler.extractLastResultSection(from: resultText)
-            finalText = "✅ 任务完成 (\(event.totalSteps) 步, \(event.durationMs / 1000)s)\n\n\(trimmed)"
+            let cleaned = TGEventHandler.cleanResultText(from: resultText)
+            finalText = cleaned.isEmpty ? "✅ 已完成" : cleaned
         } else {
-            finalText = "✅ 任务完成 (\(event.totalSteps) 步, \(event.durationMs / 1000)s)"
+            finalText = "✅ 已完成"
         }
 
         // Check freshFinalAfter — if preview is stale, send new message
@@ -281,7 +336,7 @@ actor TGStreamingController {
         // Build the full preview text
         let displayText: String
         if previewMessageId == nil {
-            displayText = "⏳ 思考中...\n\(content)"
+            displayText = "\(Self.previewPlaceholder)\n\(content)"
         } else {
             displayText = content
         }
@@ -292,12 +347,18 @@ actor TGStreamingController {
                 consecutive429Count = 0
                 lastEditAt = Date()
                 reFireTyping()
+                return
             }
-        } else {
-            // Append mode: send as new message
-            let msgId = await sendMessage(displayText, chatId)
-            if previewMessageId == nil { previewMessageId = msgId }
-            reFireTyping()
+
+            handlePermanentFailure()
+        }
+
+        // Append mode: send as new message
+        let msgId = await sendMessage(displayText, chatId)
+        if previewMessageId == nil { previewMessageId = msgId }
+        reFireTyping()
+        if transport == .append {
+            lastEditAt = Date()
         }
     }
 

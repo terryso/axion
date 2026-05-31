@@ -259,4 +259,271 @@ struct TGEventHandlerTests {
 
         #expect(collector.messages.isEmpty)
     }
+
+    // MARK: - stripMCPRawIO
+
+    @Test("stripMCPRawIO extracts answer after last MCP block")
+    func stripMCPRemovesToolIO() {
+        let text = """
+        🌐 Z.ai Built-in Tool: webReader
+
+        Input:
+        {"url":"https://example.com","return_format":"markdown"}
+
+        *Executing on server...*
+
+        Output:
+        webReader_result_summary: {"text": {"title": "Example"}}
+
+        根据以上数据，答案是 42。
+
+        [结果] 答案是 42
+        """
+        let result = TGEventHandler.stripMCPRawIO(from: text)
+        #expect(!result.contains("🌐"))
+        #expect(!result.contains("Input:"))
+        #expect(!result.contains("Output:"))
+        #expect(!result.contains("webReader_result"))
+        #expect(!result.contains("Built-in Tool"))
+        #expect(result.contains("根据以上数据"))
+        #expect(result.contains("[结果] 答案是 42"))
+    }
+
+    @Test("stripMCPRawIO handles multiple tool blocks with interleaved model text")
+    func stripMCPHandlesMultipleBlocks() {
+        let text = """
+        🌐 Z.ai Built-in Tool: webReader
+
+        Input:
+        {"url":"https://a.com"}
+
+        *Executing on server...*
+
+        Output:
+        webReader_result_summary: {"text": {"title": "A"}}
+
+                                                数据似乎不太对。🌐 Z.ai Built-in Tool: webReader
+
+        Input:
+        {"url":"https://b.com"}
+
+        *Executing on server...*
+
+        Output:
+        webReader_result_summary: {"text": {"title": "B"}}
+
+                                                根据以上数据，最终答案如下。
+
+        [结果] 最终答案
+        """
+        let result = TGEventHandler.stripMCPRawIO(from: text)
+        #expect(!result.contains("🌐"))
+        #expect(!result.contains("webReader"))
+        #expect(!result.contains("Built-in Tool"))
+        #expect(result.contains("最终答案如下"))
+        #expect(result.contains("[结果] 最终答案"))
+    }
+
+    @Test("stripMCPRawIO handles leading-whitespace tool blocks")
+    func stripMCPHandlesIndentedBlocks() {
+        let text = """
+        some header
+                                                🌐 Z.ai Built-in Tool: webReader
+
+        Input:
+        {"url":"https://example.com"}
+
+        *Executing on server...*
+                                                    Output:
+        webReader_result_summary: {"text": {"title": "Example"}}
+
+        根据以上数据，答案是 42。
+        """
+        let result = TGEventHandler.stripMCPRawIO(from: text)
+        #expect(!result.contains("🌐"))
+        #expect(!result.contains("webReader"))
+        #expect(!result.contains("Built-in Tool"))
+        #expect(result.contains("some header"))
+        #expect(result.contains("根据以上数据"))
+    }
+
+    @Test("stripMCPRawIO preserves text without tool blocks")
+    func stripMCPPreservesPlain() {
+        let text = "这是一段普通文本，没有任何工具输出。"
+        #expect(TGEventHandler.stripMCPRawIO(from: text) == text)
+    }
+
+    @Test("stripMCPRawIO preserves text with Input: but no Output: (no MCP blocks)")
+    func stripMCPFalsePositiveGuard() {
+        let text = """
+        让我解释一下。
+
+        Input:
+        这个字段接受 JSON 格式。
+
+        没有对应的 Output 行，所以不应被当作 MCP 块删除。
+
+        实际答案在这里。
+        """
+        let result = TGEventHandler.stripMCPRawIO(from: text)
+        #expect(result.contains("让我解释一下"))
+        #expect(result.contains("Input:"))
+        #expect(result.contains("实际答案在这里"))
+    }
+
+    @Test("stripMCPRawIO preserves literal Built-in Tool mention without MCP markers")
+    func stripMCPLiteralHeaderGuard() {
+        let text = """
+        文档里提到了字符串 Built-in Tool: 作为调试说明。
+
+        这里没有 Input 或 Output 块，所以不应被删除。
+        """
+        let result = TGEventHandler.stripMCPRawIO(from: text)
+        #expect(result == text)
+    }
+
+    @Test("stripMCPRawIO removes plain-text output payloads")
+    func stripMCPRemovesPlainTextOutput() {
+        let text = """
+        🌐 Z.ai Built-in Tool: webReader
+
+        Input:
+        {"url":"https://example.com"}
+
+        Output:
+        Cached response from edge node
+        March 2026 snapshot
+
+        根据最新数据，明天不下雨。
+        """
+        let result = TGEventHandler.stripMCPRawIO(from: text)
+        #expect(!result.contains("Cached response"))
+        #expect(!result.contains("March 2026 snapshot"))
+        #expect(result.contains("根据最新数据"))
+    }
+
+    @Test("stripMCPRawIO handles pretty-printed multiline input")
+    func stripMCPHandlesPrettyPrintedInput() {
+        let text = """
+        🌐 Z.ai Built-in Tool: webReader
+
+        Input:
+        {
+          "url": "https://example.com",
+          "headers": {
+            "accept": "text/html"
+          },
+          "options": {
+            "format": "markdown",
+            "cache": false
+          }
+        }
+
+        Output:
+        {"ok":true}
+
+        [结果] 处理完成
+        """
+        let result = TGEventHandler.stripMCPRawIO(from: text)
+        #expect(!result.contains("\"headers\""))
+        #expect(!result.contains("\"cache\""))
+        #expect(result.contains("[结果] 处理完成"))
+    }
+
+    // MARK: - cleanResultText
+
+    @Test("cleanResultText strips MCP I/O and extracts result")
+    func cleanResultTextStripsAndExtracts() {
+        let text = """
+        🌐 Z.ai Built-in Tool: webReader
+
+        Input:
+        {"url":"https://example.com"}
+
+        *Executing on server...*
+
+        Output:
+        webReader_result_summary: {"text": {"title": "Example"}}
+
+        根据以上数据，答案是 42。
+
+        [结果] 答案是 42
+        """
+        let result = TGEventHandler.cleanResultText(from: text)
+        #expect(!result.contains("🌐"))
+        #expect(!result.contains("webReader"))
+        #expect(result == "答案是 42")
+        #expect(!result.contains("[结果]"))
+    }
+
+    @Test("cleanResultText strips weather-style interleaved MCP transcript")
+    func cleanResultTextStripsWeatherTranscript() {
+        let text = """
+        我先帮你查一下广州明天的天气。
+        🌐 Z.ai Built-in Tool: webReader
+
+        Input:
+        {"url":"https://weather.example.com/guangzhou"}
+
+        *Executing on server...*
+
+        Output:
+        webReader_result_summary: {"forecast":"cloudy"}
+
+        查询到了最新天气。🌐 Z.ai Built-in Tool: webReader
+
+        Input:
+        {"url":"https://weather.example.com/guangzhou/advice"}
+
+        *Executing on server...*
+
+        Output:
+        webReader_result_summary: {"advice":"carry umbrella"}
+
+        广州明天多云，26°C 到 32°C，外出建议带伞。
+        [结果] 广州明天多云，26°C 到 32°C，外出建议带伞。
+        """
+
+        let result = TGEventHandler.cleanResultText(from: text)
+        #expect(result == "广州明天多云，26°C 到 32°C，外出建议带伞。")
+        #expect(!result.contains("Built-in Tool"))
+        #expect(!result.contains("Input:"))
+        #expect(!result.contains("Output:"))
+        #expect(!result.contains("result_summary"))
+        #expect(!result.contains("[结果]"))
+    }
+
+    @Test("cleanResultText extracts multiline latest result block")
+    func cleanResultTextExtractsMultilineLatestResult() {
+        let text = """
+        [结果] 旧答案
+
+        这是上一轮的内容。
+
+        [结果]
+        第一行答案
+        第二行答案
+        """
+
+        let result = TGEventHandler.cleanResultText(from: text)
+        #expect(result == "第一行答案\n第二行答案")
+    }
+
+    @Test("cleanResultText keeps short terminal answer after MCP output")
+    func cleanResultTextKeepsShortTerminalAnswer() {
+        let text = """
+        🌐 Z.ai Built-in Tool: webReader
+
+        Input:
+        {"url":"https://example.com"}
+
+        Output:
+        {"ok":true}
+
+        42
+        """
+
+        let result = TGEventHandler.cleanResultText(from: text)
+        #expect(result == "42")
+    }
 }

@@ -5,7 +5,7 @@ import AxionCore
 // MARK: - Protocol
 
 protocol TaskSerialQueueProtocol: Sendable, Actor {
-    func enqueue(task: String, chatId: Int64) async
+    func enqueue(task: String, chatId: Int64, userId: Int64) async
     func startProcessing() async
     func cancelAll() async
     func clearSession(chatId: Int64) async
@@ -31,15 +31,14 @@ actor TaskSerialQueue: TaskSerialQueueProtocol {
     private struct PendingTask: Sendable {
         let task: String
         let chatId: Int64
+        let userId: Int64
         let shouldResume: Bool
         let existingSessionId: String?
-        let startMessage: String
     }
 
     private struct TaskTimeoutError: Error {}
 
     private static let sessionTimeout: Duration = .seconds(30 * 60)
-    private static let newSessionPrefix = "新会话已开始\n"
 
     private var queue: [PendingTask] = []
     private var isExecuting = false
@@ -81,7 +80,7 @@ actor TaskSerialQueue: TaskSerialQueueProtocol {
         self.sendMessageWithMarkupHandler = sendMessageWithMarkupHandler
     }
 
-    func enqueue(task: String, chatId: Int64) async {
+    func enqueue(task: String, chatId: Int64, userId: Int64) async {
         guard !isShuttingDown else {
             _ = await replyHandler(chatId, "Gateway 正在关闭，任务已取消")
             return
@@ -90,33 +89,28 @@ actor TaskSerialQueue: TaskSerialQueueProtocol {
         let now = ContinuousClock.now
         let shouldResume: Bool
         let existingSessionId: String?
-        let startMessage: String
 
         if let session = chatSessions[chatId] {
             let elapsed = now - session.lastActivityAt
             if elapsed < Self.sessionTimeout {
                 shouldResume = true
                 existingSessionId = session.sessionId
-                startMessage = "任务开始执行: \"\(task.prefix(50))\""
             } else {
                 chatSessions.removeValue(forKey: chatId)
                 shouldResume = false
                 existingSessionId = nil
-                startMessage = "\(Self.newSessionPrefix)任务开始执行: \"\(task.prefix(50))\""
             }
         } else {
             shouldResume = false
             existingSessionId = nil
-            startMessage = "任务开始执行: \"\(task.prefix(50))\""
         }
-
         let pendingCount = queue.count
         queue.append(PendingTask(
             task: task,
             chatId: chatId,
+            userId: userId,
             shouldResume: shouldResume,
-            existingSessionId: existingSessionId,
-            startMessage: startMessage
+            existingSessionId: existingSessionId
         ))
         if isExecuting {
             _ = await replyHandler(chatId, "任务已排队 (队列: \(pendingCount + 1))")
@@ -139,7 +133,6 @@ actor TaskSerialQueue: TaskSerialQueueProtocol {
             let pending = queue.removeFirst()
             currentChatId = pending.chatId
 
-            _ = await replyHandler(pending.chatId, pending.startMessage)
             await runner.taskStarted()
 
             let timeoutMinutes = config.gatewayTaskTimeoutMinutes ?? 10.0
@@ -281,7 +274,7 @@ actor TaskSerialQueue: TaskSerialQueueProtocol {
                 let eventBus = EventBus()
                 let tgHandler = TGEventHandler(
                     chatId: pending.chatId,
-                    allowedUserId: pending.chatId,
+                    allowedUserId: pending.userId,
                     sendMessage: { [weak self] message, chatId in
                         await self?.replyHandler(chatId, message) ?? nil
                     },
@@ -347,7 +340,7 @@ actor TaskSerialQueue: TaskSerialQueueProtocol {
                     let eventBus = EventBus()
                     let tgHandler = TGEventHandler(
                         chatId: pending.chatId,
-                        allowedUserId: pending.chatId,
+                        allowedUserId: pending.userId,
                         sendMessage: { [weak self] message, chatId in
                             await self?.replyHandler(chatId, message)
                         },
