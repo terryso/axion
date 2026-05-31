@@ -187,18 +187,32 @@ JSON 模式下不发送通知（面向程序化调用）。
 
 ### 跨任务记忆
 
-Axion 从每次任务执行中学习。运行结束后自动提取 App 操作模式（常用菜单路径、控件位置、操作序列）并持久化。后续执行同 App 任务时，Planner 注入历史经验生成更精准的计划，减少试错和重规划次数。
+Axion 通过两套互补的记忆系统从每次任务中学习：
+
+**App 操作记忆** — 自动从 MCP 工具调用中提取操作模式（菜单路径、控件位置、操作序列）并持久化。后续执行同 App 任务时，Planner 注入历史经验生成更精准的计划。
+
+**通用记忆** — 双轨持久化知识：环境知识（MEMORY.md）和用户画像/偏好（USER.md）。Agent 在任务执行中和后台审查代理均可将发现的偏好和知识保存到这些文件。
 
 ```bash
 # 记忆默认启用 — 查看已积累的知识
 axion memory list
 
+# 查看通用记忆内容
+axion memory show memory    # 环境知识（MEMORY.md）
+axion memory show user      # 用户画像/偏好（USER.md）
+
 # 清除特定 App 的记忆
 axion memory clear --app com.apple.calculator
+
+# 清空通用记忆
+axion memory clear --type memory
+axion memory clear --type user
 
 # 单次运行禁用记忆
 axion run --no-memory "打开计算器"
 ```
+
+记忆文件存储在 `~/.axion/memory/`，加载到 prompt 前会进行安全扫描（检测提示注入、凭据泄露等）。
 
 ### 自进化（Review & Curator）
 

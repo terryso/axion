@@ -45,19 +45,19 @@ final class MemoryTool: ToolProtocol, Sendable {
 
     func call(input: Any, context: ToolContext) async -> ToolResult {
         guard let params = input as? [String: Any] else {
-            return errorResult(toolUseId: context.toolUseId, error: "invalid_input", message: "Input must be a JSON object", suggestion: "Pass a valid JSON object with 'action' and 'target'")
+            return ToolResultHelper.errorResult(toolUseId: context.toolUseId, error: "invalid_input", message: "Input must be a JSON object", suggestion: "Pass a valid JSON object with 'action' and 'target'")
         }
 
         guard let action = params["action"] as? String, !action.isEmpty else {
-            return errorResult(toolUseId: context.toolUseId, error: "missing_action", message: "Missing required 'action' parameter", suggestion: "Provide 'action' as one of: add, replace, remove, read")
+            return ToolResultHelper.errorResult(toolUseId: context.toolUseId, error: "missing_action", message: "Missing required 'action' parameter", suggestion: "Provide 'action' as one of: add, replace, remove, read")
         }
 
         guard let targetRaw = params["target"] as? String, !targetRaw.isEmpty else {
-            return errorResult(toolUseId: context.toolUseId, error: "missing_target", message: "Missing required 'target' parameter", suggestion: "Provide 'target' as 'memory' or 'user'")
+            return ToolResultHelper.errorResult(toolUseId: context.toolUseId, error: "missing_target", message: "Missing required 'target' parameter", suggestion: "Provide 'target' as 'memory' or 'user'")
         }
 
         guard let target = MemoryTarget(rawValue: targetRaw.uppercased() + ".md") else {
-            return errorResult(toolUseId: context.toolUseId, error: "invalid_target", message: "Invalid target '\(targetRaw)'", suggestion: "Use 'memory' or 'user'")
+            return ToolResultHelper.errorResult(toolUseId: context.toolUseId, error: "invalid_target", message: "Invalid target '\(targetRaw)'", suggestion: "Use 'memory' or 'user'")
         }
 
         switch action {
@@ -70,7 +70,7 @@ final class MemoryTool: ToolProtocol, Sendable {
         case "read":
             return await handleRead(target: target, toolUseId: context.toolUseId)
         default:
-            return errorResult(toolUseId: context.toolUseId, error: "invalid_action", message: "Unknown action '\(action)'", suggestion: "Use one of: add, replace, remove, read")
+            return ToolResultHelper.errorResult(toolUseId: context.toolUseId, error: "invalid_action", message: "Unknown action '\(action)'", suggestion: "Use one of: add, replace, remove, read")
         }
     }
 
@@ -78,55 +78,55 @@ final class MemoryTool: ToolProtocol, Sendable {
 
     private func handleAdd(params: [String: Any], target: MemoryTarget, toolUseId: String) async -> ToolResult {
         guard let content = params["content"] as? String, !content.isEmpty else {
-            return errorResult(toolUseId: toolUseId, error: "missing_content", message: "Missing required 'content' parameter for 'add' action", suggestion: "Provide the content to add")
+            return ToolResultHelper.errorResult(toolUseId: toolUseId, error: "missing_content", message: "Missing required 'content' parameter for 'add' action", suggestion: "Provide the content to add")
         }
 
         let scanResult = scanner.scan(content: content)
         if case .rejected(let reason) = scanResult {
-            return errorResult(toolUseId: toolUseId, error: "security_rejection", message: "Content blocked by security scanner: \(reason)", suggestion: "Modify the content to remove the problematic pattern")
+            return ToolResultHelper.errorResult(toolUseId: toolUseId, error: "security_rejection", message: "Content blocked by security scanner: \(reason)", suggestion: "Modify the content to remove the problematic pattern")
         }
 
         let ok = await store.add(target: target, content: content)
         if !ok {
-            return errorResult(toolUseId: toolUseId, error: "char_limit_exceeded", message: "Cannot add entry: target file would exceed character limit. Replace or remove old entries first.", suggestion: "Use 'remove' or 'replace' to free space before adding new content")
+            return ToolResultHelper.errorResult(toolUseId: toolUseId, error: "char_limit_exceeded", message: "Cannot add entry: target file would exceed character limit. Replace or remove old entries first.", suggestion: "Use 'remove' or 'replace' to free space before adding new content")
         }
 
-        return successResult(toolUseId: toolUseId, message: "Entry added to \(target.rawValue)")
+        return ToolResultHelper.successResult(toolUseId: toolUseId, message: "Entry added to \(target.rawValue)")
     }
 
     private func handleReplace(params: [String: Any], target: MemoryTarget, toolUseId: String) async -> ToolResult {
         guard let old = params["old"] as? String, !old.isEmpty else {
-            return errorResult(toolUseId: toolUseId, error: "missing_old", message: "Missing required 'old' parameter for 'replace' action", suggestion: "Provide the keyword to match the existing entry")
+            return ToolResultHelper.errorResult(toolUseId: toolUseId, error: "missing_old", message: "Missing required 'old' parameter for 'replace' action", suggestion: "Provide the keyword to match the existing entry")
         }
 
         guard let newContent = params["newContent"] as? String, !newContent.isEmpty else {
-            return errorResult(toolUseId: toolUseId, error: "missing_new_content", message: "Missing required 'newContent' parameter for 'replace' action", suggestion: "Provide the replacement content")
+            return ToolResultHelper.errorResult(toolUseId: toolUseId, error: "missing_new_content", message: "Missing required 'newContent' parameter for 'replace' action", suggestion: "Provide the replacement content")
         }
 
         let scanResult = scanner.scan(content: newContent)
         if case .rejected(let reason) = scanResult {
-            return errorResult(toolUseId: toolUseId, error: "security_rejection", message: "Content blocked by security scanner: \(reason)", suggestion: "Modify the content to remove the problematic pattern")
+            return ToolResultHelper.errorResult(toolUseId: toolUseId, error: "security_rejection", message: "Content blocked by security scanner: \(reason)", suggestion: "Modify the content to remove the problematic pattern")
         }
 
         let ok = await store.replace(target: target, keyword: old, newContent: newContent)
         if !ok {
-            return errorResult(toolUseId: toolUseId, error: "replace_failed", message: "Could not replace entry: keyword not found or result would exceed character limit", suggestion: "Check that the keyword matches an existing entry and the replacement doesn't exceed the limit")
+            return ToolResultHelper.errorResult(toolUseId: toolUseId, error: "replace_failed", message: "Could not replace entry: keyword not found or result would exceed character limit", suggestion: "Check that the keyword matches an existing entry and the replacement doesn't exceed the limit")
         }
 
-        return successResult(toolUseId: toolUseId, message: "Entry replaced in \(target.rawValue)")
+        return ToolResultHelper.successResult(toolUseId: toolUseId, message: "Entry replaced in \(target.rawValue)")
     }
 
     private func handleRemove(params: [String: Any], target: MemoryTarget, toolUseId: String) async -> ToolResult {
         guard let old = params["old"] as? String, !old.isEmpty else {
-            return errorResult(toolUseId: toolUseId, error: "missing_old", message: "Missing required 'old' parameter for 'remove' action", suggestion: "Provide the keyword to match the entry to remove")
+            return ToolResultHelper.errorResult(toolUseId: toolUseId, error: "missing_old", message: "Missing required 'old' parameter for 'remove' action", suggestion: "Provide the keyword to match the entry to remove")
         }
 
         let ok = await store.remove(target: target, keyword: old)
         if !ok {
-            return errorResult(toolUseId: toolUseId, error: "not_found", message: "No entry found matching '\(old)'", suggestion: "Check the keyword matches an existing entry")
+            return ToolResultHelper.errorResult(toolUseId: toolUseId, error: "not_found", message: "No entry found matching '\(old)'", suggestion: "Check the keyword matches an existing entry")
         }
 
-        return successResult(toolUseId: toolUseId, message: "Entry removed from \(target.rawValue)")
+        return ToolResultHelper.successResult(toolUseId: toolUseId, message: "Entry removed from \(target.rawValue)")
     }
 
     private func handleRead(target: MemoryTarget, toolUseId: String) async -> ToolResult {
@@ -134,36 +134,4 @@ final class MemoryTool: ToolProtocol, Sendable {
         return ToolResult(toolUseId: toolUseId, content: content, isError: false)
     }
 
-    // MARK: - Helpers
-
-    private func errorResult(toolUseId: String, error: String, message: String, suggestion: String) -> ToolResult {
-        encodeResult(toolUseId: toolUseId, isError: true) { encoder in
-            try encoder.encode(ToolErrorResponse(error: error, message: message, suggestion: suggestion))
-        }
-    }
-
-    private func successResult(toolUseId: String, message: String) -> ToolResult {
-        encodeResult(toolUseId: toolUseId, isError: false) { encoder in
-            try encoder.encode(SuccessResponse(status: "ok", message: message))
-        }
-    }
-
-    private func encodeResult(toolUseId: String, isError: Bool, _ encode: (JSONEncoder) throws -> Data) -> ToolResult {
-        let encoder = JSONEncoder()
-        encoder.outputFormatting = .sortedKeys
-        let data = (try? encode(encoder)) ?? Data()
-        let content = String(data: data, encoding: .utf8) ?? "{}"
-        return ToolResult(toolUseId: toolUseId, content: content, isError: isError)
-    }
-}
-
-private struct ToolErrorResponse: Encodable {
-    let error: String
-    let message: String
-    let suggestion: String
-}
-
-private struct SuccessResponse: Encodable {
-    let status: String
-    let message: String
 }

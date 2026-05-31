@@ -352,22 +352,34 @@ try await withTaskCancellationHandler {
 
 ---
 
-## Memory 系统（Epic 4 + Epic 12）
+## Memory 系统（Epic 4 + Epic 12 + Epic 31）
 
-Axion 的跨任务学习系统，基于证据驱动的知识生命周期管理。
+Axion 的跨任务学习系统，基于证据驱动的知识生命周期管理 + 双轨通用记忆。
 
 **存储路径：** `~/.axion/memory/`
 - 旧格式：`{domain}.json` — KnowledgeEntry 数组（SDK 兼容）
 - 新格式：`{domain}-facts.json` — AppMemoryFact 数组（Epic 12+）
+- **通用记忆：** `MEMORY.md`（环境知识）+ `USER.md`（用户画像）（Epic 31+）
+
+**两套记忆系统互补不替代：**
+
+| 系统 | 文件格式 | 内容范围 | 工具/提取器 |
+|------|----------|----------|-------------|
+| App 操作 facts | JSON per domain | MCP 工具调用中提取的操作经验 | `AppMemoryExtractor` → `AxionFactStore` |
+| 通用记忆 | Markdown | 环境知识 + 用户画像 + 偏好 | `memory` 工具 + Review 审查提取 |
 
 **目录结构：**
 ```
-Sources/AxionCLI/Memory/             8 files, 2,107 lines (desktop-specific only)
+Sources/AxionCLI/Memory/             8+ files (desktop-specific + universal memory)
 ├── AppMemoryFact.swift              # Epic 12: 模型（MemoryFactStatus/Source/Kind 枚举）+ normalizeFact + factId (djb2)
 ├── AppMemoryExtractor.swift         # Epic 4: 从 SDK 消息流提取 App 操作摘要（+ extractFacts() + classifyKind()）
 ├── AppProfileAnalyzer.swift         # Epic 4: 模式识别 + 高频路径 + 失败经验
 ├── FamiliarityTracker.swift         # Epic 4: 熟悉度追踪（>= 3 次成功标记 familiar）
-├── MemoryContextProvider.swift      # Epic 4: Memory 上下文（Epic 12: 新增 buildFactMemoryContext 三类分类注入）
+├── MemoryContextProvider.swift      # Epic 4+31: Memory 上下文（buildFactMemoryContext + buildUniversalMemoryContext）
+├── UniversalMemoryStore.swift       # Epic 31: actor 管理 MEMORY.md / USER.md 的读写，线程安全
+├── MemorySecurityScanner.swift      # Epic 31: 写入时拒绝 + 加载时过滤，防提示注入和凭据泄露
+├── MemoryTool.swift                 # Epic 31: Agent 主动读写记忆工具（add/replace/remove/read）
+├── ReviewSaveUniversalMemoryTool.swift # Epic 31: 审查代理写入记忆工具（add/replace only）
 ├── RunMemoryProcessor.swift         # Epic 21: 每次运行后处理 Memory（SDK FactStore 交互）
 ├── TakeoverLearningService.swift    # Epic 15: Takeover 经验→Memory 转换（affordance/avoid）
 └── TakeoverMarker.swift             # Epic 15: InterventionReason 枚举 + TakeoverMarker struct
@@ -400,8 +412,10 @@ candidate ──(evidenceCount >= 2 && confidence >= 0.65)──► active
 - 每类最多 5 条（按 confidence 降序），附带 "soft hints, not hard rules" 声明
 
 **CLI 命令：**
-- `axion memory list` — 显示已积累 Memory（含状态图标 ✓/○/✗、分类标签、evidence_count）
+- `axion memory list` — 显示已积累 Memory（App facts + 通用记忆概要：条目数、最后更新时间）
+- `axion memory show <memory|user>` — 显示通用记忆完整内容（MEMORY.md 或 USER.md）
 - `axion memory clear --app <domain>` — 清除指定 App 的 Memory
+- `axion memory clear --type <memory|user>` — 清空通用记忆（MEMORY.md 或 USER.md）
 - `axion memory export <file>` — 全量或按 App 导出 Memory Bundle（JSON）
 - `axion memory export --app <domain> <file>` — 按 App 过滤导出
 - `axion memory import <file>` — 导入 Memory（降级为 candidate + confidence 封顶 0.55）
@@ -417,6 +431,16 @@ candidate ──(evidenceCount >= 2 && confidence >= 0.65)──► active
 - **合并策略**：max confidence, stronger status, local source 优先, evidenceCount +1
 - **惰性迁移**：读旧 KnowledgeEntry 时自动转为 AppMemoryFact，无需强制迁移脚本
 - 熟悉 App 使用紧凑规划策略（减少 list_windows/get_window_state 验证步骤）
+
+**通用记忆系统设计决策（Epic 31）：**
+- **§ 分隔符**：条目用 `§` 分隔（对齐 Hermes）。条目内容包含 `§` 会导致解析错误（已知限制，延后修复）
+- **Actor 隔离**：`UniversalMemoryStore` 是 actor，序列化文件 I/O。多个实例写同一文件安全（`atomically: true`）
+- **双重安全防线**：写入时 `scan()` 拒绝恶意内容；加载时 `scanEntry()` 过滤可疑条目（prompt 注入、角色劫持、凭据泄露、不可见 Unicode）
+- **冻结快照**：`buildSystemPrompt()` 在会话初始化时调用一次，结果缓存。中途写入只更新磁盘，不刷新 prompt（自然实现，无需特殊缓存机制）
+- **字符上限**：MEMORY.md 4000 字符，USER.md 2000 字符。超限时提示 Agent 先 replace/remove
+- **两套工具**：`MemoryTool`（Agent 主动管理，add/replace/remove/read）和 `ReviewSaveUniversalMemoryTool`（审查代理保存，add/replace only）
+- **注入位置**：`[=== Universal Memory ===]` 块在 App facts 之后、Skills 之前
+- **SDK 集成**：`ReviewOrchestrator` 通过 `additionalReviewTools` 参数注入审查工具（SDK v0.6.1+）
 
 **SDK 依赖（Epic 21 更新）：**
 - `FactStore` — SDK 提供的 actor 隔离持久化层，替代原 MemoryFactStore

@@ -87,6 +87,7 @@
 
 generated: 2026-05-08
 last_updated: 2026-05-31
+# epic-32-added: 2026-05-31
 # story-31-5-started: 2026-05-31
 # story-31.5-created: 2026-05-31
 # story-31-4-started: 2026-05-31
@@ -437,10 +438,23 @@ development_status:
   # ============================================================
 
   # Epic 31: 通用记忆系统 — 对齐 Hermes 自进化闭环
-  epic-31: in-progress
+  epic-31: done
   31-1-dual-track-memory-storage: done
   31-2-memory-operation-tool: done
   31-3-review-agent-universal-memory-tool: done
   31-4-security-scanner-frozen-snapshot: done
   31-5-cli-memory-management: done
-  epic-31-retrospective: optional
+  epic-31-retrospective: done
+
+  # ============================================================
+  # Phase 12 — Telegram 能力补强与交互体验升级
+  # ============================================================
+
+  # Epic 32: Telegram 能力补强与交互体验升级
+  epic-32: backlog
+  32-1-telegram-rich-text-rendering: backlog
+  32-2-edit-based-streaming-status-bubble: backlog
+  32-3-typing-ux-draft-preview-spike: backlog
+  32-4-command-registry-bot-menu: backlog
+  32-5-interactive-approval-clarify: backlog
+  epic-32-retrospective: optional

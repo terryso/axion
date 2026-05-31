@@ -39,7 +39,7 @@ struct QueryTaskStatusTool: ToolProtocol {
               let runId = params["run_id"] as? String,
               !runId.isEmpty
         else {
-            return errorResult(
+            return ToolResultHelper.errorResult(
                 toolUseId: context.toolUseId,
                 error: "missing_run_id",
                 message: "Missing required 'run_id' parameter",
@@ -48,7 +48,7 @@ struct QueryTaskStatusTool: ToolProtocol {
         }
 
         guard let run = await runTracker.getRun(runId: runId) else {
-            return errorResult(
+            return ToolResultHelper.errorResult(
                 toolUseId: context.toolUseId,
                 error: "not_found",
                 message: "Run ID '\(runId)' not found",
@@ -64,26 +64,9 @@ struct QueryTaskStatusTool: ToolProtocol {
             durationMs: run.durationMs,
             steps: run.steps
         )
-        return encodeResult(toolUseId: context.toolUseId, isError: false) { encoder in
+        return ToolResultHelper.encodeResult(toolUseId: context.toolUseId, isError: false) { encoder in
             try encoder.encode(response)
         }
-    }
-
-    // MARK: - Private Helpers
-
-    private func errorResult(toolUseId: String, error: String, message: String, suggestion: String) -> ToolResult {
-        encodeResult(toolUseId: toolUseId, isError: true) { encoder in
-            let response = ToolErrorResponse(error: error, message: message, suggestion: suggestion)
-            return try encoder.encode(response)
-        }
-    }
-
-    private func encodeResult(toolUseId: String, isError: Bool, _ encode: (JSONEncoder) throws -> Data) -> ToolResult {
-        let encoder = JSONEncoder()
-        encoder.outputFormatting = .sortedKeys
-        let data = (try? encode(encoder)) ?? Data()
-        let content = String(data: data, encoding: .utf8) ?? "{}"
-        return ToolResult(toolUseId: toolUseId, content: content, isError: isError)
     }
 }
 
@@ -105,10 +88,4 @@ private struct TaskStatusResponse: Encodable {
         case durationMs = "duration_ms"
         case steps
     }
-}
-
-private struct ToolErrorResponse: Encodable {
-    let error: String
-    let message: String
-    let suggestion: String
 }

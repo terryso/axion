@@ -196,18 +196,32 @@ axion memory learn-takeover --bundle-id com.apple.finder \
 
 ### Cross-run Memory
 
-Axion learns from every task execution. After each run, it automatically extracts app operation patterns (menu paths, control positions, operation sequences) and persists them. On subsequent runs involving the same app, the Planner injects this experience for more accurate plans.
+Axion learns from every task execution through two complementary memory systems:
+
+**App Operation Facts** — Automatically extracts app operation patterns (menu paths, control positions, operation sequences) from MCP tool calls. On subsequent runs involving the same app, the Planner injects this experience for more accurate plans.
+
+**Universal Memory** — Dual-track persistent knowledge covering environment knowledge (MEMORY.md) and user profile/preferences (USER.md). Both the agent during task execution and the background review agent can save discovered knowledge to these files.
 
 ```bash
 # Memory is enabled by default — view accumulated knowledge
 axion memory list
 
+# View universal memory content
+axion memory show memory    # Environment knowledge (MEMORY.md)
+axion memory show user      # User profile/preferences (USER.md)
+
 # Clear memory for a specific app
 axion memory clear --app com.apple.calculator
+
+# Clear universal memory
+axion memory clear --type memory
+axion memory clear --type user
 
 # Disable memory for a single run
 axion run --no-memory "Open Calculator"
 ```
+
+Memory files are stored in `~/.axion/memory/` and scanned for security threats (prompt injection, credential exfiltration) before loading into prompts.
 
 ### Self-Evolution (Review & Curator)
 

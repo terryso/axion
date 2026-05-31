@@ -46,23 +46,23 @@ final class ReviewSaveUniversalMemoryTool: ToolProtocol, Sendable {
 
     func call(input: Any, context: ToolContext) async -> ToolResult {
         guard let params = input as? [String: Any] else {
-            return errorResult(toolUseId: context.toolUseId, error: "invalid_input", message: "Input must be a JSON object", suggestion: "Pass a valid JSON object with 'action', 'target', and 'content'")
+            return ToolResultHelper.errorResult(toolUseId: context.toolUseId, error: "invalid_input", message: "Input must be a JSON object", suggestion: "Pass a valid JSON object with 'action', 'target', and 'content'")
         }
 
         guard let action = params["action"] as? String, !action.isEmpty else {
-            return errorResult(toolUseId: context.toolUseId, error: "missing_action", message: "Missing required 'action' parameter", suggestion: "Provide 'action' as one of: add, replace")
+            return ToolResultHelper.errorResult(toolUseId: context.toolUseId, error: "missing_action", message: "Missing required 'action' parameter", suggestion: "Provide 'action' as one of: add, replace")
         }
 
         guard let targetRaw = params["target"] as? String, !targetRaw.isEmpty else {
-            return errorResult(toolUseId: context.toolUseId, error: "missing_target", message: "Missing required 'target' parameter", suggestion: "Provide 'target' as 'memory' or 'user'")
+            return ToolResultHelper.errorResult(toolUseId: context.toolUseId, error: "missing_target", message: "Missing required 'target' parameter", suggestion: "Provide 'target' as 'memory' or 'user'")
         }
 
         guard let target = MemoryTarget(rawValue: targetRaw.uppercased() + ".md") else {
-            return errorResult(toolUseId: context.toolUseId, error: "invalid_target", message: "Invalid target '\(targetRaw)'", suggestion: "Use 'memory' or 'user'")
+            return ToolResultHelper.errorResult(toolUseId: context.toolUseId, error: "invalid_target", message: "Invalid target '\(targetRaw)'", suggestion: "Use 'memory' or 'user'")
         }
 
         guard let content = params["content"] as? String, !content.isEmpty else {
-            return errorResult(toolUseId: context.toolUseId, error: "missing_content", message: "Missing required 'content' parameter", suggestion: "Provide the content to save")
+            return ToolResultHelper.errorResult(toolUseId: context.toolUseId, error: "missing_content", message: "Missing required 'content' parameter", suggestion: "Provide the content to save")
         }
 
         switch action {
@@ -71,7 +71,7 @@ final class ReviewSaveUniversalMemoryTool: ToolProtocol, Sendable {
         case "replace":
             return await handleReplace(params: params, content: content, target: target, toolUseId: context.toolUseId)
         default:
-            return errorResult(toolUseId: context.toolUseId, error: "invalid_action", message: "Unknown action '\(action)'", suggestion: "Use one of: add, replace")
+            return ToolResultHelper.errorResult(toolUseId: context.toolUseId, error: "invalid_action", message: "Unknown action '\(action)'", suggestion: "Use one of: add, replace")
         }
     }
 
@@ -80,66 +80,33 @@ final class ReviewSaveUniversalMemoryTool: ToolProtocol, Sendable {
     private func handleAdd(content: String, target: MemoryTarget, toolUseId: String) async -> ToolResult {
         let scanResult = scanner.scan(content: content)
         if case .rejected(let reason) = scanResult {
-            return errorResult(toolUseId: toolUseId, error: "security_rejection", message: "Content blocked by security scanner: \(reason)", suggestion: "Modify the content to remove the problematic pattern")
+            return ToolResultHelper.errorResult(toolUseId: toolUseId, error: "security_rejection", message: "Content blocked by security scanner: \(reason)", suggestion: "Modify the content to remove the problematic pattern")
         }
 
         let ok = await store.add(target: target, content: content)
         if !ok {
-            return errorResult(toolUseId: toolUseId, error: "char_limit_exceeded", message: "Cannot add entry: target file would exceed character limit. Replace or remove old entries first.", suggestion: "Use 'replace' to update an existing entry instead")
+            return ToolResultHelper.errorResult(toolUseId: toolUseId, error: "char_limit_exceeded", message: "Cannot add entry: target file would exceed character limit. Replace or remove old entries first.", suggestion: "Use 'replace' to update an existing entry instead")
         }
 
-        return successResult(toolUseId: toolUseId, message: "Saved entry to \(target.rawValue)")
+        return ToolResultHelper.savedResult(toolUseId: toolUseId, message: "Saved entry to \(target.rawValue)")
     }
 
     private func handleReplace(params: [String: Any], content: String, target: MemoryTarget, toolUseId: String) async -> ToolResult {
         guard let old = params["old"] as? String, !old.isEmpty else {
-            return errorResult(toolUseId: toolUseId, error: "missing_old", message: "Missing required 'old' parameter for 'replace' action", suggestion: "Provide the keyword to match the existing entry")
+            return ToolResultHelper.errorResult(toolUseId: toolUseId, error: "missing_old", message: "Missing required 'old' parameter for 'replace' action", suggestion: "Provide the keyword to match the existing entry")
         }
 
         let scanResult = scanner.scan(content: content)
         if case .rejected(let reason) = scanResult {
-            return errorResult(toolUseId: toolUseId, error: "security_rejection", message: "Content blocked by security scanner: \(reason)", suggestion: "Modify the content to remove the problematic pattern")
+            return ToolResultHelper.errorResult(toolUseId: toolUseId, error: "security_rejection", message: "Content blocked by security scanner: \(reason)", suggestion: "Modify the content to remove the problematic pattern")
         }
 
         let ok = await store.replace(target: target, keyword: old, newContent: content)
         if !ok {
-            return errorResult(toolUseId: toolUseId, error: "replace_failed", message: "Could not replace entry: keyword not found or result would exceed character limit", suggestion: "Check that the keyword matches an existing entry and the replacement doesn't exceed the limit")
+            return ToolResultHelper.errorResult(toolUseId: toolUseId, error: "replace_failed", message: "Could not replace entry: keyword not found or result would exceed character limit", suggestion: "Check that the keyword matches an existing entry and the replacement doesn't exceed the limit")
         }
 
-        return successResult(toolUseId: toolUseId, message: "Saved updated entry to \(target.rawValue)")
+        return ToolResultHelper.savedResult(toolUseId: toolUseId, message: "Saved updated entry to \(target.rawValue)")
     }
 
-    // MARK: - Helpers
-
-    private func errorResult(toolUseId: String, error: String, message: String, suggestion: String) -> ToolResult {
-        encodeResult(toolUseId: toolUseId, isError: true) { encoder in
-            try encoder.encode(ReviewToolErrorResponse(success: false, error: error, message: message, suggestion: suggestion))
-        }
-    }
-
-    private func successResult(toolUseId: String, message: String) -> ToolResult {
-        encodeResult(toolUseId: toolUseId, isError: false) { encoder in
-            try encoder.encode(ReviewToolSuccessResponse(success: true, message: message))
-        }
-    }
-
-    private func encodeResult(toolUseId: String, isError: Bool, _ encode: (JSONEncoder) throws -> Data) -> ToolResult {
-        let encoder = JSONEncoder()
-        encoder.outputFormatting = .sortedKeys
-        let data = (try? encode(encoder)) ?? Data()
-        let content = String(data: data, encoding: .utf8) ?? "{}"
-        return ToolResult(toolUseId: toolUseId, content: content, isError: isError)
-    }
-}
-
-private struct ReviewToolErrorResponse: Encodable {
-    let success: Bool
-    let error: String
-    let message: String
-    let suggestion: String
-}
-
-private struct ReviewToolSuccessResponse: Encodable {
-    let success: Bool
-    let message: String
 }
