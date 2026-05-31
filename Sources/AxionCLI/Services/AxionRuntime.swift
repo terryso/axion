@@ -34,9 +34,12 @@ public actor AxionRuntime: AxionRuntimeRunning, AxionRuntimeResuming, SessionLis
         let noReview: Bool
         let onReviewCompleted: (@Sendable (String) -> Void)?
         let reviewDataContext: ReviewDataContext?
+        let nonInteractivePause: Bool
+        let registerResumeHandle: (@Sendable (String, @Sendable @escaping (String) async -> Void) async -> Void)?
 
         static let `default` = RunOverrides(
-            json: false, noVisualDelta: false, noReview: false, onReviewCompleted: nil, reviewDataContext: nil
+            json: false, noVisualDelta: false, noReview: false, onReviewCompleted: nil, reviewDataContext: nil,
+            nonInteractivePause: false, registerResumeHandle: nil
         )
     }
 
@@ -84,7 +87,9 @@ public actor AxionRuntime: AxionRuntimeRunning, AxionRuntimeResuming, SessionLis
             noReview: runConfig.noReview,
             onReviewCompleted: runConfig.onReviewCompleted,
             eventBus: eventBus,
-            reviewDataContext: runConfig.reviewDataContext
+            reviewDataContext: runConfig.reviewDataContext,
+            nonInteractivePause: runConfig.nonInteractivePause,
+            registerResumeHandle: runConfig.registerResumeHandle
         )
 
         do {
@@ -202,7 +207,9 @@ public actor AxionRuntime: AxionRuntimeRunning, AxionRuntimeResuming, SessionLis
             noReview: runOverrides.noReview,
             onReviewCompleted: runOverrides.onReviewCompleted,
             eventBus: eventBus,
-            reviewDataContext: runOverrides.reviewDataContext
+            reviewDataContext: runOverrides.reviewDataContext,
+            nonInteractivePause: runOverrides.nonInteractivePause,
+            registerResumeHandle: runOverrides.registerResumeHandle
         )
 
         return try await run(task: buildConfig.task, buildResult: buildResult, runConfig: runConfig, resumeSessionId: sid)
@@ -386,7 +393,9 @@ public actor AxionRuntime: AxionRuntimeRunning, AxionRuntimeResuming, SessionLis
             noReview: runOverrides.noReview,
             onReviewCompleted: runOverrides.onReviewCompleted,
             eventBus: eventBus,
-            reviewDataContext: runOverrides.reviewDataContext
+            reviewDataContext: runOverrides.reviewDataContext,
+            nonInteractivePause: runOverrides.nonInteractivePause,
+            registerResumeHandle: runOverrides.registerResumeHandle
         )
 
         return try await run(

@@ -8,14 +8,16 @@ actor TelegramAdapter {
     private var lastUpdateId: Int64 = 0
     private var isRunning = false
     private let log: @Sendable (String) -> Void
+    private let sessionStore: TGInteractiveSessionStore?
 
     nonisolated(unsafe) private(set) var statusValue: String = "disabled"
 
-    init(apiClient: any TGAPIClientProtocol, allowedUsers: Set<String>, taskQueue: (any TaskSerialQueueProtocol)? = nil, commandRouter: TGCommandRouter? = nil, log: @Sendable @escaping (String) -> Void = { fputs($0 + "\n", stderr) }) {
+    init(apiClient: any TGAPIClientProtocol, allowedUsers: Set<String>, taskQueue: (any TaskSerialQueueProtocol)? = nil, commandRouter: TGCommandRouter? = nil, sessionStore: TGInteractiveSessionStore? = nil, log: @Sendable @escaping (String) -> Void = { fputs($0 + "\n", stderr) }) {
         self.apiClient = apiClient
         self.allowedUsers = allowedUsers
         self.taskQueue = taskQueue
         self.commandRouter = commandRouter
+        self.sessionStore = sessionStore
         self.log = log
     }
 
@@ -41,7 +43,9 @@ actor TelegramAdapter {
     func processUpdates(_ updates: [TGUpdate]) async {
         for update in updates {
             lastUpdateId = update.updateId
-            if let message = update.message {
+            if let callbackQuery = update.callbackQuery {
+                await processCallback(callbackQuery)
+            } else if let message = update.message {
                 await processMessage(message)
             }
         }
@@ -56,7 +60,9 @@ actor TelegramAdapter {
                 statusValue = "connected"
                 for update in updates {
                     lastUpdateId = update.updateId
-                    if let message = update.message {
+                    if let callbackQuery = update.callbackQuery {
+                        await processCallback(callbackQuery)
+                    } else if let message = update.message {
                         await processMessage(message)
                     }
                 }
@@ -72,6 +78,20 @@ actor TelegramAdapter {
     private func processMessage(_ message: TGMessage) async {
         guard let userId = message.from?.id else { return }
         guard isAuthorized(userId: userId) else { return }
+
+        // Text capture mode: intercept text for pending clarify sessions
+        if let text = message.text, !text.isEmpty, let store = sessionStore {
+            if let session = await store.session(for: message.chat.id), session.mode == .textCapture {
+                let result = try? await store.resume(pendingId: session.pendingId, response: text)
+                if result == true {
+                    // Also resume the agent via TaskSerialQueue
+                    if let queue = taskQueue {
+                        _ = await queue.resumeInteraction(pendingId: session.pendingId, context: text)
+                    }
+                    return
+                }
+            }
+        }
 
         // Handle photo messages
         if let photo = message.photo, !photo.isEmpty {
@@ -136,6 +156,117 @@ actor TelegramAdapter {
         }
     }
 
+    // MARK: - Callback Query Processing
+
+    private func processCallback(_ query: TGCallbackQuery) async {
+        let userId = query.from.id
+        guard isAuthorized(userId: userId) else {
+            _ = try? await apiClient.answerCallbackQuery(callbackQueryId: query.id, text: "未授权")
+            return
+        }
+
+        guard let rawData = query.data,
+              let callbackData = TGCallbackData(rawValue: rawData),
+              let store = sessionStore
+        else {
+            _ = try? await apiClient.answerCallbackQuery(callbackQueryId: query.id, text: "无效操作")
+            return
+        }
+
+        let pendingId = callbackData.pendingId
+
+        switch callbackData.action {
+        case .approve, .confirm:
+            let context = callbackData.action == .approve ? "approved" : "confirmed"
+            let resumed = try? await store.resume(pendingId: pendingId, response: context)
+            if resumed == true {
+                try? await apiClient.answerCallbackQuery(callbackQueryId: query.id, text: "已批准")
+                if let queue = taskQueue {
+                    _ = await queue.resumeInteraction(pendingId: pendingId, context: context)
+                }
+                if let messageId = query.message?.messageId, let chatId = query.message?.chat.id {
+                    _ = await editMessage(chatId: chatId, messageId: messageId, text: "✅ 已批准")
+                }
+            } else {
+                try? await apiClient.answerCallbackQuery(callbackQueryId: query.id, text: "已过期")
+            }
+
+        case .deny, .cancel:
+            let context = callbackData.action == .deny ? "denied" : "cancelled"
+            let resumed = try? await store.resume(pendingId: pendingId, response: context)
+            if resumed == true {
+                try? await apiClient.answerCallbackQuery(callbackQueryId: query.id, text: "已拒绝")
+                if let queue = taskQueue {
+                    _ = await queue.resumeInteraction(pendingId: pendingId, context: context)
+                }
+                if let messageId = query.message?.messageId, let chatId = query.message?.chat.id {
+                    _ = await editMessage(chatId: chatId, messageId: messageId, text: "❌ 已拒绝")
+                }
+            } else {
+                try? await apiClient.answerCallbackQuery(callbackQueryId: query.id, text: "已过期")
+            }
+
+        case .skip:
+            let resumed = try? await store.resume(pendingId: pendingId, response: "skip")
+            if resumed == true {
+                try? await apiClient.answerCallbackQuery(callbackQueryId: query.id, text: "已跳过")
+                if let queue = taskQueue {
+                    _ = await queue.resumeInteraction(pendingId: pendingId, context: "skip")
+                }
+                if let messageId = query.message?.messageId, let chatId = query.message?.chat.id {
+                    _ = await editMessage(chatId: chatId, messageId: messageId, text: "⏭️ 已跳过")
+                }
+            } else {
+                try? await apiClient.answerCallbackQuery(callbackQueryId: query.id, text: "已过期")
+            }
+
+        case .respond, .clarify:
+            // Switch to text capture mode (for respond) or resolve clarify option
+            let session = await store.get(pendingId: pendingId)
+            if let session, !session.isExpired {
+                if callbackData.action == .clarify {
+                    let optionIndex = Int(callbackData.detail) ?? -1
+                    let options = session.clarifyOptions
+                    let selectedText: String
+                    if optionIndex >= 0 && optionIndex < options.count {
+                        selectedText = options[optionIndex]
+                    } else {
+                        selectedText = callbackData.detail
+                    }
+                    let resumed = try? await store.resume(pendingId: pendingId, response: selectedText)
+                    if resumed == true {
+                        try? await apiClient.answerCallbackQuery(callbackQueryId: query.id, text: "已选择: \(selectedText)")
+                        if let queue = taskQueue {
+                            _ = await queue.resumeInteraction(pendingId: pendingId, context: selectedText)
+                        }
+                        if let messageId = query.message?.messageId, let chatId = query.message?.chat.id {
+                            _ = await editMessage(chatId: chatId, messageId: messageId, text: "✅ 已选择: \(selectedText)")
+                        }
+                    } else {
+                        try? await apiClient.answerCallbackQuery(callbackQueryId: query.id, text: "已过期")
+                    }
+                } else {
+                    // respond → text capture mode
+                    _ = await store.remove(pendingId: pendingId)
+                    await store.register(
+                        pendingId: pendingId,
+                        chatId: session.chatId,
+                        messageId: session.messageId,
+                        mode: .textCapture,
+                        allowedUserId: session.allowedUserId,
+                        onResume: { _ in }
+                    )
+                    try? await apiClient.answerCallbackQuery(callbackQueryId: query.id, text: "请输入您的回复")
+                    if let messageId = query.message?.messageId, let chatId = query.message?.chat.id {
+                        _ = await editMessage(chatId: chatId, messageId: messageId, text: "⌨️ 等待文本输入...")
+                    }
+                }
+            } else {
+                try? await apiClient.answerCallbackQuery(callbackQueryId: query.id, text: "已过期")
+            }
+        }
+    }
+
     func setTaskQueue(_ queue: any TaskSerialQueueProtocol) {
         self.taskQueue = queue
     }
@@ -173,6 +304,17 @@ actor TelegramAdapter {
             try await apiClient.sendChatAction(chatId: chatId, action: action)
         } catch {
             log("[axion] Telegram sendChatAction failed: \(error.localizedDescription)")
+        }
+    }
+
+    func sendWithMarkup(_ text: String, to chatId: Int64, replyMarkup: TGInlineKeyboardMarkup?) async -> Int64? {
+        let (formatted, mode) = TGMessageFormatter.format(text)
+        do {
+            let msg = try await apiClient.sendMessage(chatId: chatId, text: formatted, parseMode: mode, replyMarkup: replyMarkup)
+            return msg.messageId
+        } catch {
+            log("[axion] Telegram sendWithMarkup failed: \(error.localizedDescription)")
+            return nil
         }
     }
 

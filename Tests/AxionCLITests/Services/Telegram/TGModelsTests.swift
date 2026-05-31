@@ -238,4 +238,220 @@ struct TGModelsTests {
         #expect(msg.text == "hello")
         #expect(msg.photo == nil)
     }
+
+    // MARK: - Callback Query (Story 32.5)
+
+    @Test("TGCallbackQuery round-trip")
+    func callbackQueryRoundTrip() throws {
+        let query = TGCallbackQuery(
+            id: "query123",
+            from: TGUser(id: 42, firstName: "Nick", lastName: nil, username: "nick"),
+            message: nil,
+            data: "approve:run-abc"
+        )
+
+        let data = try JSONEncoder().encode(query)
+        let decoded = try JSONDecoder().decode(TGCallbackQuery.self, from: data)
+
+        #expect(decoded == query)
+        #expect(decoded.id == "query123")
+        #expect(decoded.data == "approve:run-abc")
+        #expect(decoded.from.id == 42)
+        #expect(decoded.message == nil)
+    }
+
+    @Test("TGCallbackQuery decodes from snake_case JSON")
+    func callbackQueryDecodeSnakeCase() throws {
+        let json = """
+        {
+            "update_id": 500,
+            "callback_query": {
+                "id": "cb1",
+                "from": {"id": 99, "first_name": "User"},
+                "message": {
+                    "message_id": 10,
+                    "chat": {"id": 99, "type": "private"},
+                    "date": 1700000000,
+                    "text": "Agent paused"
+                },
+                "data": "deny:run-xyz"
+            }
+        }
+        """
+        let data = try #require(json.data(using: .utf8))
+        let update = try JSONDecoder().decode(TGUpdate.self, from: data)
+
+        #expect(update.updateId == 500)
+        #expect(update.message == nil)
+        #expect(update.callbackQuery != nil)
+        #expect(update.callbackQuery?.id == "cb1")
+        #expect(update.callbackQuery?.data == "deny:run-xyz")
+        #expect(update.callbackQuery?.message?.messageId == 10)
+        #expect(update.callbackQuery?.from.id == 99)
+    }
+
+    @Test("TGUpdate with both message and callbackQuery nil")
+    func updateWithNoContent() throws {
+        let json = """
+        {"update_id": 999}
+        """
+        let data = try #require(json.data(using: .utf8))
+        let update = try JSONDecoder().decode(TGUpdate.self, from: data)
+
+        #expect(update.updateId == 999)
+        #expect(update.message == nil)
+        #expect(update.callbackQuery == nil)
+    }
+
+    // MARK: - Inline Keyboard (Story 32.5)
+
+    @Test("TGInlineKeyboardButton round-trip")
+    func inlineKeyboardButtonRoundTrip() throws {
+        let button = TGInlineKeyboardButton(text: "Approve", callbackData: "approve:1")
+
+        let data = try JSONEncoder().encode(button)
+        let decoded = try JSONDecoder().decode(TGInlineKeyboardButton.self, from: data)
+
+        #expect(decoded == button)
+        #expect(decoded.text == "Approve")
+        #expect(decoded.callbackData == "approve:1")
+        #expect(decoded.url == nil)
+    }
+
+    @Test("TGInlineKeyboardButton encodes snake_case keys")
+    func inlineKeyboardButtonEncoding() throws {
+        let button = TGInlineKeyboardButton(text: "Cancel", callbackData: "cancel")
+
+        let data = try JSONEncoder().encode(button)
+        let json = try #require(String(data: data, encoding: .utf8))
+
+        #expect(json.contains("\"text\":\"Cancel\""))
+        #expect(json.contains("\"callback_data\":\"cancel\""))
+    }
+
+    @Test("TGInlineKeyboardMarkup round-trip")
+    func inlineKeyboardMarkupRoundTrip() throws {
+        let markup = TGInlineKeyboardMarkup(inlineKeyboard: [
+            [
+                TGInlineKeyboardButton(text: "Approve", callbackData: "approve"),
+                TGInlineKeyboardButton(text: "Deny", callbackData: "deny"),
+            ]
+        ])
+
+        let data = try JSONEncoder().encode(markup)
+        let decoded = try JSONDecoder().decode(TGInlineKeyboardMarkup.self, from: data)
+
+        #expect(decoded == markup)
+        #expect(decoded.inlineKeyboard.count == 1)
+        #expect(decoded.inlineKeyboard[0].count == 2)
+        #expect(decoded.inlineKeyboard[0][0].text == "Approve")
+        #expect(decoded.inlineKeyboard[0][1].text == "Deny")
+    }
+
+    @Test("TGInlineKeyboardMarkup encodes as inline_keyboard")
+    func inlineKeyboardMarkupEncoding() throws {
+        let markup = TGInlineKeyboardMarkup(inlineKeyboard: [
+            [TGInlineKeyboardButton(text: "OK", callbackData: "ok")]
+        ])
+
+        let data = try JSONEncoder().encode(markup)
+        let json = try #require(String(data: data, encoding: .utf8))
+
+        #expect(json.contains("\"inline_keyboard\""))
+    }
+
+    @Test("TGSendMessageRequest with replyMarkup encodes correctly")
+    func sendMessageWithReplyMarkup() throws {
+        let markup = TGInlineKeyboardMarkup(inlineKeyboard: [
+            [TGInlineKeyboardButton(text: "Yes", callbackData: "yes")]
+        ])
+        let req = TGSendMessageRequest(chatId: 123, text: "Approve?", replyMarkup: markup)
+
+        let data = try JSONEncoder().encode(req)
+        let json = try #require(String(data: data, encoding: .utf8))
+
+        #expect(json.contains("\"reply_markup\""))
+        #expect(json.contains("\"inline_keyboard\""))
+        #expect(json.contains("\"callback_data\":\"yes\""))
+    }
+
+    @Test("TGSendMessageRequest without replyMarkup omits key")
+    func sendMessageWithoutReplyMarkup() throws {
+        let req = TGSendMessageRequest(chatId: 123, text: "hello")
+
+        let data = try JSONEncoder().encode(req)
+        let json = try #require(String(data: data, encoding: .utf8))
+
+        #expect(!json.contains("reply_markup"))
+    }
+
+    // MARK: - Edit Message Text Request (Story 32.5)
+
+    @Test("TGEditMessageTextRequest round-trip with chat + message id")
+    func editMessageTextRoundTrip() throws {
+        let req = TGEditMessageTextRequest(
+            chatId: 12345,
+            messageId: 42,
+            text: "Updated text",
+            parseMode: .html
+        )
+
+        let data = try JSONEncoder().encode(req)
+        let decoded = try JSONDecoder().decode(TGEditMessageTextRequest.self, from: data)
+
+        #expect(decoded.chatId == 12345)
+        #expect(decoded.messageId == 42)
+        #expect(decoded.inlineMessageId == nil)
+        #expect(decoded.text == "Updated text")
+        #expect(decoded.parseMode == "HTML")
+        #expect(decoded.replyMarkup == nil)
+    }
+
+    @Test("TGEditMessageTextRequest encodes snake_case keys")
+    func editMessageTextEncoding() throws {
+        let markup = TGInlineKeyboardMarkup(inlineKeyboard: [
+            [TGInlineKeyboardButton(text: "Done", callbackData: "done")]
+        ])
+        let req = TGEditMessageTextRequest(
+            chatId: 99,
+            messageId: 5,
+            text: "edited",
+            replyMarkup: markup
+        )
+
+        let data = try JSONEncoder().encode(req)
+        let json = try #require(String(data: data, encoding: .utf8))
+
+        #expect(json.contains("\"chat_id\":99"))
+        #expect(json.contains("\"message_id\":5"))
+        #expect(json.contains("\"reply_markup\""))
+    }
+
+    // MARK: - Answer Callback Query Request (Story 32.5)
+
+    @Test("TGAnswerCallbackQueryRequest round-trip")
+    func answerCallbackQueryRoundTrip() throws {
+        let req = TGAnswerCallbackQueryRequest(
+            callbackQueryId: "cb123",
+            text: "Approved!",
+            showAlert: false
+        )
+
+        let data = try JSONEncoder().encode(req)
+        let decoded = try JSONDecoder().decode(TGAnswerCallbackQueryRequest.self, from: data)
+
+        #expect(decoded.callbackQueryId == "cb123")
+        #expect(decoded.text == "Approved!")
+        #expect(decoded.showAlert == false)
+    }
+
+    @Test("TGAnswerCallbackQueryRequest encodes snake_case keys")
+    func answerCallbackQueryEncoding() throws {
+        let req = TGAnswerCallbackQueryRequest(callbackQueryId: "q1")
+
+        let data = try JSONEncoder().encode(req)
+        let json = try #require(String(data: data, encoding: .utf8))
+
+        #expect(json.contains("\"callback_query_id\":\"q1\""))
+    }
 }

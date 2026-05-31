@@ -71,7 +71,8 @@ struct TGEventHandlerTests {
         #expect(typeNames.contains("AgentCompletedEvent"))
         #expect(typeNames.contains("AgentFailedEvent"))
         #expect(typeNames.contains("ReviewResultEvent"))
-        #expect(types.count == 7)
+        #expect(typeNames.contains("AgentPausedEvent"))
+        #expect(types.count == 8)
     }
 
     // MARK: - extractLastResultSection

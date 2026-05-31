@@ -66,7 +66,8 @@ struct ResumeCommand: AsyncParsableCommand {
             noVisualDelta: noVisualDelta,
             noReview: noReview,
             onReviewCompleted: nil,
-            reviewDataContext: nil
+            reviewDataContext: nil,
+            nonInteractivePause: false, registerResumeHandle: nil
         )
 
         let result: AxionRunResult

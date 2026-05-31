@@ -94,6 +94,11 @@ enum RunOrchestrator {
         let onReviewCompleted: (@Sendable (String) -> Void)?
         let eventBus: EventBus?
         let reviewDataContext: ReviewDataContext?
+        /// When true, skip TakeoverIO prompt on pause and instead publish AgentPausedEvent to EventBus.
+        let nonInteractivePause: Bool
+        /// Called by RunOrchestrator to register a resume handle for a paused agent.
+        /// Parameters: (pendingId, resumeClosure). The resumeClosure calls agent.resume(context:).
+        let registerResumeHandle: (@Sendable (String, @Sendable @escaping (String) async -> Void) async -> Void)?
     }
 
     struct RunResult: Sendable {
@@ -228,25 +233,42 @@ enum RunOrchestrator {
                     switch data.subtype {
                     case .paused:
                         guard let pausedData = data.pausedData else { break }
-                        let takeoverStartTime = ContinuousClock.now
-                        let result = takeoverIO.displayTakeoverPrompt(
-                            reason: pausedData.reason,
-                            allowForeground: runConfig.allowForeground,
-                            completedSteps: totalSteps
-                        )
-                        switch result.action {
-                        case .resume:
-                            let userAction = result.userInput?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty == false
-                                ? result.userInput! : "用户已完成手动操作"
-                            takeoverIO.write("[axion] 正在恢复执行...")
-                            let elapsed = ContinuousClock.now - takeoverStartTime
-                            let durationSeconds = TakeoverMarker.durationToSeconds(elapsed)
-                            takeoverEvent = (issue: pausedData.reason, summary: userAction, feedback: result.feedback, reason: pausedData.reason, duration: durationSeconds)
-                            agent.resume(context: userAction)
-                        case .skip:
-                            agent.resume(context: "skip")
-                        case .abort:
-                            agent.interrupt()
+
+                        if runConfig.nonInteractivePause {
+                            // Gateway mode: register resume handle, publish event, await external resume
+                            let pendingId = UUID().uuidString.prefix(8).lowercased()
+                            let resumeHandle: @Sendable (String) async -> Void = { context in
+                                agent.resume(context: context)
+                            }
+                            await runConfig.registerResumeHandle?(String(pendingId), resumeHandle)
+                            await runConfig.eventBus?.publish(AgentPausedEvent(
+                                reason: pausedData.reason,
+                                sessionId: runConfig.task,
+                                canResume: true,
+                                pendingId: String(pendingId)
+                            ))
+                        } else {
+                            // CLI mode: interactive takeover prompt
+                            let takeoverStartTime = ContinuousClock.now
+                            let result = takeoverIO.displayTakeoverPrompt(
+                                reason: pausedData.reason,
+                                allowForeground: runConfig.allowForeground,
+                                completedSteps: totalSteps
+                            )
+                            switch result.action {
+                            case .resume:
+                                let userAction = result.userInput?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty == false
+                                    ? result.userInput! : "用户已完成手动操作"
+                                takeoverIO.write("[axion] 正在恢复执行...")
+                                let elapsed = ContinuousClock.now - takeoverStartTime
+                                let durationSeconds = TakeoverMarker.durationToSeconds(elapsed)
+                                takeoverEvent = (issue: pausedData.reason, summary: userAction, feedback: result.feedback, reason: pausedData.reason, duration: durationSeconds)
+                                agent.resume(context: userAction)
+                            case .skip:
+                                agent.resume(context: "skip")
+                            case .abort:
+                                agent.interrupt()
+                            }
                         }
                     case .pausedTimeout:
                         takeoverIO.displayTimeoutPrompt()

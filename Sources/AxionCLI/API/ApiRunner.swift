@@ -56,7 +56,8 @@ enum ApiRunner {
             noVisualDelta: true,
             noReview: true,
             onReviewCompleted: nil,
-            reviewDataContext: nil
+            reviewDataContext: nil,
+            nonInteractivePause: false, registerResumeHandle: nil
         )
 
         let runResult: AxionRunResult

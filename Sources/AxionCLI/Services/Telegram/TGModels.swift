@@ -17,10 +17,18 @@ struct TGResponse<T: Codable & Sendable>: Codable, Sendable {
 struct TGUpdate: Codable, Sendable, Equatable {
     let updateId: Int64
     let message: TGMessage?
+    let callbackQuery: TGCallbackQuery?
 
     enum CodingKeys: String, CodingKey {
         case updateId = "update_id"
         case message
+        case callbackQuery = "callback_query"
+    }
+
+    init(updateId: Int64, message: TGMessage? = nil, callbackQuery: TGCallbackQuery? = nil) {
+        self.updateId = updateId
+        self.message = message
+        self.callbackQuery = callbackQuery
     }
 }
 
@@ -87,19 +95,51 @@ struct TGSendMessageRequest: Codable, Sendable {
     let text: String
     let parseMode: String?
     let replyToMessageId: Int64?
+    let replyMarkup: TGInlineKeyboardMarkup?
 
     enum CodingKeys: String, CodingKey {
         case chatId = "chat_id"
         case text
         case parseMode = "parse_mode"
         case replyToMessageId = "reply_to_message_id"
+        case replyMarkup = "reply_markup"
     }
 
-    init(chatId: Int64, text: String, parseMode: TGParseMode? = nil, replyToMessageId: Int64? = nil) {
+    init(chatId: Int64, text: String, parseMode: TGParseMode? = nil, replyToMessageId: Int64? = nil, replyMarkup: TGInlineKeyboardMarkup? = nil) {
         self.chatId = chatId
         self.text = text
         self.parseMode = parseMode == .plain ? nil : parseMode?.rawValue
         self.replyToMessageId = replyToMessageId
+        self.replyMarkup = replyMarkup
+    }
+}
+
+// MARK: - Edit Message Text Request
+
+struct TGEditMessageTextRequest: Codable, Sendable {
+    let chatId: Int64?
+    let messageId: Int64?
+    let inlineMessageId: String?
+    let text: String
+    let parseMode: String?
+    let replyMarkup: TGInlineKeyboardMarkup?
+
+    enum CodingKeys: String, CodingKey {
+        case chatId = "chat_id"
+        case messageId = "message_id"
+        case inlineMessageId = "inline_message_id"
+        case text
+        case parseMode = "parse_mode"
+        case replyMarkup = "reply_markup"
+    }
+
+    init(chatId: Int64? = nil, messageId: Int64? = nil, inlineMessageId: String? = nil, text: String, parseMode: TGParseMode? = nil, replyMarkup: TGInlineKeyboardMarkup? = nil) {
+        self.chatId = chatId
+        self.messageId = messageId
+        self.inlineMessageId = inlineMessageId
+        self.text = text
+        self.parseMode = parseMode == .plain ? nil : parseMode?.rawValue
+        self.replyMarkup = replyMarkup
     }
 }
 
@@ -127,5 +167,70 @@ struct TGFile: Codable, Sendable, Equatable {
     enum CodingKeys: String, CodingKey {
         case fileId = "file_id"
         case filePath = "file_path"
+    }
+}
+
+// MARK: - Callback Query
+
+struct TGCallbackQuery: Codable, Sendable, Equatable {
+    let id: String
+    let from: TGUser
+    let message: TGMessage?
+    let data: String?
+
+    enum CodingKeys: String, CodingKey {
+        case id, from, message, data
+    }
+}
+
+// MARK: - Inline Keyboard
+
+struct TGInlineKeyboardMarkup: Codable, Sendable, Equatable {
+    let inlineKeyboard: [[TGInlineKeyboardButton]]
+
+    enum CodingKeys: String, CodingKey {
+        case inlineKeyboard = "inline_keyboard"
+    }
+
+    init(inlineKeyboard: [[TGInlineKeyboardButton]]) {
+        self.inlineKeyboard = inlineKeyboard
+    }
+}
+
+struct TGInlineKeyboardButton: Codable, Sendable, Equatable {
+    let text: String
+    let callbackData: String?
+    let url: String?
+
+    enum CodingKeys: String, CodingKey {
+        case text
+        case callbackData = "callback_data"
+        case url
+    }
+
+    init(text: String, callbackData: String? = nil, url: String? = nil) {
+        self.text = text
+        self.callbackData = callbackData
+        self.url = url
+    }
+}
+
+// MARK: - Answer Callback Query Request
+
+struct TGAnswerCallbackQueryRequest: Codable, Sendable {
+    let callbackQueryId: String
+    let text: String?
+    let showAlert: Bool?
+
+    enum CodingKeys: String, CodingKey {
+        case callbackQueryId = "callback_query_id"
+        case text
+        case showAlert = "show_alert"
+    }
+
+    init(callbackQueryId: String, text: String? = nil, showAlert: Bool? = nil) {
+        self.callbackQueryId = callbackQueryId
+        self.text = text
+        self.showAlert = showAlert
     }
 }

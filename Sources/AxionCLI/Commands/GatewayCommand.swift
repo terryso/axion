@@ -161,7 +161,8 @@ struct GatewayStartCommand: AsyncParsableCommand {
                     noVisualDelta: false,
                     noReview: false,
                     onReviewCompleted: nil,
-                    reviewDataContext: reviewDataContext
+                    reviewDataContext: reviewDataContext,
+                    nonInteractivePause: false, registerResumeHandle: nil
                 )
                 result = try await runtimeManager.executeRun(
                     task: task,
@@ -247,6 +248,8 @@ struct GatewayStartCommand: AsyncParsableCommand {
 
             let tgClient = TGAPIClient(token: tgToken)
 
+            let sessionStore = TGInteractiveSessionStore()
+
             let taskSerialQueue = TaskSerialQueue(
                 runtimeManager: runtimeManager,
                 config: config,
@@ -262,7 +265,8 @@ struct GatewayStartCommand: AsyncParsableCommand {
                 },
                 chatActionHandler: { (chatId: Int64, action: String) in
                     // Adapter not yet created; will be wired below
-                }
+                },
+                sessionStore: sessionStore
             )
 
             let registry = Self.buildCommandRegistry(
@@ -272,7 +276,7 @@ struct GatewayStartCommand: AsyncParsableCommand {
             )
             let commandRouter = TGCommandRouter(registry: registry)
 
-            let adapter = TelegramAdapter(apiClient: tgClient, allowedUsers: allowedUsers, taskQueue: taskSerialQueue, commandRouter: commandRouter)
+            let adapter = TelegramAdapter(apiClient: tgClient, allowedUsers: allowedUsers, taskQueue: taskSerialQueue, commandRouter: commandRouter, sessionStore: sessionStore)
 
             // Re-wire replyHandler to use the now-created adapter
             await taskSerialQueue.updateReplyHandler({ [weak adapter] chatId, message in
@@ -289,6 +293,12 @@ struct GatewayStartCommand: AsyncParsableCommand {
             // Re-wire chatActionHandler to use the now-created adapter
             await taskSerialQueue.updateChatActionHandler({ [weak adapter] chatId, action in
                 await adapter?.sendChatAction(chatId: chatId, action: action)
+            })
+
+            // Re-wire sendMessageWithMarkupHandler to use the now-created adapter
+            await taskSerialQueue.updateSendMessageWithMarkupHandler({ [weak adapter] chatId, text, markup in
+                guard let adapter else { return nil }
+                return await adapter.sendWithMarkup(text, to: chatId, replyMarkup: markup)
             })
 
             await adapter.setTaskQueue(taskSerialQueue)

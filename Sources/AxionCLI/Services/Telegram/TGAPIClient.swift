@@ -6,7 +6,10 @@ protocol TGAPIClientProtocol: Sendable {
     func getUpdates(offset: Int64?, timeout: Int) async throws -> [TGUpdate]
     func sendMessage(chatId: Int64, text: String) async throws -> TGMessage
     func sendMessage(chatId: Int64, text: String, parseMode: TGParseMode, replyToMessageId: Int64?) async throws -> TGMessage
+    func sendMessage(chatId: Int64, text: String, parseMode: TGParseMode, replyMarkup: TGInlineKeyboardMarkup?) async throws -> TGMessage
     func editMessageText(chatId: Int64, messageId: Int64, text: String, parseMode: TGParseMode) async throws -> TGMessage
+    func editMessageText(chatId: Int64, messageId: Int64, text: String, parseMode: TGParseMode, replyMarkup: TGInlineKeyboardMarkup?) async throws -> TGMessage
+    func answerCallbackQuery(callbackQueryId: String, text: String?) async throws
     func getFile(fileId: String) async throws -> TGFile
     func downloadFile(filePath: String) async throws -> Data
     func sendChatAction(chatId: Int64, action: String) async throws
@@ -91,6 +94,10 @@ struct TGAPIClient: TGAPIClientProtocol {
     }
 
     func editMessageText(chatId: Int64, messageId: Int64, text: String, parseMode: TGParseMode) async throws -> TGMessage {
+        return try await editMessageText(chatId: chatId, messageId: messageId, text: text, parseMode: parseMode, replyMarkup: nil)
+    }
+
+    func editMessageText(chatId: Int64, messageId: Int64, text: String, parseMode: TGParseMode, replyMarkup: TGInlineKeyboardMarkup? = nil) async throws -> TGMessage {
         guard let url = URL(string: "https://api.telegram.org/bot\(token)/editMessageText") else {
             throw TGAPIError.permanentTelegramError("Invalid URL for editMessageText")
         }
@@ -99,21 +106,13 @@ struct TGAPIClient: TGAPIClientProtocol {
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
         request.timeoutInterval = 30
 
-        struct EditMessageRequest: Codable {
-            let chatId: Int64
-            let messageId: Int64
-            let text: String
-            let parseMode: String?
-
-            enum CodingKeys: String, CodingKey {
-                case chatId = "chat_id"
-                case messageId = "message_id"
-                case text
-                case parseMode = "parse_mode"
-            }
-        }
-        let pm: String? = parseMode == .plain ? nil : parseMode.rawValue
-        let body = EditMessageRequest(chatId: chatId, messageId: messageId, text: text, parseMode: pm)
+        let body = TGEditMessageTextRequest(
+            chatId: chatId,
+            messageId: messageId,
+            text: text,
+            parseMode: parseMode,
+            replyMarkup: replyMarkup
+        )
         request.httpBody = try JSONEncoder().encode(body)
 
         let response: TGResponse<TGMessage> = try await performRequest(request, retries: maxRetries)
@@ -121,6 +120,43 @@ struct TGAPIClient: TGAPIClientProtocol {
             throw TGAPIError.permanentTelegramError(response.description ?? "editMessageText failed")
         }
         return message
+    }
+
+    func sendMessage(chatId: Int64, text: String, parseMode: TGParseMode, replyMarkup: TGInlineKeyboardMarkup? = nil) async throws -> TGMessage {
+        guard let url = URL(string: "https://api.telegram.org/bot\(token)/sendMessage") else {
+            throw TGAPIError.permanentTelegramError("Invalid URL for sendMessage")
+        }
+        var request = URLRequest(url: url)
+        request.httpMethod = "POST"
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.timeoutInterval = 30
+
+        let body = TGSendMessageRequest(chatId: chatId, text: text, parseMode: parseMode, replyMarkup: replyMarkup)
+        request.httpBody = try JSONEncoder().encode(body)
+
+        let response: TGResponse<TGMessage> = try await performRequest(request, retries: maxRetries)
+        guard response.ok, let message = response.result else {
+            throw TGAPIError.permanentTelegramError(response.description ?? "sendMessage failed")
+        }
+        return message
+    }
+
+    func answerCallbackQuery(callbackQueryId: String, text: String? = nil) async throws {
+        guard let url = URL(string: "https://api.telegram.org/bot\(token)/answerCallbackQuery") else {
+            throw TGAPIError.permanentTelegramError("Invalid URL for answerCallbackQuery")
+        }
+        var request = URLRequest(url: url)
+        request.httpMethod = "POST"
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.timeoutInterval = 10
+
+        let body = TGAnswerCallbackQueryRequest(callbackQueryId: callbackQueryId, text: text)
+        request.httpBody = try JSONEncoder().encode(body)
+
+        let response: TGResponse<Bool> = try await performRequest(request, retries: maxRetries)
+        guard response.ok else {
+            throw TGAPIError.permanentTelegramError(response.description ?? "answerCallbackQuery failed")
+        }
     }
 
     func getFile(fileId: String) async throws -> TGFile {

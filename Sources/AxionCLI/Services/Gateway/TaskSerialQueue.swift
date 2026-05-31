@@ -4,7 +4,7 @@ import AxionCore
 
 // MARK: - Protocol
 
-protocol TaskSerialQueueProtocol: Sendable {
+protocol TaskSerialQueueProtocol: Sendable, Actor {
     func enqueue(task: String, chatId: Int64) async
     func startProcessing() async
     func cancelAll() async
@@ -14,6 +14,8 @@ protocol TaskSerialQueueProtocol: Sendable {
     func pendingCount(chatId: Int64) async -> Int
     func isProcessing(chatId: Int64) async -> Bool
     func hasActiveSession(chatId: Int64) async -> Bool
+    func registerResumeHandle(pendingId: String, handle: @Sendable @escaping (String) async -> Void)
+    func resumeInteraction(pendingId: String, context: String) async -> Bool
 }
 
 // MARK: - TaskSerialQueue
@@ -45,6 +47,7 @@ actor TaskSerialQueue: TaskSerialQueueProtocol {
     private var currentChatId: Int64?
     private var newTaskContinuation: CheckedContinuation<Void, Never>?
     private var chatSessions: [Int64: ActiveSession] = [:]
+    private var activeResumeHandles: [String: @Sendable (String) async -> Void] = [:]
 
     private let runtimeManager: any DaemonRuntimeManaging
     private let config: AxionConfig
@@ -53,6 +56,8 @@ actor TaskSerialQueue: TaskSerialQueueProtocol {
     private var replyHandler: @Sendable (Int64, String) async -> Int64?
     private var editHandler: @Sendable (Int64, Int64, String) async -> Bool
     private var chatActionHandler: @Sendable (Int64, String) async -> Void
+    private let sessionStore: TGInteractiveSessionStore?
+    private var sendMessageWithMarkupHandler: @Sendable (Int64, String, TGInlineKeyboardMarkup?) async -> Int64?
 
     init(
         runtimeManager: any DaemonRuntimeManaging,
@@ -61,7 +66,9 @@ actor TaskSerialQueue: TaskSerialQueueProtocol {
         extraHandlers: [any EventHandler] = [],
         replyHandler: @Sendable @escaping (Int64, String) async -> Int64?,
         editHandler: @Sendable @escaping (Int64, Int64, String) async -> Bool = { _, _, _ in false },
-        chatActionHandler: @Sendable @escaping (Int64, String) async -> Void = { _, _ in }
+        chatActionHandler: @Sendable @escaping (Int64, String) async -> Void = { _, _ in },
+        sessionStore: TGInteractiveSessionStore? = nil,
+        sendMessageWithMarkupHandler: @Sendable @escaping (Int64, String, TGInlineKeyboardMarkup?) async -> Int64? = { _, _, _ in nil }
     ) {
         self.runtimeManager = runtimeManager
         self.config = config
@@ -70,6 +77,8 @@ actor TaskSerialQueue: TaskSerialQueueProtocol {
         self.replyHandler = replyHandler
         self.editHandler = editHandler
         self.chatActionHandler = chatActionHandler
+        self.sessionStore = sessionStore
+        self.sendMessageWithMarkupHandler = sendMessageWithMarkupHandler
     }
 
     func enqueue(task: String, chatId: Int64) async {
@@ -155,6 +164,7 @@ actor TaskSerialQueue: TaskSerialQueueProtocol {
             } catch {
                 _ = await replyHandler(pending.chatId, "任务执行失败: \(error.localizedDescription)")
             }
+            activeResumeHandles.removeAll()
 
             currentChatId = nil
             await runner.taskFinished()
@@ -187,6 +197,20 @@ actor TaskSerialQueue: TaskSerialQueueProtocol {
         self.chatActionHandler = handler
     }
 
+    func updateSendMessageWithMarkupHandler(_ handler: @Sendable @escaping (Int64, String, TGInlineKeyboardMarkup?) async -> Int64?) {
+        self.sendMessageWithMarkupHandler = handler
+    }
+
+    func registerResumeHandle(pendingId: String, handle: @Sendable @escaping (String) async -> Void) {
+        activeResumeHandles[pendingId] = handle
+    }
+
+    func resumeInteraction(pendingId: String, context: String) async -> Bool {
+        guard let handle = activeResumeHandles.removeValue(forKey: pendingId) else { return false }
+        await handle(context)
+        return true
+    }
+
     var pendingCount: Int { queue.count }
     var isProcessing: Bool { isExecuting }
 
@@ -212,6 +236,20 @@ actor TaskSerialQueue: TaskSerialQueueProtocol {
             freshFinalAfter: TGStreamingConfig.default.freshFinalAfter,
             typingEnabled: config.tgTypingEnabled,
             typingInterval: config.tgTypingInterval
+        )
+    }
+
+    private func makeGatewayRunOverrides() -> AxionRuntime.RunOverrides {
+        AxionRuntime.RunOverrides(
+            json: false,
+            noVisualDelta: false,
+            noReview: false,
+            onReviewCompleted: nil,
+            reviewDataContext: nil,
+            nonInteractivePause: true,
+            registerResumeHandle: { [weak self] pendingId, handle in
+                await self?.registerResumeHandle(pendingId: pendingId, handle: handle)
+            }
         )
     }
 
@@ -243,6 +281,7 @@ actor TaskSerialQueue: TaskSerialQueueProtocol {
                 let eventBus = EventBus()
                 let tgHandler = TGEventHandler(
                     chatId: pending.chatId,
+                    allowedUserId: pending.chatId,
                     sendMessage: { [weak self] message, chatId in
                         await self?.replyHandler(chatId, message) ?? nil
                     },
@@ -252,14 +291,18 @@ actor TaskSerialQueue: TaskSerialQueueProtocol {
                     sendChatAction: { [weak self] chatId, action in
                         await self?.chatActionHandler(chatId, action)
                     },
-                    streamingConfig: streamingConfig
+                    streamingConfig: streamingConfig,
+                    sessionStore: self.sessionStore,
+                    sendMessageWithMarkup: { [weak self] chatId, text, markup in
+                        await self?.sendMessageWithMarkupHandler(chatId, text, markup) ?? nil
+                    }
                 )
                 let allHandlers: [any EventHandler] = [tgHandler] + self.extraHandlers
                 return try await self.runtimeManager.executeRun(
                     task: pending.task,
                     buildConfig: buildConfig,
                     eventBus: eventBus,
-                    runOverrides: .default,
+                    runOverrides: self.makeGatewayRunOverrides(),
                     extraHandlers: allHandlers,
                     sessionId: nil
                 )
@@ -304,6 +347,7 @@ actor TaskSerialQueue: TaskSerialQueueProtocol {
                     let eventBus = EventBus()
                     let tgHandler = TGEventHandler(
                         chatId: pending.chatId,
+                        allowedUserId: pending.chatId,
                         sendMessage: { [weak self] message, chatId in
                             await self?.replyHandler(chatId, message)
                         },
@@ -313,7 +357,11 @@ actor TaskSerialQueue: TaskSerialQueueProtocol {
                         sendChatAction: { [weak self] chatId, action in
                             await self?.chatActionHandler(chatId, action)
                         },
-                        streamingConfig: streamingConfig
+                        streamingConfig: streamingConfig,
+                        sessionStore: self.sessionStore,
+                        sendMessageWithMarkup: { [weak self] chatId, text, markup in
+                            await self?.sendMessageWithMarkupHandler(chatId, text, markup) ?? nil
+                        }
                     )
                     let allHandlers: [any EventHandler] = [tgHandler] + self.extraHandlers
                     return try await self.runtimeManager.resumeRun(
@@ -321,7 +369,7 @@ actor TaskSerialQueue: TaskSerialQueueProtocol {
                         task: pending.task,
                         buildConfig: buildConfig,
                         eventBus: eventBus,
-                        runOverrides: .default,
+                        runOverrides: self.makeGatewayRunOverrides(),
                         extraHandlers: allHandlers
                     )
                 }

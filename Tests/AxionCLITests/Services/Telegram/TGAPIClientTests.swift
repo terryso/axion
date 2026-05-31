@@ -412,8 +412,15 @@ actor MockTGAPIClient: TGAPIClientProtocol {
     }
 
     func editMessageText(chatId: Int64, messageId: Int64, text: String, parseMode: TGParseMode) async throws -> TGMessage {
+        return try await editMessageText(chatId: chatId, messageId: messageId, text: text, parseMode: parseMode, replyMarkup: nil)
+    }
+
+    func editMessageText(chatId: Int64, messageId: Int64, text: String, parseMode: TGParseMode, replyMarkup: TGInlineKeyboardMarkup?) async throws -> TGMessage {
         if let error = _editMessageError { throw error }
         _editedMessages.append((chatId, messageId, text, parseMode))
+        if let markup = replyMarkup {
+            _editedMessagesWithMarkup.append((chatId, messageId, text, parseMode, markup))
+        }
         return TGMessage(
             messageId: messageId,
             from: nil,
@@ -422,6 +429,31 @@ actor MockTGAPIClient: TGAPIClientProtocol {
             text: text,
             photo: nil
         )
+    }
+
+    func sendMessage(chatId: Int64, text: String, parseMode: TGParseMode, replyMarkup: TGInlineKeyboardMarkup?) async throws -> TGMessage {
+        if let error = _sendMessageError { throw error }
+        _sentMessagesWithMarkup.append((chatId, text, parseMode, replyMarkup))
+        return TGMessage(
+            messageId: Int64(_sentMessages.count + _sentMessagesWithMarkup.count),
+            from: nil,
+            chat: TGChat(id: chatId, type: "private"),
+            date: 0,
+            text: text,
+            photo: nil
+        )
+    }
+
+    private var _sentMessagesWithMarkup: [(chatId: Int64, text: String, parseMode: TGParseMode, replyMarkup: TGInlineKeyboardMarkup?)] = []
+    private var _editedMessagesWithMarkup: [(chatId: Int64, messageId: Int64, text: String, parseMode: TGParseMode, replyMarkup: TGInlineKeyboardMarkup)] = []
+    private var _answerCallbackQueryCalls: [(callbackQueryId: String, text: String?)] = []
+
+    var sentMessagesWithMarkup: [(chatId: Int64, text: String, parseMode: TGParseMode, replyMarkup: TGInlineKeyboardMarkup?)] { _sentMessagesWithMarkup }
+    var editedMessagesWithMarkup: [(chatId: Int64, messageId: Int64, text: String, parseMode: TGParseMode, replyMarkup: TGInlineKeyboardMarkup)] { _editedMessagesWithMarkup }
+    var answerCallbackQueryCalls: [(callbackQueryId: String, text: String?)] { _answerCallbackQueryCalls }
+
+    func answerCallbackQuery(callbackQueryId: String, text: String?) async throws {
+        _answerCallbackQueryCalls.append((callbackQueryId, text))
     }
 
     func getFile(fileId: String) async throws -> TGFile {

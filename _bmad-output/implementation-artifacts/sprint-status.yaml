@@ -87,6 +87,7 @@
 
 generated: 2026-05-08
 last_updated: 2026-05-31
+# story-32.5-created: 2026-05-31
 # story-32.4-created: 2026-05-31
 # story-32.3-created: 2026-05-31
 # story-32.2-created: 2026-05-31
@@ -461,5 +462,5 @@ development_status:
   32-2-edit-based-streaming-status-bubble: done
   32-3-typing-ux-draft-preview-spike: done
   32-4-command-registry-bot-menu: done
-  32-5-interactive-approval-clarify: backlog
+  32-5-interactive-approval-clarify: done
   epic-32-retrospective: optional

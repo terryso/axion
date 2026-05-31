@@ -111,7 +111,8 @@ struct RunCommand: AsyncParsableCommand {
                         noVisualDelta: noVisualDelta,
                         noReview: noReview,
                         onReviewCompleted: nil,
-                        reviewDataContext: nil
+                        reviewDataContext: nil,
+                        nonInteractivePause: false, registerResumeHandle: nil
                     )
 
                     let result: AxionRunResult
@@ -170,7 +171,8 @@ struct RunCommand: AsyncParsableCommand {
             noVisualDelta: noVisualDelta,
             noReview: noReview,
             onReviewCompleted: nil,
-            reviewDataContext: nil
+            reviewDataContext: nil,
+            nonInteractivePause: false, registerResumeHandle: nil
         )
 
         let result: AxionRunResult

@@ -44,6 +44,22 @@ actor MockTaskSerialQueue: TaskSerialQueueProtocol {
     func hasActiveSession(chatId: Int64) async -> Bool { _activeSessions.contains(chatId) }
 
     func setActiveSession(_ chatId: Int64) { _activeSessions.insert(chatId) }
+
+    private var _resumeHandles: [String: @Sendable (String) async -> Void] = [:]
+    private var _resumeCalls: [(pendingId: String, context: String)] = []
+
+    var resumeCalls: [(pendingId: String, context: String)] { _resumeCalls }
+
+    func registerResumeHandle(pendingId: String, handle: @Sendable @escaping (String) async -> Void) {
+        _resumeHandles[pendingId] = handle
+    }
+
+    func resumeInteraction(pendingId: String, context: String) async -> Bool {
+        guard let handle = _resumeHandles.removeValue(forKey: pendingId) else { return false }
+        _resumeCalls.append((pendingId, context))
+        await handle(context)
+        return true
+    }
 }
 
 @Suite("TelegramAdapter")
@@ -798,9 +814,20 @@ actor MockFallbackTGAPIClient: TGAPIClientProtocol {
         return TGMessage(messageId: Int64(_sentMessages.count), from: nil, chat: TGChat(id: chatId, type: "private"), date: 0, text: text)
     }
 
+    func sendMessage(chatId: Int64, text: String, parseMode: TGParseMode, replyMarkup: TGInlineKeyboardMarkup?) async throws -> TGMessage {
+        _sentMessages.append((chatId, text, parseMode, nil))
+        return TGMessage(messageId: Int64(_sentMessages.count), from: nil, chat: TGChat(id: chatId, type: "private"), date: 0, text: text)
+    }
+
     func editMessageText(chatId: Int64, messageId: Int64, text: String, parseMode: TGParseMode) async throws -> TGMessage {
         TGMessage(messageId: messageId, from: nil, chat: TGChat(id: chatId, type: "private"), date: 0, text: text)
     }
+
+    func editMessageText(chatId: Int64, messageId: Int64, text: String, parseMode: TGParseMode, replyMarkup: TGInlineKeyboardMarkup?) async throws -> TGMessage {
+        TGMessage(messageId: messageId, from: nil, chat: TGChat(id: chatId, type: "private"), date: 0, text: text)
+    }
+
+    func answerCallbackQuery(callbackQueryId: String, text: String?) async throws {}
 
     func getFile(fileId: String) async throws -> TGFile {
         TGFile(fileId: fileId, filePath: "photos/file_0.jpg")
@@ -841,9 +868,20 @@ actor MockMultiChunkFallbackTGAPIClient: TGAPIClientProtocol {
         return TGMessage(messageId: Int64(_sentMessages.count), from: nil, chat: TGChat(id: chatId, type: "private"), date: 0, text: text)
     }
 
+    func sendMessage(chatId: Int64, text: String, parseMode: TGParseMode, replyMarkup: TGInlineKeyboardMarkup?) async throws -> TGMessage {
+        _sentMessages.append((chatId, text, parseMode, nil))
+        return TGMessage(messageId: Int64(_sentMessages.count), from: nil, chat: TGChat(id: chatId, type: "private"), date: 0, text: text)
+    }
+
     func editMessageText(chatId: Int64, messageId: Int64, text: String, parseMode: TGParseMode) async throws -> TGMessage {
         TGMessage(messageId: messageId, from: nil, chat: TGChat(id: chatId, type: "private"), date: 0, text: text)
     }
+
+    func editMessageText(chatId: Int64, messageId: Int64, text: String, parseMode: TGParseMode, replyMarkup: TGInlineKeyboardMarkup?) async throws -> TGMessage {
+        TGMessage(messageId: messageId, from: nil, chat: TGChat(id: chatId, type: "private"), date: 0, text: text)
+    }
+
+    func answerCallbackQuery(callbackQueryId: String, text: String?) async throws {}
 
     func getFile(fileId: String) async throws -> TGFile {
         TGFile(fileId: fileId, filePath: "photos/file_0.jpg")
