@@ -38,11 +38,13 @@ struct MockReviewOrchestrator: ReviewOrchestrating, Sendable {
     let callTracker = MockCallTracker()
 
     func shouldReview(sessionId: String, messageCount: Int, config: ReviewAgentConfig) -> (memory: Bool, skill: Bool) {
-        shouldReviewResult
+        callTracker.recordShouldReview(config: config)
+        return shouldReviewResult
     }
 
     func executeReview(parentAgent: Agent, messages: [SDKMessage], config: ReviewAgentConfig) async -> ReviewAgentResult? {
         callTracker.recordExecution()
+        callTracker.recordExecuteReview(config: config)
         return reviewResult
     }
 }
@@ -50,6 +52,8 @@ struct MockReviewOrchestrator: ReviewOrchestrating, Sendable {
 final class MockCallTracker: @unchecked Sendable {
     private let lock = NSLock()
     private var _executeReviewCalled = false
+    private var _shouldReviewConfig: ReviewAgentConfig?
+    private var _executeReviewConfig: ReviewAgentConfig?
 
     var executeReviewCalled: Bool {
         lock.lock()
@@ -57,9 +61,33 @@ final class MockCallTracker: @unchecked Sendable {
         return _executeReviewCalled
     }
 
+    var shouldReviewConfig: ReviewAgentConfig? {
+        lock.lock()
+        defer { lock.unlock() }
+        return _shouldReviewConfig
+    }
+
+    var executeReviewConfig: ReviewAgentConfig? {
+        lock.lock()
+        defer { lock.unlock() }
+        return _executeReviewConfig
+    }
+
     func recordExecution() {
         lock.lock()
         _executeReviewCalled = true
+        lock.unlock()
+    }
+
+    func recordShouldReview(config: ReviewAgentConfig) {
+        lock.lock()
+        _shouldReviewConfig = config
+        lock.unlock()
+    }
+
+    func recordExecuteReview(config: ReviewAgentConfig) {
+        lock.lock()
+        _executeReviewConfig = config
         lock.unlock()
     }
 }
@@ -68,6 +96,12 @@ final class MockCallTracker: @unchecked Sendable {
 
 @Suite("ReviewScheduler")
 struct ReviewSchedulerTests {
+    private func makeTempDirectory(prefix: String) throws -> URL {
+        let dir = URL(fileURLWithPath: NSTemporaryDirectory())
+            .appendingPathComponent("\(prefix)-\(UUID().uuidString)", isDirectory: true)
+        try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        return dir
+    }
 
     private func makeContext(
         sessionId: String = "test-session",
@@ -162,6 +196,91 @@ struct ReviewSchedulerTests {
             try? await _Concurrency.Task.sleep(nanoseconds: 50_000_000)
         }
         #expect(mockOrchestrator.callTracker.executeReviewCalled)
+    }
+
+    @Test("gateway review path allows universal memory writeback")
+    func testGatewayReviewAllowsUniversalMemoryWriteback() async {
+        let mockOrchestrator = MockReviewOrchestrator(
+            shouldReviewResult: (memory: true, skill: false),
+            reviewResult: ReviewAgentResult(
+                memoryChanges: ["saved user preference"],
+                skillChanges: [],
+                summary: "Review: 1 memory action",
+                reviewMessages: []
+            )
+        )
+
+        let reviewDataContext = ReviewDataContext()
+        let placeholderAgent = Agent(options: AgentOptions(model: "placeholder"))
+        reviewDataContext.update(
+            agent: placeholderAgent,
+            messages: [.userMessage(.init(message: "以后回答不要加 emoji"))],
+            reviewOrchestrator: mockOrchestrator
+        )
+
+        let scheduler = ReviewScheduler(
+            noReview: false,
+            noMemory: false,
+            reviewDataContext: reviewDataContext,
+            traceDir: "/tmp/test-trace-\(UUID().uuidString)"
+        )
+
+        await scheduler.handle(makeCompletedEvent(), context: makeContext(runCompleteContext: makeRunCompleteContext(numTurns: 8)))
+
+        let deadline = ContinuousClock.now + .seconds(3)
+        while !mockOrchestrator.callTracker.executeReviewCalled, ContinuousClock.now < deadline {
+            try? await _Concurrency.Task.sleep(nanoseconds: 50_000_000)
+        }
+
+        #expect(mockOrchestrator.callTracker.shouldReviewConfig?.allowedTools.contains("review_save_universal_memory") == true)
+        #expect(mockOrchestrator.callTracker.executeReviewConfig?.allowedTools.contains("review_save_universal_memory") == true)
+    }
+
+    @Test("fallback saves explicit response preference to USER.md when review misses it")
+    func testFallbackSavesExplicitResponsePreference() async throws {
+        let mockOrchestrator = MockReviewOrchestrator(
+            shouldReviewResult: (memory: true, skill: false),
+            reviewResult: ReviewAgentResult(
+                memoryChanges: [],
+                skillChanges: [],
+                summary: "Review completed. No actions taken.",
+                reviewMessages: []
+            )
+        )
+
+        let memoryDir = try makeTempDirectory(prefix: "axion-review-memory")
+        defer { try? FileManager.default.removeItem(at: memoryDir) }
+        let traceDir = try makeTempDirectory(prefix: "axion-review-trace")
+        defer { try? FileManager.default.removeItem(at: traceDir) }
+
+        let reviewDataContext = ReviewDataContext()
+        let placeholderAgent = Agent(options: AgentOptions(model: "placeholder"))
+        reviewDataContext.update(
+            agent: placeholderAgent,
+            messages: [.userMessage(.init(message: "以后回答不要加 emoji，并告诉我这个仓库根目录有哪些顶层文件"))],
+            reviewOrchestrator: mockOrchestrator
+        )
+
+        let scheduler = ReviewScheduler(
+            noReview: false,
+            noMemory: false,
+            reviewDataContext: reviewDataContext,
+            traceDir: traceDir.path,
+            memoryDir: memoryDir.path
+        )
+
+        await scheduler.handle(makeCompletedEvent(), context: makeContext(runCompleteContext: makeRunCompleteContext(numTurns: 8)))
+
+        let deadline = ContinuousClock.now + .seconds(3)
+        let store = UniversalMemoryStore(memoryDir: memoryDir.path)
+        var content = await store.read(target: .user)
+        while content.isEmpty, ContinuousClock.now < deadline {
+            try? await _Concurrency.Task.sleep(nanoseconds: 50_000_000)
+            content = await store.read(target: .user)
+        }
+
+        #expect(content.contains("以后回答不要加 emoji"))
+        #expect(scheduler.lastReviewSummaryValue == "新增 1 条记忆")
     }
 
     // MARK: - Task 4.3: lastReviewAt state update

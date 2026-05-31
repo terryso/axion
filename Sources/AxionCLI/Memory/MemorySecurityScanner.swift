@@ -24,7 +24,7 @@ struct MemorySecurityScanner: Sendable {
         let lowered = content.lowercased()
 
         // Prompt injection
-        if matches(lowered, pattern: #"ignore\s+(previous|all|above|prior)\s+instructions"#) {
+        if matches(lowered, pattern: #"ignore\s+(?:(?:all\s+)?(?:previous|above|prior)\s+instructions|all\s+instructions)"#) {
             return .rejected(reason: "Prompt injection pattern detected")
         }
 
@@ -81,7 +81,7 @@ struct MemorySecurityScanner: Sendable {
         let lowered = content.lowercased()
 
         // Prompt injection (warn, don't block)
-        if matches(lowered, pattern: #"ignore\s+(previous|all|above|prior)\s+instructions"#) {
+        if matches(lowered, pattern: #"ignore\s+(?:(?:all\s+)?(?:previous|above|prior)\s+instructions|all\s+instructions)"#) {
             warnings.append("Prompt injection pattern detected in stored memory")
         }
 

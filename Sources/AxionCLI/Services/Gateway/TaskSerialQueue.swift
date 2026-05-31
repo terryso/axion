@@ -46,25 +46,28 @@ actor TaskSerialQueue: TaskSerialQueueProtocol {
     private let config: AxionConfig
     private let runner: GatewayRunner
     private let extraHandlers: [any EventHandler]
-    private var replyHandler: @Sendable (Int64, String) async -> Void
+    private var replyHandler: @Sendable (Int64, String) async -> Int64?
+    private var editHandler: @Sendable (Int64, Int64, String) async -> Bool
 
     init(
         runtimeManager: any DaemonRuntimeManaging,
         config: AxionConfig,
         runner: GatewayRunner,
         extraHandlers: [any EventHandler] = [],
-        replyHandler: @Sendable @escaping (Int64, String) async -> Void
+        replyHandler: @Sendable @escaping (Int64, String) async -> Int64?,
+        editHandler: @Sendable @escaping (Int64, Int64, String) async -> Bool = { _, _, _ in false }
     ) {
         self.runtimeManager = runtimeManager
         self.config = config
         self.runner = runner
         self.extraHandlers = extraHandlers
         self.replyHandler = replyHandler
+        self.editHandler = editHandler
     }
 
     func enqueue(task: String, chatId: Int64) async {
         guard !isShuttingDown else {
-            await replyHandler(chatId, "Gateway 正在关闭，任务已取消")
+            _ = await replyHandler(chatId, "Gateway 正在关闭，任务已取消")
             return
         }
 
@@ -100,7 +103,7 @@ actor TaskSerialQueue: TaskSerialQueueProtocol {
             startMessage: startMessage
         ))
         if isExecuting {
-            await replyHandler(chatId, "任务已排队 (队列: \(pendingCount + 1))")
+            _ = await replyHandler(chatId, "任务已排队 (队列: \(pendingCount + 1))")
         }
         newTaskContinuation?.resume()
         newTaskContinuation = nil
@@ -119,7 +122,7 @@ actor TaskSerialQueue: TaskSerialQueueProtocol {
             isExecuting = true
             let pending = queue.removeFirst()
 
-            await replyHandler(pending.chatId, pending.startMessage)
+            _ = await replyHandler(pending.chatId, pending.startMessage)
             await runner.taskStarted()
 
             let timeoutMinutes = config.gatewayTaskTimeoutMinutes ?? 10.0
@@ -140,9 +143,9 @@ actor TaskSerialQueue: TaskSerialQueueProtocol {
                 }
                 updateSession(from: result, chatId: pending.chatId)
             } catch is TaskTimeoutError {
-                await replyHandler(pending.chatId, "任务超时已取消 (\(Int(timeoutMinutes)) 分钟)")
+                _ = await replyHandler(pending.chatId, "任务超时已取消 (\(Int(timeoutMinutes)) 分钟)")
             } catch {
-                await replyHandler(pending.chatId, "任务执行失败: \(error.localizedDescription)")
+                _ = await replyHandler(pending.chatId, "任务执行失败: \(error.localizedDescription)")
             }
 
             await runner.taskFinished()
@@ -152,7 +155,7 @@ actor TaskSerialQueue: TaskSerialQueueProtocol {
     func cancelAll() async {
         isShuttingDown = true
         for pending in queue {
-            await replyHandler(pending.chatId, "Gateway 正在关闭，任务已取消")
+            _ = await replyHandler(pending.chatId, "Gateway 正在关闭，任务已取消")
         }
         queue.removeAll()
         newTaskContinuation?.resume()
@@ -163,8 +166,12 @@ actor TaskSerialQueue: TaskSerialQueueProtocol {
         chatSessions.removeValue(forKey: chatId)
     }
 
-    func updateReplyHandler(_ handler: @Sendable @escaping (Int64, String) async -> Void) {
+    func updateReplyHandler(_ handler: @Sendable @escaping (Int64, String) async -> Int64?) {
         self.replyHandler = handler
+    }
+
+    func updateEditHandler(_ handler: @Sendable @escaping (Int64, Int64, String) async -> Bool) {
+        self.editHandler = handler
     }
 
     var pendingCount: Int { queue.count }
@@ -179,17 +186,33 @@ actor TaskSerialQueue: TaskSerialQueueProtocol {
         try await withThrowingTaskGroup(of: AxionRunResult.self) { group in
             group.addTask {
                 let request = OpenAgentSDK.CreateRunRequest(task: pending.task)
-                let buildConfig = AgentBuilder.BuildConfig.forAPI(
+                let buildConfig = AgentBuilder.BuildConfig(
                     config: self.config,
                     task: pending.task,
-                    request: request
+                    noMemory: false,
+                    noSkills: false,
+                    includePlaywright: false,
+                    allowForeground: request.allowForeground ?? false,
+                    maxSteps: request.maxSteps,
+                    maxTokens: nil,
+                    verbose: false,
+                    dryrun: false,
+                    fast: false,
+                    runId: nil,
+                    sessionId: nil,
+                    sessionStore: nil,
+                    emitTokenStream: true
                 )
                 let eventBus = EventBus()
                 let tgHandler = TGEventHandler(
-                    chatId: pending.chatId
-                ) { [weak self] message, chatId in
-                    await self?.replyHandler(chatId, message)
-                }
+                    chatId: pending.chatId,
+                    sendMessage: { [weak self] message, chatId in
+                        await self?.replyHandler(chatId, message) ?? nil
+                    },
+                    editMessage: { [weak self] chatId, messageId, text in
+                        await self?.editHandler(chatId, messageId, text) ?? false
+                    }
+                )
                 let allHandlers: [any EventHandler] = [tgHandler] + self.extraHandlers
                 return try await self.runtimeManager.executeRun(
                     task: pending.task,
@@ -219,17 +242,33 @@ actor TaskSerialQueue: TaskSerialQueueProtocol {
             return try await withThrowingTaskGroup(of: AxionRunResult.self) { group in
                 group.addTask {
                     let request = OpenAgentSDK.CreateRunRequest(task: pending.task)
-                    let buildConfig = AgentBuilder.BuildConfig.forAPI(
+                    let buildConfig = AgentBuilder.BuildConfig(
                         config: self.config,
                         task: pending.task,
-                        request: request
+                        noMemory: false,
+                        noSkills: false,
+                        includePlaywright: false,
+                        allowForeground: request.allowForeground ?? false,
+                        maxSteps: request.maxSteps,
+                        maxTokens: nil,
+                        verbose: false,
+                        dryrun: false,
+                        fast: false,
+                        runId: nil,
+                        sessionId: nil,
+                        sessionStore: nil,
+                        emitTokenStream: true
                     )
                     let eventBus = EventBus()
                     let tgHandler = TGEventHandler(
-                        chatId: pending.chatId
-                    ) { [weak self] message, chatId in
-                        await self?.replyHandler(chatId, message)
-                    }
+                        chatId: pending.chatId,
+                        sendMessage: { [weak self] message, chatId in
+                            await self?.replyHandler(chatId, message)
+                        },
+                        editMessage: { [weak self] chatId, messageId, text in
+                            await self?.editHandler(chatId, messageId, text) ?? false
+                        }
+                    )
                     let allHandlers: [any EventHandler] = [tgHandler] + self.extraHandlers
                     return try await self.runtimeManager.resumeRun(
                         sessionId: sessionId,

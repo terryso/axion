@@ -259,6 +259,7 @@ actor MockTGAPIClient: TGAPIClientProtocol {
     private var _downloadFileError: Error?
     private var _getFileCallCount = 0
     private var _downloadFileCallCount = 0
+    private var _editMessageError: Error?
 
     var sentMessages: [(chatId: Int64, text: String, parseMode: TGParseMode?, replyToMessageId: Int64?)] { _sentMessages }
     var editedMessages: [(chatId: Int64, messageId: Int64, text: String, parseMode: TGParseMode)] { _editedMessages }
@@ -292,6 +293,10 @@ actor MockTGAPIClient: TGAPIClientProtocol {
 
     func setDownloadFileError(_ error: Error?) {
         _downloadFileError = error
+    }
+
+    func setEditMessageError(_ error: Error?) {
+        _editMessageError = error
     }
 
     func getUpdates(offset: Int64?, timeout: Int) async throws -> [TGUpdate] {
@@ -331,6 +336,7 @@ actor MockTGAPIClient: TGAPIClientProtocol {
     }
 
     func editMessageText(chatId: Int64, messageId: Int64, text: String, parseMode: TGParseMode) async throws -> TGMessage {
+        if let error = _editMessageError { throw error }
         _editedMessages.append((chatId, messageId, text, parseMode))
         return TGMessage(
             messageId: messageId,

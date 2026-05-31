@@ -168,7 +168,8 @@ public actor AxionRuntime: AxionRuntimeRunning, AxionRuntimeResuming, SessionLis
             fast: buildConfig.fast,
             runId: sid,
             sessionId: sid,
-            sessionStore: sessionStore
+            sessionStore: sessionStore,
+            emitTokenStream: buildConfig.emitTokenStream
         )
 
         let buildResult: AgentBuildResult
@@ -353,7 +354,8 @@ public actor AxionRuntime: AxionRuntimeRunning, AxionRuntimeResuming, SessionLis
             fast: buildConfig.fast,
             runId: sessionId,
             sessionId: sessionId,
-            sessionStore: sessionStore
+            sessionStore: sessionStore,
+            emitTokenStream: buildConfig.emitTokenStream
         )
 
         // 5. Build agent

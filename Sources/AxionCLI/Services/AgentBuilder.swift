@@ -50,6 +50,7 @@ enum AgentBuilder {
         let runId: String?
         let sessionId: String?
         let sessionStore: SessionStore?
+        let emitTokenStream: Bool
 
         static func forCLI(
             config: AxionConfig,
@@ -80,7 +81,8 @@ enum AgentBuilder {
                 fast: fast,
                 runId: runId,
                 sessionId: sessionId,
-                sessionStore: sessionStore
+                sessionStore: sessionStore,
+                emitTokenStream: false
             )
         }
 
@@ -103,7 +105,8 @@ enum AgentBuilder {
                 fast: false,
                 runId: nil,
                 sessionId: nil,
-                sessionStore: nil
+                sessionStore: nil,
+                emitTokenStream: false
             )
         }
 
@@ -129,7 +132,8 @@ enum AgentBuilder {
                 fast: false,
                 runId: nil,
                 sessionId: nil,
-                sessionStore: nil
+                sessionStore: nil,
+                emitTokenStream: false
             )
         }
 
@@ -153,7 +157,8 @@ enum AgentBuilder {
                 fast: false,
                 runId: nil,
                 sessionId: nil,
-                sessionStore: nil
+                sessionStore: nil,
+                emitTokenStream: false
             )
         }
     }
@@ -287,6 +292,11 @@ enum AgentBuilder {
         if let sid = buildConfig.sessionId {
             agentOptions.sessionId = sid
             agentOptions.sessionStore = buildConfig.sessionStore
+        }
+
+        // Token streaming: enable for TG tasks that need edit-based streaming
+        if buildConfig.emitTokenStream {
+            agentOptions.emitTokenStream = true
         }
 
         // Hook onRunComplete — captures context for post-run processing
@@ -532,19 +542,19 @@ enum AgentBuilder {
 
         if let universalMemoryContext, !universalMemoryContext.isEmpty {
             prompt += "\n\n\(universalMemoryContext)"
-            prompt += """
-
-            ## Universal Memory Operations
-
-            Treat the Universal Memory block as long-lived memory, not live repository state.
-            - If the user asks you to remember or save a durable preference/fact, use the `memory` tool with `add`.
-            - If the user corrects, updates, or rephrases something already in Universal Memory, prefer the `memory` tool with `replace` (or `remove` + `add`) instead of searching the repo or editing files, unless the user explicitly asks to change code, docs, or configuration.
-            - If the user asks you to forget or delete a remembered preference/fact, use the `memory` tool with `remove`.
-            - For explicit memory-management requests (`remember/save/update/delete this memory`), do not short-circuit based on your own safety judgment. Call the `memory` tool first and let its security scanner accept or reject the content.
-            - If the `memory` tool rejects content with `security_rejection`, tell the user that the save/update was blocked by the security scanner and do not fall back to storing it elsewhere.
-            - Use target `user` for personal preferences and target `memory` for durable project/environment facts.
-            """
         }
+        prompt += """
+
+        ## Universal Memory Operations
+
+        Treat Universal Memory as long-lived memory, not live repository state.
+        - If the user asks you to remember or save a durable preference/fact, use the `memory` tool with `add`.
+        - If the user corrects, updates, or rephrases something already in Universal Memory, prefer the `memory` tool with `replace` (or `remove` + `add`) instead of searching the repo or editing files, unless the user explicitly asks to change code, docs, or configuration.
+        - If the user asks you to forget or delete a remembered preference/fact, use the `memory` tool with `remove`.
+        - For explicit memory-management requests (`remember/save/update/delete this memory`), do not short-circuit based on your own safety judgment. Call the `memory` tool first and let its security scanner accept or reject the content.
+        - If the `memory` tool rejects content with `security_rejection`, tell the user that the save/update was blocked by the security scanner and do not fall back to storing it elsewhere.
+        - Use target `user` for personal preferences and target `memory` for durable project/environment facts.
+        """
 
         if !skillsPrompt.isEmpty {
             prompt += """

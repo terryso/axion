@@ -278,8 +278,13 @@ struct GatewayStartCommand: AsyncParsableCommand {
                 config: config,
                 runner: runner,
                 extraHandlers: [reviewScheduler] + (curatorScheduler.map { [$0] } ?? []),
-                replyHandler: { chatId, message in
+                replyHandler: { (chatId: Int64, message: String) -> Int64? in
                     // Adapter not yet created; will be wired below
+                    return nil
+                },
+                editHandler: { (chatId: Int64, messageId: Int64, text: String) -> Bool in
+                    // Adapter not yet created; will be wired below
+                    return false
                 }
             )
 
@@ -295,8 +300,14 @@ struct GatewayStartCommand: AsyncParsableCommand {
 
             // Re-wire replyHandler to use the now-created adapter
             await taskSerialQueue.updateReplyHandler({ [weak adapter] chatId, message in
-                guard let adapter else { return }
-                await adapter.sendFormatted(message, to: chatId)
+                guard let adapter else { return nil }
+                return await adapter.sendFormatted(message, to: chatId)
+            })
+
+            // Re-wire editHandler to use the now-created adapter
+            await taskSerialQueue.updateEditHandler({ [weak adapter] chatId, messageId, text in
+                guard let adapter else { return false }
+                return await adapter.editMessage(chatId: chatId, messageId: messageId, text: text)
             })
 
             await adapter.setTaskQueue(taskSerialQueue)

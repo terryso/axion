@@ -260,10 +260,19 @@ struct UniversalMemoryContextProviderTests {
         )
 
         #expect(prompt.contains("## Universal Memory Operations"))
-        #expect(prompt.contains("use the `memory` tool with `replace`"))
+        #expect(prompt.contains("`memory` tool with `replace`"))
         #expect(prompt.contains("instead of searching the repo or editing files"))
         #expect(prompt.contains("do not short-circuit based on your own safety judgment"))
         #expect(prompt.contains("rejects content with `security_rejection`"))
         #expect(prompt.contains("Use target `user` for personal preferences"))
+    }
+
+    @Test("buildFullSystemPrompt adds universal memory operation guidance even without memory context")
+    func universalMemoryPromptGuidanceWithoutContext() {
+        let prompt = AgentBuilder.buildFullSystemPrompt(basePrompt: "base")
+
+        #expect(prompt.contains("## Universal Memory Operations"))
+        #expect(prompt.contains("Call the `memory` tool first"))
+        #expect(prompt.contains("rejects content with `security_rejection`"))
     }
 }

@@ -151,23 +151,43 @@ actor TelegramAdapter {
         }
     }
 
-    func sendFormatted(_ text: String, to chatId: Int64, replyToMessageId: Int64? = nil) async {
+    func editMessage(chatId: Int64, messageId: Int64, text: String) async -> Bool {
+        let (formatted, mode) = TGMessageFormatter.format(text)
+        do {
+            _ = try await apiClient.editMessageText(chatId: chatId, messageId: messageId, text: formatted, parseMode: mode)
+            return true
+        } catch let error as TGAPIError {
+            switch error {
+            case .permanentTelegramError:
+                return false
+            case .rateLimited, .retryableNetwork, .formatRejected:
+                return false
+            }
+        } catch {
+            return false
+        }
+    }
+
+    @discardableResult
+    func sendFormatted(_ text: String, to chatId: Int64, replyToMessageId: Int64? = nil) async -> Int64? {
         let (formatted, mode) = TGMessageFormatter.format(text)
         let chunks = TGMessageFormatter.split(formattedText: formatted, parseMode: mode)
 
         var sentCount = 0
+        var firstMessageId: Int64?
         for (index, chunk) in chunks.enumerated() {
             let replyId = index == 0 ? replyToMessageId : nil
 
             do {
-                _ = try await apiClient.sendMessage(chatId: chatId, text: chunk, parseMode: mode, replyToMessageId: replyId)
+                let msg = try await apiClient.sendMessage(chatId: chatId, text: chunk, parseMode: mode, replyToMessageId: replyId)
+                if firstMessageId == nil { firstMessageId = msg.messageId }
                 sentCount += 1
             } catch let error as TGAPIError {
                 switch error {
                 case .formatRejected:
                     // Fallback: re-format and send only unsent chunks
                     await sendFallbackChunks(text: text, to: chatId, replyToMessageId: replyToMessageId, startIndex: sentCount)
-                    return
+                    return firstMessageId
                 default:
                     log("[axion] Telegram sendFormatted failed: \(error.localizedDescription)")
                 }
@@ -175,6 +195,7 @@ actor TelegramAdapter {
                 log("[axion] Telegram sendFormatted failed: \(error.localizedDescription)")
             }
         }
+        return firstMessageId
     }
 
     private func sendFallbackChunks(text: String, to chatId: Int64, replyToMessageId: Int64?, startIndex: Int) async {

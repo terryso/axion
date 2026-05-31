@@ -144,7 +144,7 @@ struct TaskSerialQueueTests {
             runtimeManager: runtime,
             config: makeConfig(),
             runner: runner,
-            replyHandler: { await collector.add(chatId: $0, message: $1) }
+            replyHandler: { await collector.add(chatId: $0, message: $1); return nil }
         )
 
         let processingTask = _Concurrency.Task { await queue.startProcessing() }
@@ -180,7 +180,7 @@ struct TaskSerialQueueTests {
             runtimeManager: runtime,
             config: makeConfig(),
             runner: runner,
-            replyHandler: { await collector.add(chatId: $0, message: $1) }
+            replyHandler: { await collector.add(chatId: $0, message: $1); return nil }
         )
 
         let processingTask = _Concurrency.Task { await queue.startProcessing() }
@@ -221,7 +221,7 @@ struct TaskSerialQueueTests {
             runtimeManager: runtime,
             config: config,
             runner: runner,
-            replyHandler: { await collector.add(chatId: $0, message: $1) }
+            replyHandler: { await collector.add(chatId: $0, message: $1); return nil }
         )
 
         let processingTask = _Concurrency.Task { await queue.startProcessing() }
@@ -254,7 +254,7 @@ struct TaskSerialQueueTests {
             runtimeManager: runtime,
             config: makeConfig(),
             runner: runner,
-            replyHandler: { await collector.add(chatId: $0, message: $1) }
+            replyHandler: { await collector.add(chatId: $0, message: $1); return nil }
         )
 
         let processingTask = _Concurrency.Task { await queue.startProcessing() }
@@ -290,7 +290,7 @@ struct TaskSerialQueueTests {
             runtimeManager: runtime,
             config: makeConfig(),
             runner: runner,
-            replyHandler: { await collector.add(chatId: $0, message: $1) }
+            replyHandler: { await collector.add(chatId: $0, message: $1); return nil }
         )
 
         await queue.cancelAll()
@@ -367,7 +367,7 @@ struct TaskSerialQueueTests {
             runtimeManager: runtime,
             config: makeConfig(),
             runner: runner,
-            replyHandler: { await collector.add(chatId: $0, message: $1) }
+            replyHandler: { await collector.add(chatId: $0, message: $1); return nil }
         )
 
         let processingTask = _Concurrency.Task { await queue.startProcessing() }
@@ -393,7 +393,7 @@ struct TaskSerialQueueTests {
             runtimeManager: runtime,
             config: makeConfig(),
             runner: runner,
-            replyHandler: { await collector.add(chatId: $0, message: $1) }
+            replyHandler: { await collector.add(chatId: $0, message: $1); return nil }
         )
 
         let processingTask = _Concurrency.Task { await queue.startProcessing() }
@@ -428,7 +428,7 @@ struct TaskSerialQueueTests {
             runtimeManager: runtime,
             config: makeConfig(),
             runner: runner,
-            replyHandler: { await collector.add(chatId: $0, message: $1) }
+            replyHandler: { await collector.add(chatId: $0, message: $1); return nil }
         )
 
         let processingTask = _Concurrency.Task { await queue.startProcessing() }
@@ -461,7 +461,7 @@ struct TaskSerialQueueTests {
             runtimeManager: runtime,
             config: makeConfig(),
             runner: runner,
-            replyHandler: { await collector.add(chatId: $0, message: $1) }
+            replyHandler: { await collector.add(chatId: $0, message: $1); return nil }
         )
 
         let processingTask = _Concurrency.Task { await queue.startProcessing() }
@@ -501,7 +501,7 @@ struct TaskSerialQueueTests {
             runtimeManager: runtime,
             config: makeConfig(),
             runner: runner,
-            replyHandler: { await collector.add(chatId: $0, message: $1) }
+            replyHandler: { await collector.add(chatId: $0, message: $1); return nil }
         )
 
         let processingTask = _Concurrency.Task { await queue.startProcessing() }
@@ -538,7 +538,7 @@ struct TaskSerialQueueTests {
             runtimeManager: runtime,
             config: makeConfig(),
             runner: runner,
-            replyHandler: { await collector.add(chatId: $0, message: $1) }
+            replyHandler: { await collector.add(chatId: $0, message: $1); return nil }
         )
 
         let processingTask = _Concurrency.Task { await queue.startProcessing() }
@@ -576,7 +576,7 @@ struct TaskSerialQueueTests {
             runtimeManager: runtime,
             config: makeConfig(),
             runner: runner,
-            replyHandler: { await collector.add(chatId: $0, message: $1) }
+            replyHandler: { await collector.add(chatId: $0, message: $1); return nil }
         )
 
         let processingTask = _Concurrency.Task { await queue.startProcessing() }
@@ -622,7 +622,7 @@ struct TaskSerialQueueTests {
             runtimeManager: runtime,
             config: makeConfig(),
             runner: runner,
-            replyHandler: { await collector.add(chatId: $0, message: $1) }
+            replyHandler: { await collector.add(chatId: $0, message: $1); return nil }
         )
 
         let processingTask = _Concurrency.Task { await queue.startProcessing() }

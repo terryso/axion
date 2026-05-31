@@ -754,6 +754,42 @@ struct TelegramAdapterTests {
         #expect(mdv2Sent.count == 1) // only first chunk in MDv2
         #expect(htmlSent.count == 1) // only second chunk in HTML
     }
+
+    // MARK: - editMessage (Story 32.2)
+
+    @Test("editMessage returns true on success")
+    func editMessageReturnsTrueOnSuccess() async {
+        let mock = MockTGAPIClient()
+        let adapter = TelegramAdapter(apiClient: mock, allowedUsers: ["123"], log: { _ in })
+
+        let result = await adapter.editMessage(chatId: 123, messageId: 42, text: "edited")
+        #expect(result == true)
+
+        let edited = await mock.editedMessages
+        #expect(edited.count == 1)
+        #expect(edited[0].chatId == 123)
+        #expect(edited[0].messageId == 42)
+    }
+
+    @Test("editMessage returns false on permanent error")
+    func editMessageReturnsFalseOnPermanentError() async {
+        let mock = MockTGAPIClient()
+        await mock.setEditMessageError(TGAPIError.permanentTelegramError("message not found"))
+        let adapter = TelegramAdapter(apiClient: mock, allowedUsers: ["123"], log: { _ in })
+
+        let result = await adapter.editMessage(chatId: 123, messageId: 99, text: "fail")
+        #expect(result == false)
+    }
+
+    @Test("editMessage returns false on rate limited error")
+    func editMessageReturnsFalseOnRateLimited() async {
+        let mock = MockTGAPIClient()
+        await mock.setEditMessageError(TGAPIError.rateLimited("too many requests"))
+        let adapter = TelegramAdapter(apiClient: mock, allowedUsers: ["123"], log: { _ in })
+
+        let result = await adapter.editMessage(chatId: 123, messageId: 1, text: "retry")
+        #expect(result == false)
+    }
 }
 
 // MARK: - Fallback Mock
