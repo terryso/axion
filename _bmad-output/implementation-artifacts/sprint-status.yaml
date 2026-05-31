@@ -1,5 +1,5 @@
 # generated: 2026-05-08
-# last_updated: 2026-05-30
+# last_updated: 2026-05-31
 # retro-epic-30: 2026-05-30
 # story-30.3-created: 2026-05-30
 # story-30.2-created: 2026-05-30
@@ -87,6 +87,7 @@
 
 generated: 2026-05-08
 last_updated: 2026-05-31
+# story-32.4-created: 2026-05-31
 # story-32.3-created: 2026-05-31
 # story-32.2-created: 2026-05-31
 # epic-32-started: 2026-05-31
@@ -459,6 +460,6 @@ development_status:
   32-1-telegram-rich-text-rendering: done
   32-2-edit-based-streaming-status-bubble: done
   32-3-typing-ux-draft-preview-spike: done
-  32-4-command-registry-bot-menu: backlog
+  32-4-command-registry-bot-menu: done
   32-5-interactive-approval-clarify: backlog
   epic-32-retrospective: optional

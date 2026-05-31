@@ -272,9 +272,47 @@ struct TGAPIClientTests {
             #expect(Bool(false), "Unexpected error type")
         }
     }
-}
 
-// MARK: - Shared Mock
+    // MARK: - setMyCommands
+
+    @Test("MockTGAPIClient setMyCommands records commands")
+    func mockSetMyCommands() async throws {
+        let mock = MockTGAPIClient()
+        let commands: [(name: String, description: String)] = [
+            (name: "help", description: "入门指南"),
+            (name: "status", description: "查看状态"),
+        ]
+        try await mock.setMyCommands(commands: commands)
+
+        let calls = await mock.setMyCommandsCalls
+        #expect(calls.count == 1)
+        #expect(calls[0].count == 2)
+        #expect(calls[0][0].name == "help")
+        #expect(calls[0][1].name == "status")
+    }
+
+    @Test("setMyCommands API encodes request body correctly")
+    func setMyCommandsEncodesBody() async throws {
+        let session = MockRecordingURLSession()
+        let client = TGAPIClient(token: "test-token", session: session, maxRetries: 1)
+
+        try await client.setMyCommands(commands: [
+            (name: "help", description: "guide"),
+            (name: "status", description: "status"),
+        ])
+
+        let request = try #require(session.lastRequest)
+        #expect(request.httpMethod == "POST")
+        #expect(request.url?.absoluteString.contains("setMyCommands") == true)
+
+        let body = try #require(request.httpBody)
+        let json = try JSONSerialization.jsonObject(with: body) as? [String: Any]
+        let commands = try #require(json?["commands"] as? [[String: String]])
+        #expect(commands.count == 2)
+        #expect(commands[0]["command"] == "help")
+        #expect(commands[0]["description"] == "guide")
+    }
+}
 
 /// Mock TGAPIClient for testing TelegramAdapter
 actor MockTGAPIClient: TGAPIClientProtocol {
@@ -402,6 +440,14 @@ actor MockTGAPIClient: TGAPIClientProtocol {
         if let error = _sendChatActionError { throw error }
         _chatActions.append((chatId, action))
     }
+
+    private var _setMyCommandsCalls: [[(name: String, description: String)]] = []
+
+    var setMyCommandsCalls: [[(name: String, description: String)]] { _setMyCommandsCalls }
+
+    func setMyCommands(commands: [(name: String, description: String)]) async throws {
+        _setMyCommandsCalls.append(commands)
+    }
 }
 
 // MARK: - Mock URLSession (no real network)
@@ -433,5 +479,18 @@ final class MockHTTPErrorURLSession: URLSessionProtocol, @unchecked Sendable {
         let httpResp = HTTPURLResponse(url: url, statusCode: statusCode, httpVersion: "HTTP/1.1", headerFields: nil)!
         let bodyData = Data(body.utf8)
         return (bodyData, httpResp)
+    }
+}
+
+/// Records the last request and returns a successful setMyCommands response
+final class MockRecordingURLSession: URLSessionProtocol, @unchecked Sendable {
+    private(set) var lastRequest: URLRequest?
+
+    func data(for request: URLRequest) async throws -> (Data, URLResponse) {
+        lastRequest = request
+        let url = request.url ?? URL(string: "https://example.com")!
+        let httpResp = HTTPURLResponse(url: url, statusCode: 200, httpVersion: "HTTP/1.1", headerFields: nil)!
+        let body = Data("{\"ok\":true,\"result\":true}".utf8)
+        return (body, httpResp)
     }
 }

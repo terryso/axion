@@ -36,6 +36,14 @@ actor MockTaskSerialQueue: TaskSerialQueueProtocol {
 
     var pendingCount: Int { _pendingCount }
     var isProcessing: Bool { _isProcessing }
+
+    private var _activeSessions: Set<Int64> = []
+
+    func pendingCount(chatId: Int64) async -> Int { _pendingCount }
+    func isProcessing(chatId: Int64) async -> Bool { _isProcessing }
+    func hasActiveSession(chatId: Int64) async -> Bool { _activeSessions.contains(chatId) }
+
+    func setActiveSession(_ chatId: Int64) { _activeSessions.insert(chatId) }
 }
 
 @Suite("TelegramAdapter")
@@ -337,18 +345,7 @@ struct TelegramAdapterTests {
     func commandMessageRoutesToRouter() async {
         let mock = MockTGAPIClient()
         let mockQueue = MockTaskSerialQueue()
-        let commandRouter = TGCommandRouter(
-            statusProvider: {
-                GatewayRunnerStatus(
-                    state: "running",
-                    activeTaskCount: 1,
-                    uptimeSeconds: 60,
-                    label: "dev.axion.gateway",
-                    tgConnected: "connected"
-                )
-            },
-            skillsProvider: { [] }
-        )
+        let commandRouter = TGCommandRouter(registry: makeTestRegistry())
         let adapter = TelegramAdapter(apiClient: mock, allowedUsers: ["123"], taskQueue: mockQueue, commandRouter: commandRouter, log: { _ in })
 
         let update = TGUpdate(updateId: 1, message: TGMessage(
@@ -372,17 +369,7 @@ struct TelegramAdapterTests {
     func nonCommandStillEnqueuesWithRouter() async {
         let mock = MockTGAPIClient()
         let mockQueue = MockTaskSerialQueue()
-        let commandRouter = TGCommandRouter(
-            statusProvider: {
-                GatewayRunnerStatus(
-                    state: "running",
-                    activeTaskCount: 0,
-                    uptimeSeconds: 0,
-                    label: "dev.axion.gateway"
-                )
-            },
-            skillsProvider: { [] }
-        )
+        let commandRouter = TGCommandRouter(registry: makeTestRegistry())
         let adapter = TelegramAdapter(apiClient: mock, allowedUsers: ["123"], taskQueue: mockQueue, commandRouter: commandRouter, log: { _ in })
 
         let update = TGUpdate(updateId: 1, message: TGMessage(
@@ -425,17 +412,7 @@ struct TelegramAdapterTests {
     @Test("Authorization check happens before command routing")
     func authCheckBeforeCommandRouting() async {
         let mock = MockTGAPIClient()
-        let commandRouter = TGCommandRouter(
-            statusProvider: {
-                GatewayRunnerStatus(
-                    state: "running",
-                    activeTaskCount: 0,
-                    uptimeSeconds: 0,
-                    label: "dev.axion.gateway"
-                )
-            },
-            skillsProvider: { [] }
-        )
+        let commandRouter = TGCommandRouter(registry: makeTestRegistry())
         let adapter = TelegramAdapter(apiClient: mock, allowedUsers: ["123"], commandRouter: commandRouter, log: { _ in })
 
         let update = TGUpdate(updateId: 1, message: TGMessage(
@@ -623,20 +600,9 @@ struct TelegramAdapterTests {
             func add(_ id: Int64) { ids.append(id) }
         }
         let collector = ChatIdCollector()
-        let commandRouter = TGCommandRouter(
-            statusProvider: {
-                GatewayRunnerStatus(
-                    state: "running",
-                    activeTaskCount: 0,
-                    uptimeSeconds: 0,
-                    label: "dev.axion.gateway"
-                )
-            },
-            skillsProvider: { [] },
-            clearSession: { chatId in
-                collector.add(chatId)
-            }
-        )
+        let commandRouter = TGCommandRouter(registry: makeTestRegistry(clearSession: { chatId in
+            collector.add(chatId)
+        }))
         let adapter = TelegramAdapter(apiClient: mock, allowedUsers: ["123"], taskQueue: mockQueue, commandRouter: commandRouter, log: { _ in })
 
         let update = TGUpdate(updateId: 1, message: TGMessage(
@@ -663,18 +629,10 @@ struct TelegramAdapterTests {
     func newCommandDoesNotEnqueue() async {
         let mock = MockTGAPIClient()
         let mockQueue = MockTaskSerialQueue()
-        let commandRouter = TGCommandRouter(
-            statusProvider: {
-                GatewayRunnerStatus(
-                    state: "running",
-                    activeTaskCount: 0,
-                    uptimeSeconds: 0,
-                    label: "dev.axion.gateway"
-                )
-            },
-            skillsProvider: { [] },
-            clearSession: { _ in }
-        )
+        let registry = TGCommandRegistry(commands: [
+            TGCommandDef(name: "new", description: "开始新会话", helpText: "", menuPriority: 5) { _ in "新会话已开始" }
+        ])
+        let commandRouter = TGCommandRouter(registry: registry)
         let adapter = TelegramAdapter(apiClient: mock, allowedUsers: ["123"], taskQueue: mockQueue, commandRouter: commandRouter, log: { _ in })
 
         let update = TGUpdate(updateId: 1, message: TGMessage(
@@ -790,6 +748,24 @@ struct TelegramAdapterTests {
         let result = await adapter.editMessage(chatId: 123, messageId: 1, text: "retry")
         #expect(result == false)
     }
+
+    // MARK: - Helpers
+
+    private func makeTestRegistry(
+        clearSession: (@Sendable (Int64) async -> Void)? = nil
+    ) -> TGCommandRegistry {
+        let clear: @Sendable (Int64) async -> Void = clearSession ?? { _ in }
+        return TGCommandRegistry(commands: [
+            TGCommandDef(name: "status", description: "查看状态", helpText: "", menuPriority: 3) { _ in
+                "📊 Gateway Status\n状态: running\n运行中任务: 0"
+            },
+            TGCommandDef(name: "skills", description: "查看技能", helpText: "", menuPriority: 4) { _ in "暂无可用技能" },
+            TGCommandDef(name: "new", description: "开始新会话", helpText: "", menuPriority: 5) { chatId in
+                await clear(chatId)
+                return "新会话已开始"
+            },
+        ])
+    }
 }
 
 // MARK: - Fallback Mock
@@ -835,6 +811,7 @@ actor MockFallbackTGAPIClient: TGAPIClientProtocol {
     }
 
     func sendChatAction(chatId: Int64, action: String) async throws {}
+    func setMyCommands(commands: [(name: String, description: String)]) async throws {}
 }
 
 /// Mock that succeeds on first MDv2 call, fails on second MDv2 call, then succeeds on HTML.
@@ -877,4 +854,5 @@ actor MockMultiChunkFallbackTGAPIClient: TGAPIClientProtocol {
     }
 
     func sendChatAction(chatId: Int64, action: String) async throws {}
+    func setMyCommands(commands: [(name: String, description: String)]) async throws {}
 }

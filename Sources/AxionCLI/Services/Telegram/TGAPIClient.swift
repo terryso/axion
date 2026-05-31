@@ -10,6 +10,7 @@ protocol TGAPIClientProtocol: Sendable {
     func getFile(fileId: String) async throws -> TGFile
     func downloadFile(filePath: String) async throws -> Data
     func sendChatAction(chatId: Int64, action: String) async throws
+    func setMyCommands(commands: [(name: String, description: String)]) async throws
 }
 
 protocol URLSessionProtocol: Sendable {
@@ -168,6 +169,31 @@ struct TGAPIClient: TGAPIClientProtocol {
         let response: TGResponse<Bool> = try await performRequest(request, retries: 1)
         guard response.ok else {
             throw TGAPIError.permanentTelegramError(response.description ?? "sendChatAction failed")
+        }
+    }
+
+    func setMyCommands(commands: [(name: String, description: String)]) async throws {
+        guard let url = URL(string: "https://api.telegram.org/bot\(token)/setMyCommands") else {
+            throw TGAPIError.permanentTelegramError("Invalid URL for setMyCommands")
+        }
+        var request = URLRequest(url: url)
+        request.httpMethod = "POST"
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.timeoutInterval = 30
+
+        struct BotCommand: Codable {
+            let command: String
+            let description: String
+        }
+        struct SetMyCommandsRequest: Codable {
+            let commands: [BotCommand]
+        }
+        let body = SetMyCommandsRequest(commands: commands.map { BotCommand(command: $0.name, description: $0.description) })
+        request.httpBody = try JSONEncoder().encode(body)
+
+        let response: TGResponse<Bool> = try await performRequest(request, retries: maxRetries)
+        guard response.ok else {
+            throw TGAPIError.permanentTelegramError(response.description ?? "setMyCommands failed")
         }
     }
 

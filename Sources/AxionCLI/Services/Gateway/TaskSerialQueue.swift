@@ -11,6 +11,9 @@ protocol TaskSerialQueueProtocol: Sendable {
     func clearSession(chatId: Int64) async
     var pendingCount: Int { get async }
     var isProcessing: Bool { get async }
+    func pendingCount(chatId: Int64) async -> Int
+    func isProcessing(chatId: Int64) async -> Bool
+    func hasActiveSession(chatId: Int64) async -> Bool
 }
 
 // MARK: - TaskSerialQueue
@@ -39,6 +42,7 @@ actor TaskSerialQueue: TaskSerialQueueProtocol {
     private var queue: [PendingTask] = []
     private var isExecuting = false
     private var isShuttingDown = false
+    private var currentChatId: Int64?
     private var newTaskContinuation: CheckedContinuation<Void, Never>?
     private var chatSessions: [Int64: ActiveSession] = [:]
 
@@ -124,6 +128,7 @@ actor TaskSerialQueue: TaskSerialQueueProtocol {
             }
             isExecuting = true
             let pending = queue.removeFirst()
+            currentChatId = pending.chatId
 
             _ = await replyHandler(pending.chatId, pending.startMessage)
             await runner.taskStarted()
@@ -151,6 +156,7 @@ actor TaskSerialQueue: TaskSerialQueueProtocol {
                 _ = await replyHandler(pending.chatId, "任务执行失败: \(error.localizedDescription)")
             }
 
+            currentChatId = nil
             await runner.taskFinished()
         }
     }
@@ -183,6 +189,18 @@ actor TaskSerialQueue: TaskSerialQueueProtocol {
 
     var pendingCount: Int { queue.count }
     var isProcessing: Bool { isExecuting }
+
+    func pendingCount(chatId: Int64) -> Int {
+        queue.filter { $0.chatId == chatId }.count
+    }
+
+    func isProcessing(chatId: Int64) -> Bool {
+        isExecuting && currentChatId == chatId
+    }
+
+    func hasActiveSession(chatId: Int64) -> Bool {
+        chatSessions[chatId] != nil
+    }
 
     // MARK: - Private Execution Helpers
 

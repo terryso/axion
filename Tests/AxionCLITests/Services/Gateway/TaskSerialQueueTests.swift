@@ -649,6 +649,108 @@ struct TaskSerialQueueTests {
 
         await server.stop()
     }
+
+    // MARK: - Tests: Per-Chat Status (AC #4)
+
+    @Test("pendingCount(chatId:) returns count for specific chat")
+    func pendingCountPerChat() async throws {
+        let runtime = MockRuntimeManager()
+        await runtime.setDelay(5_000_000_000, for: "running-task")
+        let collector = ReplyCollector()
+        let (runner, server) = makeRunner()
+
+        let queue = TaskSerialQueue(
+            runtimeManager: runtime,
+            config: makeConfig(),
+            runner: runner,
+            replyHandler: { await collector.add(chatId: $0, message: $1); return nil }
+        )
+
+        let processingTask = _Concurrency.Task { await queue.startProcessing() }
+
+        await queue.enqueue(task: "running-task", chatId: 100)
+        await waitUntil { await collector.messages(for: 100).contains { $0.contains("任务开始执行") } }
+
+        await queue.enqueue(task: "queued-A", chatId: 100)
+        await queue.enqueue(task: "queued-B", chatId: 200)
+
+        let count100 = await queue.pendingCount(chatId: 100)
+        let count200 = await queue.pendingCount(chatId: 200)
+        let countTotal = await queue.pendingCount
+
+        #expect(count100 == 1) // queued-A only (running-task is dequeued)
+        #expect(count200 == 1) // queued-B
+        #expect(countTotal == 2) // total pending
+
+        await queue.cancelAll()
+        processingTask.cancel()
+        await server.stop()
+    }
+
+    @Test("isProcessing(chatId:) returns true only for executing chat")
+    func isProcessingPerChat() async throws {
+        let runtime = MockRuntimeManager()
+        await runtime.setDelay(500_000_000, for: "task-100")
+        let collector = ReplyCollector()
+        let (runner, server) = makeRunner()
+
+        let queue = TaskSerialQueue(
+            runtimeManager: runtime,
+            config: makeConfig(),
+            runner: runner,
+            replyHandler: { await collector.add(chatId: $0, message: $1); return nil }
+        )
+
+        let processingTask = _Concurrency.Task { await queue.startProcessing() }
+
+        await queue.enqueue(task: "task-100", chatId: 100)
+        await waitUntil { await collector.messages(for: 100).contains { $0.contains("任务开始执行") } }
+
+        let processing100 = await queue.isProcessing(chatId: 100)
+        let processing200 = await queue.isProcessing(chatId: 200)
+
+        #expect(processing100 == true)
+        #expect(processing200 == false)
+
+        await queue.cancelAll()
+        processingTask.cancel()
+        await server.stop()
+    }
+
+    @Test("hasActiveSession(chatId:) tracks per-chat sessions")
+    func hasActiveSessionPerChat() async throws {
+        let runtime = MockRuntimeManager()
+        let collector = ReplyCollector()
+        let (runner, server) = makeRunner()
+
+        let queue = TaskSerialQueue(
+            runtimeManager: runtime,
+            config: makeConfig(),
+            runner: runner,
+            replyHandler: { await collector.add(chatId: $0, message: $1); return nil }
+        )
+
+        let processingTask = _Concurrency.Task { await queue.startProcessing() }
+
+        await queue.enqueue(task: "task-A", chatId: 100)
+        await waitUntil { await runtime.tasks.count >= 1 }
+        try? await _Concurrency.Task.sleep(nanoseconds: 200_000_000)
+
+        let session100 = await queue.hasActiveSession(chatId: 100)
+        let session200 = await queue.hasActiveSession(chatId: 200)
+
+        #expect(session100 == true)
+        #expect(session200 == false)
+
+        await queue.clearSession(chatId: 100)
+
+        let session100AfterClear = await queue.hasActiveSession(chatId: 100)
+        #expect(session100AfterClear == false)
+
+        await queue.cancelAll()
+        processingTask.cancel()
+        await server.stop()
+    }
 }
 
 extension TaskSerialQueueTests {

@@ -265,13 +265,12 @@ struct GatewayStartCommand: AsyncParsableCommand {
                 }
             )
 
-            let commandRouter = TGCommandRouter(
-                statusProvider: { [runner] in await runner.getStatus() },
-                skillsProvider: { [skillRegistry] in skillRegistry.userInvocableSkills },
-                clearSession: { [taskSerialQueue] chatId in
-                    await taskSerialQueue.clearSession(chatId: chatId)
-                }
+            let registry = Self.buildCommandRegistry(
+                runner: runner,
+                skillRegistry: skillRegistry,
+                taskSerialQueue: taskSerialQueue
             )
+            let commandRouter = TGCommandRouter(registry: registry)
 
             let adapter = TelegramAdapter(apiClient: tgClient, allowedUsers: allowedUsers, taskQueue: taskSerialQueue, commandRouter: commandRouter)
 
@@ -354,6 +353,16 @@ struct GatewayStartCommand: AsyncParsableCommand {
             _Concurrency.Task {
                 await taskSerialQueue.startProcessing()
             }
+            // Sync bot menu before starting the poll loop (start() blocks until stopped)
+            let menuCommands = registry.menuCommands()
+            _Concurrency.Task {
+                do {
+                    try await tgClient.setMyCommands(commands: menuCommands)
+                    fputs("[axion] Telegram bot menu synced (\(menuCommands.count) commands)\n", stderr)
+                } catch {
+                    fputs("[axion] Telegram setMyCommands failed: \(error.localizedDescription)\n", stderr)
+                }
+            }
             _Concurrency.Task {
                 await adapter.start()
             }
@@ -429,6 +438,96 @@ struct GatewayStartCommand: AsyncParsableCommand {
     // Test seams
     nonisolated(unsafe) static var createRuntimeManager: @Sendable (String) -> any DaemonRuntimeManaging = { DaemonRuntimeManager(traceDir: $0) }
     nonisolated(unsafe) static var createBridge: (@Sendable (EventBus, EventBroadcaster, String) -> EventBusBridge)?
+}
+
+// MARK: - Command Registry Builder
+
+extension GatewayStartCommand {
+    static func buildCommandRegistry(
+        runner: GatewayRunner,
+        skillRegistry: SkillRegistry,
+        taskSerialQueue: TaskSerialQueue
+    ) -> TGCommandRegistry {
+        let statusProvider: @Sendable () async -> GatewayRunnerStatus = { [runner] in await runner.getStatus() }
+        let skillsProvider: @Sendable () -> [OpenAgentSDK.Skill] = { [skillRegistry] in skillRegistry.userInvocableSkills }
+        let clearSession: @Sendable (Int64) async -> Void = { [taskSerialQueue] chatId in
+            await taskSerialQueue.clearSession(chatId: chatId)
+        }
+
+        let helpDef = TGCommandDef(name: "help", description: "入门指南", helpText: "", menuPriority: 1) { _ in
+            "Axion 是一个桌面自动化助手。\n\n直接发送文本即可执行任务。\n\n可用命令:\n/commands — 查看所有命令\n/status — 查看网关状态\n/skills — 查看技能列表\n/new — 开始新会话\n/queue — 查看任务队列"
+        }
+        let commandsDescription = "查看所有命令"
+        let statusDef = TGCommandDef(name: "status", description: "查看网关状态", helpText: "", menuPriority: 3) { _ in
+            await Self.formatStatus(statusProvider: statusProvider, skillsProvider: skillsProvider)
+        }
+        let skillsDef = TGCommandDef(name: "skills", description: "查看技能列表", helpText: "", menuPriority: 4) { _ in
+            Self.formatSkills(skillsProvider: skillsProvider)
+        }
+        let newDef = TGCommandDef(name: "new", description: "开始新会话", helpText: "", menuPriority: 5) { chatId in
+            await clearSession(chatId)
+            return "新会话已开始"
+        }
+        let queueDef = TGCommandDef(name: "queue", description: "查看任务队列", helpText: "", menuPriority: 6) { chatId in
+            let processing = await taskSerialQueue.isProcessing(chatId: chatId)
+            let pending = await taskSerialQueue.pendingCount(chatId: chatId)
+            let hasSession = await taskSerialQueue.hasActiveSession(chatId: chatId)
+            var lines = ["📋 任务队列:"]
+            lines.append("执行中: \(processing ? "是" : "否")")
+            lines.append("排队中: \(pending)")
+            lines.append("会话: \(hasSession ? "活跃" : "无")")
+            return lines.joined(separator: "\n")
+        }
+
+        // Build /commands handler from the other command defs (avoids hardcoding)
+        let coreDefs = [helpDef, statusDef, skillsDef, newDef, queueDef]
+        let commandsDef = TGCommandDef(name: "commands", description: commandsDescription, helpText: "", menuPriority: 2) { _ in
+            var lines = ["📋 可用命令:"]
+            for cmd in coreDefs {
+                lines.append("  /\(cmd.name) — \(cmd.description)")
+            }
+            lines.append("  /commands — \(commandsDescription)")
+            return lines.joined(separator: "\n")
+        }
+
+        return TGCommandRegistry(commands: [helpDef, commandsDef, statusDef, skillsDef, newDef, queueDef])
+    }
+
+    private static func formatStatus(
+        statusProvider: @Sendable () async -> GatewayRunnerStatus,
+        skillsProvider: @Sendable () -> [OpenAgentSDK.Skill]
+    ) async -> String {
+        let status = await statusProvider()
+        let uptime = Int(status.uptimeSeconds)
+        let hours = uptime / 3600
+        let minutes = (uptime % 3600) / 60
+        let seconds = uptime % 60
+
+        var lines = ["📊 Gateway Status"]
+        lines.append("状态: \(status.state)")
+        lines.append("运行中任务: \(status.activeTaskCount)")
+        if hours > 0 {
+            lines.append("运行时长: \(hours)h \(minutes)m \(seconds)s")
+        } else {
+            lines.append("运行时长: \(minutes)m \(seconds)s")
+        }
+        lines.append("TG 连接: \(status.tgConnected ?? "disabled")")
+        let skills = skillsProvider()
+        lines.append("可用技能: \(skills.count) 个")
+        return lines.joined(separator: "\n")
+    }
+
+    private static func formatSkills(
+        skillsProvider: @Sendable () -> [OpenAgentSDK.Skill]
+    ) -> String {
+        let skills = skillsProvider()
+        guard !skills.isEmpty else { return "暂无可用技能" }
+        var lines = ["📋 可用技能 (\(skills.count) 个):"]
+        for skill in skills.sorted(by: { $0.name < $1.name }) {
+            lines.append("  • \(skill.name): \(skill.description)")
+        }
+        return lines.joined(separator: "\n")
+    }
 }
 
 // MARK: - Signal Handling
