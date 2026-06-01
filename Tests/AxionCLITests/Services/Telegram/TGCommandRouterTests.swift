@@ -94,6 +94,75 @@ struct TGCommandRouterTests {
         #expect(lines[3].contains("zebra"))
     }
 
+    // MARK: - Skill Passthrough
+
+    @Test("Skill-like command returns nil to passthrough to task queue")
+    func skillCommandPassthrough() async {
+        let registry = makeRegistry()
+        let router = TGCommandRouter(registry: registry, skillNameChecker: { name in
+            name == "webwright"
+        })
+
+        let reply = await router.handle("/webwright 获取最新电影票房", chatId: 100)
+        #expect(reply == nil)
+    }
+
+    @Test("Skill command with @botname suffix passthroughs")
+    func skillCommandWithBotnamePassthrough() async {
+        let registry = makeRegistry()
+        let router = TGCommandRouter(registry: registry, skillNameChecker: { name in
+            name == "webwright"
+        })
+
+        let reply = await router.handle("/webwright@my_bot 获取票房", chatId: 100)
+        #expect(reply == nil)
+    }
+
+    @Test("Skill command is case-insensitive for passthrough")
+    func skillCommandCaseInsensitive() async {
+        let registry = makeRegistry()
+        let router = TGCommandRouter(registry: registry, skillNameChecker: { name in
+            name == "webwright"
+        })
+
+        let reply = await router.handle("/WebWright do something", chatId: 100)
+        #expect(reply == nil)
+    }
+
+    @Test("Non-existent skill command returns unknown command error")
+    func nonExistentSkillCommandReturnsError() async throws {
+        let registry = makeRegistry()
+        let router = TGCommandRouter(registry: registry, skillNameChecker: { _ in false })
+
+        let reply = await router.handle("/webwright 获取票房", chatId: 100)
+        let text = try #require(reply)
+        #expect(text.contains("未知命令"))
+    }
+
+    @Test("Built-in commands take priority over skill names")
+    func builtInCommandsTakePriority() async throws {
+        let registry = makeRegistry()
+        let router = TGCommandRouter(registry: registry, skillNameChecker: { name in
+            name == "status" // pretend "status" is also a skill name
+        })
+
+        let reply = await router.handle("/status", chatId: 100)
+        let text = try #require(reply)
+        // Should execute built-in /status, not passthrough
+        #expect(text.contains("Gateway Status"))
+    }
+
+    @Test("Skill passthrough without skillNameChecker returns unknown command")
+    func skillPassthroughWithoutChecker() async throws {
+        let registry = makeRegistry()
+        // Default skillNameChecker returns false
+        let router = TGCommandRouter(registry: registry)
+
+        let reply = await router.handle("/webwright 获取票房", chatId: 100)
+        let text = try #require(reply)
+        #expect(text.contains("未知命令"))
+    }
+
     // MARK: - Unknown Command
 
     @Test("Unknown command returns available commands list")

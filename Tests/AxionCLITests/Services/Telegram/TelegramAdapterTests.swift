@@ -5,7 +5,7 @@ import Foundation
 // MARK: - Mock TaskSerialQueue
 
 actor MockTaskSerialQueue: TaskSerialQueueProtocol {
-    private var enqueuedTasks: [(task: String, chatId: Int64)] = []
+    private var enqueuedTasks: [(task: String, chatId: Int64, userId: Int64)] = []
     private var _startProcessingCalled = false
     private var _cancelAllCalled = false
     private var _pendingCount = 0
@@ -14,11 +14,11 @@ actor MockTaskSerialQueue: TaskSerialQueueProtocol {
 
     var startProcessingCalled: Bool { _startProcessingCalled }
     var cancelAllCalled: Bool { _cancelAllCalled }
-    var tasks: [(task: String, chatId: Int64)] { enqueuedTasks }
+    var tasks: [(task: String, chatId: Int64, userId: Int64)] { enqueuedTasks }
     var clearedSessions: [Int64] { _clearedSessions }
 
-    func enqueue(task: String, chatId: Int64) async {
-        enqueuedTasks.append((task, chatId))
+    func enqueue(task: String, chatId: Int64, userId: Int64) async {
+        enqueuedTasks.append((task, chatId, userId))
     }
 
     func startProcessing() async {

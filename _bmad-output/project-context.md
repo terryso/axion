@@ -349,6 +349,9 @@ try await withTaskCancellationHandler {
 14. **TG bot token 写入 config.json** — 必须通过环境变量 `AXION_TELEGRAM_BOT_TOKEN` 传入
 15. **未授权 TG 消息回复错误信息** — 静默丢弃，不泄露任何信息
 16. **Detached Task 使用 EventBus 通信** — per-request EventBus 在请求完成时停止；detached Tasks 必须使用直接回调（onReviewResult、onCuratorResult），不依赖 EventBus
+17. **Controller 格式化文本后传给 Adapter** — 格式化所有权归 Adapter（TelegramAdapter），Controller 和 Handler 生产原始文本。避免双重格式化（Epic 32 教训）
+18. **闭包跨 3+ 文件传递时不定义 typealias** — 消费端必须定义 typealias（如 `typealias SendMessageClosure = (String, Int64) async -> Int64?`），提供端匹配。防止 Void vs Int64? 等静默类型不匹配
+19. **直接使用 `Task` 而非 `_Concurrency.Task`** — OpenAgentSDK 有 `Task` 类型名冲突，Gateway/Telegram 代码中必须使用 `_Concurrency.Task`
 
 ---
 
@@ -755,6 +758,18 @@ Sources/AxionCLI/Services/GatewayRunner.swift     # 编排器（actor）
 Sources/AxionCLI/Services/TelegramAdapter.swift   # TG Bot API 长轮询（actor）
 Sources/AxionCLI/Services/ReviewScheduler.swift   # 后台审查调度（actor）
 Sources/AxionCLI/Services/CuratorScheduler.swift  # Curator 自动调度（actor）
+```
+
+**Telegram 体验层文件（Epic 32）：**
+```
+Sources/AxionCLI/Services/Telegram/TGMessageFormatter.swift         # MarkdownV2/HTML/Plain 三重降级 + 消息分段
+Sources/AxionCLI/Services/Telegram/TGStreamingController.swift      # Edit-based 流式推送（actor）
+Sources/AxionCLI/Services/Telegram/TGCommandRegistry.swift          # 命令注册表（Sendable struct）
+Sources/AxionCLI/Services/Telegram/TGCommandRouter.swift            # 薄路由层
+Sources/AxionCLI/Services/Telegram/TGInteractiveSessionStore.swift  # Inline keyboard 交互（actor）
+Sources/AxionCLI/Services/Telegram/TGErrorSanitizer.swift           # API 错误分类 + 用户友好消息
+Sources/AxionCLI/Services/Telegram/TGModels.swift                   # TG API Codable 模型
+Sources/AxionCLI/Services/Events/AgentPausedEvent.swift             # SDK pause → EventBus 桥接事件
 ```
 
 **plist 配置：**

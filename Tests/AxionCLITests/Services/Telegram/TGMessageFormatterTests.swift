@@ -34,6 +34,12 @@ struct TGMessageFormatterTests {
         #expect(result.contains("2\\. second"))
     }
 
+    @Test("Format blockquote")
+    func formatBlockquote() {
+        let (result, _) = TGMessageFormatter.format("> 广州明天天气")
+        #expect(result == "> 广州明天天气")
+    }
+
     @Test("Format code block preserves content")
     func formatCodeBlock() {
         let input = "```swift\nprint(\"hello.world\")\n```"
@@ -128,6 +134,12 @@ struct TGMessageFormatterTests {
         #expect(!result.contains("&lt;a"))
     }
 
+    @Test("HTML format blockquote uses blockquote tag")
+    func htmlFormatBlockquote() {
+        let (result, _) = TGMessageFormatter.formatAsHTML("> 广州明天天气")
+        #expect(result == "<blockquote>广州明天天气</blockquote>")
+    }
+
     @Test("HTML escapes ampersands in regular text")
     func htmlEscapesAmpersands() {
         let (result, _) = TGMessageFormatter.formatAsHTML("a & b")
@@ -153,6 +165,12 @@ struct TGMessageFormatterTests {
     func plainFormatLink() {
         let (result, _) = TGMessageFormatter.formatAsPlain("[Click here](https://example.com)")
         #expect(result == "Click here: https://example.com")
+    }
+
+    @Test("Plain format keeps blockquote prefix")
+    func plainFormatBlockquote() {
+        let (result, _) = TGMessageFormatter.formatAsPlain("> 广州明天天气")
+        #expect(result == "> 广州明天天气")
     }
 
     // MARK: - Split
@@ -199,6 +217,25 @@ struct TGMessageFormatterTests {
     func exactlyMaxLengthNotSplit() {
         let text = String(repeating: "A", count: 4096)
         let chunks = TGMessageFormatter.split(formattedText: text, parseMode: .plain)
+        #expect(chunks.count == 1)
+    }
+
+    @Test("Split respects UTF-8 byte length, not character count")
+    func splitByUTF8Length() {
+        // Each Chinese character is 3 UTF-8 bytes. 1400 chars = 4200 bytes > 4096.
+        let chinese = String(repeating: "中", count: 1400)
+        let chunks = TGMessageFormatter.split(formattedText: chinese, parseMode: .plain)
+        #expect(chunks.count >= 2, "Should split because UTF-8 length \(chinese.utf8.count) > 4096")
+        for chunk in chunks {
+            #expect(chunk.utf8.count <= 4096, "Chunk UTF-8 length \(chunk.utf8.count) exceeds 4096")
+        }
+    }
+
+    @Test("Short Chinese text is not split")
+    func shortChineseNotSplit() {
+        // 100 Chinese chars = 300 bytes, well under 4096
+        let chinese = String(repeating: "中", count: 100)
+        let chunks = TGMessageFormatter.split(formattedText: chinese, parseMode: .plain)
         #expect(chunks.count == 1)
     }
 }

@@ -51,10 +51,14 @@ struct TGStreamingControllerTests {
         chatId: Int64 = 123,
         log: CallLog,
         editResult: Bool = true,
+        originalTask: String? = nil,
+        deferFinalDelivery: Bool = false,
         config: TGStreamingConfig = .default
     ) -> TGStreamingController {
         TGStreamingController(
             chatId: chatId,
+            originalTask: originalTask,
+            deferFinalDelivery: deferFinalDelivery,
             sendMessage: { text, chatId in
                 log.appendSend(text: text, chatId: chatId)
                 return Int64(log.sentMessages.count)
@@ -100,7 +104,7 @@ struct TGStreamingControllerTests {
             typingEnabled: false,
             typingInterval: 4.0
         )
-        let controller = makeController(log: log, config: config)
+        let controller = makeController(log: log, originalTask: "查看一下当前目录有多少文件", config: config)
 
         // First chunk — creates preview
         await controller.handle(LLMTokenStreamEvent(sessionId: nil, chunk: "12345"))
@@ -119,7 +123,7 @@ struct TGStreamingControllerTests {
             typingEnabled: false,
             typingInterval: 4.0
         )
-        let controller = makeController(log: log, config: config)
+        let controller = makeController(log: log, originalTask: "查看一下当前目录有多少文件", config: config)
 
         // First chunk — creates preview
         await controller.handle(LLMTokenStreamEvent(sessionId: nil, chunk: "Hi"))
@@ -133,21 +137,21 @@ struct TGStreamingControllerTests {
 
     // MARK: - AC #3: Tool segment finalize
 
-    @Test("First tool start creates preview bubble")
-    func firstToolStartCreatesPreview() async {
+    @Test("Tool start sends standalone step message with arguments")
+    func toolStartSendsStandaloneStepMessage() async {
         let log = CallLog()
         let controller = makeController(log: log)
 
         await controller.handle(ToolStartedEvent(
-            sessionId: nil, toolName: "WebSearch", toolUseId: "tu-1", input: nil
+            sessionId: nil, toolName: "WebSearch", toolUseId: "tu-1", input: #"{"query":"广州明天天气"}"#
         ))
 
         #expect(log.sentMessages.count == 1)
-        #expect(log.sentMessages[0].text == "⏳ 处理中…")
+        #expect(log.sentMessages[0].text == "🔍 WebSearch: query: 广州明天天气")
     }
 
-    @Test("Tool completed shows concise tool marker")
-    func toolCompletedShowsFinalize() async {
+    @Test("Tool completed no longer emits separate finalize marker")
+    func toolCompletedDoesNotEmitFinalizeMarker() async {
         let log = CallLog()
         let config = TGStreamingConfig(
             editInterval: 0,
@@ -173,14 +177,13 @@ struct TGStreamingControllerTests {
             isError: false
         ))
 
-        // Check that the tool finalize marker stays concise
-        let allSent = (log.sentMessages.map(\.text) + log.editedMessages.map(\.text)).joined()
-        #expect(allSent.contains("✓ 💻 Bash"))
-        #expect(!allSent.contains("1.2s"))
+        #expect(log.sentMessages.count == 1)
+        #expect(log.sentMessages[0].text == "💻 Bash")
+        #expect(log.editedMessages.isEmpty)
     }
 
-    @Test("Tool completed with error shows concise warning marker")
-    func toolCompletedErrorShowsMarker() async {
+    @Test("Tool start formats shell command as inline code")
+    func toolStartFormatsShellCommand() async {
         let log = CallLog()
         let config = TGStreamingConfig(
             editInterval: 0,
@@ -193,23 +196,18 @@ struct TGStreamingControllerTests {
         let controller = makeController(log: log, config: config)
 
         await controller.handle(ToolStartedEvent(
-            sessionId: nil, toolName: "Bash", toolUseId: "tu-1", input: nil
-        ))
-        await controller.handle(ToolCompletedEvent(
             sessionId: nil,
-            toolUseId: "tu-1",
             toolName: "Bash",
-            durationMs: 500,
-            isError: true
+            toolUseId: "tu-1",
+            input: #"{"command":"curl -s \"wttr.in/Guangzhou?format=j1\""}"#
         ))
 
-        let allSent = (log.sentMessages.map(\.text) + log.editedMessages.map(\.text)).joined()
-        #expect(allSent.contains("⚠️ 💻 Bash"))
-        #expect(!allSent.contains("0.5s"))
+        #expect(log.sentMessages.count == 1)
+        #expect(log.sentMessages[0].text == #"💻 Bash: `curl -s "wttr.in/Guangzhou?format=j1"`"#)
     }
 
-    @Test("Tool completed omits raw argument preview")
-    func toolCompletedOmitsPreview() async {
+    @Test("Tool step includes argument preview")
+    func toolStepIncludesPreview() async {
         let log = CallLog()
         let config = TGStreamingConfig(
             editInterval: 0,
@@ -225,17 +223,9 @@ struct TGStreamingControllerTests {
         await controller.handle(ToolStartedEvent(
             sessionId: nil, toolName: "WebSearch", toolUseId: "tu-1", input: inputJson
         ))
-        await controller.handle(ToolCompletedEvent(
-            sessionId: nil,
-            toolUseId: "tu-1",
-            toolName: "WebSearch",
-            durationMs: 1600,
-            isError: false
-        ))
 
-        let allSent = (log.sentMessages.map(\.text) + log.editedMessages.map(\.text)).joined()
-        #expect(allSent.contains("✓ 🔍 WebSearch"))
-        #expect(!allSent.contains("广州明天天气"))
+        let allSent = log.sentMessages.map(\.text).joined()
+        #expect(allSent.contains("🔍 WebSearch: query: 广州明天天气"))
         #expect(!allSent.contains(#""query""#))
     }
 
@@ -373,7 +363,7 @@ struct TGStreamingControllerTests {
             typingEnabled: false,
             typingInterval: 4.0
         )
-        let controller = makeController(log: log, config: config)
+        let controller = makeController(log: log, originalTask: "广州明天天气", config: config)
 
         // Send some tokens first
         await controller.handle(LLMTokenStreamEvent(sessionId: nil, chunk: "thinking..."))
@@ -391,7 +381,7 @@ struct TGStreamingControllerTests {
         let allEdits = log.editedMessages.map(\.text)
         let finalEdit = allEdits.last ?? ""
         #expect(!finalEdit.contains("⏳ 处理中…"))
-        #expect(finalEdit == "The task is done.")
+        #expect(finalEdit == "> 广州明天天气\n\nThe task is done.")
     }
 
     // MARK: - AC #7: Overflow split
@@ -407,7 +397,7 @@ struct TGStreamingControllerTests {
             typingEnabled: false,
             typingInterval: 4.0
         )
-        let controller = makeController(log: log, config: config)
+        let controller = makeController(log: log, originalTask: "查看一下当前目录有多少文件", config: config)
 
         let longText = String(repeating: "A", count: 5000)
         await controller.handle(AgentCompletedEvent(
@@ -439,7 +429,7 @@ struct TGStreamingControllerTests {
             typingEnabled: false,
             typingInterval: 4.0
         )
-        let controller = makeController(log: log, config: config)
+        let controller = makeController(log: log, originalTask: "查看一下当前目录有多少文件", config: config)
 
         // Send tokens to create preview (which sets previewCreatedAt)
         await controller.handle(LLMTokenStreamEvent(sessionId: nil, chunk: "start"))
@@ -456,7 +446,41 @@ struct TGStreamingControllerTests {
         // so the final message should be sent as a new sendMessage
         #expect(log.sentMessages.count >= 2) // preview + final
         let lastMsg = log.sentMessages.last?.text ?? ""
-        #expect(lastMsg == "Done")
+        #expect(lastMsg == "> 查看一下当前目录有多少文件\n\nDone")
+    }
+
+    @Test("Final answer sends as new message after standalone tool steps")
+    func finalAnswerSendsAsNewMessageAfterToolSteps() async {
+        let log = CallLog()
+        let config = TGStreamingConfig(
+            editInterval: 0,
+            bufferThreshold: 1000,
+            transport: .edit,
+            freshFinalAfter: 60,
+            typingEnabled: false,
+            typingInterval: 4.0
+        )
+        let controller = makeController(log: log, originalTask: "帮我压缩一下视频", config: config)
+
+        await controller.handle(LLMTokenStreamEvent(sessionId: nil, chunk: "thinking..."))
+        await controller.handle(ToolStartedEvent(
+            sessionId: nil,
+            toolName: "Bash",
+            toolUseId: "tu-1",
+            input: #"{"command":"ffmpeg -i input.mp4 output.mp4"}"#
+        ))
+        await controller.handle(AgentCompletedEvent(
+            sessionId: nil,
+            totalSteps: 3,
+            durationMs: 5_000,
+            resultText: "压缩完成"
+        ))
+
+        #expect(log.sentMessages.count == 3)
+        #expect(log.sentMessages[0].text == "⏳ 处理中…")
+        #expect(log.sentMessages[1].text == "💻 Bash: `ffmpeg -i input.mp4 output.mp4`")
+        #expect(log.sentMessages[2].text == "> 帮我压缩一下视频\n\n压缩完成")
+        #expect(!(log.editedMessages.last?.text.contains("压缩完成") ?? false))
     }
 
     // MARK: - Cancel
@@ -723,7 +747,7 @@ struct TGStreamingControllerTests {
             typingEnabled: false,
             typingInterval: 4.0
         )
-        let controller = makeController(log: log, editResult: false, config: config)
+        let controller = makeController(log: log, editResult: false, originalTask: "广州明天天气", config: config)
 
         await controller.handle(LLMTokenStreamEvent(sessionId: nil, chunk: "thinking"))
         await controller.setPreviewMessageId(99)
@@ -751,10 +775,46 @@ struct TGStreamingControllerTests {
         ))
 
         let finalSend = log.sentMessages.last?.text ?? ""
-        #expect(finalSend == "广州明天多云，气温 26°C 到 32°C。")
+        #expect(finalSend == "> 广州明天天气\n\n广州明天多云，气温 26°C 到 32°C。")
         #expect(!finalSend.contains("Built-in Tool"))
         #expect(!finalSend.contains("Input:"))
         #expect(!finalSend.contains("Output:"))
         #expect(!finalSend.contains("result_summary"))
+    }
+
+    @Test("Deferred final delivery prefers authoritative run response")
+    func deferredFinalDeliveryUsesAuthoritativeResponse() async {
+        let log = CallLog()
+        let config = TGStreamingConfig(
+            editInterval: 0,
+            bufferThreshold: 1000,
+            transport: .edit,
+            freshFinalAfter: 60,
+            typingEnabled: false,
+            typingInterval: 4.0
+        )
+        let controller = makeController(
+            log: log,
+            originalTask: "广州未来5天的天气",
+            deferFinalDelivery: true,
+            config: config
+        )
+
+        await controller.handle(LLMTokenStreamEvent(sessionId: nil, chunk: "thinking"))
+        await controller.handle(AgentCompletedEvent(
+            sessionId: nil,
+            totalSteps: 2,
+            durationMs: 1_500,
+            resultText: "旧任务结果"
+        ))
+
+        #expect(!(log.sentMessages.map(\.text).joined().contains("旧任务结果")))
+        #expect(!(log.editedMessages.map(\.text).joined().contains("旧任务结果")))
+
+        await controller.finishDeferredRun(authoritativeResultText: "未来5天以阵雨和多云为主。")
+
+        let finalEdit = log.editedMessages.last?.text ?? ""
+        #expect(finalEdit == "> 广州未来5天的天气\n\n未来5天以阵雨和多云为主。")
+        #expect(!finalEdit.contains("旧任务结果"))
     }
 }

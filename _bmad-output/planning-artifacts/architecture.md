@@ -558,6 +558,19 @@ axion gateway (单个 Swift executable)
 | `Sources/AxionCLI/Services/ReviewScheduler.swift` | ~100 | 审查调度（监听事件 + 间隔检查） |
 | `Sources/AxionCLI/Services/CuratorScheduler.swift` | ~80 | Curator 调度（空闲检测 + 定时触发） |
 
+**Telegram 体验层文件（Epic 32）：**
+
+| 文件 | 行数 | 说明 |
+|------|------|------|
+| `Sources/AxionCLI/Services/Telegram/TGMessageFormatter.swift` | ~528 | MarkdownV2/HTML/Plain 三重降级渲染 + 消息分段（按渲染长度切割，4096字符限制） |
+| `Sources/AxionCLI/Services/Telegram/TGStreamingController.swift` | ~336 | Edit-based 流式推送 actor：节流（0.8s/2s/5s 递增）、429 退避、传输降级（edit → append）、token 缓冲 |
+| `Sources/AxionCLI/Services/Telegram/TGCommandRegistry.swift` | ~59 | 命令注册表 Sendable struct：注册/解析/菜单命令提取、名称归一化（strip `/@bot`、lowercase、`-`→`_`） |
+| `Sources/AxionCLI/Services/Telegram/TGCommandRouter.swift` | ~28 | 薄路由层：归一化输入 → registry.resolve() → handler 闭包调用 |
+| `Sources/AxionCLI/Services/Telegram/TGInteractiveSessionStore.swift` | ~200 | Inline keyboard 交互 actor：session 管理、callback query 处理、answerCallbackQuery 确认 |
+| `Sources/AxionCLI/Services/Telegram/TGErrorSanitizer.swift` | ~116 | TG API 错误分类（4 类：retryableNetwork/rateLimited/formatRejected/permanentTelegramError）+ 用户友好消息 |
+| `Sources/AxionCLI/Services/Telegram/TGModels.swift` | ~236 | TG API 模型：Update/Message/CallbackQuery/InlineKeyboardMarkup 等 Codable 类型 |
+| `Sources/AxionCLI/Services/Events/AgentPausedEvent.swift` | ~68 | SDK pause → EventBus 桥接事件：SDK 消息流不发布 AgentPausedEvent，自定义桥接将 pause 消息转为 EventBus 事件 |
+
 **配置扩展（AxionConfig）：**
 
 ```swift
@@ -657,6 +670,50 @@ func isAuthorized(userId: Int64) -> Bool {
 - 订阅 AgentStepEvent → 推送步骤进展到 TG
 - 订阅 AgentCompletedEvent → 推送最终结果到 TG
 - 推送节流：步骤进展最多每 5 秒推送一次，避免 TG API rate limit
+
+---
+
+### D12: Telegram 体验层架构（Epic 32）
+
+**决策：** Telegram 体验由独立的服务层组件提供：格式化（TGMessageFormatter）、流式推送（TGStreamingController）、命令系统（TGCommandRegistry + TGCommandRouter）、交互式会话（TGInteractiveSessionStore）、Pause/Resume 桥接（AgentPausedEvent）。
+
+**背景：** Epic 29 实现了基础 TG 通信（纯文本收发）。Epic 32 升级为富文本渲染、流式气泡、可发现命令和 inline keyboard 交互。
+
+**关键设计决策：**
+
+1. **TGMessageFormatter 三重降级** — MarkdownV2 → HTML → PlainText。避免 Telegram 严格的 MarkdownV2 转义规则导致消息发送失败。`split()` 基于渲染长度而非原始文本长度。
+
+2. **TGStreamingController 是 actor** — 管理流式推送状态（previewMessageId、throttle timer、429 Retry-After、transport mode）。闭包注入（sendMessage/editMessage/sendChatAction）保持可测试性。
+
+3. **格式化所有权归 Adapter** — **Controller 生产原始文本，Adapter 负责格式化。** 避免双重格式化（Epic 32 Story 32.2 教训）。
+
+4. **TGCommandRegistry 是 Sendable struct** — 启动时构建一次，运行时不可变。Handler 是 `@Sendable (Int64) async -> String` 闭包。
+
+5. **AgentPausedEvent 自定义桥接** — SDK 消息流不发布 AgentPausedEvent 到 EventBus。自定义桥接：SDK pause 消息 → EventBus AgentPausedEvent → TGEventHandler → inline keyboard → callback → agent.resume。
+
+6. **闭包类型安全** — 流经 3+ 文件的闭包必须在消费端定义 typealias（Epic 32 Story 32.2 教训：sendMessage 返回 Void 导致 previewMessageId 丢失）。
+
+7. **Deferred Wiring 模式** — TaskSerialQueue 初始化时闭包使用 no-op 默认值，adapter 创建后通过 `updateReplyHandler`/`updateEditHandler` 等方法重新接线。解决 Swift actor 初始化顺序问题。
+
+**交互式审批流程：**
+
+```
+Agent pause → SDK message stream → TGEventHandler detects pause
+    → Publish AgentPausedEvent to EventBus
+    → TGInteractiveSessionStore creates session + inline keyboard
+    → User taps button → callback query → answerCallbackQuery
+    → Resume handle invokes agent.resume(proceed: true/false)
+```
+
+**流式推送流程：**
+
+```
+Agent token stream → TGStreamingController.emitToken()
+    → Buffer tokens (accumulation window)
+    → Throttled editMessageText (0.8s → 2s → 5s progressive)
+    → On 429: Retry-After wait → degrade transport (edit → append)
+    → On completion: final format + send
+```
 
 ---
 

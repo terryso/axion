@@ -236,11 +236,16 @@ enum RunOrchestrator {
 
                         if runConfig.nonInteractivePause {
                             // Gateway mode: register resume handle, publish event, await external resume
+                            guard let registerHandle = runConfig.registerResumeHandle else {
+                                takeoverIO.write("[axion] warning: nonInteractivePause enabled but no registerResumeHandle — interrupting agent")
+                                agent.interrupt()
+                                break
+                            }
                             let pendingId = UUID().uuidString.prefix(8).lowercased()
                             let resumeHandle: @Sendable (String) async -> Void = { context in
                                 agent.resume(context: context)
                             }
-                            await runConfig.registerResumeHandle?(String(pendingId), resumeHandle)
+                            await registerHandle(String(pendingId), resumeHandle)
                             await runConfig.eventBus?.publish(AgentPausedEvent(
                                 reason: pausedData.reason,
                                 sessionId: runConfig.task,

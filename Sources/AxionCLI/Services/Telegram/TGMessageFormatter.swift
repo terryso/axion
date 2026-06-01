@@ -89,6 +89,10 @@ enum TGMessageFormatter {
             return "**" + escapeMarkdownV2(heading) + "**"
         }
 
+        if let quote = parseBlockQuote(line) {
+            return "> " + renderInlineMarkdownV2(quote)
+        }
+
         // Unordered list: - item or * item
         if let listContent = parseUnorderedList(line) {
             let indent = listContent.indent
@@ -221,6 +225,9 @@ enum TGMessageFormatter {
         if let heading = parseHeading(line) {
             return "<b>\(escapeHTML(heading))</b>"
         }
+        if let quote = parseBlockQuote(line) {
+            return "<blockquote>\(renderInlineHTML(quote))</blockquote>"
+        }
         if let listContent = parseUnorderedList(line) {
             return String(repeating: "  ", count: listContent.indent) + "• " + renderInlineHTML(listContent.text)
         }
@@ -297,6 +304,9 @@ enum TGMessageFormatter {
         if let heading = parseHeading(line) {
             return heading.uppercased()
         }
+        if let quote = parseBlockQuote(line) {
+            return "> " + stripInlineFormatting(quote)
+        }
         // Keep list markers as-is for plain
         if let listContent = parseUnorderedList(line) {
             return String(repeating: "  ", count: listContent.indent) + "• " + stripInlineFormatting(listContent.text)
@@ -343,19 +353,22 @@ enum TGMessageFormatter {
     // MARK: - Split
 
     static func split(formattedText: String, parseMode: TGParseMode, maxRenderedLength: Int = 4096) -> [String] {
-        guard formattedText.count > maxRenderedLength else { return [formattedText] }
+        guard formattedText.utf8.count > maxRenderedLength else { return [formattedText] }
 
         var chunks: [String] = []
         var remaining = formattedText[...]
 
-        while remaining.count > 0 {
-            if remaining.count <= maxRenderedLength {
+        while !remaining.isEmpty {
+            if remaining.utf8.count <= maxRenderedLength {
                 chunks.append(String(remaining))
                 break
             }
 
-            let endIndex = remaining.index(remaining.startIndex, offsetBy: maxRenderedLength)
-            let searchRange = remaining[..<endIndex]
+            // Walk from max UTF-8 offset backwards to find a valid String.Index
+            let utf8Start = remaining.utf8.startIndex
+            let utf8Target = remaining.utf8.index(utf8Start, offsetBy: maxRenderedLength)
+            let cutIndex = remaining.index(utf8Target, offsetBy: 0) // clamps to nearest Character boundary
+            let searchRange = remaining[..<cutIndex]
 
             // Try to split at paragraph boundary (double newline)
             if let paraBreak = searchRange.range(of: "\n\n", options: .backwards) {
@@ -374,8 +387,8 @@ enum TGMessageFormatter {
             }
 
             // Hard split at max length
-            chunks.append(String(remaining[..<endIndex]))
-            remaining = remaining[endIndex...]
+            chunks.append(String(remaining[..<cutIndex]))
+            remaining = remaining[cutIndex...]
         }
 
         // Ensure each chunk is independently renderable (balance code blocks)
@@ -432,6 +445,14 @@ enum TGMessageFormatter {
         }
         guard hashCount > 0, hashCount <= 6 else { return nil }
         let content = String(trimmed.dropFirst(hashCount)).trimmingCharacters(in: .whitespaces)
+        guard !content.isEmpty else { return nil }
+        return content
+    }
+
+    private static func parseBlockQuote(_ line: String) -> String? {
+        let trimmed = line.trimmingCharacters(in: .whitespaces)
+        guard trimmed.hasPrefix(">") else { return nil }
+        let content = String(trimmed.dropFirst()).trimmingCharacters(in: .whitespaces)
         guard !content.isEmpty else { return nil }
         return content
     }

@@ -87,6 +87,7 @@
 
 generated: 2026-05-08
 last_updated: 2026-05-31
+# retro-epic-32: 2026-05-31
 # story-32.5-created: 2026-05-31
 # story-32.4-created: 2026-05-31
 # story-32.3-created: 2026-05-31
@@ -457,10 +458,10 @@ development_status:
   # ============================================================
 
   # Epic 32: Telegram 能力补强与交互体验升级
-  epic-32: in-progress
+  epic-32: done
   32-1-telegram-rich-text-rendering: done
   32-2-edit-based-streaming-status-bubble: done
   32-3-typing-ux-draft-preview-spike: done
   32-4-command-registry-bot-menu: done
   32-5-interactive-approval-clarify: done
-  epic-32-retrospective: optional
+  epic-32-retrospective: done

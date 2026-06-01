@@ -3,22 +3,34 @@ import OpenAgentSDK
 
 struct TGCommandRouter: Sendable {
     private let registry: TGCommandRegistry
+    private let skillNameChecker: @Sendable (String) -> Bool
 
-    init(registry: TGCommandRegistry) {
+    init(registry: TGCommandRegistry, skillNameChecker: @Sendable @escaping (String) -> Bool = { _ in false }) {
         self.registry = registry
+        self.skillNameChecker = skillNameChecker
     }
 
     /// Returns reply text for a command message, or nil if not a command.
+    /// Returns nil for skill-like commands (e.g. "/webwright ...") so they
+    /// fall through to the task queue as normal task text.
     func handle(_ text: String, chatId: Int64) async -> String? {
         guard text.hasPrefix("/") else { return nil }
 
         let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
         let firstToken = trimmed.split(separator: " ").first.map(String.init) ?? trimmed
 
-        guard let def = registry.resolve(firstToken) else {
-            return unknownCommandReply()
+        if let def = registry.resolve(firstToken) {
+            return await def.handler(chatId)
         }
-        return await def.handler(chatId)
+
+        // Not a built-in command — check if it matches a skill name.
+        // If so, return nil so the full text reaches the task queue.
+        let skillName = TGCommandRegistry.normalize(firstToken)
+        if skillNameChecker(skillName) {
+            return nil
+        }
+
+        return unknownCommandReply()
     }
 
     private func unknownCommandReply() -> String {

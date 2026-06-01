@@ -27,6 +27,7 @@ Axion is a Swift-based AI agent for macOS that takes natural language task descr
 - **Record & Replay Skills** — Record a workflow once, replay it instantly without LLM calls
 - **HTTP API Server** — Integrate with CI/CD and external systems via REST + SSE
 - **MCP Server Mode** — Act as a desktop plugin for external agents (Claude Code, Cursor, etc.), while also supporting CLI, file, and web tasks standalone
+- **Telegram Gateway** — Always-on remote control via Telegram bot with streaming responses, interactive approval keyboards, and extensible command system
 - **User Takeover** — Pause and resume when automation gets stuck
 - **Completion Notifications** — macOS desktop notification with AI-generated summary when tasks finish
 - **Self-Evolution** — Background review agent and intelligent curator automatically extract memory, evolve skills, and manage skill lifecycle after each run
@@ -38,10 +39,11 @@ Axion is a Swift-based AI agent for macOS that takes natural language task descr
 ┌───────────────────────────────────────────────────────────┐
 │                          AxionCLI                          │
 │  run / setup / doctor / server / mcp / record / skill     │
-│  daemon / resume / sessions                               │
+│  daemon / resume / sessions / gateway                     │
 │  Agent Stream Loop · Memory · Takeover                    │
 │  Skill System · Built-in Skills · Skill + Memory Context  │
 │  Runtime Event Layer · EventBus · EventHandlers (7)       │
+│  Gateway: Telegram · Streaming · Interactive Approval     │
 ├──────────────────────┬────────────────────────────────────┤
 │      AxionCore       │           AxionHelper              │
 │  Models, Protocols,  │  MCP Server                        │
@@ -49,7 +51,7 @@ Axion is a Swift-based AI agent for macOS that takes natural language task descr
 └──────────────────────┴────────────────────────────────────┘
 ```
 
-- **AxionCLI** — CLI entry point with agent stream loop, memory, skill system (prompt + recorded + built-in), daemon management, server modes, and completion notifications
+- **AxionCLI** — CLI entry point with agent stream loop, memory, skill system (prompt + recorded + built-in), daemon management, server modes, Telegram gateway with streaming and interactive approval, and completion notifications
 - **AxionCore** — Shared model layer (RunConfig, AxionConfig) and protocol definitions
 - **AxionHelper** — MCP server process providing 21 native macOS automation tools via stdio
 

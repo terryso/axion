@@ -54,10 +54,12 @@ actor TelegramAdapter {
     // MARK: - Poll Loop
 
     private func pollLoop() async {
+        var consecutiveErrors = 0
         while isRunning {
             do {
                 let updates = try await apiClient.getUpdates(offset: lastUpdateId + 1, timeout: 30)
                 statusValue = "connected"
+                consecutiveErrors = 0
                 for update in updates {
                     lastUpdateId = update.updateId
                     if let callbackQuery = update.callbackQuery {
@@ -69,6 +71,9 @@ actor TelegramAdapter {
             } catch {
                 statusValue = "error:\(error.localizedDescription)"
                 log("[axion] Telegram getUpdates failed: \(error.localizedDescription)")
+                consecutiveErrors += 1
+                let delay = min(5.0 * Double(consecutiveErrors), 30.0)
+                try? await _Concurrency.Task.sleep(nanoseconds: UInt64(delay * 1_000_000_000))
             }
         }
     }
@@ -95,7 +100,7 @@ actor TelegramAdapter {
 
         // Handle photo messages
         if let photo = message.photo, !photo.isEmpty {
-            await processPhoto(photo, caption: message.text, chatId: message.chat.id)
+            await processPhoto(photo, caption: message.text, chatId: message.chat.id, userId: userId)
             return
         }
 
@@ -109,13 +114,13 @@ actor TelegramAdapter {
         log("[axion] Telegram task submitted: \"\(text.prefix(50))\"")
 
         if let queue = taskQueue {
-            await queue.enqueue(task: text, chatId: message.chat.id)
+            await queue.enqueue(task: text, chatId: message.chat.id, userId: userId)
         } else {
             await sendReply("任务已收到", to: message.chat.id)
         }
     }
 
-    private func processPhoto(_ sizes: [TGPhotoSize], caption: String?, chatId: Int64) async {
+    private func processPhoto(_ sizes: [TGPhotoSize], caption: String?, chatId: Int64, userId: Int64) async {
         let largest = sizes.max(by: { (a, b) in (a.fileSize ?? 0) < (b.fileSize ?? 0) }) ?? sizes.last!
         var tmpPath: String?
 
@@ -143,7 +148,7 @@ actor TelegramAdapter {
             log("[axion] Telegram photo task submitted: \"\(taskText.prefix(50))\"")
 
             if let queue = taskQueue {
-                await queue.enqueue(task: taskText, chatId: chatId)
+                await queue.enqueue(task: taskText, chatId: chatId, userId: userId)
             } else {
                 await sendReply("图片已收到", to: chatId)
             }

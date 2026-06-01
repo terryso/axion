@@ -7,7 +7,7 @@ enum TGErrorSanitizer {
 
         // Redact API keys (sk-..., key=..., api_key=...)
         result = result.replacingOccurrences(
-            of: "sk-[a-zA-Z0-9]{20,}",
+            of: "sk-[a-zA-Z0-9_\\-]{20,}",
             with: "[REDACTED_KEY]",
             options: .regularExpression
         )

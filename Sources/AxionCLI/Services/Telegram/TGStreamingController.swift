@@ -51,11 +51,16 @@ actor TGStreamingController {
     private var transport: TGStreamingTransport
     private var toolPreviewMap: [String: String] = [:]
     private var finalized = false
+    private var completionReceived = false
+    private var completionEventResultText: String?
     private var consecutive429Count = 0
     private var segmentParts: [String] = []
     private var typingTask: _Concurrency.Task<Void, Never>?
+    private var hasSentStandaloneStepMessage = false
 
     private let config: TGStreamingConfig
+    private let originalTask: String?
+    private let deferFinalDelivery: Bool
     private let sendMessage: @Sendable (String, Int64) async -> Int64?
     private let editMessage: @Sendable (Int64, Int64, String) async -> Bool
     private let sendChatAction: @Sendable (Int64, String) async -> Void
@@ -112,16 +117,82 @@ actor TGStreamingController {
         return nil
     }
 
+    private static func formatToolArgument(toolName: String, input: String?) -> String? {
+        guard let preview = extractToolPreview(toolName: toolName, input: input)?
+            .trimmingCharacters(in: .whitespacesAndNewlines),
+              !preview.isEmpty else {
+            return nil
+        }
+
+        let lower = toolName.lowercased()
+        if lower.contains("bash") || lower.contains("terminal") || lower.contains("shell") {
+            return "`\(preview)`"
+        }
+        if lower.contains("search") || lower.contains("websearch") {
+            return "query: \(preview)"
+        }
+        if lower.contains("reader") || lower.contains("fetch") || lower.contains("url") {
+            return "url: \(preview)"
+        }
+        if lower.contains("read") || lower.contains("write") || lower.contains("file") {
+            return "path: \(preview)"
+        }
+        return preview
+    }
+
+    private static func formatToolStepMessage(toolName: String, input: String?) -> String {
+        let emoji = toolEmoji(toolName)
+        if let argument = formatToolArgument(toolName: toolName, input: input) {
+            return "\(emoji) \(toolName): \(argument)"
+        }
+        return "\(emoji) \(toolName)"
+    }
+
+    private static func normalizeQuotedTask(_ task: String?) -> String? {
+        guard let task else { return nil }
+
+        let filtered = task
+            .components(separatedBy: "\n")
+            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+            .filter { line in
+                !line.isEmpty
+                    && !line.hasPrefix("[附件图片:")
+                    && !line.hasPrefix("[用户发送了一张图片")
+            }
+
+        guard !filtered.isEmpty else { return nil }
+
+        let joined = filtered.joined(separator: "\n")
+        return String(joined.prefix(280))
+    }
+
+    private static func formatQuotedFinalAnswer(task: String?, answer: String) -> String {
+        guard let normalizedTask = normalizeQuotedTask(task) else {
+            return answer
+        }
+
+        let quotedTask = normalizedTask
+            .components(separatedBy: "\n")
+            .map { "> \($0)" }
+            .joined(separator: "\n")
+
+        return "\(quotedTask)\n\n\(answer)"
+    }
+
     // MARK: - Init
 
     init(
         chatId: Int64,
+        originalTask: String? = nil,
+        deferFinalDelivery: Bool = false,
         sendMessage: @escaping @Sendable (String, Int64) async -> Int64?,
         editMessage: @escaping @Sendable (Int64, Int64, String) async -> Bool,
         sendChatAction: @escaping @Sendable (Int64, String) async -> Void = { _, _ in },
         config: TGStreamingConfig = .default
     ) {
         self.chatId = chatId
+        self.originalTask = originalTask
+        self.deferFinalDelivery = deferFinalDelivery
         self.sendMessage = sendMessage
         self.editMessage = editMessage
         self.sendChatAction = sendChatAction
@@ -199,18 +270,17 @@ actor TGStreamingController {
     private func handleToolStarted(_ event: ToolStartedEvent) async {
         guard !finalized else { return }
 
-        if previewCreatedAt == nil {
-            stopTypingTimer()
-            let previewText = Self.previewPlaceholder
-            let msgId = await sendMessage(previewText, chatId)
-            if let msgId { previewMessageId = msgId }
-            previewCreatedAt = Date()
-            lastEditAt = Date()
+        if !bufferedText.isEmpty {
+            await flushBuffer()
         }
 
         if let preview = Self.extractToolPreview(toolName: event.toolName, input: event.input) {
             toolPreviewMap[event.toolUseId] = preview
         }
+
+        stopTypingTimer()
+        hasSentStandaloneStepMessage = true
+        _ = await sendMessage(Self.formatToolStepMessage(toolName: event.toolName, input: event.input), chatId)
     }
 
     // MARK: - Tool Streaming
@@ -223,33 +293,13 @@ actor TGStreamingController {
 
     private func handleToolCompleted(_ event: ToolCompletedEvent) async {
         guard !finalized else { return }
-
-        let statusEmoji = event.isError ? "⚠️" : "✓"
-        let toolName = event.toolName
-        let emoji = Self.toolEmoji(toolName)
-        let finalizeLine = "\n\(statusEmoji) \(emoji) \(toolName)\n"
         toolPreviewMap.removeValue(forKey: event.toolUseId)
-
-        // Flush any pending buffer first
-        if !bufferedText.isEmpty {
-            await flushBuffer()
-        }
-
-        // Append tool finalize marker
-        renderedPreview += finalizeLine
-        bufferedText = finalizeLine
-
-        await performEdit()
-
-        // Reset segment for next LLM text
-        currentSegment = .llm
-        segmentParts = []
     }
 
     // MARK: - Agent Completed
 
     private func handleAgentCompleted(_ event: AgentCompletedEvent) async {
-        guard !finalized else { return }
+        guard !finalized, !completionReceived else { return }
 
         stopTypingTimer()
 
@@ -258,15 +308,37 @@ actor TGStreamingController {
             await flushBuffer()
         }
 
+        completionReceived = true
+        completionEventResultText = event.resultText
+
+        if deferFinalDelivery {
+            return
+        }
+
+        await sendFinal(using: event.resultText)
+    }
+
+    func finishDeferredRun(authoritativeResultText: String?) async {
+        guard deferFinalDelivery, !finalized else { return }
+        stopTypingTimer()
+
+        if !bufferedText.isEmpty {
+            await flushBuffer()
+        }
+
+        await sendFinal(using: authoritativeResultText ?? completionEventResultText)
+    }
+
+    private func sendFinal(using resultText: String?) async {
         finalized = true
 
-        // Build final text
-        var finalText = ""
-        if let resultText = event.resultText, !resultText.isEmpty {
+        let finalText: String
+        if let resultText, !resultText.isEmpty {
             let cleaned = TGEventHandler.cleanResultText(from: resultText)
-            finalText = cleaned.isEmpty ? "✅ 已完成" : cleaned
+            let answer = cleaned.isEmpty ? "✅ 已完成" : cleaned
+            finalText = Self.formatQuotedFinalAnswer(task: originalTask, answer: answer)
         } else {
-            finalText = "✅ 已完成"
+            finalText = Self.formatQuotedFinalAnswer(task: originalTask, answer: "✅ 已完成")
         }
 
         // Check freshFinalAfter — if preview is stale, send new message
@@ -277,7 +349,7 @@ actor TGStreamingController {
             shouldSendFresh = true
         }
 
-        if shouldSendFresh || transport != .edit {
+        if shouldSendFresh || hasSentStandaloneStepMessage || transport != .edit {
             // Adapter handles formatting + splitting
             _ = await sendMessage(finalText, chatId)
             return

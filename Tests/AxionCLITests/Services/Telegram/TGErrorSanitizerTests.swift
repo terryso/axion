@@ -15,6 +15,14 @@ struct TGErrorSanitizerTests {
         #expect(result.contains("[REDACTED_KEY]"))
     }
 
+    @Test("Redacts Anthropic-style API keys with hyphens")
+    func redactAnthropicKey() {
+        let raw = "Error: Invalid sk-ant-api03-a1b2c3d4e5f6g7h8i9j0k1l2m3n4o5p6 in request"
+        let result = TGErrorSanitizer.sanitizeForTelegramError(raw)
+        #expect(!result.contains("sk-ant"))
+        #expect(result.contains("[REDACTED_KEY]"))
+    }
+
     @Test("Redacts Bearer tokens")
     func redactBearerToken() {
         let raw = "Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.abc.def"

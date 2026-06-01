@@ -170,8 +170,8 @@ struct TGEventHandlerTests {
 
     // MARK: - Streaming delegation: ToolCompletedEvent no longer sends step message
 
-    @Test("ToolCompletedEvent is delegated to streaming controller, not direct push")
-    func toolCompletedDelegatedToStreaming() async {
+    @Test("ToolCompletedEvent does not send a direct Telegram message")
+    func toolCompletedDoesNotPushDirectMessage() async {
         let collector = MessageCollector()
         let handler = makeHandler(collector: collector)
         let context = makeContext()
@@ -185,16 +185,8 @@ struct TGEventHandlerTests {
         )
         await handler.handle(event, context: context)
 
-        // Streaming controller handles it — the handler itself does NOT send step messages
-        // The controller will send a preview/edit with tool finalize marker
-        // For this test, we verify the handler doesn't send old-style step messages
         let messages = collector.messages
-        // The streaming controller sends "⏳ 思考中..." on first event, then tool finalize
-        #expect(messages.count >= 1)
-        // Should NOT contain old "步骤 N:" format
-        for msg in messages {
-            #expect(!msg.message.contains("步骤"))
-        }
+        #expect(messages.isEmpty)
     }
 
     // MARK: - ReviewResultEvent handling
@@ -491,6 +483,120 @@ struct TGEventHandlerTests {
         #expect(!result.contains("Output:"))
         #expect(!result.contains("result_summary"))
         #expect(!result.contains("[结果]"))
+    }
+
+    @Test("cleanResultText prefers substantive prose over trailing result summary")
+    func cleanResultTextPrefersSubstantiveProse() {
+        let text = """
+        已成功获取保利威最新 5 个频道：
+        - 频道 A：直播中
+        - 频道 B：等待中
+        - 频道 C：等待中
+        - 频道 D：未开始
+        - 频道 E：未开始
+
+        你可以继续告诉我要查看哪个频道的详细状态。
+
+        [结果] 成功获取保利威最新5个频道，1个直播中，2个等待中，2个未开始
+        """
+
+        let result = TGEventHandler.cleanResultText(from: text)
+        #expect(result.contains("已成功获取保利威最新 5 个频道"))
+        #expect(result.contains("频道 A：直播中"))
+        #expect(result.contains("继续告诉我要查看哪个频道"))
+        #expect(!result.contains("[结果]"))
+        #expect(!result.hasPrefix("成功获取保利威最新5个频道"))
+    }
+
+    @Test("cleanResultText keeps introductory line for list-style answers")
+    func cleanResultTextKeepsIntroLineForListAnswer() {
+        let text = """
+        成功获取最新5个频道信息：
+        - 频道 A：直播中
+        - 频道 B：等待中
+        - 频道 C：等待中
+        - 频道 D：未开始
+        - 频道 E：未开始
+        [结果] 成功获取最新5个频道信息，1个直播中，2个等待中，2个未开始
+        """
+
+        let result = TGEventHandler.cleanResultText(from: text)
+        #expect(result.hasPrefix("成功获取最新5个频道信息："))
+        #expect(result.contains("频道 A：直播中"))
+        #expect(!result.contains("[结果]"))
+    }
+
+    @Test("cleanResultText keeps trailing table and key points before result summary")
+    func cleanResultTextKeepsTableAndKeyPoints() {
+        let text = """
+        认证状态正常，现在获取最新的5个频道信息：
+
+        成功获取到最新的5个频道信息，以下是汇总：
+
+        | # | 频道ID | 频道名称 | 状态 | 场景 | 模板 |
+        |---|--------|---------|------|------|------|
+        | 1 | 5762133 | 测试商品购买_te60dmiv | 🔴 直播中 (live) | topclass | portrait_alone |
+        | 2 | 6099130 | 暖场图测试频道 | ⏳ 等待中 (waiting) | topclass | alone |
+
+        **关键信息：**
+        - 共5个频道，其中 **1个正在直播中**，2个处于等待状态，2个未开始
+        - 所有频道场景均为 **topclass（大班课）**
+        - 创建时间均为 2026-06-01
+        - 当前使用的账号为默认账号 **nicksu**
+
+        [结果] 成功获取5个频道信息，1个直播中、2个等待中、2个未开始
+        """
+
+        let result = TGEventHandler.cleanResultText(from: text)
+        #expect(result.contains("成功获取到最新的5个频道信息，以下是汇总："))
+        #expect(result.contains("| # | 频道ID | 频道名称 | 状态 | 场景 | 模板 |"))
+        #expect(result.contains("当前使用的账号为默认账号 **nicksu**"))
+        #expect(!result.contains("认证状态正常，现在获取最新的5个频道信息："))
+        #expect(!result.contains("[结果]"))
+    }
+
+    @Test("cleanResultText keeps rich weather answer when MCP blocks are markdown formatted")
+    func cleanResultTextKeepsMarkdownFormattedWeatherAnswer() {
+        let text = """
+        **🌐 Z.ai Built-in Tool: webReader**
+
+        **Input:**
+        ```json
+        {"url":"https://www.weather.com.cn/weather/101280101.shtml","return_format":"text","retain_images":false}
+        ```
+
+        *Executing on server...*
+
+        **Output:**
+        **webReader_result_summary:** [{"text": {"title": "广州天气预报", "content": "- 今天\\n- 7天"}}]
+
+        以下是 **广州未来5天天气预报**（数据来源：中国天气网）：
+
+        | 日期 | 天气 | 最高温 | 最低温 | 风力 |
+        |------|------|--------|--------|------|
+        | 📅 6月1日 | ⛅ 多云 | 35℃ | 27℃ | <3级 |
+        | 📅 6月2日 | ⛅ 多云 | 35℃ | 27℃ | <3级 |
+        | 📅 6月3日 | 🌩️ 雷阵雨转中雨 | 34℃ | 25℃ | <3级 |
+
+        **总体趋势：**
+        - 🌡️ **前两天持续高温闷热**，注意防暑降温
+        - 🌧️ **第三天起迎来降雨**，气温小幅下降
+        - 👕 穿衣建议：短衫、短裤等清凉夏季服装
+
+        [结果] 已查询广州未来5天天气：前两天多云高温，第三天起雷阵雨降温
+        """
+
+        let result = TGEventHandler.cleanResultText(from: text)
+        #expect(result.contains("以下是 **广州未来5天天气预报**"))
+        #expect(result.contains("| 日期 | 天气 | 最高温 | 最低温 | 风力 |"))
+        #expect(result.contains("**总体趋势：**"))
+        #expect(result.contains("第三天起迎来降雨"))
+        #expect(!result.contains("Built-in Tool"))
+        #expect(!result.contains("Input:"))
+        #expect(!result.contains("Output:"))
+        #expect(!result.contains("webReader_result_summary"))
+        #expect(!result.contains("[结果]"))
+        #expect(!result.hasPrefix("已查询广州未来5天天气"))
     }
 
     @Test("cleanResultText extracts multiline latest result block")

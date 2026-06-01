@@ -28,6 +28,8 @@ actor TGEventHandler: EventHandler {
     private let sendMessage: @Sendable (String, Int64) async -> Int64?
     private let editMessage: @Sendable (Int64, Int64, String) async -> Bool
     private let sendChatAction: @Sendable (Int64, String) async -> Void
+    private let originalTask: String?
+    private let deferFinalDelivery: Bool
     private let sendMessageWithMarkup: @Sendable (Int64, String, TGInlineKeyboardMarkup?) async -> Int64?
     private let streamingConfig: TGStreamingConfig
     private let sessionStore: TGInteractiveSessionStore?
@@ -35,6 +37,8 @@ actor TGEventHandler: EventHandler {
     private lazy var streamingController: TGStreamingController = {
         TGStreamingController(
             chatId: chatId,
+            originalTask: originalTask,
+            deferFinalDelivery: deferFinalDelivery,
             sendMessage: sendMessage,
             editMessage: editMessage,
             sendChatAction: sendChatAction,
@@ -48,6 +52,8 @@ actor TGEventHandler: EventHandler {
         sendMessage: @escaping @Sendable (String, Int64) async -> Int64?,
         editMessage: @escaping @Sendable (Int64, Int64, String) async -> Bool = { _, _, _ in false },
         sendChatAction: @escaping @Sendable (Int64, String) async -> Void = { _, _ in },
+        originalTask: String? = nil,
+        deferFinalDelivery: Bool = false,
         streamingConfig: TGStreamingConfig = .default,
         sessionStore: TGInteractiveSessionStore? = nil,
         registerResumeHandle: (@Sendable (String, @Sendable @escaping (String) async -> Void) -> Void)? = nil,
@@ -58,10 +64,16 @@ actor TGEventHandler: EventHandler {
         self.sendMessage = sendMessage
         self.editMessage = editMessage
         self.sendChatAction = sendChatAction
+        self.originalTask = originalTask
+        self.deferFinalDelivery = deferFinalDelivery
         self.streamingConfig = streamingConfig
         self.sessionStore = sessionStore
         self.registerResumeHandle = registerResumeHandle
         self.sendMessageWithMarkup = sendMessageWithMarkup
+    }
+
+    func finishRun(responseText: String?) async {
+        await streamingController.finishDeferredRun(authoritativeResultText: responseText)
     }
 
     func handle(_ event: any AgentEvent, context: EventHandlerContext) async {
@@ -319,15 +331,15 @@ actor TGEventHandler: EventHandler {
     }
 
     private static func isInputHeader(_ line: String) -> Bool {
-        line.hasPrefix("Input:")
+        normalizedMCPMarkerLine(line).hasPrefix("Input:")
     }
 
     private static func isOutputHeader(_ line: String) -> Bool {
-        line.hasPrefix("Output:")
+        normalizedMCPMarkerLine(line).hasPrefix("Output:")
     }
 
     private static func isExecutingLine(_ line: String) -> Bool {
-        line.contains("Executing on server...")
+        normalizedMCPMarkerLine(line).contains("Executing on server...")
     }
 
     private static func isStructuredPayloadLine(_ line: String) -> Bool {
@@ -343,9 +355,19 @@ actor TGEventHandler: EventHandler {
     }
 
     private static func isToolResultLine(_ line: String) -> Bool {
-        if line.contains("_result_summary:") { return true }
-        if line.contains("_result:") { return true }
+        let normalized = normalizedMCPMarkerLine(line)
+        if normalized.contains("_result_summary:") { return true }
+        if normalized.contains("_result:") { return true }
         return false
+    }
+
+    private static func normalizedMCPMarkerLine(_ line: String) -> String {
+        line
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .replacingOccurrences(of: "**", with: "")
+            .replacingOccurrences(of: "__", with: "")
+            .replacingOccurrences(of: "`", with: "")
+            .trimmingCharacters(in: .whitespacesAndNewlines)
     }
 
     private static func preservedProsePrefix(before boundary: String.Index, in line: String) -> String {
@@ -366,11 +388,37 @@ actor TGEventHandler: EventHandler {
     /// Strips raw MCP tool I/O then extracts the last result section.
     static func cleanResultText(from text: String) -> String {
         let stripped = stripMCPRawIO(from: text)
-        if let markedAnswer = extractLatestMarkedAnswer(from: stripped), !markedAnswer.isEmpty {
+        let latest = extractLastResultSection(from: stripped)
+        return selectUserFacingResult(from: latest)
+    }
+
+    private static func extractLatestMarkedAnswer(from text: String) -> String? {
+        let marker = "[结果]"
+        guard let range = text.range(of: marker, options: .backwards) else { return nil }
+        let answer = String(text[range.upperBound...]).trimmingCharacters(in: .whitespacesAndNewlines)
+        return answer.isEmpty ? nil : answer
+    }
+
+    private static func selectUserFacingResult(from text: String) -> String {
+        guard let markerRange = text.range(of: "[结果]", options: .backwards) else {
+            return normalizeVisibleResultText(text)
+        }
+
+        let proseBeforeMarker = normalizeVisibleResultText(String(text[..<markerRange.lowerBound]))
+        let focusedProse = focusNarrativeBody(proseBeforeMarker)
+        if isSubstantiveDisplayBody(focusedProse) {
+            return focusedProse
+        }
+
+        if let markedAnswer = extractLatestMarkedAnswer(from: text), !markedAnswer.isEmpty {
             return markedAnswer
         }
-        let latest = extractLastResultSection(from: stripped)
-        let normalizedLines = latest
+
+        return normalizeVisibleResultText(text)
+    }
+
+    private static func normalizeVisibleResultText(_ text: String) -> String {
+        let normalizedLines = text
             .components(separatedBy: "\n")
             .map { line -> String in
                 let trimmed = line.trimmingCharacters(in: .whitespaces)
@@ -382,11 +430,140 @@ actor TGEventHandler: EventHandler {
         return collapsed.trimmingCharacters(in: .whitespacesAndNewlines)
     }
 
-    private static func extractLatestMarkedAnswer(from text: String) -> String? {
-        let marker = "[结果]"
-        guard let range = text.range(of: marker, options: .backwards) else { return nil }
-        let answer = String(text[range.upperBound...]).trimmingCharacters(in: .whitespacesAndNewlines)
-        return answer.isEmpty ? nil : answer
+    private static func isSubstantiveDisplayBody(_ text: String) -> Bool {
+        let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return false }
+
+        let nonEmptyLines = trimmed
+            .components(separatedBy: "\n")
+            .map { $0.trimmingCharacters(in: .whitespaces) }
+            .filter { !$0.isEmpty }
+
+        if nonEmptyLines.count >= 2 { return true }
+        if trimmed.count >= 80 { return true }
+        if trimmed.contains("\n- ") || trimmed.contains("\n* ") { return true }
+        if trimmed.contains("：") || trimmed.contains(":") { return true }
+        return false
+    }
+
+    private static func focusNarrativeBody(_ text: String) -> String {
+        let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        let blocks = splitIntoContentBlocks(trimmed)
+
+        guard let lastBlock = blocks.last else {
+            return trimmed
+        }
+
+        var selectedBlocks = [lastBlock]
+        var index = blocks.count - 2
+
+        while index >= 0 {
+            let candidate = blocks[index]
+            if isProcessLikeBlock(candidate) {
+                break
+            }
+
+            let currentFirst = selectedBlocks.first ?? lastBlock
+            if shouldAttachToFocusedAnswer(candidate, currentFirstBlock: currentFirst) {
+                selectedBlocks.insert(candidate, at: 0)
+                index -= 1
+                continue
+            }
+
+            break
+        }
+
+        return trimLeadingProcessLines(from: selectedBlocks.joined(separator: "\n\n"))
+    }
+
+    private static func splitIntoContentBlocks(_ text: String) -> [String] {
+        guard !text.isEmpty else { return [] }
+
+        var blocks: [String] = []
+        var currentLines: [String] = []
+
+        for rawLine in text.components(separatedBy: "\n") {
+            let line = rawLine.trimmingCharacters(in: .whitespacesAndNewlines)
+            if line.isEmpty {
+                if !currentLines.isEmpty {
+                    blocks.append(currentLines.joined(separator: "\n"))
+                    currentLines.removeAll()
+                }
+                continue
+            }
+
+            currentLines.append(line)
+        }
+
+        if !currentLines.isEmpty {
+            blocks.append(currentLines.joined(separator: "\n"))
+        }
+
+        return blocks
+    }
+
+    private static func shouldAttachToFocusedAnswer(_ candidate: String, currentFirstBlock: String) -> Bool {
+        if isStructuredAnswerBlock(candidate) || isIntroductoryAnswerBlock(candidate) {
+            return true
+        }
+
+        if isStructuredAnswerBlock(currentFirstBlock), isSubstantiveDisplayBody(candidate) {
+            return true
+        }
+
+        return false
+    }
+
+    private static func isStructuredAnswerBlock(_ block: String) -> Bool {
+        let lines = block.components(separatedBy: "\n")
+        return lines.contains { line in
+            line.hasPrefix("- ")
+                || line.hasPrefix("* ")
+                || line.hasPrefix("|")
+                || line.hasPrefix("**")
+        }
+    }
+
+    private static func isIntroductoryAnswerBlock(_ block: String) -> Bool {
+        guard !block.isEmpty else { return false }
+        if block.contains("以下是") || block.contains("如下") || block.contains("汇总") || block.contains("关键信息") {
+            return true
+        }
+
+        let lines = block.components(separatedBy: "\n")
+        return lines.count == 1 && (block.hasSuffix("：") || block.hasSuffix(":"))
+    }
+
+    private static func isProcessLikeBlock(_ block: String) -> Bool {
+        let lines = block.components(separatedBy: "\n")
+        return !lines.isEmpty && lines.allSatisfy(isProcessLikeLine)
+    }
+
+    private static func trimLeadingProcessLines(from text: String) -> String {
+        var lines = text.components(separatedBy: "\n")
+        while lines.count > 1 {
+            let first = lines[0].trimmingCharacters(in: .whitespacesAndNewlines)
+            if !isProcessLikeLine(first) {
+                break
+            }
+            lines.removeFirst()
+        }
+        return lines.joined(separator: "\n").trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    private static func isProcessLikeLine(_ line: String) -> Bool {
+        let processPhrases = [
+            "我先",
+            "先帮你",
+            "让我",
+            "正在",
+            "稍等",
+            "查询到了最新",
+            "看起来",
+            "重新获取",
+            "现在获取"
+        ]
+        return processPhrases.contains { line.contains($0) }
     }
 
     private static func isLikelyNarrativeLine(_ line: String) -> Bool {

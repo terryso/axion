@@ -284,6 +284,8 @@ actor TaskSerialQueue: TaskSerialQueueProtocol {
                     sendChatAction: { [weak self] chatId, action in
                         await self?.chatActionHandler(chatId, action)
                     },
+                    originalTask: pending.task,
+                    deferFinalDelivery: true,
                     streamingConfig: streamingConfig,
                     sessionStore: self.sessionStore,
                     sendMessageWithMarkup: { [weak self] chatId, text, markup in
@@ -291,7 +293,7 @@ actor TaskSerialQueue: TaskSerialQueueProtocol {
                     }
                 )
                 let allHandlers: [any EventHandler] = [tgHandler] + self.extraHandlers
-                return try await self.runtimeManager.executeRun(
+                let result = try await self.runtimeManager.executeRun(
                     task: pending.task,
                     buildConfig: buildConfig,
                     eventBus: eventBus,
@@ -299,6 +301,8 @@ actor TaskSerialQueue: TaskSerialQueueProtocol {
                     extraHandlers: allHandlers,
                     sessionId: nil
                 )
+                await tgHandler.finishRun(responseText: result.responseText)
+                return result
             }
             group.addTask {
                 try await _Concurrency.Task.sleep(nanoseconds: UInt64(timeoutMinutes * 60 * 1_000_000_000))
@@ -350,6 +354,8 @@ actor TaskSerialQueue: TaskSerialQueueProtocol {
                         sendChatAction: { [weak self] chatId, action in
                             await self?.chatActionHandler(chatId, action)
                         },
+                        originalTask: pending.task,
+                        deferFinalDelivery: true,
                         streamingConfig: streamingConfig,
                         sessionStore: self.sessionStore,
                         sendMessageWithMarkup: { [weak self] chatId, text, markup in
@@ -357,7 +363,7 @@ actor TaskSerialQueue: TaskSerialQueueProtocol {
                         }
                     )
                     let allHandlers: [any EventHandler] = [tgHandler] + self.extraHandlers
-                    return try await self.runtimeManager.resumeRun(
+                    let result = try await self.runtimeManager.resumeRun(
                         sessionId: sessionId,
                         task: pending.task,
                         buildConfig: buildConfig,
@@ -365,6 +371,8 @@ actor TaskSerialQueue: TaskSerialQueueProtocol {
                         runOverrides: self.makeGatewayRunOverrides(),
                         extraHandlers: allHandlers
                     )
+                    await tgHandler.finishRun(responseText: result.responseText)
+                    return result
                 }
                 group.addTask {
                     try await _Concurrency.Task.sleep(nanoseconds: UInt64(timeoutMinutes * 60 * 1_000_000_000))
