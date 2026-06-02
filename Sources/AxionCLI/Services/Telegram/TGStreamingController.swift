@@ -245,8 +245,10 @@ actor TGStreamingController {
 
         let finalText: String
         if let resultText, !resultText.isEmpty {
-            let cleaned = TGEventHandler.cleanResultText(from: resultText)
-            let answer = cleaned.isEmpty ? "✅ 已完成" : cleaned
+            let stripped = TGEventHandler.stripMCPRawIO(from: resultText)
+                .replacingOccurrences(of: "\n{3,}", with: "\n\n", options: .regularExpression)
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+            let answer = stripped.isEmpty ? "✅ 已完成" : stripped
             finalText = Self.formatQuotedFinalAnswer(task: originalTask, answer: answer)
         } else {
             finalText = Self.formatQuotedFinalAnswer(task: originalTask, answer: "✅ 已完成")
