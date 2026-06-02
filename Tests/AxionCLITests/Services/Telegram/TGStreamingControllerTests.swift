@@ -118,8 +118,8 @@ struct TGStreamingControllerTests {
         #expect(!allText.contains("raw output line"))
     }
 
-    @Test("Tool completed does not emit extra message")
-    func toolCompletedDoesNotEmitExtraMessage() async {
+    @Test("Tool completed without output does not emit extra message")
+    func toolCompletedWithoutOutputDoesNotEmit() async {
         let log = CallLog()
         let controller = makeController(log: log)
 
@@ -132,6 +132,94 @@ struct TGStreamingControllerTests {
         ))
 
         #expect(log.sentMessages.count == 1)
+    }
+
+    @Test("Tool completed with output sends result summary")
+    func toolCompletedWithOutputSendsResult() async {
+        let log = CallLog()
+        let controller = makeController(log: log)
+
+        await controller.handle(ToolStartedEvent(
+            sessionId: nil, toolName: "Bash", toolUseId: "tu-1",
+            input: #"{"command":"ls"}"#
+        ))
+        await controller.handle(ToolCompletedEvent(
+            sessionId: nil, toolUseId: "tu-1", toolName: "Bash",
+            durationMs: 500, isError: false, output: "file1.txt\nfile2.txt\nfile3.txt"
+        ))
+
+        #expect(log.sentMessages.count == 2)
+        #expect(log.sentMessages[1].text == "💻 Bash 结果：\nfile1.txt\nfile2.txt\nfile3.txt")
+    }
+
+    @Test("Tool completed with long output truncates to max lines")
+    func toolCompletedWithLongOutputTruncates() async {
+        let log = CallLog()
+        let controller = makeController(log: log)
+
+        let longOutput = (1...10).map { "line\($0)" }.joined(separator: "\n")
+
+        await controller.handle(ToolStartedEvent(
+            sessionId: nil, toolName: "Read", toolUseId: "tu-1", input: nil
+        ))
+        await controller.handle(ToolCompletedEvent(
+            sessionId: nil, toolUseId: "tu-1", toolName: "Read",
+            durationMs: 100, isError: false, output: longOutput
+        ))
+
+        #expect(log.sentMessages.count == 2)
+        let resultMsg = log.sentMessages[1].text
+        #expect(resultMsg.hasPrefix("📖 Read 结果："))
+        #expect(resultMsg.contains("line1"))
+        #expect(resultMsg.contains("line4"))
+        #expect(resultMsg.contains("6 行省略"))
+        #expect(!resultMsg.contains("line5"))
+    }
+
+    @Test("Tool completed with error shows failure message")
+    func toolCompletedWithErrorShowsFailure() async {
+        let log = CallLog()
+        let controller = makeController(log: log)
+
+        await controller.handle(ToolStartedEvent(
+            sessionId: nil, toolName: "Bash", toolUseId: "tu-1",
+            input: #"{"command":"bad_cmd"}"#
+        ))
+        await controller.handle(ToolCompletedEvent(
+            sessionId: nil, toolUseId: "tu-1", toolName: "Bash",
+            durationMs: 100, isError: true, output: "command not found: bad_cmd"
+        ))
+
+        #expect(log.sentMessages.count == 2)
+        #expect(log.sentMessages[1].text == "❌ Bash 失败：\ncommand not found: bad_cmd")
+    }
+
+    @Test("Tool completed with MCP raw output shows basic cleanup result")
+    func toolCompletedWithMCPRawOutputShowsCleanResult() async {
+        let log = CallLog()
+        let controller = makeController(log: log)
+
+        let mcpOutput = """
+        🌐 Z.ai Built-in Tool: webReader
+        Input: {"url":"https://example.com"}
+        Output: webReader_result_summary: {"text":"hello"}
+        The actual content here.
+        """
+
+        await controller.handle(ToolStartedEvent(
+            sessionId: nil, toolName: "WebReader", toolUseId: "tu-1", input: nil
+        ))
+        await controller.handle(ToolCompletedEvent(
+            sessionId: nil, toolUseId: "tu-1", toolName: "WebReader",
+            durationMs: 200, isError: false, output: mcpOutput
+        ))
+
+        // Tool output is raw data, shown with basic cleanup (no MCP stripping)
+        #expect(log.sentMessages.count == 2)
+        let resultMsg = log.sentMessages[1].text
+        #expect(resultMsg.hasPrefix("🌐 WebReader 结果："))
+        // All 4 non-empty lines fit within maxLines=4
+        #expect(resultMsg.contains("The actual content here."))
     }
 
     // MARK: - Agent completed sends final answer
@@ -194,6 +282,12 @@ struct TGStreamingControllerTests {
             input: #"{"command":"ffmpeg -i input.mp4 output.mp4"}"#
         ))
 
+        // Tool completes with output
+        await controller.handle(ToolCompletedEvent(
+            sessionId: nil, toolUseId: "tu-1", toolName: "Bash",
+            durationMs: 3000, isError: false, output: "compressed successfully"
+        ))
+
         // LLM output (no message — typing indicator only)
         await controller.handle(LLMTokenStreamEvent(sessionId: nil, chunk: "成功"))
 
@@ -203,10 +297,11 @@ struct TGStreamingControllerTests {
             resultText: "压缩完成"
         ))
 
-        // Only 2 messages: tool step + final answer (no preview)
-        #expect(log.sentMessages.count == 2)
+        // 3 messages: tool start + tool result + final answer
+        #expect(log.sentMessages.count == 3)
         #expect(log.sentMessages[0].text == "💻 Bash: `ffmpeg -i input.mp4 output.mp4`")
-        #expect(log.sentMessages[1].text == "> 帮我压缩一下视频\n\n压缩完成")
+        #expect(log.sentMessages[1].text == "💻 Bash 结果：\ncompressed successfully")
+        #expect(log.sentMessages[2].text == "> 帮我压缩一下视频\n\n压缩完成")
     }
 
     // MARK: - Deferred final delivery

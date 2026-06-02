@@ -37,9 +37,9 @@ actor TGStreamingController {
         let lower = toolName.lowercased()
         if lower.contains("search") || lower.contains("websearch") { return "🔍" }
         if lower.contains("bash") || lower.contains("terminal") || lower.contains("shell") { return "💻" }
+        if lower.contains("reader") || lower.contains("fetch") { return "🌐" }
         if lower.contains("read") { return "📖" }
         if lower.contains("write") { return "✍️" }
-        if lower.contains("reader") || lower.contains("fetch") { return "🌐" }
         if lower.contains("vision") || lower.contains("image") { return "👁️" }
         if lower.contains("edit") { return "📝" }
         if lower.contains("screenshot") || lower.contains("screen") { return "📸" }
@@ -219,6 +219,37 @@ actor TGStreamingController {
 
     private func handleToolCompleted(_ event: ToolCompletedEvent) async {
         guard !finalized else { return }
+
+        if event.isError {
+            let msg = "❌ \(event.toolName) 失败" + (event.output.map { "：\n" + Self.summarizeOutput($0, maxLines: 3) } ?? "")
+            _ = await sendMessage(msg, chatId)
+            return
+        }
+
+        guard let output = event.output, !output.isEmpty else { return }
+
+        let summary = Self.summarizeOutput(output, maxLines: 4)
+        guard !summary.isEmpty else { return }
+
+        let emoji = Self.toolEmoji(event.toolName)
+        let header = "\(emoji) \(event.toolName) 结果："
+        _ = await sendMessage("\(header)\n\(summary)", chatId)
+    }
+
+    /// Summarize tool output for TG display: basic cleanup, truncate to maxLines.
+    private static func summarizeOutput(_ output: String, maxLines: Int = 4) -> String {
+        // Tool output is raw data, not agent prose — do NOT apply stripMCPRawIO
+        // (which would strip everything inside MCP I/O blocks).
+        // Just do basic whitespace cleanup.
+        var cleaned = output
+            .replacingOccurrences(of: "\n{3,}", with: "\n\n", options: .regularExpression)
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !cleaned.isEmpty else { return "" }
+
+        let lines = cleaned.components(separatedBy: "\n").filter { !$0.trimmingCharacters(in: .whitespaces).isEmpty }
+        let truncated = lines.prefix(maxLines)
+        let suffix = lines.count > maxLines ? "\n… (\(lines.count - maxLines) 行省略)" : ""
+        return truncated.joined(separator: "\n") + suffix
     }
 
     // MARK: - Agent Completed
