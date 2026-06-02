@@ -7,6 +7,13 @@ protocol AxionRuntimeRunning: Sendable {
     func stopEventLoop() async
     func execute(
         buildConfig: AgentBuilder.BuildConfig,
+        runOverrides: AxionRuntime.RunOverrides,
+        sessionId: String?
+    ) async throws -> AxionRunResult
+
+    func resumeSession(
+        _ sessionId: String,
+        buildConfig: AgentBuilder.BuildConfig,
         runOverrides: AxionRuntime.RunOverrides
     ) async throws -> AxionRunResult
     func executeSkill(

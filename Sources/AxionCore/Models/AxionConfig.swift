@@ -28,6 +28,16 @@ public struct AxionConfig: Equatable, Sendable {
     public var curatorIntervalHours: Double?
     public var curatorStaleAfterDays: Int?
     public var curatorArchiveAfterDays: Int?
+    public var gatewayEnabled: Bool?
+    public var gatewayCuratorIdleHours: Double?
+    public var gatewayCuratorIntervalHours: Double?
+    public var gatewayTaskTimeoutMinutes: Double?
+    public var gatewayNotifyCuratorResults: Bool?
+    public var telegramBotToken: String?
+    public var telegramChatId: String?
+    public var telegramAllowedUsers: String?
+    public var telegramTypingEnabled: Bool?
+    public var telegramTypingInterval: Double?
 
     public static let `default` = AxionConfig(
         apiKey: nil,
@@ -49,7 +59,17 @@ public struct AxionConfig: Equatable, Sendable {
         curatorDryRun: nil,
         curatorIntervalHours: nil,
         curatorStaleAfterDays: nil,
-        curatorArchiveAfterDays: nil
+        curatorArchiveAfterDays: nil,
+        gatewayEnabled: nil,
+        gatewayCuratorIdleHours: nil,
+        gatewayCuratorIntervalHours: nil,
+        gatewayTaskTimeoutMinutes: nil,
+        gatewayNotifyCuratorResults: nil,
+        telegramBotToken: nil,
+        telegramChatId: nil,
+        telegramAllowedUsers: nil,
+        telegramTypingEnabled: nil,
+        telegramTypingInterval: nil
     )
 
     public init(
@@ -72,7 +92,17 @@ public struct AxionConfig: Equatable, Sendable {
         curatorDryRun: Bool? = nil,
         curatorIntervalHours: Double? = nil,
         curatorStaleAfterDays: Int? = nil,
-        curatorArchiveAfterDays: Int? = nil
+        curatorArchiveAfterDays: Int? = nil,
+        gatewayEnabled: Bool? = nil,
+        gatewayCuratorIdleHours: Double? = nil,
+        gatewayCuratorIntervalHours: Double? = nil,
+        gatewayTaskTimeoutMinutes: Double? = nil,
+        gatewayNotifyCuratorResults: Bool? = nil,
+        telegramBotToken: String? = nil,
+        telegramChatId: String? = nil,
+        telegramAllowedUsers: String? = nil,
+        telegramTypingEnabled: Bool? = nil,
+        telegramTypingInterval: Double? = nil
     ) {
         self.apiKey = apiKey
         self.provider = provider
@@ -94,7 +124,20 @@ public struct AxionConfig: Equatable, Sendable {
         self.curatorIntervalHours = curatorIntervalHours
         self.curatorStaleAfterDays = curatorStaleAfterDays
         self.curatorArchiveAfterDays = curatorArchiveAfterDays
+        self.gatewayEnabled = gatewayEnabled
+        self.gatewayCuratorIdleHours = gatewayCuratorIdleHours
+        self.gatewayCuratorIntervalHours = gatewayCuratorIntervalHours
+        self.gatewayTaskTimeoutMinutes = gatewayTaskTimeoutMinutes
+        self.gatewayNotifyCuratorResults = gatewayNotifyCuratorResults
+        self.telegramBotToken = telegramBotToken
+        self.telegramChatId = telegramChatId
+        self.telegramAllowedUsers = telegramAllowedUsers
+        self.telegramTypingEnabled = telegramTypingEnabled
+        self.telegramTypingInterval = telegramTypingInterval
     }
+
+    public var tgTypingEnabled: Bool { telegramTypingEnabled ?? true }
+    public var tgTypingInterval: Double { telegramTypingInterval ?? 4.0 }
 }
 
 extension AxionConfig: Codable {
@@ -102,6 +145,8 @@ extension AxionConfig: Codable {
         case apiKey, provider, baseURL, model, maxSteps, maxBatches, maxReplanRetries, traceEnabled, sharedSeatMode, maxModelCalls, maxScreenshots
         case reviewMemoryInterval, reviewSkillInterval, reviewMinMessages, reviewModel
         case curatorEnabled, curatorDryRun, curatorIntervalHours, curatorStaleAfterDays, curatorArchiveAfterDays
+        case gatewayEnabled, gatewayCuratorIdleHours, gatewayCuratorIntervalHours, gatewayTaskTimeoutMinutes, gatewayNotifyCuratorResults
+        case telegramBotToken, telegramChatId, telegramAllowedUsers, telegramTypingEnabled, telegramTypingInterval
     }
 
     public init(from decoder: Decoder) throws {
@@ -126,5 +171,15 @@ extension AxionConfig: Codable {
         curatorIntervalHours = try c.decodeIfPresent(Double.self, forKey: .curatorIntervalHours)
         curatorStaleAfterDays = try c.decodeIfPresent(Int.self, forKey: .curatorStaleAfterDays)
         curatorArchiveAfterDays = try c.decodeIfPresent(Int.self, forKey: .curatorArchiveAfterDays)
+        gatewayEnabled = try c.decodeIfPresent(Bool.self, forKey: .gatewayEnabled)
+        gatewayCuratorIdleHours = try c.decodeIfPresent(Double.self, forKey: .gatewayCuratorIdleHours)
+        gatewayCuratorIntervalHours = try c.decodeIfPresent(Double.self, forKey: .gatewayCuratorIntervalHours)
+        gatewayTaskTimeoutMinutes = try c.decodeIfPresent(Double.self, forKey: .gatewayTaskTimeoutMinutes)
+        gatewayNotifyCuratorResults = try c.decodeIfPresent(Bool.self, forKey: .gatewayNotifyCuratorResults)
+        telegramBotToken = try c.decodeIfPresent(String.self, forKey: .telegramBotToken)
+        telegramChatId = try c.decodeIfPresent(String.self, forKey: .telegramChatId)
+        telegramAllowedUsers = try c.decodeIfPresent(String.self, forKey: .telegramAllowedUsers)
+        telegramTypingEnabled = try c.decodeIfPresent(Bool.self, forKey: .telegramTypingEnabled)
+        telegramTypingInterval = try c.decodeIfPresent(Double.self, forKey: .telegramTypingInterval)
     }
 }

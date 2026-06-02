@@ -62,12 +62,13 @@ extension AxionRuntimeTests {
         executorError: Error? = nil,
         builderResult: AgentBuildResult? = nil,
         builderError: Error? = nil,
-        eventBus: EventBus? = nil
+        eventBus: EventBus? = nil,
+        sessionStore: SessionStore? = nil
     ) -> AxionRuntime {
         let result = executorResult ?? successResult()
         let executor = MockRunExecutor(runResult: result, error: executorError)
         let builder = MockAgentBuilder(buildResult: builderResult, error: builderError)
-        return AxionRuntime(eventBus: eventBus, executor: executor, builder: builder)
+        return AxionRuntime(eventBus: eventBus, executor: executor, builder: builder, sessionStore: sessionStore)
     }
 
     static func dummyBuildResult() -> AgentBuildResult {
@@ -269,6 +270,36 @@ struct AxionRuntimeTests {
         #expect(result.state == .completed)
     }
 
+    // MARK: - execute() — sessionId passthrough
+
+    @Test("execute() uses provided sessionId instead of generating one")
+    func executeUsesProvidedSessionId() async throws {
+        let buildResult = Self.dummyBuildResult()
+        let runtime = Self.makeRuntime(builderResult: buildResult)
+
+        let result = try await runtime.execute(
+            buildConfig: Self.makeBuildConfig(),
+            runOverrides: .default,
+            sessionId: "external-run-id-123"
+        )
+
+        #expect(result.sessionId == "external-run-id-123")
+    }
+
+    @Test("execute() auto-generates sessionId when nil is passed")
+    func executeAutoGeneratesSessionIdWhenNil() async throws {
+        let buildResult = Self.dummyBuildResult()
+        let runtime = Self.makeRuntime(builderResult: buildResult)
+
+        let result = try await runtime.execute(
+            buildConfig: Self.makeBuildConfig(),
+            runOverrides: .default,
+            sessionId: nil
+        )
+
+        #expect(!result.sessionId.isEmpty, "Generated sessionId should not be empty")
+    }
+
     // MARK: - execute() — task passthrough
 
     @Test("execute() uses buildConfig.task as runConfig.task")
@@ -378,7 +409,8 @@ struct AxionRuntimeTests {
 
     @Test("listSessions() returns array without crashing")
     func listSessionsNoCrash() async throws {
-        let runtime = Self.makeRuntime()
+        let emptyStore = SessionStore(sessionsDir: "/tmp/axion-test-empty-\(UUID().uuidString)")
+        let runtime = Self.makeRuntime(sessionStore: emptyStore)
         let sessions = try await runtime.listSessions()
         #expect(type(of: sessions) == [SessionInfo].self)
     }
@@ -548,7 +580,8 @@ extension AxionRuntimeTests {
             task: task, fast: false, dryrun: true, json: false,
             noMemory: true, noVisualDelta: true, allowForeground: false,
             maxSteps: 1, config: AxionConfig(apiKey: "test"),
-            noReview: true, onReviewCompleted: nil, eventBus: nil
+            noReview: true, onReviewCompleted: nil, eventBus: nil, reviewDataContext: nil,
+            nonInteractivePause: false, registerResumeHandle: nil
         )
     }
 

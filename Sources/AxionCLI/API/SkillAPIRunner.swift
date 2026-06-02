@@ -4,7 +4,7 @@ import os
 import OpenAgentSDK
 
 /// Runs a skill through the RunTracker + EventBroadcaster pipeline.
-/// Used by the POST /v1/skills/{name}/run endpoint so AxionBar can
+/// Used by the POST /v1/skills/{name}/run endpoint so external clients can
 /// reuse SSE monitoring and TaskDetailPanel.
 enum SkillAPIRunner {
 

@@ -1,5 +1,13 @@
 # generated: 2026-05-08
-# last_updated: 2026-05-27
+# last_updated: 2026-05-31
+# retro-epic-30: 2026-05-30
+# story-30.3-created: 2026-05-30
+# story-30.2-created: 2026-05-30
+# story-29-1-started: 2026-05-29
+# story-29.1-created: 2026-05-29
+# retro-epic-28: 2026-05-29
+# story-28.2-created: 2026-05-29
+# story-28.1-created: 2026-05-29
 # story-27.2-created: 2026-05-27
 # story-27.3-created: 2026-05-27
 # story-26.3-created: 2026-05-27
@@ -78,7 +86,29 @@
 # - Dev moves story to 'review', then runs code-review (fresh context, different LLM recommended)
 
 generated: 2026-05-08
-last_updated: 2026-05-27
+last_updated: 2026-05-31
+# retro-epic-32: 2026-05-31
+# story-32.5-created: 2026-05-31
+# story-32.4-created: 2026-05-31
+# story-32.3-created: 2026-05-31
+# story-32.2-created: 2026-05-31
+# epic-32-started: 2026-05-31
+# story-32.1-created: 2026-05-31
+# epic-32-added: 2026-05-31
+# story-31-5-started: 2026-05-31
+# story-31.5-created: 2026-05-31
+# story-31-4-started: 2026-05-31
+# story-31.4-created: 2026-05-31
+# story-31.3-created: 2026-05-31
+# story-31.2-created: 2026-05-31
+# story-31.1-created: 2026-05-31
+# story-29-4-started: 2026-05-29
+# story-29.4-created: 2026-05-29
+# story-29.3-created: 2026-05-29
+# story-29.2-created: 2026-05-29
+# story-28-4-started: 2026-05-29
+# story-28.4-created: 2026-05-29
+# story-28.3-created: 2026-05-29
 # retro-epic-27: 2026-05-27
 # epic-27-started: 2026-05-27
 # story-27.1-created: 2026-05-27
@@ -131,6 +161,10 @@ last_updated: 2026-05-27
 # epic-22-added: 2026-05-24
 # epic-23-added: 2026-05-24
 # phase-9-added: 2026-05-27
+# phase-10-added: 2026-05-29
+# epic-28-30-added: 2026-05-29
+# phase-11-added: 2026-05-31
+# epic-31-added: 2026-05-31
 
 project_key: NOKEY
 tracking_system: file-system
@@ -326,31 +360,31 @@ development_status:
   # ============================================================
 
   # Epic 22: Background Review Agent 集成
-  epic-22: in-progress
-  22-2-skillevolver-integration: done
-  22-5-skill-usage-tracking: done
+  epic-22: done
   22-1-revieworchestrator-integration: done
+  22-2-skillevolver-integration: done
   22-3-revieworchestrator-dependency-injection: done
   22-4-intelligentcurator-integration: done
-  epic-22-retrospective: optional
+  22-5-skill-usage-tracking: done
+  epic-22-retrospective: done
 
   # Epic 23: Review 配置与 Axion 专属适配
-  epic-23: in-progress
+  epic-23: done
   23-1-review-config-cli-flags: done
   23-2-review-result-logging-notification: done
-  epic-23-retrospective: optional
+  epic-23-retrospective: done
 
   # ============================================================
   # Phase 9 — AxionRuntime 统一执行引擎
   # ============================================================
 
   # Epic 24: AxionRuntime Core
-  epic-24: in-progress
+  epic-24: done
   24-1-axionruntime-skeleton: done
   24-2-agent-build-execution: done
   24-3-axionrunstate-session-metadata: done
   24-4-session-state-persistence: done
-  epic-24-retrospective: optional
+  epic-24-retrospective: done
 
   # Epic 25: EventHandler 体系
   epic-25: done
@@ -377,3 +411,57 @@ development_status:
   27-3-daemon-axionruntime-integration: done
   27-4-skill-execution-axionruntime: done
   epic-27-retrospective: done
+
+  # ============================================================
+  # Phase 10 — Gateway: 远程交互 + 自进化
+  # ============================================================
+
+  # Epic 28: Gateway 进程基础
+  epic-28: done
+  28-1-gateway-config-extension: done
+  28-2-gatewayrunner-http-api-reuse: done
+  28-3-launchd-daemon-management: done
+  28-4-gateway-status-query: done
+  epic-28-retrospective: done
+
+  # Epic 29: Telegram 远程交互
+  epic-29: done
+  29-1-telegramadapter-core-communication: done
+  29-2-task-serial-execution-queue: done
+  29-3-tgeventhandler-event-push: done
+  29-4-tg-command-support: done
+  29-5-tg-image-support: done
+  epic-29-retrospective: done
+
+  # Epic 30: 自进化调度
+  epic-30: done
+  30-1-reviewscheduler-isolated-review-agent: done
+  30-2-review-result-handling-optional-push: done
+  30-3-curatorscheduler-auto-scheduling: done
+  epic-30-retrospective: done
+
+  # ============================================================
+  # Phase 11 — 通用记忆系统
+  # ============================================================
+
+  # Epic 31: 通用记忆系统 — 对齐 Hermes 自进化闭环
+  epic-31: done
+  31-1-dual-track-memory-storage: done
+  31-2-memory-operation-tool: done
+  31-3-review-agent-universal-memory-tool: done
+  31-4-security-scanner-frozen-snapshot: done
+  31-5-cli-memory-management: done
+  epic-31-retrospective: done
+
+  # ============================================================
+  # Phase 12 — Telegram 能力补强与交互体验升级
+  # ============================================================
+
+  # Epic 32: Telegram 能力补强与交互体验升级
+  epic-32: done
+  32-1-telegram-rich-text-rendering: done
+  32-2-edit-based-streaming-status-bubble: done
+  32-3-typing-ux-draft-preview-spike: done
+  32-4-command-registry-bot-menu: done
+  32-5-interactive-approval-clarify: done
+  epic-32-retrospective: done

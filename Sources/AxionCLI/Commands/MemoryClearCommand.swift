@@ -2,10 +2,9 @@ import ArgumentParser
 import Foundation
 
 /// `axion memory clear --app <domain>` — delete a specific App's Memory file.
+/// `axion memory clear --type <memory|user>` — clear a universal memory file.
 ///
-/// Removes the JSON file for the specified domain from the Memory directory.
-/// If the domain does not exist, outputs a message (does not error).
-/// Other domains are not affected.
+/// Exactly one of `--app` or `--type` must be provided.
 struct MemoryClearCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
         commandName: "clear",
@@ -13,12 +12,23 @@ struct MemoryClearCommand: AsyncParsableCommand {
     )
 
     @Option(name: .long, help: "要清除的 App domain（如 com.apple.calculator）")
-    var app: String
+    var app: String?
+
+    @Option(name: .long, help: "Universal memory type to clear: memory or user")
+    var type: String?
 
     func run() async throws {
         let memoryDir = resolveMemoryDir()
-        let result = try await Self.clearDomain(app, memoryDir: memoryDir)
-        print(result.message)
+
+        try Self.validateOptions(app: app, type: type)
+
+        if let type = type {
+            let result = try await Self.clearType(type, memoryDir: memoryDir)
+            print(result.message)
+        } else if let app = app {
+            let result = try await Self.clearDomain(app, memoryDir: memoryDir)
+            print(result.message)
+        }
     }
 
     // MARK: - Public Static API (for testing)
@@ -27,6 +37,25 @@ struct MemoryClearCommand: AsyncParsableCommand {
     struct ClearResult {
         let success: Bool
         let message: String
+    }
+
+    /// Validate that exactly one of --app or --type is provided.
+    static func validateOptions(app: String?, type: String?) throws {
+        let hasApp = app != nil
+        let hasType = type != nil
+        guard hasApp != hasType else {
+            throw ValidationError("Exactly one of --app or --type must be specified")
+        }
+    }
+
+    /// Clear a universal memory file by type ("memory" or "user").
+    static func clearType(_ type: String, memoryDir: String) async throws -> ClearResult {
+        guard let target = parseTypeArgument(type) else {
+            throw ValidationError("Invalid type: '\(type)'. Use 'memory' or 'user'")
+        }
+        let store = UniversalMemoryStore(memoryDir: memoryDir)
+        await store.write(target: target, content: "")
+        return ClearResult(success: true, message: "Cleared \(type) memory")
     }
 
     /// Clear the Memory file for a specific domain.
@@ -73,6 +102,14 @@ struct MemoryClearCommand: AsyncParsableCommand {
     }
 
     // MARK: - Private Helpers
+
+    private static func parseTypeArgument(_ raw: String) -> MemoryTarget? {
+        switch raw {
+        case "memory": return .memory
+        case "user": return .user
+        default: return nil
+        }
+    }
 
     /// Resolve the default Memory directory path.
     private func resolveMemoryDir() -> String {

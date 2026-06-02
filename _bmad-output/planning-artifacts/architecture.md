@@ -10,6 +10,7 @@ stepsCompleted:
   - step-08-complete
 inputDocuments:
   - _bmad-output/planning-artifacts/prd.md
+  - _bmad-output/planning-artifacts/prds/prd-axion-gateway-2026-05-29/prd.md
 documentCounts:
   prd: 1
   uxDesign: 0
@@ -24,6 +25,7 @@ documentLanguage: 'zh-CN'
 lastStep: 8
 status: 'complete'
 completedAt: '2026-05-08'
+gatewayDecisionsAdded: '2026-05-29'  # D9/D10/D11 from Gateway PRD
 ---
 
 # 架构决策文档 — Axion
@@ -490,6 +492,284 @@ actor HelperProcessManager {
 
 ---
 
+### D9: Gateway 进程模型
+
+**决策：** `axion gateway` 作为独立长驻进程，包含 HTTP API + Telegram adapter + 后台审查调度 + Curator 调度。与现有 `axion daemon`（仅 HTTP API）并行存在。
+
+**背景：** PRD "Axion Gateway: Remote Interaction & Self-Evolving Learning Loop" 要求 Axion 从按需启动的 CLI 变成始终在线的个人助手。
+
+**约束：**
+- 复用现有组件：AxionRuntime、ReviewOrchestrator、IntelligentCurator、LLMSkillEvolver、AxionAPI
+- 纯 Swift 实现，不引入第三方 TG 库
+- 单用户场景（Nick），单任务串行执行
+- Gateway 进程内的 Swift Concurrency（async/await + Task），不使用 pthread
+
+**进程结构：**
+
+```
+axion gateway (单个 Swift executable)
+    │
+    ├── GatewayRunner (actor) — 编排器，管理生命周期
+    │
+    ├── HTTP API Server (Hummingbird) — 复用 AxionAPI
+    │       └── AxionBar + 外部 API 消费者
+    │
+    ├── TelegramAdapter (actor) — TG Bot API 长轮询
+    │       ├── getUpdates 轮询循环 (async streaming)
+    │       ├── sendMessage/sendPhoto 回复
+    │       └── 用户白名单过滤
+    │
+    ├── TaskQueue (SDK ConcurrencyLimiter = 1) — 串行执行
+    │       └── 每个任务创建独立 AxionRuntime 实例
+    │
+    ├── ReviewScheduler (actor) — 后台审查调度
+    │       ├── 监听 AgentCompletedEvent
+    │       ├── 检查 ReviewScheduleConfig 间隔
+    │       ├── 触发时调用 ReviewOrchestrator.executeReview()
+    │       └── 结果通过 onReviewResult 回调推送（非 EventBus）
+    │
+    ├── CuratorScheduler (actor) — Curator 自动调度
+    │       ├── 定时检查：空闲 > curatorIdleHours && 距上次 > curatorIntervalHours
+    │       ├── 触发时调用 IntelligentCurator.execute()
+    │       └── 结果通过 onCuratorResult 回调推送（非 EventBus）
+    │
+    └── EventBus (SDK) — 事件分发
+            ├── → TG adapter（推送进展/结果）
+            ├── → SSE（AxionBar 实时更新）
+            └── → TraceEventHandler（trace 记录）
+```
+
+**关键设计决策：**
+
+1. **GatewayRunner 是 actor** — 进程状态（运行中任务、空闲时间、启停）需要串行化
+2. **TelegramAdapter 是 actor** — TG API 调用和消息队列需要串行化
+3. **ReviewScheduler 是 actor** — 审查间隔状态需要串行化
+4. **CuratorScheduler 是 actor** — 空闲计时和 curator 状态需要串行化
+5. **每个任务创建独立 AxionRuntime 实例** — 避免状态交叉污染（AxionRuntime 本身是 actor）
+6. **ConcurrencyLimiter = 1** — 单用户桌面场景，同时只有一个 agent 操作 Mac
+
+**新增文件：**
+
+| 文件 | 行数估计 | 说明 |
+|------|---------|------|
+| `Sources/AxionCLI/Commands/GatewayCommand.swift` | ~390 | CLI 入口（start/install/status/uninstall） |
+| `Sources/AxionCLI/Services/GatewayRunner.swift` | ~190 | 编排器（启停、信号处理、HTTP API 复用、状态查询） |
+| `Sources/AxionCLI/Services/TelegramAdapter.swift` | ~350 | TG Bot API 对接（长轮询、消息收发） |
+| `Sources/AxionCLI/Services/ReviewScheduler.swift` | ~100 | 审查调度（监听事件 + 间隔检查） |
+| `Sources/AxionCLI/Services/CuratorScheduler.swift` | ~80 | Curator 调度（空闲检测 + 定时触发） |
+
+**Telegram 体验层文件（Epic 32）：**
+
+| 文件 | 行数 | 说明 |
+|------|------|------|
+| `Sources/AxionCLI/Services/Telegram/TGMessageFormatter.swift` | ~528 | MarkdownV2/HTML/Plain 三重降级渲染 + 消息分段（按渲染长度切割，4096字符限制） |
+| `Sources/AxionCLI/Services/Telegram/TGStreamingController.swift` | ~336 | Edit-based 流式推送 actor：节流（0.8s/2s/5s 递增）、429 退避、传输降级（edit → append）、token 缓冲 |
+| `Sources/AxionCLI/Services/Telegram/TGCommandRegistry.swift` | ~59 | 命令注册表 Sendable struct：注册/解析/菜单命令提取、名称归一化（strip `/@bot`、lowercase、`-`→`_`） |
+| `Sources/AxionCLI/Services/Telegram/TGCommandRouter.swift` | ~28 | 薄路由层：归一化输入 → registry.resolve() → handler 闭包调用 |
+| `Sources/AxionCLI/Services/Telegram/TGInteractiveSessionStore.swift` | ~200 | Inline keyboard 交互 actor：session 管理、callback query 处理、answerCallbackQuery 确认 |
+| `Sources/AxionCLI/Services/Telegram/TGErrorSanitizer.swift` | ~116 | TG API 错误分类（4 类：retryableNetwork/rateLimited/formatRejected/permanentTelegramError）+ 用户友好消息 |
+| `Sources/AxionCLI/Services/Telegram/TGModels.swift` | ~236 | TG API 模型：Update/Message/CallbackQuery/InlineKeyboardMarkup 等 Codable 类型 |
+| `Sources/AxionCLI/Services/Events/AgentPausedEvent.swift` | ~68 | SDK pause → EventBus 桥接事件：SDK 消息流不发布 AgentPausedEvent，自定义桥接将 pause 消息转为 EventBus 事件 |
+
+**配置扩展（AxionConfig）：**
+
+```swift
+// 新增字段（decodeIfPresent, Optional, nil defaults）
+var gatewayEnabled: Bool?                     // 有效默认 false
+var gatewayCuratorIdleHours: Double?          // 有效默认 2.0
+var gatewayCuratorIntervalHours: Double?      // 有效默认 168.0
+var gatewayTaskTimeoutMinutes: Double?        // 有效默认 10.0
+var gatewayNotifyCuratorResults: Bool?        // 有效默认 false
+// 注：TG token/whitelist 不写入 config.json，通过环境变量传入：
+// AXION_TELEGRAM_BOT_TOKEN, AXION_TELEGRAM_ALLOWED_USERS
+```
+
+**launchd plist：**
+- Label: `dev.axion.gateway`（与 `dev.axion.server` 分开）
+- 路径: `~/Library/LaunchAgents/dev.axion.gateway.plist`
+- RunAtLoad + KeepAlive(Crashed=true) + ThrottleInterval=10
+- 日志: `~/.axion/gateway.log` + `~/.axion/gateway.err.log`
+
+**信号处理：**
+- SIGTERM → GatewayRunner.stop() → 停止接受新任务 → 等待运行中任务（最多 30 秒）→ 退出
+- SIGINT → 同 SIGTERM（支持 Ctrl-C 开发调试）
+
+**与现有 daemon 的关系：**
+- `axion daemon` → 仅 HTTP API（AxionBar 后端），功能不变
+- `axion gateway` → HTTP API + TG + 自进化调度，是 daemon 的超集
+- 用户可以只跑 daemon、只跑 gateway、或两个都跑（但没必要，gateway 包含了 HTTP API）
+- 未来考虑废弃 daemon，用 gateway 完全替代
+
+---
+
+### D10: Telegram Adapter 通信模式
+
+**决策：** HTTP 长轮询（getUpdates），不使用 Webhook。
+
+**背景：** TG Bot API 支持两种接收消息方式：长轮询和 Webhook。MVP 选择长轮询。
+
+**选择理由：**
+- 无需公网 IP（Mac 在 NAT 后面也能用）
+- 无需 TLS 证书
+- 无需配置 Webhook URL
+- 开发调试简单（本地直接跑）
+- 单用户场景，轮询延迟（1-3 秒）完全可接受
+
+**实现细节：**
+
+```
+TelegramAdapter (actor)
+    │
+    ├── pollLoop() — async 无限循环
+    │       ├── getUpdates?offset={lastUpdateId+1}&timeout=30
+    │       ├── 解析 Update 数组
+    │       ├── 过滤未授权用户（静默丢弃）
+    │       ├── 分发到 handleMessage / handleCommand
+    │       └── 更新 lastUpdateId
+    │
+    ├── handleMessage(_ text: String) async
+    │       ├── 提交任务到 TaskQueue
+    │       └── 返回"任务已提交"
+    │
+    ├── handleCommand(_ command: String) async
+    │       ├── /status → 查询 GatewayRunner 状态
+    │       └── /skills → 查询 SkillRegistry
+    │
+    └── sendReply(_ text: String, to chatId: Int64) async
+            ├── 长消息分段（TG 限制 4096 字符）
+            └── sendMessage API 调用
+```
+
+**API 调用方式：**
+- URLSession HTTP 请求，无需第三方库
+- JSON 编解码用 Codable + JSONEncoder/JSONDecoder
+- 超时：长轮询 30 秒，发送消息 10 秒
+- 重试：网络错误最多重试 3 次（指数退避 1s → 2s → 4s）
+
+**安全模型：**
+
+```swift
+// 用户授权检查（参考 Hermes _is_user_authorized）
+func isAuthorized(userId: Int64) -> Bool {
+    guard let allowed = ProcessInfo.processInfo.environment["AXION_TELEGRAM_ALLOWED_USERS"] else { return false }
+    let allowedIds = allowed.split(separator: ",").map { $0.trimmingCharacters(in: .whitespaces) }
+    return allowedIds.contains(String(userId))
+}
+```
+
+- 未授权消息静默丢弃（不回复、不记录用户内容）
+- Bot token 通过环境变量 `AXION_TELEGRAM_BOT_TOKEN` 传入，不写入 config.json
+- API Key 不出现在 TG 推送消息中
+
+**图片支持（FR-2.3）：**
+- 接收：getUpdates 返回 PhotoSize 数组 → 选最大尺寸 → 下载到临时文件 → 作为 agent 附件传入
+- 发送：截图结果通过 sendPhoto 推送
+
+**EventBus → TG 推送：**
+- GatewayRunner 注册一个 TGEventHandler（实现 EventHandler protocol）
+- 订阅 AgentStepEvent → 推送步骤进展到 TG
+- 订阅 AgentCompletedEvent → 推送最终结果到 TG
+- 推送节流：步骤进展最多每 5 秒推送一次，避免 TG API rate limit
+
+---
+
+### D12: Telegram 体验层架构（Epic 32）
+
+**决策：** Telegram 体验由独立的服务层组件提供：格式化（TGMessageFormatter）、流式推送（TGStreamingController）、命令系统（TGCommandRegistry + TGCommandRouter）、交互式会话（TGInteractiveSessionStore）、Pause/Resume 桥接（AgentPausedEvent）。
+
+**背景：** Epic 29 实现了基础 TG 通信（纯文本收发）。Epic 32 升级为富文本渲染、流式气泡、可发现命令和 inline keyboard 交互。
+
+**关键设计决策：**
+
+1. **TGMessageFormatter 三重降级** — MarkdownV2 → HTML → PlainText。避免 Telegram 严格的 MarkdownV2 转义规则导致消息发送失败。`split()` 基于渲染长度而非原始文本长度。
+
+2. **TGStreamingController 是 actor** — 管理流式推送状态（previewMessageId、throttle timer、429 Retry-After、transport mode）。闭包注入（sendMessage/editMessage/sendChatAction）保持可测试性。
+
+3. **格式化所有权归 Adapter** — **Controller 生产原始文本，Adapter 负责格式化。** 避免双重格式化（Epic 32 Story 32.2 教训）。
+
+4. **TGCommandRegistry 是 Sendable struct** — 启动时构建一次，运行时不可变。Handler 是 `@Sendable (Int64) async -> String` 闭包。
+
+5. **AgentPausedEvent 自定义桥接** — SDK 消息流不发布 AgentPausedEvent 到 EventBus。自定义桥接：SDK pause 消息 → EventBus AgentPausedEvent → TGEventHandler → inline keyboard → callback → agent.resume。
+
+6. **闭包类型安全** — 流经 3+ 文件的闭包必须在消费端定义 typealias（Epic 32 Story 32.2 教训：sendMessage 返回 Void 导致 previewMessageId 丢失）。
+
+7. **Deferred Wiring 模式** — TaskSerialQueue 初始化时闭包使用 no-op 默认值，adapter 创建后通过 `updateReplyHandler`/`updateEditHandler` 等方法重新接线。解决 Swift actor 初始化顺序问题。
+
+**交互式审批流程：**
+
+```
+Agent pause → SDK message stream → TGEventHandler detects pause
+    → Publish AgentPausedEvent to EventBus
+    → TGInteractiveSessionStore creates session + inline keyboard
+    → User taps button → callback query → answerCallbackQuery
+    → Resume handle invokes agent.resume(proceed: true/false)
+```
+
+**流式推送流程：**
+
+```
+Agent token stream → TGStreamingController.emitToken()
+    → Buffer tokens (accumulation window)
+    → Throttled editMessageText (0.8s → 2s → 5s progressive)
+    → On 429: Retry-After wait → degrade transport (edit → append)
+    → On completion: final format + send
+```
+
+---
+
+### D11: 后台审查 Actor 隔离策略
+
+**决策：** 审查 agent 通过独立 AxionRuntime 实例执行，不与主任务共享 actor 状态。
+
+**背景：** Hermes 用 Python thread fork 审查 agent，天然隔离。Axion 用 Swift actor，需要明确隔离策略。
+
+**问题：**
+- AxionRuntime 是 actor，内部持有 EventBus、EventHandler 列表
+- 审查 agent 需要 Agent（有 LLM 调用能力）但工具权限受限
+- 审查和主任务不能共享 HelperProcessManager（Helper 进程可能正在被主任务使用）
+
+**方案：**
+
+```
+ReviewScheduler (actor)
+    │
+    ├── 收到 AgentCompletedEvent
+    ├── 检查 shouldReview() → 是
+    │
+    └── 创建独立执行路径（不走 AxionRuntime）：
+            ├── AgentBuilder.buildReviewAgent() — 新方法
+            │       ├── 复用 build() 的 model/apiKey/baseURL
+            │       ├── 工具白名单：memory + skill 操作
+            │       ├── 无 MCP 连接（不操作桌面）
+            │       └── 无 Helper 进程
+            │
+            └── reviewAgent.stream(reviewPrompt)
+                    └── 结果写入 FactStore + SkillRegistry
+```
+
+**关键隔离点：**
+1. **审查 agent 不连接 Helper** — 工具白名单只有 memory/skill，没有 AX 操作
+2. **审查 agent 不共享 AxionRuntime** — 通过 ReviewOrchestrator.executeReview() 创建独立 Agent 实例
+3. **审查 agent 不写入 EventBus** — 直接操作 FactStore 和 SkillRegistry
+4. **审查结果可选推送 TG** — 通过直接回调 onReviewResult（非 EventBus），由 GatewayCommand 在构建时注入
+
+**Detached Task 通信约束：**
+- per-request EventBus 在请求完成时停止，不跨越 detached Task 生命周期
+- 后台任务（ReviewScheduler、CuratorScheduler）使用直接回调（onReviewResult、onCuratorResult）进行跨组件通信
+- EventBus 仅用于同步、请求内的事件传播
+
+**AgentBuilder 扩展：**
+- 审查 agent 通过 `ReviewOrchestrator.executeReview(parentAgent:messages:config:)` 创建
+- 复用 buildFullSystemPrompt()（前缀缓存共享策略）
+- 工具集：FactStore 操作 + SkillRegistry 操作（白名单）
+
+**CuratorScheduler 同理：**
+- 触发 IntelligentCurator.execute()（已有完整实现）
+- Curator 内部通过 LLMSkillEvolver 调用 LLM
+- 不需要独立 agent 实例（Curator 直接操作文件）
+
+---
+
 ### 决策影响分析
 
 **实现顺序：**
@@ -500,6 +780,7 @@ actor HelperProcessManager {
 4. **SDK 集成** — AgentBuilder + BuildConfig 构建 Agent
 5. **CLI 入口** — ArgumentParser 子命令 + 流式输出 + Trace 记录
 6. **API 入口** — ServerCommand runHandler 通过 AxionRuntime + EventBusBridge SSE 推送（Epic 26）；ApiRunner 仅保留 runSkillAgent 路径
+7. **Gateway**（远程交互 + 自进化） — GatewayRunner + TelegramAdapter + ReviewScheduler + CuratorScheduler（D9/D10/D11）
 
 **跨组件依赖：**
 
@@ -507,6 +788,7 @@ actor HelperProcessManager {
 - CLI → AgentBuilder（构建 Agent）、Helper（MCP 工具调用）
 - API → AgentBuilder（构建 Agent）、Helper（MCP 工具调用）
 - Helper → AxionCore（共享模型）
+- Gateway → AxionRuntime（任务执行）、AxionAPI（HTTP server）、ReviewOrchestrator（后台审查）、IntelligentCurator（自进化）、TelegramAdapter（TG 通信）
 
 ## 实现模式与一致性规则
 

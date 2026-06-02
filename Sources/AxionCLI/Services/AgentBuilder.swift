@@ -50,6 +50,7 @@ enum AgentBuilder {
         let runId: String?
         let sessionId: String?
         let sessionStore: SessionStore?
+        let emitTokenStream: Bool
 
         static func forCLI(
             config: AxionConfig,
@@ -80,7 +81,8 @@ enum AgentBuilder {
                 fast: fast,
                 runId: runId,
                 sessionId: sessionId,
-                sessionStore: sessionStore
+                sessionStore: sessionStore,
+                emitTokenStream: false
             )
         }
 
@@ -103,7 +105,8 @@ enum AgentBuilder {
                 fast: false,
                 runId: nil,
                 sessionId: nil,
-                sessionStore: nil
+                sessionStore: nil,
+                emitTokenStream: false
             )
         }
 
@@ -129,7 +132,8 @@ enum AgentBuilder {
                 fast: false,
                 runId: nil,
                 sessionId: nil,
-                sessionStore: nil
+                sessionStore: nil,
+                emitTokenStream: false
             )
         }
 
@@ -153,7 +157,8 @@ enum AgentBuilder {
                 fast: false,
                 runId: nil,
                 sessionId: nil,
-                sessionStore: nil
+                sessionStore: nil,
+                emitTokenStream: false
             )
         }
     }
@@ -249,6 +254,12 @@ enum AgentBuilder {
             agentTools.append(createSkillTool(registry: skillRegistry))
         }
 
+        // Memory tool — Agent can actively read/write MEMORY.md and USER.md
+        if !buildConfig.noMemory, !buildConfig.dryrun {
+            let universalStore = UniversalMemoryStore(memoryDir: memoryDir)
+            agentTools.append(MemoryTool(store: universalStore))
+        }
+
         // 9. Build AgentOptions
         let effectiveMaxSteps = buildConfig.dryrun ? 1 : (buildConfig.maxSteps ?? config.maxSteps)
         let effectiveMaxTokens = buildConfig.maxTokens ?? 4096
@@ -283,6 +294,11 @@ enum AgentBuilder {
             agentOptions.sessionStore = buildConfig.sessionStore
         }
 
+        // Token streaming: enable for TG tasks that need edit-based streaming
+        if buildConfig.emitTokenStream {
+            agentOptions.emitTokenStream = true
+        }
+
         // Hook onRunComplete — captures context for post-run processing
         let runCompleteBox = RunCompleteContextBox()
         agentOptions.onRunComplete = { context in
@@ -315,12 +331,15 @@ enum AgentBuilder {
                 client: evolverClient,
                 evolutionModel: config.reviewModel ?? AxionConfig.defaultReviewModel
             )
+            let universalMemoryStore = UniversalMemoryStore(memoryDir: memoryDir)
+            let reviewSaveMemoryTool = ReviewSaveUniversalMemoryTool(store: universalMemoryStore)
             reviewOrchestrator = ReviewOrchestrator(
                 scheduleConfig: scheduleConfig,
                 factStore: reviewFactStore,
                 skillRegistry: skillRegistry,
                 skillEvolver: skillEvolver,
-                usageStore: concreteStore
+                usageStore: concreteStore,
+                additionalReviewTools: [reviewSaveMemoryTool]
             )
 
             // IntelligentCurator — reuses deps from ReviewOrchestrator block
@@ -444,6 +463,7 @@ enum AgentBuilder {
 
         // Memory context
         var memoryContext: String? = nil
+        var universalMemoryContext: String? = nil
         if !noMemory {
             let contextProvider = MemoryContextProvider()
             let factStore = AxionFactStore(memoryDir: memoryDir)
@@ -462,6 +482,9 @@ enum AgentBuilder {
             } catch {
                 // Non-fatal: continue without memory context
             }
+
+            // Universal memory (MEMORY.md + USER.md) — frozen at prompt build time
+            universalMemoryContext = await contextProvider.buildUniversalMemoryContext(memoryDir: memoryDir)
         }
 
         let baseSystemPrompt = (try? PromptBuilder.load(
@@ -478,6 +501,7 @@ enum AgentBuilder {
         let prompt = buildFullSystemPrompt(
             basePrompt: baseSystemPrompt,
             memoryContext: memoryContext,
+            universalMemoryContext: universalMemoryContext,
             skillsPrompt: skillsPrompt
         )
 
@@ -503,10 +527,11 @@ enum AgentBuilder {
         return prompt
     }
 
-    /// Builds the full system prompt with skills section appended.
+    /// Builds the full system prompt with memory context and skills section appended.
     static func buildFullSystemPrompt(
         basePrompt: String,
         memoryContext: String? = nil,
+        universalMemoryContext: String? = nil,
         skillsPrompt: String = ""
     ) -> String {
         var prompt = basePrompt
@@ -514,6 +539,22 @@ enum AgentBuilder {
         if let memoryContext, !memoryContext.isEmpty {
             prompt += "\n\n\(memoryContext)"
         }
+
+        if let universalMemoryContext, !universalMemoryContext.isEmpty {
+            prompt += "\n\n\(universalMemoryContext)"
+        }
+        prompt += """
+
+        ## Universal Memory Operations
+
+        Treat Universal Memory as long-lived memory, not live repository state.
+        - If the user asks you to remember or save a durable preference/fact, use the `memory` tool with `add`.
+        - If the user corrects, updates, or rephrases something already in Universal Memory, prefer the `memory` tool with `replace` (or `remove` + `add`) instead of searching the repo or editing files, unless the user explicitly asks to change code, docs, or configuration.
+        - If the user asks you to forget or delete a remembered preference/fact, use the `memory` tool with `remove`.
+        - For explicit memory-management requests (`remember/save/update/delete this memory`), do not short-circuit based on your own safety judgment. Call the `memory` tool first and let its security scanner accept or reject the content.
+        - If the `memory` tool rejects content with `security_rejection`, tell the user that the save/update was blocked by the security scanner and do not fall back to storing it elsewhere.
+        - Use target `user` for personal preferences and target `memory` for durable project/environment facts.
+        """
 
         if !skillsPrompt.isEmpty {
             prompt += """

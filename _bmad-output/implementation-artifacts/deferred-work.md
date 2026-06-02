@@ -30,3 +30,20 @@
 
 - RunCompleteContextBox (`AgentBuilder.swift:11-13`) is `@unchecked Sendable` with a mutable `var context` — onRunComplete closure writes, RunOrchestrator reads. No synchronization. Currently safe because SDK stream processing is sequential, but fragile if SDK changes concurrency model.
 - Split-brain tracker IDs in ServerCommand.runHandler — RunCoordinator generates its own runId via `submitRun()`, then passes it to SDK's `tracker.updateRun(runId:)` which doesn't know that ID. SDK and Axion track runs independently. Tests pass because SDK routes and Axion custom routes are tested separately. Should be unified by either passing SDK's runId through to RunCoordinator or eliminating dual tracking.
+
+## Deferred from: Epic 29 验收 (2026-05-30)
+
+- TG 持续会话 — 当前每条 TG 消息创建新 agent session（`executeRun()`），用户无法基于上次结果追问。改进方案：`TaskSerialQueue` 维护 `chatId → sessionId` 映射，用 `resumeSession()` 替代 `executeRun()`，30 分钟无消息自动关闭会话，用户可发 `/new` 主动开始新会话。
+
+## Deferred from: TG Persistent Sessions review (2026-05-30)
+
+- Resume degradation double timeout — when `resumeRun()` fails and degrades to `executeNewWithTimeout()`, the task gets a fresh full timeout. Worst case ~20 min wall clock for default 10 min timeout. Acceptable tradeoff for simplicity; could be improved by tracking elapsed time.
+- `chatSessions` unbounded growth — `TaskSerialQueue.chatSessions` has no eviction policy for distinct chatIds. For a small-user-count TG bot this is fine. Should add a max-entries eviction (similar to `DaemonRuntimeManager.maxSessionHistory`) if user count grows.
+
+## Deferred from: TG Message UX Simplification spec split (2026-06-01)
+
+- Broader Hermes-parity polish — add Telegram message reactions / notification-mode tuning / richer processing indicators only after the core chat-noise cleanup ships.
+
+## Deferred from: TG Message UX Simplification review (2026-06-01)
+
+- Group-chat session isolation — `TaskSerialQueue` resumes Telegram sessions by `chatId` only, so different users in the same group chat could inherit each other’s resumed context. Out of scope for this UX cleanup; address in a focused session-keying follow-up.

@@ -2,10 +2,8 @@ import ArgumentParser
 import Foundation
 import OpenAgentSDK
 
-/// `axion memory list` — display accumulated Memory for all known Apps.
-///
-/// Scans the Memory directory for fact files, reads each to display classified
-/// memory entries with status icons, kind labels, confidence, and evidence counts.
+/// `axion memory list` — display accumulated Memory for all known Apps
+/// and universal memory (MEMORY.md / USER.md) summary.
 struct MemoryListCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
         commandName: "list",
@@ -34,7 +32,8 @@ struct MemoryListCommand: AsyncParsableCommand {
         .observation: "备注",
     ]
 
-    /// List all Memory domains and their classified fact entries.
+    /// List all Memory domains and their classified fact entries,
+    /// plus universal memory summary.
     static func listMemory(in memoryDir: String) async -> String {
         let store = AxionFactStore(memoryDir: memoryDir)
 
@@ -45,38 +44,61 @@ struct MemoryListCommand: AsyncParsableCommand {
             return "No App Memory found.\nTotal: 0 apps"
         }
 
-        guard !domains.isEmpty else {
-            return "No App Memory found.\nTotal: 0 apps"
+        var lines: [String] = []
+
+        // App Memory section
+        if domains.isEmpty {
+            lines.append("App Memory: none")
+        } else {
+            lines.append("App Memory:")
+            var totalFacts = 0
+
+            for domain in domains.sorted() {
+                let facts: [AppMemoryFact]
+                do {
+                    facts = try await store.query(domain: domain)
+                } catch {
+                    lines.append("  \(domain) — error reading facts")
+                    continue
+                }
+
+                guard !facts.isEmpty else { continue }
+                totalFacts += facts.count
+                lines.append("  \(domain) (\(facts.count) facts)")
+                lines.append("  ──────────────────────────────")
+
+                for fact in facts {
+                    let icon = statusIcons[fact.status] ?? "?"
+                    let kindLabel = kindLabels[fact.kind] ?? fact.kind.rawValue
+                    let summary = String(fact.description.prefix(80))
+                    lines.append("    \(icon) [\(kindLabel)] confidence:\(String(format: "%.2f", fact.confidence)) evidence:\(fact.evidenceCount)")
+                    lines.append("      \(summary)")
+                }
+                lines.append("")
+            }
+            lines.append("Total: \(domains.count) apps, \(totalFacts) facts")
         }
 
-        var lines: [String] = ["App Memory:"]
-        var totalFacts = 0
+        // Universal Memory section
+        lines.append("")
+        lines.append("Universal Memory:")
+        let universalStore = UniversalMemoryStore(readOnlyMemoryDir: memoryDir)
+        let dateFormatter = DateFormatter()
+        dateFormatter.dateStyle = .short
+        dateFormatter.timeStyle = .short
 
-        for domain in domains.sorted() {
-            let facts: [AppMemoryFact]
-            do {
-                facts = try await store.query(domain: domain)
-            } catch {
-                lines.append("  \(domain) — error reading facts")
-                continue
+        for target in [MemoryTarget.memory, .user] {
+            let info = await universalStore.summary(target: target)
+            let entryWord = info.count == 1 ? "entry" : "entries"
+            let dateStr: String
+            if let date = info.lastModified {
+                dateStr = dateFormatter.string(from: date)
+            } else {
+                dateStr = "never"
             }
-
-            guard !facts.isEmpty else { continue }
-            totalFacts += facts.count
-            lines.append("  \(domain) (\(facts.count) facts)")
-            lines.append("  ──────────────────────────────")
-
-            for fact in facts {
-                let icon = statusIcons[fact.status] ?? "?"
-                let kindLabel = kindLabels[fact.kind] ?? fact.kind.rawValue
-                let summary = String(fact.description.prefix(80))
-                lines.append("    \(icon) [\(kindLabel)] confidence:\(String(format: "%.2f", fact.confidence)) evidence:\(fact.evidenceCount)")
-                lines.append("      \(summary)")
-            }
-            lines.append("")
+            lines.append("  \(target.rawValue) — \(info.count) \(entryWord) (last updated: \(dateStr))")
         }
 
-        lines.append("Total: \(domains.count) apps, \(totalFacts) facts")
         return lines.joined(separator: "\n")
     }
 

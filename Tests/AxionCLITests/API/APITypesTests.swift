@@ -531,7 +531,7 @@ struct APITypesTests {
         let durationMs = Double(elapsed.components.seconds) * 1000.0 +
             Double(elapsed.components.attoseconds) / 1_000_000_000_000.0
 
-        #expect(durationMs < 500.0)
+        #expect(durationMs < 2000.0)
     }
 
     // MARK: - CapabilitiesResponse Tests

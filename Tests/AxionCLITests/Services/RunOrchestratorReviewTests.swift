@@ -911,6 +911,37 @@ struct RunOrchestratorReviewTests {
         #expect(name == nil)
     }
 
+    @Test("RunOrchestrator.collectVisibleResponseText prefers streamed body over trailing summary result")
+    func collectVisibleResponseTextPrefersStreamedBody() {
+        let messages: [SDKMessage] = [
+            .partialMessage(.init(text: """
+            ## 📍 Where You Are
+
+            **All planned epics (1–32) are DONE.**
+            """)),
+            .assistant(.init(text: """
+            ## 🔀 What You Can Do Next
+
+            1. Commit your current work
+            2. Plan the next phase
+            """, model: "mock-model", stopReason: "end_turn")),
+            .result(.init(
+                subtype: .success,
+                text: "BMad Help: 所有 32 个 Epic 已完成，推荐下一步规划新阶段或刷新项目上下文",
+                usage: nil,
+                numTurns: 3,
+                durationMs: 500
+            ))
+        ]
+
+        let responseText = RunOrchestrator.collectVisibleResponseText(from: messages)
+
+        #expect(responseText?.contains("## 📍 Where You Are") == true)
+        #expect(responseText?.contains("## 🔀 What You Can Do Next") == true)
+        #expect(responseText?.contains("Plan the next phase") == true)
+        #expect(responseText?.contains("BMad Help: 所有 32 个 Epic 已完成") == false)
+    }
+
     @Test("Usage tracking failure does not block — catchable error on unwritable path")
     func usageTrackingFailureDoesNotBlock() async throws {
         // Use a path that cannot be written to — bumpView should throw, error must be catchable

@@ -4,6 +4,72 @@ import OpenAgentSDK
 
 import AxionCore
 
+/// Thread-safe box for sharing agent + messages with ReviewScheduler.
+final class ReviewDataContext: @unchecked Sendable {
+    private let lock = NSLock()
+    private var _agent: Agent?
+    private var _messages: [SDKMessage] = []
+    private var _reviewOrchestrator: (any ReviewOrchestrating)?
+    private var _messagesReady = false
+
+    var agent: Agent? {
+        lock.lock()
+        defer { lock.unlock() }
+        return _agent
+    }
+
+    var messages: [SDKMessage] {
+        lock.lock()
+        defer { lock.unlock() }
+        return _messages
+    }
+
+    var reviewOrchestrator: (any ReviewOrchestrating)? {
+        lock.lock()
+        defer { lock.unlock() }
+        return _reviewOrchestrator
+    }
+
+    /// Whether post-stream messages have been written.
+    var messagesReady: Bool {
+        lock.lock()
+        defer { lock.unlock() }
+        return _messagesReady
+    }
+
+    func update(agent: Agent, messages: [SDKMessage], reviewOrchestrator: (any ReviewOrchestrating)?) {
+        lock.lock()
+        _agent = agent
+        _messages = messages
+        _reviewOrchestrator = reviewOrchestrator
+        _messagesReady = !messages.isEmpty
+        lock.unlock()
+    }
+
+    /// Wait until post-stream messages are available (max 5 seconds).
+    func waitForMessages() async -> [SDKMessage] {
+        let deadline = ContinuousClock.now + .seconds(5)
+        while ContinuousClock.now < deadline {
+            if readMessagesReady() { return readMessages() }
+            try? await _Concurrency.Task.sleep(nanoseconds: 100_000_000) // 100ms
+        }
+        return readMessages()
+    }
+
+    // Synchronous accessors for use from async waitForMessages
+    private func readMessagesReady() -> Bool {
+        lock.lock()
+        defer { lock.unlock() }
+        return _messagesReady
+    }
+
+    private func readMessages() -> [SDKMessage] {
+        lock.lock()
+        defer { lock.unlock() }
+        return _messages
+    }
+}
+
 /// Encapsulates the full agent execution pipeline: stream loop with output rendering,
 /// takeover handling, and post-run processing (review + curator).
 ///
@@ -27,6 +93,12 @@ enum RunOrchestrator {
         let noReview: Bool
         let onReviewCompleted: (@Sendable (String) -> Void)?
         let eventBus: EventBus?
+        let reviewDataContext: ReviewDataContext?
+        /// When true, skip TakeoverIO prompt on pause and instead publish AgentPausedEvent to EventBus.
+        let nonInteractivePause: Bool
+        /// Called by RunOrchestrator to register a resume handle for a paused agent.
+        /// Parameters: (pendingId, resumeClosure). The resumeClosure calls agent.resume(context:).
+        let registerResumeHandle: (@Sendable (String, @Sendable @escaping (String) async -> Void) async -> Void)?
     }
 
     struct RunResult: Sendable {
@@ -103,6 +175,16 @@ enum RunOrchestrator {
         let externallyModified = false
         var takeoverEvent: (issue: String, summary: String, feedback: String?, reason: String, duration: TimeInterval?)? = nil
         var collectedMessages: [SDKMessage] = []
+        var streamedMessages: [SDKMessage] = []
+
+        // Pre-stream: set agent + orchestrator early so event handlers (ReviewScheduler)
+        // can access them when AgentCompletedEvent arrives during stream completion.
+        // Messages will be updated post-stream.
+        runConfig.reviewDataContext?.update(
+            agent: agent,
+            messages: [],
+            reviewOrchestrator: buildResult.reviewOrchestrator
+        )
 
         let startTime = ContinuousClock.now
 
@@ -112,6 +194,7 @@ enum RunOrchestrator {
             for await message in messageStream {
                 if _Concurrency.Task.isCancelled { break }
                 if case .toolUse = message { totalSteps += 1 }
+                streamedMessages.append(message)
                 outputHandler.handle(message)
 
                 // Collect messages for post-run review
@@ -152,25 +235,47 @@ enum RunOrchestrator {
                     switch data.subtype {
                     case .paused:
                         guard let pausedData = data.pausedData else { break }
-                        let takeoverStartTime = ContinuousClock.now
-                        let result = takeoverIO.displayTakeoverPrompt(
-                            reason: pausedData.reason,
-                            allowForeground: runConfig.allowForeground,
-                            completedSteps: totalSteps
-                        )
-                        switch result.action {
-                        case .resume:
-                            let userAction = result.userInput?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty == false
-                                ? result.userInput! : "用户已完成手动操作"
-                            takeoverIO.write("[axion] 正在恢复执行...")
-                            let elapsed = ContinuousClock.now - takeoverStartTime
-                            let durationSeconds = TakeoverMarker.durationToSeconds(elapsed)
-                            takeoverEvent = (issue: pausedData.reason, summary: userAction, feedback: result.feedback, reason: pausedData.reason, duration: durationSeconds)
-                            agent.resume(context: userAction)
-                        case .skip:
-                            agent.resume(context: "skip")
-                        case .abort:
-                            agent.interrupt()
+
+                        if runConfig.nonInteractivePause {
+                            // Gateway mode: register resume handle, publish event, await external resume
+                            guard let registerHandle = runConfig.registerResumeHandle else {
+                                takeoverIO.write("[axion] warning: nonInteractivePause enabled but no registerResumeHandle — interrupting agent")
+                                agent.interrupt()
+                                break
+                            }
+                            let pendingId = UUID().uuidString.prefix(8).lowercased()
+                            let resumeHandle: @Sendable (String) async -> Void = { context in
+                                agent.resume(context: context)
+                            }
+                            await registerHandle(String(pendingId), resumeHandle)
+                            await runConfig.eventBus?.publish(AgentPausedEvent(
+                                reason: pausedData.reason,
+                                sessionId: runConfig.task,
+                                canResume: true,
+                                pendingId: String(pendingId)
+                            ))
+                        } else {
+                            // CLI mode: interactive takeover prompt
+                            let takeoverStartTime = ContinuousClock.now
+                            let result = takeoverIO.displayTakeoverPrompt(
+                                reason: pausedData.reason,
+                                allowForeground: runConfig.allowForeground,
+                                completedSteps: totalSteps
+                            )
+                            switch result.action {
+                            case .resume:
+                                let userAction = result.userInput?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty == false
+                                    ? result.userInput! : "用户已完成手动操作"
+                                takeoverIO.write("[axion] 正在恢复执行...")
+                                let elapsed = ContinuousClock.now - takeoverStartTime
+                                let durationSeconds = TakeoverMarker.durationToSeconds(elapsed)
+                                takeoverEvent = (issue: pausedData.reason, summary: userAction, feedback: result.feedback, reason: pausedData.reason, duration: durationSeconds)
+                                agent.resume(context: userAction)
+                            case .skip:
+                                agent.resume(context: "skip")
+                            case .abort:
+                                agent.interrupt()
+                            }
                         }
                     case .pausedTimeout:
                         takeoverIO.displayTimeoutPrompt()
@@ -187,15 +292,14 @@ enum RunOrchestrator {
             agent.interrupt()
         }
 
-        // Post-stream
+        // Post-stream: update messages (agent + orchestrator already set pre-stream)
+        runConfig.reviewDataContext?.update(
+            agent: agent,
+            messages: collectedMessages,
+            reviewOrchestrator: buildResult.reviewOrchestrator
+        )
 
-        // Extract last assistant response text for notification summary
-        let responseText = collectedMessages.last(where: {
-            if case .assistant = $0 { return true }; return false
-        }).flatMap { msg -> String? in
-            if case .assistant(let data) = msg { return data.text }
-            return nil
-        }
+        let responseText = Self.collectVisibleResponseText(from: streamedMessages)
 
         let elapsed = ContinuousClock.now - startTime
         let durationMs = Int(elapsed.components.seconds * 1000 + elapsed.components.attoseconds / 1_000_000_000_000_000)
@@ -221,17 +325,19 @@ enum RunOrchestrator {
 
         // Post-run review — after memory processing, before lock release
         if let orchestrator = buildResult.reviewOrchestrator, !runConfig.dryrun, !runConfig.noMemory, !runConfig.noReview {
-            let reviewConfig = ReviewAgentConfig()
+            var reviewConfig = ReviewAgentConfig()
+            reviewConfig.allowedTools.append("review_save_universal_memory")
             let (doMemory, doSkill) = orchestrator.shouldReview(
                 sessionId: runId,
                 messageCount: collectedMessages.count,
                 config: reviewConfig
             )
             if doMemory || doSkill {
-                let tunedConfig = ReviewAgentConfig(
+                var tunedConfig = ReviewAgentConfig(
                     reviewMemory: doMemory,
                     reviewSkills: doSkill
                 )
+                tunedConfig.allowedTools.append("review_save_universal_memory")
                 let result = await orchestrator.executeReview(
                     parentAgent: agent,
                     messages: collectedMessages,
@@ -530,6 +636,79 @@ enum RunOrchestrator {
             }
         }
         return nil
+    }
+
+    /// Reconstructs the user-visible assistant body from streamed SDK messages.
+    /// Mirrors `SDKTerminalOutputHandler` semantics so downstream surfaces like
+    /// Telegram receive the same substantive content a terminal user saw.
+    static func collectVisibleResponseText(from messages: [SDKMessage]) -> String? {
+        var visibleChunks: [String] = []
+        var streamBuffer = ""
+        var lastFlushedText = ""
+        var fallbackResultText: String?
+
+        func appendVisibleChunk(_ text: String) {
+            let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !trimmed.isEmpty else { return }
+            visibleChunks.append(trimmed)
+        }
+
+        func flushStreamBuffer() {
+            guard !streamBuffer.isEmpty else { return }
+            lastFlushedText = streamBuffer
+            appendVisibleChunk(streamBuffer)
+            streamBuffer = ""
+        }
+
+        for message in messages {
+            switch message {
+            case .partialMessage(let data):
+                streamBuffer += data.text
+
+            case .assistant(let data):
+                if !streamBuffer.isEmpty {
+                    flushStreamBuffer()
+                    let trimmed = data.text.trimmingCharacters(in: .whitespacesAndNewlines)
+                    if !trimmed.isEmpty && trimmed != lastFlushedText {
+                        if trimmed.hasPrefix(lastFlushedText) {
+                            let extra = String(trimmed.dropFirst(lastFlushedText.count))
+                                .trimmingCharacters(in: .whitespacesAndNewlines)
+                            if !extra.isEmpty {
+                                appendVisibleChunk(extra)
+                            }
+                        } else {
+                            appendVisibleChunk(trimmed)
+                        }
+                        lastFlushedText = trimmed
+                    }
+                } else if !data.text.isEmpty && data.text != lastFlushedText {
+                    lastFlushedText = data.text
+                    appendVisibleChunk(data.text)
+                }
+
+            case .result(let data):
+                flushStreamBuffer()
+                let trimmed = data.text.trimmingCharacters(in: .whitespacesAndNewlines)
+                if !trimmed.isEmpty {
+                    fallbackResultText = trimmed
+                }
+
+            case .toolUse, .toolResult, .system, .userMessage, .toolProgress,
+                    .hookStarted, .hookProgress, .hookResponse, .taskStarted,
+                    .taskProgress, .authStatus, .filesPersisted, .localCommandOutput,
+                    .promptSuggestion, .toolUseSummary:
+                flushStreamBuffer()
+            }
+        }
+
+        flushStreamBuffer()
+
+        let visibleText = visibleChunks.joined(separator: "\n\n").trimmingCharacters(in: .whitespacesAndNewlines)
+        if !visibleText.isEmpty {
+            return visibleText
+        }
+
+        return fallbackResultText
     }
 
     /// Brings the terminal app back to the foreground after UI automation.

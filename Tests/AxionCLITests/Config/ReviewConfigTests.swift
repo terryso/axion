@@ -43,7 +43,7 @@ struct ReviewConfigTests: ~Copyable {
             noMemory: false, noVisualDelta: false,
             allowForeground: false, maxSteps: nil,
             config: AxionConfig.default, noReview: true, onReviewCompleted: nil,
-            eventBus: nil
+            eventBus: nil, reviewDataContext: nil, nonInteractivePause: false, registerResumeHandle: nil
         )
         #expect(config.noReview == true)
     }
@@ -55,7 +55,7 @@ struct ReviewConfigTests: ~Copyable {
             noMemory: false, noVisualDelta: false,
             allowForeground: false, maxSteps: nil,
             config: AxionConfig.default, noReview: false, onReviewCompleted: nil,
-            eventBus: nil
+            eventBus: nil, reviewDataContext: nil, nonInteractivePause: false, registerResumeHandle: nil
         )
         #expect(config.noReview == false)
     }

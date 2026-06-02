@@ -163,7 +163,7 @@ AxionBar ← AxionCore + Foundation + SwiftUI + AppKit（独立 macOS App）
 | 目标 | 类型 | 入口 |
 |------|------|------|
 | AxionCore | library | 无（共享库） |
-| AxionCLI | executable | `main.swift` + `@main struct AxionCLI: ParsableCommand` |
+| AxionCLI | executable | `main.swift` + `@main struct AxionCLI: ParsableCommand`（含 gateway 子命令） |
 | AxionHelper | executable | `main.swift`（`try await HelperMCPServer.run()`） |
 | AxionBar | executable | `App.swift`（`@main struct AxionBarApp: App` + MenuBarExtra） |
 
@@ -299,6 +299,10 @@ func test_xxx_roundTrip() throws {
 | `EventBroadcaster` | SSE 事件多客户端广播 + 事件持久化 | 订阅者和重放缓存串行化，每次 emit 追加到 api-events.jsonl |
 | `ConcurrencyLimiter` | 并发任务槽位管理（SDK 提供） | 并发计数和排队串行化 |
 | `TaskQueue` | MCP Server 模式任务串行化（SDK 提供） | agent.prompt() 调用串行化 |
+| `GatewayRunner` | Gateway 生命周期管理、任务调度 | 进程状态、启停、信号处理串行化（D9） |
+| `TelegramAdapter` | TG Bot API 长轮询、消息收发 | TG API 调用和消息队列串行化（D10） |
+| `ReviewScheduler` | 后台审查调度 | 审查间隔状态串行化（D11） |
+| `CuratorScheduler` | Curator 自动调度 | 空闲计时和 curator 状态串行化（D11） |
 
 ### Helper 进程生命周期（D8）
 
@@ -341,25 +345,44 @@ try await withTaskCancellationHandler {
 10. **测试中硬编码字符串而非调用真实方法** — 测试必须调用被测方法/函数，不允许测试纯字面量（bogus test）
 11. **JSON 输出使用手动字符串拼接** — 必须使用 JSONEncoder + Codable struct
 12. **AxionBar 测试写入真实文件系统** — 必须使用临时目录
+13. **审查 agent 连接 Helper/操作桌面** — 审查 agent 工具白名单只有 memory + skill，通过 `ReviewOrchestrator.executeReview()` 创建隔离 agent（D11）
+14. **TG bot token 写入 config.json** — 必须通过环境变量 `AXION_TELEGRAM_BOT_TOKEN` 传入
+15. **未授权 TG 消息回复错误信息** — 静默丢弃，不泄露任何信息
+16. **Detached Task 使用 EventBus 通信** — per-request EventBus 在请求完成时停止；detached Tasks 必须使用直接回调（onReviewResult、onCuratorResult），不依赖 EventBus
+17. **Controller 格式化文本后传给 Adapter** — 格式化所有权归 Adapter（TelegramAdapter），Controller 和 Handler 生产原始文本。避免双重格式化（Epic 32 教训）
+18. **闭包跨 3+ 文件传递时不定义 typealias** — 消费端必须定义 typealias（如 `typealias SendMessageClosure = (String, Int64) async -> Int64?`），提供端匹配。防止 Void vs Int64? 等静默类型不匹配
+19. **直接使用 `Task` 而非 `_Concurrency.Task`** — OpenAgentSDK 有 `Task` 类型名冲突，Gateway/Telegram 代码中必须使用 `_Concurrency.Task`
 
 ---
 
-## Memory 系统（Epic 4 + Epic 12）
+## Memory 系统（Epic 4 + Epic 12 + Epic 31）
 
-Axion 的跨任务学习系统，基于证据驱动的知识生命周期管理。
+Axion 的跨任务学习系统，基于证据驱动的知识生命周期管理 + 双轨通用记忆。
 
 **存储路径：** `~/.axion/memory/`
 - 旧格式：`{domain}.json` — KnowledgeEntry 数组（SDK 兼容）
 - 新格式：`{domain}-facts.json` — AppMemoryFact 数组（Epic 12+）
+- **通用记忆：** `MEMORY.md`（环境知识）+ `USER.md`（用户画像）（Epic 31+）
+
+**两套记忆系统互补不替代：**
+
+| 系统 | 文件格式 | 内容范围 | 工具/提取器 |
+|------|----------|----------|-------------|
+| App 操作 facts | JSON per domain | MCP 工具调用中提取的操作经验 | `AppMemoryExtractor` → `AxionFactStore` |
+| 通用记忆 | Markdown | 环境知识 + 用户画像 + 偏好 | `memory` 工具 + Review 审查提取 |
 
 **目录结构：**
 ```
-Sources/AxionCLI/Memory/             8 files, 2,107 lines (desktop-specific only)
+Sources/AxionCLI/Memory/             8+ files (desktop-specific + universal memory)
 ├── AppMemoryFact.swift              # Epic 12: 模型（MemoryFactStatus/Source/Kind 枚举）+ normalizeFact + factId (djb2)
 ├── AppMemoryExtractor.swift         # Epic 4: 从 SDK 消息流提取 App 操作摘要（+ extractFacts() + classifyKind()）
 ├── AppProfileAnalyzer.swift         # Epic 4: 模式识别 + 高频路径 + 失败经验
 ├── FamiliarityTracker.swift         # Epic 4: 熟悉度追踪（>= 3 次成功标记 familiar）
-├── MemoryContextProvider.swift      # Epic 4: Memory 上下文（Epic 12: 新增 buildFactMemoryContext 三类分类注入）
+├── MemoryContextProvider.swift      # Epic 4+31: Memory 上下文（buildFactMemoryContext + buildUniversalMemoryContext）
+├── UniversalMemoryStore.swift       # Epic 31: actor 管理 MEMORY.md / USER.md 的读写，线程安全
+├── MemorySecurityScanner.swift      # Epic 31: 写入时拒绝 + 加载时过滤，防提示注入和凭据泄露
+├── MemoryTool.swift                 # Epic 31: Agent 主动读写记忆工具（add/replace/remove/read）
+├── ReviewSaveUniversalMemoryTool.swift # Epic 31: 审查代理写入记忆工具（add/replace only）
 ├── RunMemoryProcessor.swift         # Epic 21: 每次运行后处理 Memory（SDK FactStore 交互）
 ├── TakeoverLearningService.swift    # Epic 15: Takeover 经验→Memory 转换（affordance/avoid）
 └── TakeoverMarker.swift             # Epic 15: InterventionReason 枚举 + TakeoverMarker struct
@@ -392,8 +415,10 @@ candidate ──(evidenceCount >= 2 && confidence >= 0.65)──► active
 - 每类最多 5 条（按 confidence 降序），附带 "soft hints, not hard rules" 声明
 
 **CLI 命令：**
-- `axion memory list` — 显示已积累 Memory（含状态图标 ✓/○/✗、分类标签、evidence_count）
+- `axion memory list` — 显示已积累 Memory（App facts + 通用记忆概要：条目数、最后更新时间）
+- `axion memory show <memory|user>` — 显示通用记忆完整内容（MEMORY.md 或 USER.md）
 - `axion memory clear --app <domain>` — 清除指定 App 的 Memory
+- `axion memory clear --type <memory|user>` — 清空通用记忆（MEMORY.md 或 USER.md）
 - `axion memory export <file>` — 全量或按 App 导出 Memory Bundle（JSON）
 - `axion memory export --app <domain> <file>` — 按 App 过滤导出
 - `axion memory import <file>` — 导入 Memory（降级为 candidate + confidence 封顶 0.55）
@@ -409,6 +434,16 @@ candidate ──(evidenceCount >= 2 && confidence >= 0.65)──► active
 - **合并策略**：max confidence, stronger status, local source 优先, evidenceCount +1
 - **惰性迁移**：读旧 KnowledgeEntry 时自动转为 AppMemoryFact，无需强制迁移脚本
 - 熟悉 App 使用紧凑规划策略（减少 list_windows/get_window_state 验证步骤）
+
+**通用记忆系统设计决策（Epic 31）：**
+- **§ 分隔符**：条目用 `§` 分隔（对齐 Hermes）。条目内容包含 `§` 会导致解析错误（已知限制，延后修复）
+- **Actor 隔离**：`UniversalMemoryStore` 是 actor，序列化文件 I/O。多个实例写同一文件安全（`atomically: true`）
+- **双重安全防线**：写入时 `scan()` 拒绝恶意内容；加载时 `scanEntry()` 过滤可疑条目（prompt 注入、角色劫持、凭据泄露、不可见 Unicode）
+- **冻结快照**：`buildSystemPrompt()` 在会话初始化时调用一次，结果缓存。中途写入只更新磁盘，不刷新 prompt（自然实现，无需特殊缓存机制）
+- **字符上限**：MEMORY.md 4000 字符，USER.md 2000 字符。超限时提示 Agent 先 replace/remove
+- **两套工具**：`MemoryTool`（Agent 主动管理，add/replace/remove/read）和 `ReviewSaveUniversalMemoryTool`（审查代理保存，add/replace only）
+- **注入位置**：`[=== Universal Memory ===]` 块在 App facts 之后、Skills 之前
+- **SDK 集成**：`ReviewOrchestrator` 通过 `additionalReviewTools` 参数注入审查工具（SDK v0.6.1+）
 
 **SDK 依赖（Epic 21 更新）：**
 - `FactStore` — SDK 提供的 actor 隔离持久化层，替代原 MemoryFactStore
@@ -641,6 +676,8 @@ AxionRuntime.execute(buildConfig, runOverrides) → AgentBuilder.build() → age
 - 环境变量 `AXION_API_KEY` 作为覆盖机制（CI/脚本场景）
 - 环境变量 `AXION_AUTH_KEY` 作为 daemon 模式下 server 的 auth-key 来源（Epic 16）
 - 环境变量 `AXION_BIN` 可覆盖 daemon plist 中的二进制路径（Epic 16）
+- 环境变量 `AXION_TELEGRAM_BOT_TOKEN` 配置 TG bot token（Gateway 模式）
+- 环境变量 `AXION_TELEGRAM_ALLOWED_USERS` 配置 TG 用户 ID 白名单（Gateway 模式）
 - `axion setup` 写入配置，`axion doctor` 验证所有层级
 
 **AxionConfig 默认值：**
@@ -653,6 +690,11 @@ AxionRuntime.execute(buildConfig, runOverrides) → AgentBuilder.build() → age
 | `maxReplanRetries` | `3` | 最大重规划次数 |
 | `traceEnabled` | `true` | 默认开启 trace |
 | `sharedSeatMode` | `true` | 默认开启共享座椅安全模式 |
+| `gatewayEnabled` | `false` | 是否启用 gateway |
+| `gatewayCuratorIdleHours` | `2.0` | Curator 空闲触发阈值（小时） |
+| `gatewayCuratorIntervalHours` | `168.0` | Curator 间隔（小时，默认 7 天） |
+| `gatewayTaskTimeoutMinutes` | `10.0` | 单任务超时（分钟） |
+| `gatewayNotifyCuratorResults` | `false` | Curator 结果是否推送 TG |
 
 ---
 
@@ -679,7 +721,7 @@ Axion server 可注册为 macOS 用户级 launchd 守护进程，实现开机自
 
 **核心文件：**
 ```
-Sources/AxionCLI/Services/DaemonService.swift    # plist 生成、launchctl 调用、状态查询
+Sources/AxionCLI/Services/DaemonService.swift    # plist 生成、launchctl 调用、状态查询（参数化支持 Gateway 和 daemon）
 Sources/AxionCLI/Commands/DaemonCommand.swift     # CLI 子命令入口
 ```
 
@@ -698,6 +740,61 @@ Sources/AxionCLI/Commands/DaemonCommand.swift     # CLI 子命令入口
 - 使用 launchctl bootstrap/bootout（不使用已废弃的 load/unload）
 - DaemonService 通过注入 `@Sendable` 闭包实现 launchctl 调用的可测试性
 - ServerCommand authKey 优先级：CLI `--auth-key` > `AXION_AUTH_KEY` 环境变量 > nil
+
+### Gateway 模式（D9/D10/D11）
+
+Gateway 是 daemon 的超集：包含 HTTP API + Telegram adapter + 后台审查 + Curator 自动调度。
+
+**CLI 命令：**
+- `axion gateway` — 前台启动（开发调试）
+- `axion gateway install` — 注册为 launchd 守护进程（开机自启）
+- `axion gateway status` — 运行状态、TG 连接、上次审查/curator 时间
+- `axion gateway uninstall` — 停止并卸载
+
+**核心文件：**
+```
+Sources/AxionCLI/Commands/GatewayCommand.swift    # CLI 入口
+Sources/AxionCLI/Services/GatewayRunner.swift     # 编排器（actor）
+Sources/AxionCLI/Services/TelegramAdapter.swift   # TG Bot API 长轮询（actor）
+Sources/AxionCLI/Services/ReviewScheduler.swift   # 后台审查调度（actor）
+Sources/AxionCLI/Services/CuratorScheduler.swift  # Curator 自动调度（actor）
+```
+
+**Telegram 体验层文件（Epic 32）：**
+```
+Sources/AxionCLI/Services/Telegram/TGMessageFormatter.swift         # MarkdownV2/HTML/Plain 三重降级 + 消息分段
+Sources/AxionCLI/Services/Telegram/TGStreamingController.swift      # Edit-based 流式推送（actor）
+Sources/AxionCLI/Services/Telegram/TGCommandRegistry.swift          # 命令注册表（Sendable struct）
+Sources/AxionCLI/Services/Telegram/TGCommandRouter.swift            # 薄路由层
+Sources/AxionCLI/Services/Telegram/TGInteractiveSessionStore.swift  # Inline keyboard 交互（actor）
+Sources/AxionCLI/Services/Telegram/TGErrorSanitizer.swift           # API 错误分类 + 用户友好消息
+Sources/AxionCLI/Services/Telegram/TGModels.swift                   # TG API Codable 模型
+Sources/AxionCLI/Services/Events/AgentPausedEvent.swift             # SDK pause → EventBus 桥接事件
+```
+
+**plist 配置：**
+- Label: `dev.axion.gateway`（与 `dev.axion.server` 独立）
+- 路径: `~/Library/LaunchAgents/dev.axion.gateway.plist`
+- 日志: `~/.axion/gateway.log` + `~/.axion/gateway.err.log`
+
+**TG 安全：**
+- `AXION_TELEGRAM_BOT_TOKEN` 环境变量配置 bot token（不写入 config.json）
+- `AXION_TELEGRAM_ALLOWED_USERS` 环境变量配置用户 ID 白名单（逗号分隔）
+- 未授权消息静默丢弃
+
+**后台审查（D11）：**
+- 审查 agent 通过 `AgentBuilder.buildReviewAgent()` 创建独立实例
+- 工具白名单：只有 memory + skill 操作，无 MCP/Helper
+- 不与主任务共享 AxionRuntime 实例
+
+**Curator 自动调度：**
+- 空闲 > `curatorIdleHours`（默认 2h）+ 距上次 > `curatorIntervalHours`（默认 168h = 7d）时触发
+- 调用现有 `IntelligentCurator.execute()`
+
+**与 daemon 的关系：**
+- `axion daemon` → 仅 HTTP API（AxionBar），功能不变
+- `axion gateway` → HTTP API + TG + 自进化，是 daemon 超集
+- 两者可独立运行，但通常只需 gateway
 
 ### API 运行状态持久化
 
@@ -884,6 +981,62 @@ MCPServerRunner.run()                            # 编排器（使用 AgentBuild
              ├── tools/list → [Helper 工具 + run_task + query_task_status]
              ├── tool_call "run_task" → TaskQueue.enqueue() → agent.prompt(task)
              └── tool_call "query_task_status" → RunTracker.getRun(runId)
+```
+
+### Gateway 数据流（D9/D10/D11）
+
+```
+axion gateway (长驻进程)
+    │
+    ├── 启动 → GatewayRunner (actor)
+    │       ├── 启动 HTTP API (复用 AxionAPI + Hummingbird)
+    │       ├── 启动 TelegramAdapter (actor) → getUpdates 长轮询
+    │       ├── 启动 CuratorScheduler (actor) → 定时检查
+    │       └── 注册信号处理 (SIGTERM/SIGINT)
+    │
+    ▼ TG 消息到达
+TelegramAdapter.pollLoop() 收到 Update
+    │
+    ├── 用户白名单检查 → 未授权则静默丢弃
+    │
+    ├── 文本消息 → 提交任务到 TaskQueue (ConcurrencyLimiter=1)
+    │       │
+    │       ▼ (排队执行)
+    │   AxionRuntime.execute(buildConfig, runOverrides)
+    │       ├── AgentBuilder.build() → agent
+    │       ├── agent.stream(task) → SDK Agent Loop
+    │       │       ├── LLM 规划 + 工具调用
+    │       │       │       ├── MCP tools (Helper) → AX 桌面操作
+    │       │       │       └── Bash tool → 代码执行
+    │       │       └── EventBus emit AgentEvents
+    │       │               ├── TGEventHandler → TG 推送进展（节流 5 秒）
+    │       │               ├── EventBridge → SSE (AxionBar)
+    │       │               └── TraceEventHandler → trace 记录
+    │       │
+    │       └── 完成 → TG 推送最终结果
+    │
+    ├── /status 命令 → 查询 GatewayRunner 状态
+    └── /skills 命令 → 查询 SkillRegistry
+
+    ▼ run 完成后（后台审查）
+ReviewScheduler 监听 AgentCompletedEvent
+    │
+    ├── ReviewScheduleConfig.shouldReview() → 是
+    │
+    └── AgentBuilder.buildReviewAgent() → 独立 agent 实例
+            ├── 工具白名单：memory + skill（无 MCP/Helper）
+            ├── 复用 buildFullSystemPrompt()（前缀缓存共享）
+            └── 审查结果 → FactStore + SkillRegistry 写入
+
+    ▼ 空闲时（Curator 自动调度）
+CuratorScheduler 检查：lastTaskTime + curatorIdleHours < now
+                     && lastCuratorTime + curatorIntervalHours < now
+    │
+    └── IntelligentCurator.execute()
+            ├── LLMSkillEvolver → SKILL.md 内容更新
+            ├── 合并重叠技能
+            ├── 归档长期未用技能（永不自动删除）
+            └── 结果 → .curator_state 持久化
 ```
 
 ### Takeover 数据流（Epic 7）

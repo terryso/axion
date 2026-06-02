@@ -39,9 +39,21 @@ enum ApiRunner {
         let eventBus = EventBus()
         let runtime = AxionRuntime(eventBus: eventBus)
 
-        await runtime.registerHandler(CostEventHandler())
         let traceDir = (ConfigManager.defaultConfigDirectory as NSString).appendingPathComponent("runs")
-        await runtime.registerHandler(TraceEventHandler(traceDir: traceDir))
+        let memoryDir = (ConfigManager.defaultConfigDirectory as NSString).appendingPathComponent("memory")
+        let profile = HandlerProfile(
+            context: .api,
+            config: config,
+            memoryDir: memoryDir,
+            traceDir: traceDir,
+            noMemory: true,
+            noReview: true,
+            noVisualDelta: true,
+            reviewDataContext: nil
+        )
+        for handler in profile.buildHandlers() {
+            await runtime.registerHandler(handler)
+        }
 
         let eventLoopTask = _Concurrency.Task { await runtime.startEventLoop() }
 
@@ -55,7 +67,9 @@ enum ApiRunner {
             json: false,
             noVisualDelta: true,
             noReview: true,
-            onReviewCompleted: nil
+            onReviewCompleted: nil,
+            reviewDataContext: nil,
+            nonInteractivePause: false, registerResumeHandle: nil
         )
 
         let runResult: AxionRunResult

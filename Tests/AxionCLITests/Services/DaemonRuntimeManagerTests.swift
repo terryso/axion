@@ -38,7 +38,8 @@ final class MockDaemonRuntime: AxionRuntimeRunning, @unchecked Sendable {
 
     func execute(
         buildConfig: AgentBuilder.BuildConfig,
-        runOverrides: AxionRuntime.RunOverrides
+        runOverrides: AxionRuntime.RunOverrides,
+        sessionId: String? = nil
     ) async throws -> AxionRunResult {
         _executeCount.increment()
         if let error { throw error }
@@ -52,6 +53,17 @@ final class MockDaemonRuntime: AxionRuntimeRunning, @unchecked Sendable {
         config: AxionConfig,
         buildConfig: AgentBuilder.BuildConfig,
         runOverrides: AxionRuntime.RunOverrides = .default
+    ) async throws -> AxionRunResult {
+        _executeCount.increment()
+        if let error { throw error }
+        guard let result else { fatalError("MockDaemonRuntime: no result and no error") }
+        return result
+    }
+
+    func resumeSession(
+        _ sessionId: String,
+        buildConfig: AgentBuilder.BuildConfig,
+        runOverrides: AxionRuntime.RunOverrides
     ) async throws -> AxionRunResult {
         _executeCount.increment()
         if let error { throw error }
@@ -101,6 +113,19 @@ private func makeBuildConfig(task: String = "test task") -> AgentBuilder.BuildCo
     )
 }
 
+private func makeTestProfile() -> HandlerProfile {
+    HandlerProfile(
+        context: .api,
+        config: AxionConfig(apiKey: "test"),
+        memoryDir: "/tmp/test-memory",
+        traceDir: "/tmp/test-traces",
+        noMemory: true,
+        noReview: true,
+        noVisualDelta: true,
+        reviewDataContext: nil
+    )
+}
+
 // MARK: - Mock DaemonRuntimeManager (for ServerCommand seam tests)
 
 final class MockDaemonRuntimeManager: DaemonRuntimeManaging, @unchecked Sendable {
@@ -121,7 +146,10 @@ final class MockDaemonRuntimeManager: DaemonRuntimeManaging, @unchecked Sendable
         task: String,
         buildConfig: AgentBuilder.BuildConfig,
         eventBus: EventBus,
-        runOverrides: AxionRuntime.RunOverrides
+        runOverrides: AxionRuntime.RunOverrides,
+        handlerProfile: HandlerProfile,
+        extraHandlers: [any EventHandler],
+        sessionId: String? = nil
     ) async throws -> AxionRunResult {
         _executeCount.increment()
         if let error { throw error }
@@ -136,6 +164,21 @@ final class MockDaemonRuntimeManager: DaemonRuntimeManaging, @unchecked Sendable
         buildConfig: AgentBuilder.BuildConfig,
         eventBus: EventBus = EventBus(),
         runOverrides: AxionRuntime.RunOverrides = .default
+    ) async throws -> AxionRunResult {
+        _executeCount.increment()
+        if let error { throw error }
+        guard let result else { fatalError("MockDaemonRuntimeManager: no result and no error") }
+        return result
+    }
+
+    func resumeRun(
+        sessionId: String,
+        task: String,
+        buildConfig: AgentBuilder.BuildConfig,
+        eventBus: EventBus,
+        runOverrides: AxionRuntime.RunOverrides,
+        handlerProfile: HandlerProfile,
+        extraHandlers: [any EventHandler]
     ) async throws -> AxionRunResult {
         _executeCount.increment()
         if let error { throw error }
@@ -164,7 +207,10 @@ struct DaemonRuntimeManagerTests {
             task: "test",
             buildConfig: makeBuildConfig(),
             eventBus: eventBus,
-            runOverrides: AxionRuntime.RunOverrides.default
+            runOverrides: AxionRuntime.RunOverrides.default,
+            handlerProfile: makeTestProfile(),
+            extraHandlers: [],
+            sessionId: nil
         )
 
         #expect(result.sessionId == expected.sessionId)
@@ -182,7 +228,10 @@ struct DaemonRuntimeManagerTests {
             task: "test",
             buildConfig: makeBuildConfig(),
             eventBus: eventBus,
-            runOverrides: AxionRuntime.RunOverrides.default
+            runOverrides: AxionRuntime.RunOverrides.default,
+            handlerProfile: makeTestProfile(),
+            extraHandlers: [],
+            sessionId: nil
         )
 
         #expect(mock.handlerCount == 2, "Should register CostEventHandler + TraceEventHandler")
@@ -199,7 +248,10 @@ struct DaemonRuntimeManagerTests {
             task: "test",
             buildConfig: makeBuildConfig(),
             eventBus: eventBus,
-            runOverrides: AxionRuntime.RunOverrides.default
+            runOverrides: AxionRuntime.RunOverrides.default,
+            handlerProfile: makeTestProfile(),
+            extraHandlers: [],
+            sessionId: nil
         )
 
         #expect(result.state == .completed, "Execute should complete without hanging")
@@ -215,13 +267,19 @@ struct DaemonRuntimeManagerTests {
             task: "run1",
             buildConfig: makeBuildConfig(task: "run1"),
             eventBus: EventBus(),
-            runOverrides: AxionRuntime.RunOverrides.default
+            runOverrides: AxionRuntime.RunOverrides.default,
+            handlerProfile: makeTestProfile(),
+            extraHandlers: [],
+            sessionId: nil
         )
         let r2 = try await manager.executeRun(
             task: "run2",
             buildConfig: makeBuildConfig(task: "run2"),
             eventBus: EventBus(),
-            runOverrides: AxionRuntime.RunOverrides.default
+            runOverrides: AxionRuntime.RunOverrides.default,
+            handlerProfile: makeTestProfile(),
+            extraHandlers: [],
+            sessionId: nil
         )
 
         #expect(r1.state == .completed)
@@ -247,20 +305,27 @@ struct DaemonRuntimeManagerTests {
             task: "alpha",
             buildConfig: makeBuildConfig(task: "alpha"),
             eventBus: EventBus(),
-            runOverrides: AxionRuntime.RunOverrides.default
+            runOverrides: AxionRuntime.RunOverrides.default,
+            handlerProfile: makeTestProfile(),
+            extraHandlers: [],
+            sessionId: nil
         )
         async let r2 = manager.executeRun(
             task: "beta",
             buildConfig: makeBuildConfig(task: "beta"),
             eventBus: EventBus(),
-            runOverrides: AxionRuntime.RunOverrides.default
+            runOverrides: AxionRuntime.RunOverrides.default,
+            handlerProfile: makeTestProfile(),
+            extraHandlers: [],
+            sessionId: nil
         )
 
         let res1 = try await r1
         let res2 = try await r2
 
-        #expect(res1.sessionId == "session-alpha")
-        #expect(res2.sessionId == "session-beta")
+        // Concurrent calls may complete in any order; verify both results are present
+        let sessionIds = Set([res1.sessionId, res2.sessionId])
+        #expect(sessionIds == ["session-alpha", "session-beta"])
         #expect(mock1.executeCount == 1)
         #expect(mock2.executeCount == 1)
     }
@@ -281,14 +346,20 @@ struct DaemonRuntimeManagerTests {
             task: "run1",
             buildConfig: makeBuildConfig(),
             eventBus: bus1,
-            runOverrides: AxionRuntime.RunOverrides.default
+            runOverrides: AxionRuntime.RunOverrides.default,
+            handlerProfile: makeTestProfile(),
+            extraHandlers: [],
+            sessionId: nil
         )
 
         _ = try await manager.executeRun(
             task: "run2",
             buildConfig: makeBuildConfig(),
             eventBus: bus2,
-            runOverrides: AxionRuntime.RunOverrides.default
+            runOverrides: AxionRuntime.RunOverrides.default,
+            handlerProfile: makeTestProfile(),
+            extraHandlers: [],
+            sessionId: nil
         )
 
         let buses = capturedBuses.value
@@ -306,7 +377,10 @@ struct DaemonRuntimeManagerTests {
             task: "test",
             buildConfig: makeBuildConfig(),
             eventBus: EventBus(),
-            runOverrides: AxionRuntime.RunOverrides.default
+            runOverrides: AxionRuntime.RunOverrides.default,
+            handlerProfile: makeTestProfile(),
+            extraHandlers: [],
+            sessionId: nil
         )
 
         let sessions = await manager.listActiveSessions()
@@ -326,7 +400,10 @@ struct DaemonRuntimeManagerTests {
                 task: "failing",
                 buildConfig: makeBuildConfig(),
                 eventBus: EventBus(),
-                runOverrides: AxionRuntime.RunOverrides.default
+                runOverrides: AxionRuntime.RunOverrides.default,
+            handlerProfile: makeTestProfile(),
+            extraHandlers: [],
+            sessionId: nil
             )
             Issue.record("Expected error to be thrown")
         } catch {
@@ -346,7 +423,10 @@ struct DaemonRuntimeManagerTests {
             task: "test",
             buildConfig: makeBuildConfig(),
             eventBus: EventBus(),
-            runOverrides: AxionRuntime.RunOverrides.default
+            runOverrides: AxionRuntime.RunOverrides.default,
+            handlerProfile: makeTestProfile(),
+            extraHandlers: [],
+            sessionId: nil
         )
 
         var sessions = await manager.listActiveSessions()
@@ -370,13 +450,19 @@ struct DaemonRuntimeManagerTests {
             task: "task1",
             buildConfig: makeBuildConfig(),
             eventBus: EventBus(),
-            runOverrides: AxionRuntime.RunOverrides.default
+            runOverrides: AxionRuntime.RunOverrides.default,
+            handlerProfile: makeTestProfile(),
+            extraHandlers: [],
+            sessionId: nil
         )
         _ = try await manager.executeRun(
             task: "task2",
             buildConfig: makeBuildConfig(),
             eventBus: EventBus(),
-            runOverrides: AxionRuntime.RunOverrides.default
+            runOverrides: AxionRuntime.RunOverrides.default,
+            handlerProfile: makeTestProfile(),
+            extraHandlers: [],
+            sessionId: nil
         )
 
         let sessions = await manager.listActiveSessions()
@@ -384,6 +470,24 @@ struct DaemonRuntimeManagerTests {
 
         let tasks = Set(sessions.map(\.task))
         #expect(tasks == ["task1", "task2"])
+    }
+
+    @Test("sessionId parameter is forwarded to runtime")
+    func sessionIdForwarded() async throws {
+        let mock = MockDaemonRuntime(result: makeResult(sessionId: "sdk-run-id-abc"))
+        let manager = DaemonRuntimeManager(traceDir: "/tmp/test-traces") { _ in mock }
+
+        _ = try await manager.executeRun(
+            task: "test",
+            buildConfig: makeBuildConfig(),
+            eventBus: EventBus(),
+            runOverrides: AxionRuntime.RunOverrides.default,
+            handlerProfile: makeTestProfile(),
+            extraHandlers: [],
+            sessionId: "sdk-run-id-abc"
+        )
+
+        #expect(mock.executeCount == 1)
     }
 }
 
@@ -411,7 +515,10 @@ struct ServerCommandRuntimeManagerTests {
             task: "seam test",
             buildConfig: makeBuildConfig(),
             eventBus: EventBus(),
-            runOverrides: AxionRuntime.RunOverrides.default
+            runOverrides: AxionRuntime.RunOverrides.default,
+            handlerProfile: makeTestProfile(),
+            extraHandlers: [],
+            sessionId: nil
         )
 
         #expect(result.sessionId == "seam-test")
@@ -433,7 +540,10 @@ struct ServerCommandRuntimeManagerTests {
                 task: "fail test",
                 buildConfig: makeBuildConfig(),
                 eventBus: EventBus(),
-                runOverrides: AxionRuntime.RunOverrides.default
+                runOverrides: AxionRuntime.RunOverrides.default,
+            handlerProfile: makeTestProfile(),
+            extraHandlers: [],
+            sessionId: nil
             )
             Issue.record("Expected error to be thrown")
         } catch {

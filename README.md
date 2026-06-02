@@ -27,6 +27,7 @@ Axion is a Swift-based AI agent for macOS that takes natural language task descr
 - **Record & Replay Skills** — Record a workflow once, replay it instantly without LLM calls
 - **HTTP API Server** — Integrate with CI/CD and external systems via REST + SSE
 - **MCP Server Mode** — Act as a desktop plugin for external agents (Claude Code, Cursor, etc.), while also supporting CLI, file, and web tasks standalone
+- **Telegram Gateway** — Always-on remote control via Telegram bot with streaming responses, interactive approval keyboards, and extensible command system
 - **User Takeover** — Pause and resume when automation gets stuck
 - **Completion Notifications** — macOS desktop notification with AI-generated summary when tasks finish
 - **Self-Evolution** — Background review agent and intelligent curator automatically extract memory, evolve skills, and manage skill lifecycle after each run
@@ -38,10 +39,11 @@ Axion is a Swift-based AI agent for macOS that takes natural language task descr
 ┌───────────────────────────────────────────────────────────┐
 │                          AxionCLI                          │
 │  run / setup / doctor / server / mcp / record / skill     │
-│  daemon / resume / sessions                               │
+│  daemon / resume / sessions / gateway                     │
 │  Agent Stream Loop · Memory · Takeover                    │
 │  Skill System · Built-in Skills · Skill + Memory Context  │
 │  Runtime Event Layer · EventBus · EventHandlers (7)       │
+│  Gateway: Telegram · Streaming · Interactive Approval     │
 ├──────────────────────┬────────────────────────────────────┤
 │      AxionCore       │           AxionHelper              │
 │  Models, Protocols,  │  MCP Server                        │
@@ -49,7 +51,7 @@ Axion is a Swift-based AI agent for macOS that takes natural language task descr
 └──────────────────────┴────────────────────────────────────┘
 ```
 
-- **AxionCLI** — CLI entry point with agent stream loop, memory, skill system (prompt + recorded + built-in), daemon management, server modes, and completion notifications
+- **AxionCLI** — CLI entry point with agent stream loop, memory, skill system (prompt + recorded + built-in), daemon management, server modes, Telegram gateway with streaming and interactive approval, and completion notifications
 - **AxionCore** — Shared model layer (RunConfig, AxionConfig) and protocol definitions
 - **AxionHelper** — MCP server process providing 21 native macOS automation tools via stdio
 
@@ -196,18 +198,32 @@ axion memory learn-takeover --bundle-id com.apple.finder \
 
 ### Cross-run Memory
 
-Axion learns from every task execution. After each run, it automatically extracts app operation patterns (menu paths, control positions, operation sequences) and persists them. On subsequent runs involving the same app, the Planner injects this experience for more accurate plans.
+Axion learns from every task execution through two complementary memory systems:
+
+**App Operation Facts** — Automatically extracts app operation patterns (menu paths, control positions, operation sequences) from MCP tool calls. On subsequent runs involving the same app, the Planner injects this experience for more accurate plans.
+
+**Universal Memory** — Dual-track persistent knowledge covering environment knowledge (MEMORY.md) and user profile/preferences (USER.md). Both the agent during task execution and the background review agent can save discovered knowledge to these files.
 
 ```bash
 # Memory is enabled by default — view accumulated knowledge
 axion memory list
 
+# View universal memory content
+axion memory show memory    # Environment knowledge (MEMORY.md)
+axion memory show user      # User profile/preferences (USER.md)
+
 # Clear memory for a specific app
 axion memory clear --app com.apple.calculator
+
+# Clear universal memory
+axion memory clear --type memory
+axion memory clear --type user
 
 # Disable memory for a single run
 axion run --no-memory "Open Calculator"
 ```
+
+Memory files are stored in `~/.axion/memory/` and scanned for security threats (prompt injection, credential exfiltration) before loading into prompts.
 
 ### Self-Evolution (Review & Curator)
 
@@ -295,6 +311,42 @@ Add to your Claude Code MCP configuration:
   }
 }
 ```
+
+### Telegram Gateway
+
+Always-on remote control via Telegram bot. Chat with Axion from your phone, receive streaming responses with typing indicators, and interact with inline keyboards for approval and skill browsing.
+
+**Setup:**
+
+```bash
+# Configure Telegram bot token and allowed users
+axion setup
+
+# Start gateway (standalone)
+axion gateway start
+
+# Start as launchd daemon (auto-start on login)
+axion daemon install --port 4242 --gateway
+```
+
+**Built-in commands:**
+
+| Command | Description |
+|---------|-------------|
+| `/help` | Getting started guide |
+| `/commands` | List all commands |
+| `/status` | Gateway status |
+| `/skills` | Browse available skills (paginated inline keyboard) |
+| `/new` | Start a new session |
+| `/queue` | View task queue |
+| `/stop` | Stop current task |
+
+**Interactive features:**
+- **Streaming responses** — Real-time typing indicators and incremental message updates during task execution
+- **Interactive approval** — Inline keyboard buttons for approve/reject/clarify when the agent needs user confirmation
+- **Skill browsing** — Paginated inline keyboard for browsing and triggering skills with one tap
+- **Rich text rendering** — Markdown formatting converted to Telegram-compatible HTML
+- **Task queuing** — Serial execution with queue management for concurrent requests
 
 ### Record and Replay Skills
 

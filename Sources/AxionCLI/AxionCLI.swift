@@ -6,6 +6,6 @@ struct AxionCLI: AsyncParsableCommand {
         commandName: "axion",
         abstract: "Axion — macOS 桌面自动化 CLI",
         version: AxionVersion.current,
-        subcommands: [RunCommand.self, SetupCommand.self, DoctorCommand.self, MemoryCommand.self, ServerCommand.self, McpCommand.self, RecordCommand.self, SkillCommand.self, DaemonCommand.self, CuratorCommand.self, SessionsCommand.self, ResumeCommand.self]
+        subcommands: [RunCommand.self, SetupCommand.self, DoctorCommand.self, MemoryCommand.self, ServerCommand.self, McpCommand.self, RecordCommand.self, SkillCommand.self, DaemonCommand.self, GatewayCommand.self, CuratorCommand.self, SessionsCommand.self, ResumeCommand.self]
     )
 }

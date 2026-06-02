@@ -1,3 +1,4 @@
+import Foundation
 import Testing
 @testable import AxionHelper
 
@@ -170,6 +171,19 @@ struct SelectorResolverTests {
     func negativeOrdinalRejected() {
         let ordinal = -1
         #expect(ordinal < 0, "Negative ordinal should be rejected")
+    }
+
+    // MARK: - JSON decoding with identifier key
+
+    @Test("identifier key decoded from JSON")
+    func identifierKeyDecodedFromJSON() throws {
+        let json = """
+        {"identifier": "Five", "role": "AXButton"}
+        """
+        let query = try JSONDecoder().decode(SelectorQuery.self, from: json.data(using: .utf8)!)
+        #expect(query.axId == "Five")
+        #expect(query.role == "AXButton")
+        #expect(query.title == nil)
     }
 }
 

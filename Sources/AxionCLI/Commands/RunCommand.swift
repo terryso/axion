@@ -102,7 +102,7 @@ struct RunCommand: AsyncParsableCommand {
 
                     let eventBus = EventBus()
                     let runtime = Self.createRuntime(eventBus)
-                    await registerHandlers(into: runtime, config: config)
+                    let reviewDC = await registerHandlers(into: runtime, config: config)
 
                     let eventLoopTask = _Concurrency.Task { await runtime.startEventLoop() }
 
@@ -110,7 +110,9 @@ struct RunCommand: AsyncParsableCommand {
                         json: json,
                         noVisualDelta: noVisualDelta,
                         noReview: noReview,
-                        onReviewCompleted: nil
+                        onReviewCompleted: nil,
+                        reviewDataContext: reviewDC,
+                        nonInteractivePause: false, registerResumeHandle: nil
                     )
 
                     let result: AxionRunResult
@@ -159,7 +161,7 @@ struct RunCommand: AsyncParsableCommand {
 
         let eventBus = EventBus()
         let runtime = Self.createRuntime(eventBus)
-        await registerHandlers(into: runtime, config: config)
+        let reviewDC = await registerHandlers(into: runtime, config: config)
 
         // Start event loop concurrently so handlers receive events during execution
         let eventLoopTask = _Concurrency.Task { await runtime.startEventLoop() }
@@ -168,12 +170,14 @@ struct RunCommand: AsyncParsableCommand {
             json: json,
             noVisualDelta: noVisualDelta,
             noReview: noReview,
-            onReviewCompleted: nil
+            onReviewCompleted: nil,
+            reviewDataContext: reviewDC,
+            nonInteractivePause: false, registerResumeHandle: nil
         )
 
         let result: AxionRunResult
         do {
-            result = try await runtime.execute(buildConfig: buildConfig, runOverrides: overrides)
+            result = try await runtime.execute(buildConfig: buildConfig, runOverrides: overrides, sessionId: nil)
         } catch {
             eventLoopTask.cancel()
             await runtime.stopEventLoop()
@@ -203,16 +207,26 @@ struct RunCommand: AsyncParsableCommand {
         }
     }
 
-    private func registerHandlers(into runtime: any AxionRuntimeRunning, config: AxionConfig) async {
+    @discardableResult
+    private func registerHandlers(into runtime: any AxionRuntimeRunning, config: AxionConfig) async -> ReviewDataContext {
         let memoryDir = (ConfigManager.defaultConfigDirectory as NSString).appendingPathComponent("memory")
         let traceDir = (ConfigManager.defaultConfigDirectory as NSString).appendingPathComponent("runs")
+        let reviewDataContext = ReviewDataContext()
 
-        await runtime.registerHandler(CostEventHandler())
-        await runtime.registerHandler(VisualDeltaHandler(noVisualDelta: noVisualDelta))
-        await runtime.registerHandler(SeatMonitorHandler(sharedSeatMode: config.sharedSeatMode))
-        await runtime.registerHandler(MemoryProcessingHandler(noMemory: noMemory, memoryDir: memoryDir))
-        await runtime.registerHandler(ReviewHandler(noReview: noReview, noMemory: noMemory, reviewOrchestrator: nil))
-        await runtime.registerHandler(TraceEventHandler(traceDir: traceDir))
+        let profile = HandlerProfile(
+            context: .cli,
+            config: config,
+            memoryDir: memoryDir,
+            traceDir: traceDir,
+            noMemory: noMemory,
+            noReview: noReview,
+            noVisualDelta: noVisualDelta,
+            reviewDataContext: reviewDataContext
+        )
+        for handler in profile.buildHandlers() {
+            await runtime.registerHandler(handler)
+        }
+        return reviewDataContext
     }
 
     private func sendCompletionNotification(result: AxionRunResult) {

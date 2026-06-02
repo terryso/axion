@@ -19,13 +19,13 @@ public actor AxionRuntime: AxionRuntimeRunning, AxionRuntimeResuming, SessionLis
     private var handlers: [any EventHandler] = []
     private var eventSubscriptionId: UUID?
 
-    init(eventBus: EventBus? = nil, executor: RunExecuting = DefaultRunExecutor(), builder: AgentBuilding = DefaultAgentBuilder()) {
+    init(eventBus: EventBus? = nil, executor: RunExecuting = DefaultRunExecutor(), builder: AgentBuilding = DefaultAgentBuilder(), sessionStore: SessionStore? = nil) {
         self.eventBus = eventBus
         self.executor = executor
         self.builder = builder
         let dir = (NSHomeDirectory() as NSString).appendingPathComponent(".axion/sessions")
         self.sessionsDir = dir
-        self.sessionStore = SessionStore(sessionsDir: dir)
+        self.sessionStore = sessionStore ?? SessionStore(sessionsDir: dir)
     }
 
     struct RunOverrides: Sendable {
@@ -33,14 +33,22 @@ public actor AxionRuntime: AxionRuntimeRunning, AxionRuntimeResuming, SessionLis
         let noVisualDelta: Bool
         let noReview: Bool
         let onReviewCompleted: (@Sendable (String) -> Void)?
+        let reviewDataContext: ReviewDataContext?
+        let nonInteractivePause: Bool
+        let registerResumeHandle: (@Sendable (String, @Sendable @escaping (String) async -> Void) async -> Void)?
 
         static let `default` = RunOverrides(
-            json: false, noVisualDelta: false, noReview: false, onReviewCompleted: nil
+            json: false, noVisualDelta: false, noReview: false, onReviewCompleted: nil, reviewDataContext: nil,
+            nonInteractivePause: false, registerResumeHandle: nil
         )
     }
 
     public nonisolated var state: AxionRunState {
         get async { await currentState }
+    }
+
+    static func collectSkillResponseText(from messages: [SDKMessage]) -> String? {
+        RunOrchestrator.collectVisibleResponseText(from: messages)
     }
 
     func run(
@@ -82,7 +90,10 @@ public actor AxionRuntime: AxionRuntimeRunning, AxionRuntimeResuming, SessionLis
             config: runConfig.config,
             noReview: runConfig.noReview,
             onReviewCompleted: runConfig.onReviewCompleted,
-            eventBus: eventBus
+            eventBus: eventBus,
+            reviewDataContext: runConfig.reviewDataContext,
+            nonInteractivePause: runConfig.nonInteractivePause,
+            registerResumeHandle: runConfig.registerResumeHandle
         )
 
         do {
@@ -143,11 +154,12 @@ public actor AxionRuntime: AxionRuntimeRunning, AxionRuntimeResuming, SessionLis
 
     func execute(
         buildConfig: AgentBuilder.BuildConfig,
-        runOverrides: RunOverrides = .default
+        runOverrides: RunOverrides = .default,
+        sessionId: String? = nil
     ) async throws -> AxionRunResult {
-        let sid = executor.generateRunId()
+        let sid = (sessionId?.isEmpty == false) ? sessionId! : executor.generateRunId()
         let startedAt = Date()
-        sessionId = sid
+        self.sessionId = sid
         createdAt = startedAt
 
         // Inject sessionId + sessionStore into buildConfig so SDK writes transcript.json
@@ -165,7 +177,8 @@ public actor AxionRuntime: AxionRuntimeRunning, AxionRuntimeResuming, SessionLis
             fast: buildConfig.fast,
             runId: sid,
             sessionId: sid,
-            sessionStore: sessionStore
+            sessionStore: sessionStore,
+            emitTokenStream: buildConfig.emitTokenStream
         )
 
         let buildResult: AgentBuildResult
@@ -197,7 +210,10 @@ public actor AxionRuntime: AxionRuntimeRunning, AxionRuntimeResuming, SessionLis
             config: buildConfig.config,
             noReview: runOverrides.noReview,
             onReviewCompleted: runOverrides.onReviewCompleted,
-            eventBus: eventBus
+            eventBus: eventBus,
+            reviewDataContext: runOverrides.reviewDataContext,
+            nonInteractivePause: runOverrides.nonInteractivePause,
+            registerResumeHandle: runOverrides.registerResumeHandle
         )
 
         return try await run(task: buildConfig.task, buildResult: buildResult, runConfig: runConfig, resumeSessionId: sid)
@@ -258,11 +274,11 @@ public actor AxionRuntime: AxionRuntimeRunning, AxionRuntimeResuming, SessionLis
             fputs("[axion] 执行: Skill (via AxionRuntime)\n", stderr)
 
             let skillStream = agent.executeSkillStream(skill.name, args: args)
-            var lastResponseText: String?
+            var streamedMessages: [SDKMessage] = []
             for await message in skillStream {
                 if _Concurrency.Task.isCancelled { break }
                 if case .toolUse = message { totalSteps += 1 }
-                if case .assistant(let data) = message { lastResponseText = data.text }
+                streamedMessages.append(message)
                 outputHandler.handle(message)
             }
 
@@ -298,7 +314,7 @@ public actor AxionRuntime: AxionRuntimeRunning, AxionRuntimeResuming, SessionLis
                 sessionId: sid, task: task, state: .completed,
                 totalSteps: totalSteps, durationMs: durationMs,
                 runSucceeded: true, runCompleteContext: ctxWrapper,
-                responseText: lastResponseText, createdAt: startedAt
+                responseText: Self.collectSkillResponseText(from: streamedMessages), createdAt: startedAt
             )
         } catch {
             currentState = .failed
@@ -349,7 +365,8 @@ public actor AxionRuntime: AxionRuntimeRunning, AxionRuntimeResuming, SessionLis
             fast: buildConfig.fast,
             runId: sessionId,
             sessionId: sessionId,
-            sessionStore: sessionStore
+            sessionStore: sessionStore,
+            emitTokenStream: buildConfig.emitTokenStream
         )
 
         // 5. Build agent
@@ -379,7 +396,10 @@ public actor AxionRuntime: AxionRuntimeRunning, AxionRuntimeResuming, SessionLis
             config: buildConfig.config,
             noReview: runOverrides.noReview,
             onReviewCompleted: runOverrides.onReviewCompleted,
-            eventBus: eventBus
+            eventBus: eventBus,
+            reviewDataContext: runOverrides.reviewDataContext,
+            nonInteractivePause: runOverrides.nonInteractivePause,
+            registerResumeHandle: runOverrides.registerResumeHandle
         )
 
         return try await run(

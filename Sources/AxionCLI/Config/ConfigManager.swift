@@ -120,6 +120,15 @@ enum ConfigManager {
         if let v = env["AXION_MAX_SCREENSHOTS"], let i = Int(v) {
             config.maxScreenshots = i
         }
+        if let v = env["AXION_TELEGRAM_BOT_TOKEN"], !v.isEmpty {
+            config.telegramBotToken = v
+        }
+        if let v = env["AXION_TELEGRAM_CHAT_ID"], !v.isEmpty {
+            config.telegramChatId = v
+        }
+        if let v = env["AXION_TELEGRAM_ALLOWED_USERS"], !v.isEmpty {
+            config.telegramAllowedUsers = v
+        }
     }
 
     /// 应用 CLI 参数覆盖。

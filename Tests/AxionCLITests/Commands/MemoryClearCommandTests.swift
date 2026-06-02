@@ -1,3 +1,4 @@
+import ArgumentParser
 import Foundation
 import Testing
 import OpenAgentSDK
@@ -187,6 +188,110 @@ struct MemoryClearCommandTests {
 
     private func createTempMemoryDir() throws -> String {
         let tempDir = "/tmp/axion-test-memory-clear-\(UUID().uuidString)"
+        try FileManager.default.createDirectory(
+            atPath: tempDir,
+            withIntermediateDirectories: true,
+            attributes: [.posixPermissions: 0o700]
+        )
+        return tempDir
+    }
+}
+
+// MARK: - Story 31.5: --type option tests
+
+@Suite("MemoryClearCommand --type")
+struct MemoryClearTypeTests {
+
+    @Test("--type memory clears MEMORY.md")
+    func clearTypeMemory() async throws {
+        let tempDir = try createTempMemoryDir()
+        defer { try? FileManager.default.removeItem(atPath: tempDir) }
+
+        let store = UniversalMemoryStore(memoryDir: tempDir)
+        await store.write(target: .memory, content: "§\nsome content\n§\n")
+
+        let result = try await MemoryClearCommand.clearType("memory", memoryDir: tempDir)
+        #expect(result.success, "Clear type memory should succeed")
+        #expect(result.message.contains("Cleared"), "Message should confirm clear")
+
+        let content = await store.read(target: .memory)
+        #expect(content.isEmpty, "MEMORY.md should be empty after clear")
+    }
+
+    @Test("--type user clears USER.md")
+    func clearTypeUser() async throws {
+        let tempDir = try createTempMemoryDir()
+        defer { try? FileManager.default.removeItem(atPath: tempDir) }
+
+        let store = UniversalMemoryStore(memoryDir: tempDir)
+        await store.write(target: .user, content: "§\nuser prefs\n§\n")
+
+        let result = try await MemoryClearCommand.clearType("user", memoryDir: tempDir)
+        #expect(result.success, "Clear type user should succeed")
+        #expect(result.message.contains("Cleared"), "Message should confirm clear")
+
+        let content = await store.read(target: .user)
+        #expect(content.isEmpty, "USER.md should be empty after clear")
+    }
+
+    @Test("--type invalid returns error")
+    func clearTypeInvalid() async throws {
+        let tempDir = try createTempMemoryDir()
+        defer { try? FileManager.default.removeItem(atPath: tempDir) }
+
+        do {
+            _ = try await MemoryClearCommand.clearType("invalid", memoryDir: tempDir)
+            Issue.record("Should throw for invalid type")
+        } catch {
+            #expect(error is ValidationError, "Should throw ValidationError for invalid type")
+        }
+    }
+
+    @Test("--app still works unchanged")
+    func clearAppStillWorks() async throws {
+        let tempDir = try createTempMemoryDir()
+        defer { try? FileManager.default.removeItem(atPath: tempDir) }
+
+        let store = FileBasedMemoryStore(memoryDir: tempDir)
+        let domain = "com.apple.calculator"
+        let entry = KnowledgeEntry(
+            id: UUID().uuidString,
+            content: "Calculator run",
+            tags: ["app:\(domain)", "success"],
+            createdAt: Date(),
+            sourceRunId: nil
+        )
+        try await store.save(domain: domain, knowledge: entry)
+
+        let result = try await MemoryClearCommand.clearDomain(domain, memoryDir: tempDir)
+        #expect(result.success, "Clear --app should still work")
+    }
+
+    @Test("mutual exclusion: both --app and --type rejected")
+    func mutualExclusionRejected() async throws {
+        let tempDir = try createTempMemoryDir()
+        defer { try? FileManager.default.removeItem(atPath: tempDir) }
+
+        do {
+            _ = try await MemoryClearCommand.validateOptions(app: "com.apple.calculator", type: "memory")
+            Issue.record("Should throw when both --app and --type provided")
+        } catch {
+            #expect(error is ValidationError, "Should throw ValidationError for mutual exclusion")
+        }
+    }
+
+    @Test("mutual exclusion: neither --app nor --type rejected")
+    func neitherOptionRejected() async throws {
+        do {
+            _ = try await MemoryClearCommand.validateOptions(app: nil, type: nil)
+            Issue.record("Should throw when neither --app nor --type provided")
+        } catch {
+            #expect(error is ValidationError, "Should throw ValidationError when no option provided")
+        }
+    }
+
+    private func createTempMemoryDir() throws -> String {
+        let tempDir = "/tmp/axion-test-memory-clear-type-\(UUID().uuidString)"
         try FileManager.default.createDirectory(
             atPath: tempDir,
             withIntermediateDirectories: true,

@@ -42,26 +42,43 @@ enum DaemonError: Error, CustomStringConvertible {
 // MARK: - DaemonService
 
 final class DaemonService {
-    static let daemonLabel = "dev.axion.server"
     static let defaultHost = "127.0.0.1"
     static let defaultPort = 4242
 
+    let label: String
     let plistPath: String
     let logDir: String
 
+    private let subcommand: String
+    private let logFileName: String
+    private let errLogFileName: String
+    private let keepAliveCrashOnly: Bool
+    private let environmentVariables: [String: String]?
     private let runLaunchctl: @Sendable ([String]) throws -> String
     private let fileManager: FileManager
     private let resolveBin: () -> String
 
     init(
+        label: String = "dev.axion.server",
+        subcommand: String = "server",
+        logFileName: String = "server.log",
+        errLogFileName: String = "server.err.log",
+        keepAliveCrashOnly: Bool = false,
+        environmentVariables: [String: String]? = nil,
         plistPath: String? = nil,
         runLaunchctl: @escaping @Sendable ([String]) throws -> String = DaemonService.defaultLaunchctl,
         fileManager: FileManager = .default,
         resolveBin: @escaping @Sendable () -> String = { DaemonService.resolveAxionBin() }
     ) {
+        self.label = label
+        self.subcommand = subcommand
+        self.logFileName = logFileName
+        self.errLogFileName = errLogFileName
+        self.keepAliveCrashOnly = keepAliveCrashOnly
+        self.environmentVariables = environmentVariables
         let home = NSHomeDirectory()
         self.plistPath = plistPath
-            ?? (home as NSString).appendingPathComponent("Library/LaunchAgents/dev.axion.server.plist")
+            ?? (home as NSString).appendingPathComponent("Library/LaunchAgents/\(label).plist")
         self.logDir = (home as NSString).appendingPathComponent(".axion")
         self.runLaunchctl = runLaunchctl
         self.fileManager = fileManager
@@ -121,8 +138,10 @@ final class DaemonService {
 
     func buildPlist(host: String = defaultHost, port: Int = defaultPort, authKey: String? = nil) -> String {
         let binPath = resolveBin()
-        let logPath = (logDir as NSString).appendingPathComponent("server.log")
-        let errLogPath = (logDir as NSString).appendingPathComponent("server.err.log")
+        let logPath = (logDir as NSString).appendingPathComponent(logFileName)
+        let errLogPath = (logDir as NSString).appendingPathComponent(errLogFileName)
+
+        let subcommandParts = subcommand.split(separator: " ").map(String.init)
 
         var xml = """
         <?xml version="1.0" encoding="UTF-8"?>
@@ -130,33 +149,60 @@ final class DaemonService {
         <plist version="1.0">
         <dict>
         \t<key>Label</key>
-        \t<string>\(Self.escapeXML(Self.daemonLabel))</string>
+        \t<string>\(Self.escapeXML(label))</string>
         \t<key>ProgramArguments</key>
         \t<array>
         \t\t<string>\(Self.escapeXML(binPath))</string>
-        \t\t<string>server</string>
-        \t\t<string>--host</string>
+        """
+
+        for part in subcommandParts {
+            xml += "\n\t\t<string>\(Self.escapeXML(part))</string>"
+        }
+
+        xml += """
+        \n\t\t<string>--host</string>
         \t\t<string>\(Self.escapeXML(host))</string>
         \t\t<string>--port</string>
         \t\t<string>\(Self.escapeXML(String(port)))</string>
         \t</array>
         """
 
+        var envDict: [(String, String)] = []
         if let authKey {
-            xml += """
-            \n\t<key>EnvironmentVariables</key>
-            \t<dict>
-            \t\t<key>AXION_AUTH_KEY</key>
-            \t\t<string>\(Self.escapeXML(authKey))</string>
-            \t</dict>
-            """
+            envDict.append(("AXION_AUTH_KEY", authKey))
+        }
+        if let environmentVariables {
+            for (key, value) in environmentVariables.sorted(by: { $0.key < $1.key }) {
+                envDict.append((key, value))
+            }
+        }
+
+        if !envDict.isEmpty {
+            xml += "\n\t<key>EnvironmentVariables</key>\n\t<dict>\n"
+            for (key, value) in envDict {
+                xml += "\t\t<key>\(Self.escapeXML(key))</key>\n\t\t<string>\(Self.escapeXML(value))</string>\n"
+            }
+            xml += "\t</dict>\n"
         }
 
         xml += """
-        \n\t<key>RunAtLoad</key>
+        \t<key>RunAtLoad</key>
         \t<true/>
         \t<key>KeepAlive</key>
-        \t<true/>
+        """
+
+        if keepAliveCrashOnly {
+            xml += """
+            \n\t<dict>
+            \t\t<key>Crashed</key>
+            \t\t<true/>
+            \t</dict>
+            """
+        } else {
+            xml += "\n\t<true/>\n"
+        }
+
+        xml += """
         \t<key>ThrottleInterval</key>
         \t<integer>10</integer>
         \t<key>StandardOutPath</key>
@@ -209,7 +255,7 @@ final class DaemonService {
         }
 
         do {
-            _ = try runLaunchctl(["kickstart", "-k", "\(domain)/\(Self.daemonLabel)"])
+            _ = try runLaunchctl(["kickstart", "-k", "\(domain)/\(label)"])
         } catch {
             // Rollback: bootout + remove plist on kickstart failure
             _ = try? runLaunchctl(["bootout", domain, plistPath])
@@ -236,8 +282,8 @@ final class DaemonService {
 
         // Optionally remove logs
         if !keepLogs {
-            let logPath = (logDir as NSString).appendingPathComponent("server.log")
-            let errLogPath = (logDir as NSString).appendingPathComponent("server.err.log")
+            let logPath = (logDir as NSString).appendingPathComponent(logFileName)
+            let errLogPath = (logDir as NSString).appendingPathComponent(errLogFileName)
             try? fileManager.removeItem(atPath: logPath)
             try? fileManager.removeItem(atPath: errLogPath)
         }
@@ -254,13 +300,13 @@ final class DaemonService {
                 port: nil,
                 host: nil,
                 plistPath: plistPath,
-                label: Self.daemonLabel
+                label: label
             )
         }
 
         let uid = getuid()
         let domain = "gui/\(uid)"
-        let servicePath = "\(domain)/\(Self.daemonLabel)"
+        let servicePath = "\(domain)/\(label)"
 
         // Query launchctl for status
         let output: String
@@ -273,7 +319,7 @@ final class DaemonService {
                 port: nil,
                 host: nil,
                 plistPath: plistPath,
-                label: Self.daemonLabel
+                label: label
             )
         }
 
@@ -289,7 +335,7 @@ final class DaemonService {
             port: port,
             host: host,
             plistPath: plistPath,
-            label: Self.daemonLabel
+            label: label
         )
     }
 

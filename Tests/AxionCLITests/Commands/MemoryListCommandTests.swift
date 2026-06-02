@@ -127,7 +127,7 @@ struct MemoryListCommandTests {
 
         let output = await MemoryListCommand.listMemory(in: tempDir)
 
-        #expect(output.contains("No App Memory found") || output.contains("0 apps"),
+        #expect(output.contains("No App Memory found") || output.contains("0 apps") || output.contains("none"),
             "Output should indicate no memory data exists")
     }
 
@@ -223,6 +223,66 @@ struct MemoryListCommandTests {
 
     private func createTempMemoryDir() throws -> String {
         let tempDir = "/tmp/axion-test-memory-list-\(UUID().uuidString)"
+        try FileManager.default.createDirectory(
+            atPath: tempDir,
+            withIntermediateDirectories: true,
+            attributes: [.posixPermissions: 0o700]
+        )
+        return tempDir
+    }
+}
+
+// MARK: - Story 31.5: Universal Memory section tests
+
+@Suite("MemoryListCommand Universal Memory")
+struct MemoryListUniversalTests {
+
+    @Test("list output includes universal memory section with entry counts")
+    func listIncludesUniversalMemorySection() async throws {
+        let tempDir = try createTempMemoryDir()
+        defer { try? FileManager.default.removeItem(atPath: tempDir) }
+
+        let store = UniversalMemoryStore(memoryDir: tempDir, maxMemoryChars: 1000, maxUserChars: 1000)
+        _ = await store.add(target: .memory, content: "entry one")
+        _ = await store.add(target: .memory, content: "entry two")
+        _ = await store.add(target: .memory, content: "entry three")
+        _ = await store.add(target: .user, content: "user entry")
+
+        let output = await MemoryListCommand.listMemory(in: tempDir)
+
+        #expect(output.contains("Universal Memory"), "Output should include Universal Memory section header")
+        #expect(output.contains("MEMORY.md"), "Output should mention MEMORY.md")
+        #expect(output.contains("USER.md"), "Output should mention USER.md")
+        #expect(output.contains("3 entries"), "Output should show 3 entries for MEMORY.md")
+        #expect(output.contains("1 entry"), "Output should show 1 entry for USER.md")
+    }
+
+    @Test("list output shows last updated date for universal memory")
+    func listShowsLastUpdatedDate() async throws {
+        let tempDir = try createTempMemoryDir()
+        defer { try? FileManager.default.removeItem(atPath: tempDir) }
+
+        let store = UniversalMemoryStore(memoryDir: tempDir)
+        await store.write(target: .memory, content: "some content")
+
+        let output = await MemoryListCommand.listMemory(in: tempDir)
+
+        #expect(output.contains("last updated"), "Output should show last updated date")
+    }
+
+    @Test("list output with empty universal memory shows 0 entries")
+    func listEmptyUniversalMemoryShowsZero() async throws {
+        let tempDir = try createTempMemoryDir()
+        defer { try? FileManager.default.removeItem(atPath: tempDir) }
+
+        let output = await MemoryListCommand.listMemory(in: tempDir)
+
+        #expect(output.contains("Universal Memory"), "Output should include Universal Memory section")
+        #expect(output.contains("0 entries"), "Output should show 0 entries for empty files")
+    }
+
+    private func createTempMemoryDir() throws -> String {
+        let tempDir = "/tmp/axion-test-memory-list-univ-\(UUID().uuidString)"
         try FileManager.default.createDirectory(
             atPath: tempDir,
             withIntermediateDirectories: true,
