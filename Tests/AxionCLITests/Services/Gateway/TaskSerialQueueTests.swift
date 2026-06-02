@@ -35,11 +35,7 @@ struct TaskSerialQueueTests {
             resumeError = error
         }
 
-        func executeRun(task: String, buildConfig: AgentBuilder.BuildConfig, eventBus: OpenAgentSDK.EventBus, runOverrides: AxionRuntime.RunOverrides, sessionId: String? = nil) async throws -> AxionRunResult {
-            return try await executeRun(task: task, buildConfig: buildConfig, eventBus: eventBus, runOverrides: runOverrides, extraHandlers: [], sessionId: sessionId)
-        }
-
-        func executeRun(task: String, buildConfig: AgentBuilder.BuildConfig, eventBus: OpenAgentSDK.EventBus, runOverrides: AxionRuntime.RunOverrides, extraHandlers: [any EventHandler], sessionId: String? = nil) async throws -> AxionRunResult {
+        func executeRun(task: String, buildConfig: AgentBuilder.BuildConfig, eventBus: OpenAgentSDK.EventBus, runOverrides: AxionRuntime.RunOverrides, handlerProfile: HandlerProfile, extraHandlers: [any EventHandler], sessionId: String? = nil) async throws -> AxionRunResult {
             executedTasks.append(task)
             executeCallCount += 1
             if let delay = delays[task] {
@@ -59,7 +55,7 @@ struct TaskSerialQueueTests {
             return result
         }
 
-        func resumeRun(sessionId: String, task: String, buildConfig: AgentBuilder.BuildConfig, eventBus: OpenAgentSDK.EventBus, runOverrides: AxionRuntime.RunOverrides, extraHandlers: [any EventHandler]) async throws -> AxionRunResult {
+        func resumeRun(sessionId: String, task: String, buildConfig: AgentBuilder.BuildConfig, eventBus: OpenAgentSDK.EventBus, runOverrides: AxionRuntime.RunOverrides, handlerProfile: HandlerProfile, extraHandlers: [any EventHandler]) async throws -> AxionRunResult {
             if let error = resumeError {
                 throw error
             }
@@ -93,6 +89,20 @@ struct TaskSerialQueueTests {
 
     private func makeConfig(timeout: Double? = nil) -> AxionConfig {
         AxionConfig(apiKey: nil, gatewayTaskTimeoutMinutes: timeout)
+    }
+
+    private func makeHandlerProfile(config: AxionConfig? = nil) -> HandlerProfile {
+        let c = config ?? makeConfig()
+        return HandlerProfile(
+            context: .gateway,
+            config: c,
+            memoryDir: "/tmp/test-memory",
+            traceDir: "/tmp/test-traces",
+            noMemory: false,
+            noReview: false,
+            noVisualDelta: false,
+            reviewDataContext: nil
+        )
     }
 
     private func makeRunner() -> (GatewayRunner, MockGatewayServerForQueue) {
@@ -143,7 +153,9 @@ struct TaskSerialQueueTests {
         let queue = TaskSerialQueue(
             runtimeManager: runtime,
             config: makeConfig(),
+            
             runner: runner,
+            handlerProfile: makeHandlerProfile(),
             replyHandler: { await collector.add(chatId: $0, message: $1); return nil }
         )
 
@@ -179,7 +191,9 @@ struct TaskSerialQueueTests {
         let queue = TaskSerialQueue(
             runtimeManager: runtime,
             config: makeConfig(),
+            
             runner: runner,
+            handlerProfile: makeHandlerProfile(),
             replyHandler: { await collector.add(chatId: $0, message: $1); return nil }
         )
 
@@ -219,7 +233,9 @@ struct TaskSerialQueueTests {
         let queue = TaskSerialQueue(
             runtimeManager: runtime,
             config: config,
+            
             runner: runner,
+            handlerProfile: makeHandlerProfile(),
             replyHandler: { await collector.add(chatId: $0, message: $1); return nil }
         )
 
@@ -252,7 +268,9 @@ struct TaskSerialQueueTests {
         let queue = TaskSerialQueue(
             runtimeManager: runtime,
             config: makeConfig(),
+            
             runner: runner,
+            handlerProfile: makeHandlerProfile(),
             replyHandler: { await collector.add(chatId: $0, message: $1); return nil }
         )
 
@@ -287,7 +305,9 @@ struct TaskSerialQueueTests {
         let queue = TaskSerialQueue(
             runtimeManager: runtime,
             config: makeConfig(),
+            
             runner: runner,
+            handlerProfile: makeHandlerProfile(),
             replyHandler: { await collector.add(chatId: $0, message: $1); return nil }
         )
 
@@ -364,7 +384,9 @@ struct TaskSerialQueueTests {
         let queue = TaskSerialQueue(
             runtimeManager: runtime,
             config: makeConfig(),
+            
             runner: runner,
+            handlerProfile: makeHandlerProfile(),
             replyHandler: { await collector.add(chatId: $0, message: $1); return nil }
         )
 
@@ -391,7 +413,9 @@ struct TaskSerialQueueTests {
         let queue = TaskSerialQueue(
             runtimeManager: runtime,
             config: makeConfig(),
+            
             runner: runner,
+            handlerProfile: makeHandlerProfile(),
             replyHandler: { await collector.add(chatId: $0, message: $1); return nil }
         )
 
@@ -424,7 +448,9 @@ struct TaskSerialQueueTests {
         let queue = TaskSerialQueue(
             runtimeManager: runtime,
             config: makeConfig(),
+            
             runner: runner,
+            handlerProfile: makeHandlerProfile(),
             replyHandler: { await collector.add(chatId: $0, message: $1); return nil }
         )
 
@@ -457,7 +483,9 @@ struct TaskSerialQueueTests {
         let queue = TaskSerialQueue(
             runtimeManager: runtime,
             config: makeConfig(),
+            
             runner: runner,
+            handlerProfile: makeHandlerProfile(),
             replyHandler: { await collector.add(chatId: $0, message: $1); return nil }
         )
 
@@ -497,7 +525,9 @@ struct TaskSerialQueueTests {
         let queue = TaskSerialQueue(
             runtimeManager: runtime,
             config: makeConfig(),
+            
             runner: runner,
+            handlerProfile: makeHandlerProfile(),
             replyHandler: { await collector.add(chatId: $0, message: $1); return nil }
         )
 
@@ -534,7 +564,9 @@ struct TaskSerialQueueTests {
         let queue = TaskSerialQueue(
             runtimeManager: runtime,
             config: makeConfig(),
+            
             runner: runner,
+            handlerProfile: makeHandlerProfile(),
             replyHandler: { await collector.add(chatId: $0, message: $1); return nil }
         )
 
@@ -572,7 +604,9 @@ struct TaskSerialQueueTests {
         let queue = TaskSerialQueue(
             runtimeManager: runtime,
             config: makeConfig(),
+            
             runner: runner,
+            handlerProfile: makeHandlerProfile(),
             replyHandler: { await collector.add(chatId: $0, message: $1); return nil }
         )
 
@@ -618,7 +652,9 @@ struct TaskSerialQueueTests {
         let queue = TaskSerialQueue(
             runtimeManager: runtime,
             config: makeConfig(),
+            
             runner: runner,
+            handlerProfile: makeHandlerProfile(),
             replyHandler: { await collector.add(chatId: $0, message: $1); return nil }
         )
 
@@ -659,7 +695,9 @@ struct TaskSerialQueueTests {
         let queue = TaskSerialQueue(
             runtimeManager: runtime,
             config: makeConfig(),
+            
             runner: runner,
+            handlerProfile: makeHandlerProfile(),
             replyHandler: { await collector.add(chatId: $0, message: $1); return nil }
         )
 
@@ -694,7 +732,9 @@ struct TaskSerialQueueTests {
         let queue = TaskSerialQueue(
             runtimeManager: runtime,
             config: makeConfig(),
+            
             runner: runner,
+            handlerProfile: makeHandlerProfile(),
             replyHandler: { await collector.add(chatId: $0, message: $1); return nil }
         )
 
@@ -723,7 +763,9 @@ struct TaskSerialQueueTests {
         let queue = TaskSerialQueue(
             runtimeManager: runtime,
             config: makeConfig(),
+            
             runner: runner,
+            handlerProfile: makeHandlerProfile(),
             replyHandler: { await collector.add(chatId: $0, message: $1); return nil }
         )
 

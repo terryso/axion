@@ -12,11 +12,16 @@ struct TGStreamingControllerTests {
     private final class CallLog: @unchecked Sendable {
         private let lock = NSLock()
         private var _sentMessages: [(text: String, chatId: Int64)] = []
+        private var _editedMessages: [(chatId: Int64, messageId: Int64, text: String)] = []
         private var _chatActions: [(chatId: Int64, action: String)] = []
 
         var sentMessages: [(text: String, chatId: Int64)] {
             lock.lock(); defer { lock.unlock() }
             return _sentMessages
+        }
+        var editedMessages: [(chatId: Int64, messageId: Int64, text: String)] {
+            lock.lock(); defer { lock.unlock() }
+            return _editedMessages
         }
         var chatActions: [(chatId: Int64, action: String)] {
             lock.lock(); defer { lock.unlock() }
@@ -25,6 +30,9 @@ struct TGStreamingControllerTests {
 
         func appendSend(text: String, chatId: Int64) {
             lock.lock(); _sentMessages.append((text, chatId)); lock.unlock()
+        }
+        func appendEdit(chatId: Int64, messageId: Int64, text: String) {
+            lock.lock(); _editedMessages.append((chatId, messageId, text)); lock.unlock()
         }
         func appendChatAction(chatId: Int64, action: String) {
             lock.lock(); _chatActions.append((chatId, action)); lock.unlock()
@@ -46,7 +54,10 @@ struct TGStreamingControllerTests {
                 log.appendSend(text: text, chatId: chatId)
                 return Int64(log.sentMessages.count)
             },
-            editMessage: { _, _, _ in false },
+            editMessage: { chatId, messageId, text in
+                log.appendEdit(chatId: chatId, messageId: messageId, text: text)
+                return true
+            },
             sendChatAction: { chatId, action in
                 log.appendChatAction(chatId: chatId, action: action)
             },
@@ -118,8 +129,8 @@ struct TGStreamingControllerTests {
         #expect(!allText.contains("raw output line"))
     }
 
-    @Test("Tool completed without output does not emit extra message")
-    func toolCompletedWithoutOutputDoesNotEmit() async {
+    @Test("Tool completed without output edits existing message with completion suffix")
+    func toolCompletedWithoutOutputEditsExisting() async {
         let log = CallLog()
         let controller = makeController(log: log)
 
@@ -132,9 +143,11 @@ struct TGStreamingControllerTests {
         ))
 
         #expect(log.sentMessages.count == 1)
+        #expect(log.editedMessages.count == 1)
+        #expect(log.editedMessages[0].text == "💻 Bash\n✅ 完成（500ms）")
     }
 
-    @Test("Tool completed with output sends result summary")
+    @Test("Tool completed with output edits message with result summary")
     func toolCompletedWithOutputSendsResult() async {
         let log = CallLog()
         let controller = makeController(log: log)
@@ -148,8 +161,9 @@ struct TGStreamingControllerTests {
             durationMs: 500, isError: false, output: "file1.txt\nfile2.txt\nfile3.txt"
         ))
 
-        #expect(log.sentMessages.count == 2)
-        #expect(log.sentMessages[1].text == "💻 Bash 结果：\nfile1.txt\nfile2.txt\nfile3.txt")
+        #expect(log.sentMessages.count == 1)
+        #expect(log.editedMessages.count == 1)
+        #expect(log.editedMessages[0].text == "💻 Bash: `ls`\n✅ 结果：\nfile1.txt\nfile2.txt\nfile3.txt")
     }
 
     @Test("Tool completed with long output truncates to max lines")
@@ -167,9 +181,10 @@ struct TGStreamingControllerTests {
             durationMs: 100, isError: false, output: longOutput
         ))
 
-        #expect(log.sentMessages.count == 2)
-        let resultMsg = log.sentMessages[1].text
-        #expect(resultMsg.hasPrefix("📖 Read 结果："))
+        #expect(log.sentMessages.count == 1)
+        #expect(log.editedMessages.count == 1)
+        let resultMsg = log.editedMessages[0].text
+        #expect(resultMsg.hasPrefix("📖 Read\n✅ 结果："))
         #expect(resultMsg.contains("line1"))
         #expect(resultMsg.contains("line4"))
         #expect(resultMsg.contains("6 行省略"))
@@ -190,8 +205,9 @@ struct TGStreamingControllerTests {
             durationMs: 100, isError: true, output: "command not found: bad_cmd"
         ))
 
-        #expect(log.sentMessages.count == 2)
-        #expect(log.sentMessages[1].text == "❌ Bash 失败：\ncommand not found: bad_cmd")
+        #expect(log.sentMessages.count == 1)
+        #expect(log.editedMessages.count == 1)
+        #expect(log.editedMessages[0].text == "💻 Bash: `bad_cmd`\n❌ 失败：\ncommand not found: bad_cmd")
     }
 
     @Test("Tool completed with MCP raw output shows basic cleanup result")
@@ -215,9 +231,10 @@ struct TGStreamingControllerTests {
         ))
 
         // Tool output is raw data, shown with basic cleanup (no MCP stripping)
-        #expect(log.sentMessages.count == 2)
-        let resultMsg = log.sentMessages[1].text
-        #expect(resultMsg.hasPrefix("🌐 WebReader 结果："))
+        #expect(log.sentMessages.count == 1)
+        #expect(log.editedMessages.count == 1)
+        let resultMsg = log.editedMessages[0].text
+        #expect(resultMsg.hasPrefix("🌐 WebReader\n✅ 结果："))
         // All 4 non-empty lines fit within maxLines=4
         #expect(resultMsg.contains("The actual content here."))
     }
@@ -282,7 +299,7 @@ struct TGStreamingControllerTests {
             input: #"{"command":"ffmpeg -i input.mp4 output.mp4"}"#
         ))
 
-        // Tool completes with output
+        // Tool completes with output — edits existing message
         await controller.handle(ToolCompletedEvent(
             sessionId: nil, toolUseId: "tu-1", toolName: "Bash",
             durationMs: 3000, isError: false, output: "compressed successfully"
@@ -297,11 +314,12 @@ struct TGStreamingControllerTests {
             resultText: "压缩完成"
         ))
 
-        // 3 messages: tool start + tool result + final answer
-        #expect(log.sentMessages.count == 3)
+        // 2 sent messages: tool start + final answer; 1 edit: tool result
+        #expect(log.sentMessages.count == 2)
         #expect(log.sentMessages[0].text == "💻 Bash: `ffmpeg -i input.mp4 output.mp4`")
-        #expect(log.sentMessages[1].text == "💻 Bash 结果：\ncompressed successfully")
-        #expect(log.sentMessages[2].text == "> 帮我压缩一下视频\n\n压缩完成")
+        #expect(log.sentMessages[1].text == "> 帮我压缩一下视频\n\n压缩完成")
+        #expect(log.editedMessages.count == 1)
+        #expect(log.editedMessages[0].text == "💻 Bash: `ffmpeg -i input.mp4 output.mp4`\n✅ 结果：\ncompressed successfully")
     }
 
     // MARK: - Deferred final delivery

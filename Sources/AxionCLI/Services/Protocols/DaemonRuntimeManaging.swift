@@ -9,23 +9,15 @@ struct DaemonSessionInfo: Sendable {
 }
 
 protocol DaemonRuntimeManaging: Sendable {
-    /// Execute a run through a per-request AxionRuntime with pre-registered API handlers.
+    /// Execute a run through a per-request AxionRuntime using HandlerProfile for handler registration.
+    /// - Parameter extraHandlers: Domain-specific handlers to append after profile handlers (e.g. TGEventHandler).
     /// - Parameter sessionId: When provided, used as the run's sessionId instead of auto-generating one.
     func executeRun(
         task: String,
         buildConfig: AgentBuilder.BuildConfig,
         eventBus: EventBus,
         runOverrides: AxionRuntime.RunOverrides,
-        sessionId: String?
-    ) async throws -> AxionRunResult
-
-    /// Execute a run with additional event handlers (e.g. TGEventHandler).
-    /// - Parameter sessionId: When provided, used as the run's sessionId instead of auto-generating one.
-    func executeRun(
-        task: String,
-        buildConfig: AgentBuilder.BuildConfig,
-        eventBus: EventBus,
-        runOverrides: AxionRuntime.RunOverrides,
+        handlerProfile: HandlerProfile,
         extraHandlers: [any EventHandler],
         sessionId: String?
     ) async throws -> AxionRunResult
@@ -37,6 +29,7 @@ protocol DaemonRuntimeManaging: Sendable {
         buildConfig: AgentBuilder.BuildConfig,
         eventBus: EventBus,
         runOverrides: AxionRuntime.RunOverrides,
+        handlerProfile: HandlerProfile,
         extraHandlers: [any EventHandler]
     ) async throws -> AxionRunResult
 
@@ -55,18 +48,4 @@ protocol DaemonRuntimeManaging: Sendable {
 
     /// Clear session history. Does NOT cancel in-progress runs — those complete naturally.
     func shutdown() async
-}
-
-extension DaemonRuntimeManaging {
-    func executeRun(
-        task: String,
-        buildConfig: AgentBuilder.BuildConfig,
-        eventBus: EventBus,
-        runOverrides: AxionRuntime.RunOverrides
-    ) async throws -> AxionRunResult {
-        try await executeRun(
-            task: task, buildConfig: buildConfig, eventBus: eventBus,
-            runOverrides: runOverrides, sessionId: nil
-        )
-    }
 }

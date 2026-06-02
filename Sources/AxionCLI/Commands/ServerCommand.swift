@@ -62,7 +62,19 @@ struct ServerCommand: AsyncParsableCommand {
         let placeholderAgent = Agent(options: AgentOptions(model: "placeholder"))
 
         let traceDir = (ConfigManager.defaultConfigDirectory as NSString).appendingPathComponent("runs")
+        let memoryDir = (ConfigManager.defaultConfigDirectory as NSString).appendingPathComponent("memory")
         let runtimeManager = Self.createRuntimeManager(traceDir)
+
+        let apiProfile = HandlerProfile(
+            context: .api,
+            config: config,
+            memoryDir: memoryDir,
+            traceDir: traceDir,
+            noMemory: true,
+            noReview: true,
+            noVisualDelta: true,
+            reviewDataContext: nil
+        )
 
         let server = AgentHTTPServer(
             agent: placeholderAgent,
@@ -73,7 +85,7 @@ struct ServerCommand: AsyncParsableCommand {
             dataDir: nil
         )
 
-        server.runHandler = { [runCoordinator, config, runtimeManager] task, request, tracker, broadcaster, persistence, limiter in
+        server.runHandler = { [runCoordinator, config, runtimeManager, apiProfile] task, request, tracker, broadcaster, persistence, limiter in
             // SDK boundary limitation: the runHandler callback does not expose the runId
             // it created, so we find it by matching task text + .queued status. This is
             // ambiguous when identical tasks are queued concurrently — a fix requires an
@@ -120,6 +132,8 @@ struct ServerCommand: AsyncParsableCommand {
                     buildConfig: buildConfig,
                     eventBus: eventBus,
                     runOverrides: .default,
+                    handlerProfile: apiProfile,
+                    extraHandlers: [],
                     sessionId: runId
                 )
             } catch {

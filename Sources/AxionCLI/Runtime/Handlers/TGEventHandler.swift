@@ -133,6 +133,13 @@ actor TGEventHandler: EventHandler {
 
     private func handleFailed(_ event: AgentFailedEvent) async {
         await streamingController.cancel()
+
+        let lower = event.error.lowercased()
+        if lower.contains("cancelled") || lower.contains("canceled") || lower.contains("cancellation") {
+            _ = await sendMessage("⏹ 任务已停止", chatId)
+            return
+        }
+
         let sanitizedError = TGErrorSanitizer.sanitizeForTelegramError(event.error)
         let message = "❌ 任务失败: \(sanitizedError)"
         _ = await sendMessage(message, chatId)

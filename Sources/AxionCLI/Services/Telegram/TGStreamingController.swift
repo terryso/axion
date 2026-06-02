@@ -29,7 +29,10 @@ actor TGStreamingController {
     private let originalTask: String?
     private let deferFinalDelivery: Bool
     private let sendMessage: @Sendable (String, Int64) async -> Int64?
+    private let editMessage: @Sendable (Int64, Int64, String) async -> Bool
     private let sendChatAction: @Sendable (Int64, String) async -> Void
+    private var toolMessageIds: [String: Int64] = [:]
+    private var toolInputs: [String: String] = [:]
 
     // MARK: - Tool Preview Helpers
 
@@ -165,6 +168,7 @@ actor TGStreamingController {
         self.originalTask = originalTask
         self.deferFinalDelivery = deferFinalDelivery
         self.sendMessage = sendMessage
+        self.editMessage = editMessage
         self.sendChatAction = sendChatAction
         self.config = config
 
@@ -206,7 +210,11 @@ actor TGStreamingController {
     private func handleToolStarted(_ event: ToolStartedEvent) async {
         guard !finalized else { return }
 
-        _ = await sendMessage(Self.formatToolStepMessage(toolName: event.toolName, input: event.input), chatId)
+        if let input = event.input { toolInputs[event.toolUseId] = input }
+        let text = Self.formatToolStepMessage(toolName: event.toolName, input: event.input)
+        if let msgId = await sendMessage(text, chatId) {
+            toolMessageIds[event.toolUseId] = msgId
+        }
     }
 
     // MARK: - Tool Streaming
@@ -220,20 +228,30 @@ actor TGStreamingController {
     private func handleToolCompleted(_ event: ToolCompletedEvent) async {
         guard !finalized else { return }
 
+        let emoji = Self.toolEmoji(event.toolName)
+        let resultSuffix: String
+
         if event.isError {
-            let msg = "❌ \(event.toolName) 失败" + (event.output.map { "：\n" + Self.summarizeOutput($0, maxLines: 3) } ?? "")
-            _ = await sendMessage(msg, chatId)
-            return
+            resultSuffix = "\n❌ 失败" + (event.output.map { "：\n" + Self.summarizeOutput($0, maxLines: 3) } ?? "")
+        } else if let output = event.output, !output.isEmpty {
+            let summary = Self.summarizeOutput(output, maxLines: 4)
+            if !summary.isEmpty {
+                resultSuffix = "\n✅ 结果：\n\(summary)"
+            } else {
+                resultSuffix = "\n✅ 完成（\(event.durationMs)ms）"
+            }
+        } else {
+            resultSuffix = "\n✅ 完成（\(event.durationMs)ms）"
         }
 
-        guard let output = event.output, !output.isEmpty else { return }
-
-        let summary = Self.summarizeOutput(output, maxLines: 4)
-        guard !summary.isEmpty else { return }
-
-        let emoji = Self.toolEmoji(event.toolName)
-        let header = "\(emoji) \(event.toolName) 结果："
-        _ = await sendMessage("\(header)\n\(summary)", chatId)
+        let msgId = toolMessageIds.removeValue(forKey: event.toolUseId)
+        let savedInput = toolInputs.removeValue(forKey: event.toolUseId)
+        if let msgId {
+            let original = Self.formatToolStepMessage(toolName: event.toolName, input: savedInput)
+            _ = await editMessage(chatId, msgId, original + resultSuffix)
+        } else {
+            _ = await sendMessage("\(emoji) \(event.toolName)\(resultSuffix)", chatId)
+        }
     }
 
     /// Summarize tool output for TG display: basic cleanup, truncate to maxLines.

@@ -72,13 +72,25 @@ struct GatewayStartCommand: AsyncParsableCommand {
         let placeholderAgent = Agent(options: AgentOptions(model: "placeholder"))
 
         let traceDir = (ConfigManager.defaultConfigDirectory as NSString).appendingPathComponent("runs")
+        let memoryDir = (ConfigManager.defaultConfigDirectory as NSString).appendingPathComponent("memory")
         let runtimeManager = Self.createRuntimeManager(traceDir)
         let reviewDataContext = ReviewDataContext()
+        let gatewayProfile = HandlerProfile(
+            context: .gateway,
+            config: config,
+            memoryDir: memoryDir,
+            traceDir: traceDir,
+            noMemory: false,
+            noReview: false,
+            noVisualDelta: false,
+            reviewDataContext: reviewDataContext
+        )
         let reviewScheduler = ReviewScheduler(
             noReview: false,
             noMemory: false,
             reviewDataContext: reviewDataContext,
-            traceDir: traceDir
+            traceDir: traceDir,
+            memoryDir: memoryDir
         )
         let curatorScheduler = Self.makeCuratorScheduler(
             config: config,
@@ -98,7 +110,7 @@ struct GatewayStartCommand: AsyncParsableCommand {
 
         let runner = GatewayRunner(server: server)
 
-        server.runHandler = { [runCoordinator, runtimeManager, runner, traceDir] task, request, tracker, broadcaster, persistence, limiter in
+        server.runHandler = { [runCoordinator, runtimeManager, runner, traceDir, gatewayProfile, reviewScheduler, curatorScheduler] task, request, tracker, broadcaster, persistence, limiter in
             guard await runner.isAcceptingTasks else { return }
 
             await runner.taskStarted()
@@ -110,19 +122,6 @@ struct GatewayStartCommand: AsyncParsableCommand {
                 await runner.taskFinished()
                 return
             }
-
-            let reviewDataContext = ReviewDataContext()
-            let reviewScheduler = ReviewScheduler(
-                noReview: false,
-                noMemory: false,
-                reviewDataContext: reviewDataContext,
-                traceDir: traceDir
-            )
-            let curatorScheduler = Self.makeCuratorScheduler(
-                config: currentConfig,
-                reviewDataContext: reviewDataContext,
-                traceDir: traceDir
-            )
 
             // SDK boundary limitation: the runHandler callback does not expose the runId
             // it created, so we find it by matching task text + .queued status. This is
@@ -161,15 +160,17 @@ struct GatewayStartCommand: AsyncParsableCommand {
                     noVisualDelta: false,
                     noReview: false,
                     onReviewCompleted: nil,
-                    reviewDataContext: reviewDataContext,
+                    reviewDataContext: gatewayProfile.reviewDataContext,
                     nonInteractivePause: false, registerResumeHandle: nil
                 )
+                let extraHandlers: [any EventHandler] = [reviewScheduler] + (curatorScheduler.map { [$0] } ?? [])
                 result = try await runtimeManager.executeRun(
                     task: task,
                     buildConfig: buildConfig,
                     eventBus: eventBus,
                     runOverrides: runOverrides,
-                    extraHandlers: [reviewScheduler] + (curatorScheduler.map { [$0] } ?? []),
+                    handlerProfile: gatewayProfile,
+                    extraHandlers: extraHandlers,
                     sessionId: runId
                 )
             } catch {
@@ -255,6 +256,7 @@ struct GatewayStartCommand: AsyncParsableCommand {
                 config: config,
                 runner: runner,
                 extraHandlers: [reviewScheduler] + (curatorScheduler.map { [$0] } ?? []),
+                handlerProfile: gatewayProfile,
                 replyHandler: { (chatId: Int64, message: String) -> Int64? in
                     // Adapter not yet created; will be wired below
                     return nil
@@ -468,7 +470,7 @@ extension GatewayStartCommand {
         }
 
         let helpDef = TGCommandDef(name: "help", description: "入门指南", helpText: "", menuPriority: 1) { _ in
-            "Axion 是一个桌面自动化助手。\n\n直接发送文本即可执行任务。\n\n可用命令:\n/commands — 查看所有命令\n/status — 查看网关状态\n/skills — 查看技能列表\n/new — 开始新会话\n/queue — 查看任务队列"
+            "Axion 是一个桌面自动化助手。\n\n直接发送文本即可执行任务。\n\n可用命令:\n/commands — 查看所有命令\n/status — 查看网关状态\n/skills — 查看技能列表\n/new — 开始新会话\n/queue — 查看任务队列\n/stop — 停止当前任务"
         }
         let commandsDescription = "查看所有命令"
         let statusDef = TGCommandDef(name: "status", description: "查看网关状态", helpText: "", menuPriority: 3) { _ in
@@ -491,9 +493,17 @@ extension GatewayStartCommand {
             lines.append("会话: \(hasSession ? "活跃" : "无")")
             return lines.joined(separator: "\n")
         }
+        let stopDef = TGCommandDef(name: "stop", description: "停止当前任务", helpText: "", menuPriority: 7) { chatId in
+            let cancelled = await taskSerialQueue.cancelCurrentTask(chatId: chatId)
+            if cancelled {
+                return "⏹ 正在停止当前任务..."
+            } else {
+                return "没有正在执行的任务"
+            }
+        }
 
         // Build /commands handler from the other command defs (avoids hardcoding)
-        let coreDefs = [helpDef, statusDef, skillsDef, newDef, queueDef]
+        let coreDefs = [helpDef, statusDef, skillsDef, newDef, queueDef, stopDef]
         let commandsDef = TGCommandDef(name: "commands", description: commandsDescription, helpText: "", menuPriority: 2) { _ in
             var lines = ["📋 可用命令:"]
             for cmd in coreDefs {
@@ -503,7 +513,7 @@ extension GatewayStartCommand {
             return lines.joined(separator: "\n")
         }
 
-        return TGCommandRegistry(commands: [helpDef, commandsDef, statusDef, skillsDef, newDef, queueDef])
+        return TGCommandRegistry(commands: [helpDef, commandsDef, statusDef, skillsDef, newDef, queueDef, stopDef])
     }
 
     private static func formatStatus(

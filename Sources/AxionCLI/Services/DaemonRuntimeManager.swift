@@ -26,31 +26,13 @@ actor DaemonRuntimeManager: DaemonRuntimeManaging {
         buildConfig: AgentBuilder.BuildConfig,
         eventBus: EventBus,
         runOverrides: AxionRuntime.RunOverrides = .default,
-        sessionId: String? = nil
-    ) async throws -> AxionRunResult {
-        return try await executeRun(
-            task: task,
-            buildConfig: buildConfig,
-            eventBus: eventBus,
-            runOverrides: runOverrides,
-            extraHandlers: [],
-            sessionId: sessionId
-        )
-    }
-
-    func executeRun(
-        task: String,
-        buildConfig: AgentBuilder.BuildConfig,
-        eventBus: EventBus,
-        runOverrides: AxionRuntime.RunOverrides = .default,
-        extraHandlers: [any EventHandler],
+        handlerProfile: HandlerProfile,
+        extraHandlers: [any EventHandler] = [],
         sessionId: String? = nil
     ) async throws -> AxionRunResult {
         let runtime = runtimeFactory(eventBus)
 
-        await runtime.registerHandler(CostEventHandler())
-        await runtime.registerHandler(TraceEventHandler(traceDir: traceDir))
-        for handler in extraHandlers {
+        for handler in handlerProfile.buildHandlers() + extraHandlers {
             await runtime.registerHandler(handler)
         }
 
@@ -77,16 +59,7 @@ actor DaemonRuntimeManager: DaemonRuntimeManaging {
             startedAt: result.createdAt
         )
 
-        // Evict oldest entries when history exceeds limit
-        if sessionHistory.count > maxSessionHistory {
-            let sortedKeys = sessionHistory.keys.sorted {
-                sessionHistory[$0]!.startedAt < sessionHistory[$1]!.startedAt
-            }
-            let excess = sessionHistory.count - maxSessionHistory
-            for key in sortedKeys.prefix(excess) {
-                sessionHistory.removeValue(forKey: key)
-            }
-        }
+        evictOldestIfNeeded()
 
         return result
     }
@@ -97,13 +70,12 @@ actor DaemonRuntimeManager: DaemonRuntimeManaging {
         buildConfig: AgentBuilder.BuildConfig,
         eventBus: EventBus,
         runOverrides: AxionRuntime.RunOverrides = .default,
-        extraHandlers: [any EventHandler]
+        handlerProfile: HandlerProfile,
+        extraHandlers: [any EventHandler] = []
     ) async throws -> AxionRunResult {
         let runtime = runtimeFactory(eventBus)
 
-        await runtime.registerHandler(CostEventHandler())
-        await runtime.registerHandler(TraceEventHandler(traceDir: traceDir))
-        for handler in extraHandlers {
+        for handler in handlerProfile.buildHandlers() + extraHandlers {
             await runtime.registerHandler(handler)
         }
 
@@ -127,15 +99,7 @@ actor DaemonRuntimeManager: DaemonRuntimeManaging {
             startedAt: result.createdAt
         )
 
-        if sessionHistory.count > maxSessionHistory {
-            let sortedKeys = sessionHistory.keys.sorted {
-                sessionHistory[$0]!.startedAt < sessionHistory[$1]!.startedAt
-            }
-            let excess = sessionHistory.count - maxSessionHistory
-            for key in sortedKeys.prefix(excess) {
-                sessionHistory.removeValue(forKey: key)
-            }
-        }
+        evictOldestIfNeeded()
 
         return result
     }
@@ -150,8 +114,19 @@ actor DaemonRuntimeManager: DaemonRuntimeManaging {
     ) async throws -> AxionRunResult {
         let runtime = runtimeFactory(eventBus)
 
-        await runtime.registerHandler(CostEventHandler())
-        await runtime.registerHandler(TraceEventHandler(traceDir: traceDir))
+        let profile = HandlerProfile(
+            context: .api,
+            config: config,
+            memoryDir: (ConfigManager.defaultConfigDirectory as NSString).appendingPathComponent("memory"),
+            traceDir: traceDir,
+            noMemory: true,
+            noReview: true,
+            noVisualDelta: true,
+            reviewDataContext: nil
+        )
+        for handler in profile.buildHandlers() {
+            await runtime.registerHandler(handler)
+        }
 
         let eventLoopTask = _Concurrency.Task { await runtime.startEventLoop() }
 
@@ -170,8 +145,6 @@ actor DaemonRuntimeManager: DaemonRuntimeManaging {
             throw error
         }
 
-        // Stop the event loop gracefully: finish() on the AsyncStream lets
-        // in-flight handler calls complete before the `for await` loop exits.
         await runtime.stopEventLoop()
         _ = await eventLoopTask.result
 
@@ -181,16 +154,7 @@ actor DaemonRuntimeManager: DaemonRuntimeManaging {
             startedAt: result.createdAt
         )
 
-        // Evict oldest entries when history exceeds limit
-        if sessionHistory.count > maxSessionHistory {
-            let sortedKeys = sessionHistory.keys.sorted {
-                sessionHistory[$0]!.startedAt < sessionHistory[$1]!.startedAt
-            }
-            let excess = sessionHistory.count - maxSessionHistory
-            for key in sortedKeys.prefix(excess) {
-                sessionHistory.removeValue(forKey: key)
-            }
-        }
+        evictOldestIfNeeded()
 
         return result
     }
@@ -201,5 +165,16 @@ actor DaemonRuntimeManager: DaemonRuntimeManaging {
 
     func shutdown() async {
         sessionHistory.removeAll()
+    }
+
+    private func evictOldestIfNeeded() {
+        guard sessionHistory.count > maxSessionHistory else { return }
+        let sortedKeys = sessionHistory.keys.sorted {
+            sessionHistory[$0]!.startedAt < sessionHistory[$1]!.startedAt
+        }
+        let excess = sessionHistory.count - maxSessionHistory
+        for key in sortedKeys.prefix(excess) {
+            sessionHistory.removeValue(forKey: key)
+        }
     }
 }

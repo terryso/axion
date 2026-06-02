@@ -75,6 +75,27 @@ struct TGEventHandlerTests {
         #expect(types.count == 8)
     }
 
+    // MARK: - AgentFailedEvent cancellation shows stop message
+
+    @Test("AgentFailedEvent with cancelled error shows stop message")
+    func agentFailedCancelledShowsStop() async {
+        let collector = MessageCollector()
+        let handler = makeHandler(collector: collector)
+        let context = makeContext()
+
+        let event = AgentFailedEvent(
+            sessionId: nil,
+            error: "[0] cancelled",
+            stepsCompleted: 2
+        )
+        await handler.handle(event, context: context)
+
+        let messages = collector.messages
+        #expect(messages.count == 1)
+        #expect(messages[0].message == "⏹ 任务已停止")
+        #expect(!messages[0].message.contains("失败"))
+    }
+
     // MARK: - AgentFailedEvent pushes error (no API key)
 
     @Test("AgentFailedEvent pushes error message without API key")
@@ -137,8 +158,8 @@ struct TGEventHandlerTests {
 
     // MARK: - Streaming delegation: ToolCompletedEvent no longer sends step message
 
-    @Test("ToolCompletedEvent does not send a direct Telegram message")
-    func toolCompletedDoesNotPushDirectMessage() async {
+    @Test("ToolCompletedEvent without prior start sends standalone message")
+    func toolCompletedWithoutPriorStartSendsStandalone() async {
         let collector = MessageCollector()
         let handler = makeHandler(collector: collector)
         let context = makeContext()
@@ -153,7 +174,8 @@ struct TGEventHandlerTests {
         await handler.handle(event, context: context)
 
         let messages = collector.messages
-        #expect(messages.isEmpty)
+        #expect(messages.count == 1)
+        #expect(messages[0].message == "📸 screenshot\n✅ 完成（230ms）")
     }
 
     // MARK: - ReviewResultEvent handling

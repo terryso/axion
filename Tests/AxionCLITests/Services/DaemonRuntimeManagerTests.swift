@@ -113,6 +113,19 @@ private func makeBuildConfig(task: String = "test task") -> AgentBuilder.BuildCo
     )
 }
 
+private func makeTestProfile() -> HandlerProfile {
+    HandlerProfile(
+        context: .api,
+        config: AxionConfig(apiKey: "test"),
+        memoryDir: "/tmp/test-memory",
+        traceDir: "/tmp/test-traces",
+        noMemory: true,
+        noReview: true,
+        noVisualDelta: true,
+        reviewDataContext: nil
+    )
+}
+
 // MARK: - Mock DaemonRuntimeManager (for ServerCommand seam tests)
 
 final class MockDaemonRuntimeManager: DaemonRuntimeManaging, @unchecked Sendable {
@@ -134,19 +147,7 @@ final class MockDaemonRuntimeManager: DaemonRuntimeManaging, @unchecked Sendable
         buildConfig: AgentBuilder.BuildConfig,
         eventBus: EventBus,
         runOverrides: AxionRuntime.RunOverrides,
-        sessionId: String? = nil
-    ) async throws -> AxionRunResult {
-        return try await executeRun(
-            task: task, buildConfig: buildConfig, eventBus: eventBus,
-            runOverrides: runOverrides, extraHandlers: [], sessionId: sessionId
-        )
-    }
-
-    func executeRun(
-        task: String,
-        buildConfig: AgentBuilder.BuildConfig,
-        eventBus: EventBus,
-        runOverrides: AxionRuntime.RunOverrides,
+        handlerProfile: HandlerProfile,
         extraHandlers: [any EventHandler],
         sessionId: String? = nil
     ) async throws -> AxionRunResult {
@@ -176,6 +177,7 @@ final class MockDaemonRuntimeManager: DaemonRuntimeManaging, @unchecked Sendable
         buildConfig: AgentBuilder.BuildConfig,
         eventBus: EventBus,
         runOverrides: AxionRuntime.RunOverrides,
+        handlerProfile: HandlerProfile,
         extraHandlers: [any EventHandler]
     ) async throws -> AxionRunResult {
         _executeCount.increment()
@@ -205,7 +207,10 @@ struct DaemonRuntimeManagerTests {
             task: "test",
             buildConfig: makeBuildConfig(),
             eventBus: eventBus,
-            runOverrides: AxionRuntime.RunOverrides.default
+            runOverrides: AxionRuntime.RunOverrides.default,
+            handlerProfile: makeTestProfile(),
+            extraHandlers: [],
+            sessionId: nil
         )
 
         #expect(result.sessionId == expected.sessionId)
@@ -223,7 +228,10 @@ struct DaemonRuntimeManagerTests {
             task: "test",
             buildConfig: makeBuildConfig(),
             eventBus: eventBus,
-            runOverrides: AxionRuntime.RunOverrides.default
+            runOverrides: AxionRuntime.RunOverrides.default,
+            handlerProfile: makeTestProfile(),
+            extraHandlers: [],
+            sessionId: nil
         )
 
         #expect(mock.handlerCount == 2, "Should register CostEventHandler + TraceEventHandler")
@@ -240,7 +248,10 @@ struct DaemonRuntimeManagerTests {
             task: "test",
             buildConfig: makeBuildConfig(),
             eventBus: eventBus,
-            runOverrides: AxionRuntime.RunOverrides.default
+            runOverrides: AxionRuntime.RunOverrides.default,
+            handlerProfile: makeTestProfile(),
+            extraHandlers: [],
+            sessionId: nil
         )
 
         #expect(result.state == .completed, "Execute should complete without hanging")
@@ -256,13 +267,19 @@ struct DaemonRuntimeManagerTests {
             task: "run1",
             buildConfig: makeBuildConfig(task: "run1"),
             eventBus: EventBus(),
-            runOverrides: AxionRuntime.RunOverrides.default
+            runOverrides: AxionRuntime.RunOverrides.default,
+            handlerProfile: makeTestProfile(),
+            extraHandlers: [],
+            sessionId: nil
         )
         let r2 = try await manager.executeRun(
             task: "run2",
             buildConfig: makeBuildConfig(task: "run2"),
             eventBus: EventBus(),
-            runOverrides: AxionRuntime.RunOverrides.default
+            runOverrides: AxionRuntime.RunOverrides.default,
+            handlerProfile: makeTestProfile(),
+            extraHandlers: [],
+            sessionId: nil
         )
 
         #expect(r1.state == .completed)
@@ -288,13 +305,19 @@ struct DaemonRuntimeManagerTests {
             task: "alpha",
             buildConfig: makeBuildConfig(task: "alpha"),
             eventBus: EventBus(),
-            runOverrides: AxionRuntime.RunOverrides.default
+            runOverrides: AxionRuntime.RunOverrides.default,
+            handlerProfile: makeTestProfile(),
+            extraHandlers: [],
+            sessionId: nil
         )
         async let r2 = manager.executeRun(
             task: "beta",
             buildConfig: makeBuildConfig(task: "beta"),
             eventBus: EventBus(),
-            runOverrides: AxionRuntime.RunOverrides.default
+            runOverrides: AxionRuntime.RunOverrides.default,
+            handlerProfile: makeTestProfile(),
+            extraHandlers: [],
+            sessionId: nil
         )
 
         let res1 = try await r1
@@ -323,14 +346,20 @@ struct DaemonRuntimeManagerTests {
             task: "run1",
             buildConfig: makeBuildConfig(),
             eventBus: bus1,
-            runOverrides: AxionRuntime.RunOverrides.default
+            runOverrides: AxionRuntime.RunOverrides.default,
+            handlerProfile: makeTestProfile(),
+            extraHandlers: [],
+            sessionId: nil
         )
 
         _ = try await manager.executeRun(
             task: "run2",
             buildConfig: makeBuildConfig(),
             eventBus: bus2,
-            runOverrides: AxionRuntime.RunOverrides.default
+            runOverrides: AxionRuntime.RunOverrides.default,
+            handlerProfile: makeTestProfile(),
+            extraHandlers: [],
+            sessionId: nil
         )
 
         let buses = capturedBuses.value
@@ -348,7 +377,10 @@ struct DaemonRuntimeManagerTests {
             task: "test",
             buildConfig: makeBuildConfig(),
             eventBus: EventBus(),
-            runOverrides: AxionRuntime.RunOverrides.default
+            runOverrides: AxionRuntime.RunOverrides.default,
+            handlerProfile: makeTestProfile(),
+            extraHandlers: [],
+            sessionId: nil
         )
 
         let sessions = await manager.listActiveSessions()
@@ -368,7 +400,10 @@ struct DaemonRuntimeManagerTests {
                 task: "failing",
                 buildConfig: makeBuildConfig(),
                 eventBus: EventBus(),
-                runOverrides: AxionRuntime.RunOverrides.default
+                runOverrides: AxionRuntime.RunOverrides.default,
+            handlerProfile: makeTestProfile(),
+            extraHandlers: [],
+            sessionId: nil
             )
             Issue.record("Expected error to be thrown")
         } catch {
@@ -388,7 +423,10 @@ struct DaemonRuntimeManagerTests {
             task: "test",
             buildConfig: makeBuildConfig(),
             eventBus: EventBus(),
-            runOverrides: AxionRuntime.RunOverrides.default
+            runOverrides: AxionRuntime.RunOverrides.default,
+            handlerProfile: makeTestProfile(),
+            extraHandlers: [],
+            sessionId: nil
         )
 
         var sessions = await manager.listActiveSessions()
@@ -412,13 +450,19 @@ struct DaemonRuntimeManagerTests {
             task: "task1",
             buildConfig: makeBuildConfig(),
             eventBus: EventBus(),
-            runOverrides: AxionRuntime.RunOverrides.default
+            runOverrides: AxionRuntime.RunOverrides.default,
+            handlerProfile: makeTestProfile(),
+            extraHandlers: [],
+            sessionId: nil
         )
         _ = try await manager.executeRun(
             task: "task2",
             buildConfig: makeBuildConfig(),
             eventBus: EventBus(),
-            runOverrides: AxionRuntime.RunOverrides.default
+            runOverrides: AxionRuntime.RunOverrides.default,
+            handlerProfile: makeTestProfile(),
+            extraHandlers: [],
+            sessionId: nil
         )
 
         let sessions = await manager.listActiveSessions()
@@ -438,6 +482,8 @@ struct DaemonRuntimeManagerTests {
             buildConfig: makeBuildConfig(),
             eventBus: EventBus(),
             runOverrides: AxionRuntime.RunOverrides.default,
+            handlerProfile: makeTestProfile(),
+            extraHandlers: [],
             sessionId: "sdk-run-id-abc"
         )
 
@@ -469,7 +515,10 @@ struct ServerCommandRuntimeManagerTests {
             task: "seam test",
             buildConfig: makeBuildConfig(),
             eventBus: EventBus(),
-            runOverrides: AxionRuntime.RunOverrides.default
+            runOverrides: AxionRuntime.RunOverrides.default,
+            handlerProfile: makeTestProfile(),
+            extraHandlers: [],
+            sessionId: nil
         )
 
         #expect(result.sessionId == "seam-test")
@@ -491,7 +540,10 @@ struct ServerCommandRuntimeManagerTests {
                 task: "fail test",
                 buildConfig: makeBuildConfig(),
                 eventBus: EventBus(),
-                runOverrides: AxionRuntime.RunOverrides.default
+                runOverrides: AxionRuntime.RunOverrides.default,
+            handlerProfile: makeTestProfile(),
+            extraHandlers: [],
+            sessionId: nil
             )
             Issue.record("Expected error to be thrown")
         } catch {

@@ -47,7 +47,7 @@ struct ResumeCommand: AsyncParsableCommand {
 
         let eventBus = EventBus()
         let runtime = Self.createRuntime(eventBus)
-        await registerHandlers(into: runtime, config: config)
+        let reviewDC = await registerHandlers(into: runtime, config: config)
 
         let eventLoopTask = _Concurrency.Task { await runtime.startEventLoop() }
 
@@ -66,7 +66,7 @@ struct ResumeCommand: AsyncParsableCommand {
             noVisualDelta: noVisualDelta,
             noReview: noReview,
             onReviewCompleted: nil,
-            reviewDataContext: nil,
+            reviewDataContext: reviewDC,
             nonInteractivePause: false, registerResumeHandle: nil
         )
 
@@ -101,15 +101,25 @@ struct ResumeCommand: AsyncParsableCommand {
         }
     }
 
-    private func registerHandlers(into runtime: any AxionRuntimeResuming, config: AxionConfig) async {
+    @discardableResult
+    private func registerHandlers(into runtime: any AxionRuntimeResuming, config: AxionConfig) async -> ReviewDataContext {
         let memoryDir = (ConfigManager.defaultConfigDirectory as NSString).appendingPathComponent("memory")
         let traceDir = (ConfigManager.defaultConfigDirectory as NSString).appendingPathComponent("runs")
+        let reviewDataContext = ReviewDataContext()
 
-        await runtime.registerHandler(CostEventHandler())
-        await runtime.registerHandler(VisualDeltaHandler(noVisualDelta: noVisualDelta))
-        await runtime.registerHandler(SeatMonitorHandler(sharedSeatMode: config.sharedSeatMode))
-        await runtime.registerHandler(MemoryProcessingHandler(noMemory: noMemory, memoryDir: memoryDir))
-        await runtime.registerHandler(ReviewHandler(noReview: noReview, noMemory: noMemory, reviewOrchestrator: nil))
-        await runtime.registerHandler(TraceEventHandler(traceDir: traceDir))
+        let profile = HandlerProfile(
+            context: .cli,
+            config: config,
+            memoryDir: memoryDir,
+            traceDir: traceDir,
+            noMemory: noMemory,
+            noReview: noReview,
+            noVisualDelta: noVisualDelta,
+            reviewDataContext: reviewDataContext
+        )
+        for handler in profile.buildHandlers() {
+            await runtime.registerHandler(handler)
+        }
+        return reviewDataContext
     }
 }

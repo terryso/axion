@@ -16,6 +16,7 @@ protocol TaskSerialQueueProtocol: Sendable, Actor {
     func hasActiveSession(chatId: Int64) async -> Bool
     func registerResumeHandle(pendingId: String, handle: @Sendable @escaping (String) async -> Void)
     func resumeInteraction(pendingId: String, context: String) async -> Bool
+    func cancelCurrentTask(chatId: Int64) -> Bool
 }
 
 // MARK: - TaskSerialQueue
@@ -47,11 +48,13 @@ actor TaskSerialQueue: TaskSerialQueueProtocol {
     private var newTaskContinuation: CheckedContinuation<Void, Never>?
     private var chatSessions: [Int64: ActiveSession] = [:]
     private var activeResumeHandles: [String: @Sendable (String) async -> Void] = [:]
+    private var currentExecutionTask: _Concurrency.Task<Void, Never>?
 
     private let runtimeManager: any DaemonRuntimeManaging
     private let config: AxionConfig
     private let runner: GatewayRunner
     private let extraHandlers: [any EventHandler]
+    private let handlerProfile: HandlerProfile
     private var replyHandler: @Sendable (Int64, String) async -> Int64?
     private var editHandler: @Sendable (Int64, Int64, String) async -> Bool
     private var chatActionHandler: @Sendable (Int64, String) async -> Void
@@ -63,6 +66,7 @@ actor TaskSerialQueue: TaskSerialQueueProtocol {
         config: AxionConfig,
         runner: GatewayRunner,
         extraHandlers: [any EventHandler] = [],
+        handlerProfile: HandlerProfile,
         replyHandler: @Sendable @escaping (Int64, String) async -> Int64?,
         editHandler: @Sendable @escaping (Int64, Int64, String) async -> Bool = { _, _, _ in false },
         chatActionHandler: @Sendable @escaping (Int64, String) async -> Void = { _, _ in },
@@ -73,6 +77,7 @@ actor TaskSerialQueue: TaskSerialQueueProtocol {
         self.config = config
         self.runner = runner
         self.extraHandlers = extraHandlers
+        self.handlerProfile = handlerProfile
         self.replyHandler = replyHandler
         self.editHandler = editHandler
         self.chatActionHandler = chatActionHandler
@@ -137,31 +142,66 @@ actor TaskSerialQueue: TaskSerialQueueProtocol {
 
             let timeoutMinutes = config.gatewayTaskTimeoutMinutes ?? 10.0
 
-            do {
-                let result: AxionRunResult
-                if pending.shouldResume, let sessionId = pending.existingSessionId {
-                    result = try await executeWithTimeout(
-                        timeoutMinutes: timeoutMinutes,
-                        pending: pending,
-                        sessionId: sessionId
-                    )
-                } else {
-                    result = try await executeNewWithTimeout(
-                        timeoutMinutes: timeoutMinutes,
-                        pending: pending
-                    )
-                }
-                updateSession(from: result, chatId: pending.chatId)
-            } catch is TaskTimeoutError {
-                _ = await replyHandler(pending.chatId, "任务超时已取消 (\(Int(timeoutMinutes)) 分钟)")
-            } catch {
-                _ = await replyHandler(pending.chatId, "任务执行失败: \(error.localizedDescription)")
+            // Wrap execution in a Task so we can cancel it from cancelCurrentTask
+            currentExecutionTask = _Concurrency.Task {
+                await self.executeAndFinalize(pending: pending, timeoutMinutes: timeoutMinutes)
             }
-            activeResumeHandles.removeAll()
 
-            currentChatId = nil
-            await runner.taskFinished()
+            // Await the task to maintain sequential processing
+            _ = await currentExecutionTask?.value
+
+            // Cleanup (also done in executeAndFinalize, but safe to double-clean)
+            if currentChatId != nil {
+                activeResumeHandles.removeAll()
+                currentChatId = nil
+                currentExecutionTask = nil
+                await runner.taskFinished()
+            }
         }
+    }
+
+    private func executeAndFinalize(pending: PendingTask, timeoutMinutes: Double) async {
+        do {
+            let result: AxionRunResult
+            if pending.shouldResume, let sessionId = pending.existingSessionId {
+                result = try await executeWithTimeout(
+                    timeoutMinutes: timeoutMinutes,
+                    pending: pending,
+                    sessionId: sessionId
+                )
+            } else {
+                result = try await executeNewWithTimeout(
+                    timeoutMinutes: timeoutMinutes,
+                    pending: pending
+                )
+            }
+            updateSession(from: result, chatId: pending.chatId)
+        } catch is TaskTimeoutError {
+            _ = await replyHandler(pending.chatId, "任务超时已取消 (\(Int(timeoutMinutes)) 分钟)")
+        } catch is CancellationError {
+            _ = await replyHandler(pending.chatId, "⏹ 任务已停止")
+        } catch {
+            _ = await replyHandler(pending.chatId, "任务执行失败: \(error.localizedDescription)")
+        }
+        activeResumeHandles.removeAll()
+        currentChatId = nil
+        currentExecutionTask = nil
+        await runner.taskFinished()
+    }
+
+    func cancelCurrentTask(chatId: Int64) -> Bool {
+        // Can only cancel if currently executing for this chat
+        guard isExecuting && currentChatId == chatId else {
+            return false
+        }
+        // Cancel the running task — triggers CancellationError propagation
+        currentExecutionTask?.cancel()
+        // Clear queued tasks for this chat as well
+        queue.removeAll { $0.chatId == chatId }
+        // Clear the session so next message starts fresh
+        chatSessions.removeValue(forKey: chatId)
+        activeResumeHandles.removeAll()
+        return true
     }
 
     func cancelAll() async {
@@ -232,9 +272,9 @@ actor TaskSerialQueue: TaskSerialQueueProtocol {
         AxionRuntime.RunOverrides(
             json: false,
             noVisualDelta: false,
-            noReview: false,
+            noReview: handlerProfile.noReview,
             onReviewCompleted: nil,
-            reviewDataContext: nil,
+            reviewDataContext: handlerProfile.reviewDataContext,
             nonInteractivePause: true,
             registerResumeHandle: { [weak self] pendingId, handle in
                 await self?.registerResumeHandle(pendingId: pendingId, handle: handle)
@@ -294,6 +334,7 @@ actor TaskSerialQueue: TaskSerialQueueProtocol {
                     buildConfig: buildConfig,
                     eventBus: eventBus,
                     runOverrides: self.makeGatewayRunOverrides(),
+                    handlerProfile: self.handlerProfile,
                     extraHandlers: allHandlers,
                     sessionId: nil
                 )
@@ -365,6 +406,7 @@ actor TaskSerialQueue: TaskSerialQueueProtocol {
                         buildConfig: buildConfig,
                         eventBus: eventBus,
                         runOverrides: self.makeGatewayRunOverrides(),
+                        handlerProfile: self.handlerProfile,
                         extraHandlers: allHandlers
                     )
                     await tgHandler.finishRun(responseText: result.responseText)

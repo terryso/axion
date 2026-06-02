@@ -34,6 +34,8 @@ actor MockTaskSerialQueue: TaskSerialQueueProtocol {
         _clearedSessions.append(chatId)
     }
 
+    func cancelCurrentTask(chatId: Int64) -> Bool { false }
+
     var pendingCount: Int { _pendingCount }
     var isProcessing: Bool { _isProcessing }
 
