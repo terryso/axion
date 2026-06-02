@@ -129,6 +129,29 @@ struct TGCommandRouterTests {
         #expect(reply == nil)
     }
 
+    @Test("Skill with hyphens passthroughs after normalization")
+    func skillWithHyphensPassthrough() async {
+        let registry = makeRegistry()
+        // Simulates real skillNameChecker: skill name "polyv-live-cli" with normalize
+        let router = TGCommandRouter(registry: registry, skillNameChecker: { name in
+            TGCommandRegistry.normalize("polyv-live-cli") == name
+        })
+
+        let reply = await router.handle("/polyv-live-cli 获取10个频道信息", chatId: 100)
+        #expect(reply == nil)
+    }
+
+    @Test("Skill with hyphens and @botname passthroughs")
+    func skillWithHyphensAndBotname() async {
+        let registry = makeRegistry()
+        let router = TGCommandRouter(registry: registry, skillNameChecker: { name in
+            TGCommandRegistry.normalize("polyv-live-cli") == name
+        })
+
+        let reply = await router.handle("/polyv-live-cli@my_bot test", chatId: 100)
+        #expect(reply == nil)
+    }
+
     @Test("Non-existent skill command returns unknown command error")
     func nonExistentSkillCommandReturnsError() async throws {
         let registry = makeRegistry()

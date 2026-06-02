@@ -29,4 +29,15 @@ echo "[axion] Log: $logfile"
 nohup .build/arm64-apple-macosx/debug/AxionCLI gateway start \
     --host 127.0.0.1 --port 4242 \
     >> "$logfile" 2>&1 &
-echo "[axion] Gateway started (pid $!)"
+gwpid=$!
+echo "[axion] Gateway started (pid $gwpid)"
+
+# Wait for startup, then tail log
+sleep 2
+if kill -0 "$gwpid" 2>/dev/null; then
+    echo "[axion] Tailing log (Ctrl+C to stop viewing, gateway keeps running)..."
+    tail -f "$logfile"
+else
+    echo "[axion] Gateway exited unexpectedly, showing log:"
+    cat "$logfile"
+fi

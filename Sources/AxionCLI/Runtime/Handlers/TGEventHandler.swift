@@ -440,7 +440,10 @@ actor TGEventHandler: EventHandler {
             .filter { !$0.isEmpty }
 
         if nonEmptyLines.count >= 2 { return true }
-        if trimmed.count >= 80 { return true }
+        if trimmed.count >= 32 { return true }
+        if trimmed.rangeOfCharacter(from: CharacterSet(charactersIn: "。！？!?")) != nil, trimmed.count >= 20 {
+            return true
+        }
         if trimmed.contains("\n- ") || trimmed.contains("\n* ") { return true }
         if trimmed.contains("：") || trimmed.contains(":") { return true }
         return false
@@ -459,6 +462,10 @@ actor TGEventHandler: EventHandler {
 
         while index >= 0 {
             let candidate = blocks[index]
+            if isDividerBlock(candidate) {
+                index -= 1
+                continue
+            }
             if isProcessLikeBlock(candidate) {
                 break
             }
@@ -517,10 +524,13 @@ actor TGEventHandler: EventHandler {
     private static func isStructuredAnswerBlock(_ block: String) -> Bool {
         let lines = block.components(separatedBy: "\n")
         return lines.contains { line in
-            line.hasPrefix("- ")
+            line.hasPrefix("#")
+                || line.hasPrefix("> ")
+                || line.hasPrefix("- ")
                 || line.hasPrefix("* ")
                 || line.hasPrefix("|")
                 || line.hasPrefix("**")
+                || line.range(of: #"^\d+\.\s"#, options: .regularExpression) != nil
         }
     }
 
@@ -539,6 +549,12 @@ actor TGEventHandler: EventHandler {
         return !lines.isEmpty && lines.allSatisfy(isProcessLikeLine)
     }
 
+    private static func isDividerBlock(_ block: String) -> Bool {
+        let trimmed = block.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return false }
+        return trimmed.allSatisfy { $0 == "-" || $0 == "—" || $0 == "_" }
+    }
+
     private static func trimLeadingProcessLines(from text: String) -> String {
         var lines = text.components(separatedBy: "\n")
         while lines.count > 1 {
@@ -552,18 +568,31 @@ actor TGEventHandler: EventHandler {
     }
 
     private static func isProcessLikeLine(_ line: String) -> Bool {
+        let trimmed = line.trimmingCharacters(in: .whitespacesAndNewlines)
+        let lowerTrimmed = trimmed.lowercased()
         let processPhrases = [
             "我先",
             "先帮你",
             "让我",
             "正在",
             "稍等",
+            "认证状态正常",
             "查询到了最新",
             "看起来",
             "重新获取",
-            "现在获取"
+            "现在获取",
+            "now",
+            "let me",
+            "i'll",
+            "i will",
+            "here's"
         ]
-        return processPhrases.contains { line.contains($0) }
+        return processPhrases.contains { phrase in
+            if phrase.canBeConverted(to: .ascii) {
+                return lowerTrimmed.hasPrefix(phrase)
+            }
+            return trimmed.hasPrefix(phrase)
+        }
     }
 
     private static func isLikelyNarrativeLine(_ line: String) -> Bool {

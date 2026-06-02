@@ -112,6 +112,58 @@ struct AxionRuntimeSkillTests {
         #expect(identifier == "skill-test-handler")
     }
 
+    @Test("collectSkillResponseText prefers visible streamed body over final summary result")
+    func collectSkillResponseTextPrefersVisibleStreamedBody() {
+        let messages: [SDKMessage] = [
+            .partialMessage(.init(text: """
+            ## 📍 Where You Are
+
+            **All planned epics (1–32) are DONE.**
+
+            ## 🔀 What You Can Do Next
+            """)),
+            .assistant(.init(text: """
+            Your most impactful next step depends on your goals:
+            """, model: "mock-model", stopReason: "end_turn")),
+            .toolUse(.init(toolName: "Read", toolUseId: "tu-1", input: #"{"path":"_bmad/core/config.yaml"}"#)),
+            .result(.init(
+                subtype: .success,
+                text: """
+                BMad Help: 显示了项目状态（32个epics全部完成）和推荐下一步操作
+                """,
+                usage: nil,
+                numTurns: 3,
+                durationMs: 500
+            ))
+        ]
+
+        let responseText = AxionRuntime.collectSkillResponseText(from: messages)
+
+        #expect(responseText?.contains("## 📍 Where You Are") == true)
+        #expect(responseText?.contains("All planned epics (1–32) are DONE") == true)
+        #expect(responseText?.contains("## 🔀 What You Can Do Next") == true)
+        #expect(responseText?.contains("Your most impactful next step") == true)
+        #expect(responseText?.contains("BMad Help: 显示了项目状态") == false)
+    }
+
+    @Test("collectSkillResponseText falls back to result text when no visible stream body exists")
+    func collectSkillResponseTextFallsBackToResultText() {
+        let messages: [SDKMessage] = [
+            .toolUse(.init(toolName: "Read", toolUseId: "tu-1", input: #"{"path":"_bmad/core/config.yaml"}"#)),
+            .result(.init(
+                subtype: .success,
+                text: "BMad Help: 显示了项目状态（32个epics全部完成）和推荐下一步操作",
+                usage: nil,
+                numTurns: 1,
+                durationMs: 200
+            ))
+        ]
+
+        let responseText = AxionRuntime.collectSkillResponseText(from: messages)
+
+        #expect(responseText == "BMad Help: 显示了项目状态（32个epics全部完成）和推荐下一步操作")
+    }
+
     // MARK: - RunCommand skillExecutorOverride seam
 
     @Test("RunCommand skillExecutorOverride seam works")

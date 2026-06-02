@@ -31,6 +31,15 @@ struct GatewayRunnerTests {
         }
     }
 
+    /// Polls until the runner reaches .running state, with a timeout.
+    private func waitForRunning(_ runner: GatewayRunner, timeoutMs: Int = 500) async throws {
+        let deadline = ContinuousClock.now + .milliseconds(timeoutMs)
+        while await runner.currentState != .running {
+            if ContinuousClock.now > deadline { break }
+            try await _Concurrency.Task.sleep(nanoseconds: 5_000_000)
+        }
+    }
+
     // MARK: - State Transitions (Task 3.1)
 
     @Test("GatewayRunner initial state is created")
@@ -47,7 +56,7 @@ struct GatewayRunnerTests {
 
         let runnerTask = _Concurrency.Task { try await runner.start() }
 
-        try await _Concurrency.Task.sleep(nanoseconds: 50_000_000)
+        try await waitForRunning(runner)
 
         let state = await runner.currentState
         #expect(state == .running)
@@ -62,7 +71,7 @@ struct GatewayRunnerTests {
         let runner = GatewayRunner(server: server)
 
         let runnerTask = _Concurrency.Task { try await runner.start() }
-        try await _Concurrency.Task.sleep(nanoseconds: 50_000_000)
+        try await waitForRunning(runner)
 
         await runner.stop(graceful: false)
         _ = try? await runnerTask.result
@@ -79,7 +88,7 @@ struct GatewayRunnerTests {
         let runner = GatewayRunner(server: server)
 
         let runnerTask = _Concurrency.Task { try await runner.start() }
-        try await _Concurrency.Task.sleep(nanoseconds: 50_000_000)
+        try await waitForRunning(runner)
 
         await runner.taskStarted()
 
@@ -102,7 +111,7 @@ struct GatewayRunnerTests {
         let runner = GatewayRunner(server: server)
 
         let runnerTask = _Concurrency.Task { try await runner.start() }
-        try await _Concurrency.Task.sleep(nanoseconds: 50_000_000)
+        try await waitForRunning(runner)
 
         await runner.stop(graceful: false)
         _ = try? await runnerTask.result
@@ -119,7 +128,7 @@ struct GatewayRunnerTests {
         let runner = GatewayRunner(server: server)
 
         let runnerTask = _Concurrency.Task { try await runner.start() }
-        try await _Concurrency.Task.sleep(nanoseconds: 50_000_000)
+        try await waitForRunning(runner)
 
         await runner.stop(graceful: false)
         _ = try? await runnerTask.result
@@ -158,7 +167,7 @@ struct GatewayRunnerTests {
         let runner = GatewayRunner(server: server)
 
         let runnerTask = _Concurrency.Task { try await runner.start() }
-        try await _Concurrency.Task.sleep(nanoseconds: 50_000_000)
+        try await waitForRunning(runner)
 
         #expect(await runner.isAcceptingTasks == true)
 
@@ -174,7 +183,7 @@ struct GatewayRunnerTests {
         let runner = GatewayRunner(server: server)
 
         let runnerTask = _Concurrency.Task { try await runner.start() }
-        try await _Concurrency.Task.sleep(nanoseconds: 50_000_000)
+        try await waitForRunning(runner)
 
         await runner.stop(graceful: true)
         _ = try? await runnerTask.result
@@ -253,7 +262,7 @@ struct GatewayRunnerTests {
 
         // Start the runner
         let runnerTask = _Concurrency.Task { try await runner.start() }
-        try await _Concurrency.Task.sleep(nanoseconds: 50_000_000)
+        try await waitForRunning(runner)
 
         await runner.taskStarted()
         await runner.taskStarted()
@@ -278,7 +287,7 @@ struct GatewayRunnerTests {
 
         // Start and wait
         let runnerTask = _Concurrency.Task { try await runner.start() }
-        try await _Concurrency.Task.sleep(nanoseconds: 150_000_000) // 150ms
+        try await waitForRunning(runner)
 
         let whileRunning = await runner.getStatus()
         #expect(whileRunning.uptimeSeconds > 0)

@@ -599,6 +599,137 @@ struct TGEventHandlerTests {
         #expect(!result.hasPrefix("已查询广州未来5天天气"))
     }
 
+    @Test("cleanResultText keeps full BMad status sections before trailing summary")
+    func cleanResultTextKeepsBMadStatusSections() {
+        let text = """
+        ---
+
+        ## 🎯 BMad Help — Axion Project Status
+
+        ### Where You Are
+
+        You're at a **major milestone** — **all 32 epics are marked `done`**.
+
+        ### ✅ What's Complete
+
+        | Phase | Description | Status |
+        |-------|-------------|--------|
+        | 1–3 | Core, Growth, Vision (Epics 1–11) | ✅ Done |
+        | 12 | Telegram Experience Upgrades (Epic 32) | ✅ Done |
+
+        ---
+
+        ### 🔜 Recommended Next Steps
+
+        **1. Commit your current work** — You have uncommitted changes on `feat/epic-28-gateway-foundation`.
+
+        | Code | Skill | Description |
+        |------|-------|-------------|
+        | **[BP]** | `bmad-brainstorming` | Brainstorm what Phase 13 should focus on |
+        | **[PRD]** | `bmad-prd` | Create/update a PRD for the next set of features |
+
+        ---
+
+        ### 💡 My Recommendation
+
+        1. **`bmad-brainstorming`** to explore what's next for Axion
+        2. **`bmad-generate-project-context`** to refresh the LLM context
+
+        Would you like me to run any of these for you right now?
+
+        [结果] BMad Help: 所有 32 个 Epic 已完成，推荐下一步规划新阶段或刷新项目上下文
+        """
+
+        let result = TGEventHandler.cleanResultText(from: text)
+        #expect(result.contains("## 🎯 BMad Help — Axion Project Status"))
+        #expect(result.contains("### Where You Are"))
+        #expect(result.contains("| Phase | Description | Status |"))
+        #expect(result.contains("| **[PRD]** | `bmad-prd` |"))
+        #expect(result.contains("### 💡 My Recommendation"))
+        #expect(result.contains("Would you like me to run any of these for you right now?"))
+        #expect(!result.contains("[结果]"))
+        #expect(!result.hasPrefix("BMad Help: 所有 32 个 Epic 已完成"))
+    }
+
+    @Test("cleanResultText keeps top BMad project overview from real gateway output")
+    func cleanResultTextKeepsTopBMadProjectOverview() {
+        let text = """
+        Now I have the full picture. Here's the BMad Help summary:
+
+        ---
+
+        ## 🧭 BMad 帮助 — 项目状态总览
+
+        ### 📍 你当前的位置
+
+        **项目**: Axion
+        **模块**: BMad Method v6.8.0 + TEA v1.19.0 + Automator
+        **当前分支**: `feat/epic-28-gateway-foundation`（有 12 个未暂存修改文件）
+
+        ### ✅ 已完成的阶段
+
+        | 阶段 | 状态 |
+        |------|------|
+        | **1-Analysis** (研究/头脑风暴) | ✅ 已有 project-context.md |
+        | **2-Planning** (PRD/UX) | ✅ PRD + Architecture 已完成 |
+        | **3-Solutioning** (架构/Epics) | ✅ Epics + 实现就绪报告已就绪 |
+        | **4-Implementation** (Sprint执行) | ✅ **所有 32 个 Epic 全部 Done** |
+
+        所有 32 个 Epic 已完成，包含回顾都已归档。这是一个里程碑！🎉
+
+        ### ⚠️ 当前未提交的工作
+
+        分支 `feat/epic-28-gateway-foundation` 上有 **12 个未暂存的修改文件**，看起来是 Epic 32 完成后的一些额外增强工作（TG streaming、event handling、message UX 改进）。这些改动还没有 commit。
+
+        ---
+
+        ### 🎯 建议的下一步行动
+
+        **1. 处理未提交的改动**（最优先）
+        - 这些改动需要提交或 stashed。你可以让我帮你：
+          - 查看改动内容并提交
+          - 或者运行 `bmad-code-review` (CR) 先做代码审查
+
+        **2. Sprint 完成后的可选操作**
+
+        | 代码 | 技能 | 说明 |
+        |------|-------|------|
+        | **ER** | `bmad-retrospective` | 做一次整体回顾（所有 Epic 已完成） |
+        | **QQ** | `bmad-quick-dev` | 快速实现小型改进或修复 |
+        | **CC** | `bmad-correct-course` | 如果需要规划下一个大方向 |
+        | **CR** | `bmad-code-review` | 对当前未提交改动做代码审查 |
+
+        **3. 如果你准备开启新阶段**
+
+        当前所有 32 个 Epic 都已完成，你可能需要：
+        - 更新 PRD 或 Architecture 来规划下一批 Epic
+        - 运行 `bmad-prd` (PRD) 来更新产品需求
+        - 运行 `bmad-create-architecture` (CA) 来更新技术架构
+        - 然后运行 `bmad-create-epics-and-stories` (CE) 创建新 Epic
+
+        ---
+
+        需要我帮你做什么？例如：
+        - 🔍 **审查当前未提交的代码** → 我可以运行 `bmad-code-review`
+        - 📦 **提交当前改动** → 我可以直接帮你 commit
+        - 🗺️ **规划下一阶段** → 运行 `bmad-correct-course` 或更新 PRD
+
+        [结果] BMad Help: 所有32个Epic已完成，有12个未提交文件，建议先处理改动再规划下一阶段
+        """
+
+        let result = TGEventHandler.cleanResultText(from: text)
+
+        #expect(result.contains("## 🧭 BMad 帮助 — 项目状态总览"))
+        #expect(result.contains("### 📍 你当前的位置"))
+        #expect(result.contains("**项目**: Axion"))
+        #expect(result.contains("### ✅ 已完成的阶段"))
+        #expect(result.contains("所有 32 个 Epic 已完成"))
+        #expect(result.contains("### ⚠️ 当前未提交的工作"))
+        #expect(result.contains("### 🎯 建议的下一步行动"))
+        #expect(result.contains("需要我帮你做什么？例如："))
+        #expect(!result.contains("[结果]"))
+    }
+
     @Test("cleanResultText extracts multiline latest result block")
     func cleanResultTextExtractsMultilineLatestResult() {
         let text = """

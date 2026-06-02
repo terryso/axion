@@ -47,6 +47,10 @@ public actor AxionRuntime: AxionRuntimeRunning, AxionRuntimeResuming, SessionLis
         get async { await currentState }
     }
 
+    static func collectSkillResponseText(from messages: [SDKMessage]) -> String? {
+        RunOrchestrator.collectVisibleResponseText(from: messages)
+    }
+
     func run(
         task: String,
         buildResult: AgentBuildResult,
@@ -270,11 +274,11 @@ public actor AxionRuntime: AxionRuntimeRunning, AxionRuntimeResuming, SessionLis
             fputs("[axion] 执行: Skill (via AxionRuntime)\n", stderr)
 
             let skillStream = agent.executeSkillStream(skill.name, args: args)
-            var lastResponseText: String?
+            var streamedMessages: [SDKMessage] = []
             for await message in skillStream {
                 if _Concurrency.Task.isCancelled { break }
                 if case .toolUse = message { totalSteps += 1 }
-                if case .assistant(let data) = message { lastResponseText = data.text }
+                streamedMessages.append(message)
                 outputHandler.handle(message)
             }
 
@@ -310,7 +314,7 @@ public actor AxionRuntime: AxionRuntimeRunning, AxionRuntimeResuming, SessionLis
                 sessionId: sid, task: task, state: .completed,
                 totalSteps: totalSteps, durationMs: durationMs,
                 runSucceeded: true, runCompleteContext: ctxWrapper,
-                responseText: lastResponseText, createdAt: startedAt
+                responseText: Self.collectSkillResponseText(from: streamedMessages), createdAt: startedAt
             )
         } catch {
             currentState = .failed

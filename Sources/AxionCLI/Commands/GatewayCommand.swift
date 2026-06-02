@@ -276,7 +276,7 @@ struct GatewayStartCommand: AsyncParsableCommand {
             )
             let commandRouter = TGCommandRouter(
                 registry: registry,
-                skillNameChecker: { [skillRegistry] name in skillRegistry.userInvocableSkills.contains { $0.name == name } }
+                skillNameChecker: { [skillRegistry] name in skillRegistry.userInvocableSkills.contains { TGCommandRegistry.normalize($0.name) == name } }
             )
 
             let adapter = TelegramAdapter(apiClient: tgClient, allowedUsers: allowedUsers, taskQueue: taskSerialQueue, commandRouter: commandRouter, sessionStore: sessionStore)

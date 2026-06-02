@@ -175,6 +175,7 @@ enum RunOrchestrator {
         let externallyModified = false
         var takeoverEvent: (issue: String, summary: String, feedback: String?, reason: String, duration: TimeInterval?)? = nil
         var collectedMessages: [SDKMessage] = []
+        var streamedMessages: [SDKMessage] = []
 
         // Pre-stream: set agent + orchestrator early so event handlers (ReviewScheduler)
         // can access them when AgentCompletedEvent arrives during stream completion.
@@ -193,6 +194,7 @@ enum RunOrchestrator {
             for await message in messageStream {
                 if _Concurrency.Task.isCancelled { break }
                 if case .toolUse = message { totalSteps += 1 }
+                streamedMessages.append(message)
                 outputHandler.handle(message)
 
                 // Collect messages for post-run review
@@ -297,13 +299,7 @@ enum RunOrchestrator {
             reviewOrchestrator: buildResult.reviewOrchestrator
         )
 
-        // Extract last assistant response text for notification summary
-        let responseText = collectedMessages.last(where: {
-            if case .assistant = $0 { return true }; return false
-        }).flatMap { msg -> String? in
-            if case .assistant(let data) = msg { return data.text }
-            return nil
-        }
+        let responseText = Self.collectVisibleResponseText(from: streamedMessages)
 
         let elapsed = ContinuousClock.now - startTime
         let durationMs = Int(elapsed.components.seconds * 1000 + elapsed.components.attoseconds / 1_000_000_000_000_000)
@@ -640,6 +636,79 @@ enum RunOrchestrator {
             }
         }
         return nil
+    }
+
+    /// Reconstructs the user-visible assistant body from streamed SDK messages.
+    /// Mirrors `SDKTerminalOutputHandler` semantics so downstream surfaces like
+    /// Telegram receive the same substantive content a terminal user saw.
+    static func collectVisibleResponseText(from messages: [SDKMessage]) -> String? {
+        var visibleChunks: [String] = []
+        var streamBuffer = ""
+        var lastFlushedText = ""
+        var fallbackResultText: String?
+
+        func appendVisibleChunk(_ text: String) {
+            let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !trimmed.isEmpty else { return }
+            visibleChunks.append(trimmed)
+        }
+
+        func flushStreamBuffer() {
+            guard !streamBuffer.isEmpty else { return }
+            lastFlushedText = streamBuffer
+            appendVisibleChunk(streamBuffer)
+            streamBuffer = ""
+        }
+
+        for message in messages {
+            switch message {
+            case .partialMessage(let data):
+                streamBuffer += data.text
+
+            case .assistant(let data):
+                if !streamBuffer.isEmpty {
+                    flushStreamBuffer()
+                    let trimmed = data.text.trimmingCharacters(in: .whitespacesAndNewlines)
+                    if !trimmed.isEmpty && trimmed != lastFlushedText {
+                        if trimmed.hasPrefix(lastFlushedText) {
+                            let extra = String(trimmed.dropFirst(lastFlushedText.count))
+                                .trimmingCharacters(in: .whitespacesAndNewlines)
+                            if !extra.isEmpty {
+                                appendVisibleChunk(extra)
+                            }
+                        } else {
+                            appendVisibleChunk(trimmed)
+                        }
+                        lastFlushedText = trimmed
+                    }
+                } else if !data.text.isEmpty && data.text != lastFlushedText {
+                    lastFlushedText = data.text
+                    appendVisibleChunk(data.text)
+                }
+
+            case .result(let data):
+                flushStreamBuffer()
+                let trimmed = data.text.trimmingCharacters(in: .whitespacesAndNewlines)
+                if !trimmed.isEmpty {
+                    fallbackResultText = trimmed
+                }
+
+            case .toolUse, .toolResult, .system, .userMessage, .toolProgress,
+                    .hookStarted, .hookProgress, .hookResponse, .taskStarted,
+                    .taskProgress, .authStatus, .filesPersisted, .localCommandOutput,
+                    .promptSuggestion, .toolUseSummary:
+                flushStreamBuffer()
+            }
+        }
+
+        flushStreamBuffer()
+
+        let visibleText = visibleChunks.joined(separator: "\n\n").trimmingCharacters(in: .whitespacesAndNewlines)
+        if !visibleText.isEmpty {
+            return visibleText
+        }
+
+        return fallbackResultText
     }
 
     /// Brings the terminal app back to the foreground after UI automation.

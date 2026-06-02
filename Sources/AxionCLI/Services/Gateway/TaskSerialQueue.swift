@@ -223,10 +223,6 @@ actor TaskSerialQueue: TaskSerialQueueProtocol {
 
     private func makeStreamingConfig() -> TGStreamingConfig {
         TGStreamingConfig(
-            editInterval: TGStreamingConfig.default.editInterval,
-            bufferThreshold: TGStreamingConfig.default.bufferThreshold,
-            transport: TGStreamingConfig.default.transport,
-            freshFinalAfter: TGStreamingConfig.default.freshFinalAfter,
             typingEnabled: config.tgTypingEnabled,
             typingInterval: config.tgTypingInterval
         )

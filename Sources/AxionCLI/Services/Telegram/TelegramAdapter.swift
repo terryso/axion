@@ -1,6 +1,12 @@
 import Foundation
 
 actor TelegramAdapter {
+    private struct TGFormattedPayload {
+        let formattedText: String
+        let parseMode: TGParseMode
+        let chunks: [String]
+    }
+
     private let apiClient: any TGAPIClientProtocol
     private let allowedUsers: Set<String>
     private let commandRouter: TGCommandRouter?
@@ -325,8 +331,10 @@ actor TelegramAdapter {
 
     @discardableResult
     func sendFormatted(_ text: String, to chatId: Int64, replyToMessageId: Int64? = nil) async -> Int64? {
-        let (formatted, mode) = TGMessageFormatter.format(text)
-        let chunks = TGMessageFormatter.split(formattedText: formatted, parseMode: mode)
+        let preferredPayload = preferredFormattedPayload(for: text)
+        let formatted = preferredPayload.formattedText
+        let mode = preferredPayload.parseMode
+        let chunks = preferredPayload.chunks
 
         var sentCount = 0
         var firstMessageId: Int64?
@@ -340,8 +348,13 @@ actor TelegramAdapter {
             } catch let error as TGAPIError {
                 switch error {
                 case .formatRejected:
-                    // Fallback: re-format and send only unsent chunks
-                    await sendFallbackChunks(text: text, to: chatId, replyToMessageId: replyToMessageId, startIndex: sentCount)
+                    await sendFallbackChunks(
+                        text: text,
+                        to: chatId,
+                        replyToMessageId: replyToMessageId,
+                        startIndex: sentCount,
+                        failedMode: mode
+                    )
                     return firstMessageId
                 default:
                     log("[axion] Telegram sendFormatted failed: \(error.localizedDescription)")
@@ -353,7 +366,46 @@ actor TelegramAdapter {
         return firstMessageId
     }
 
-    private func sendFallbackChunks(text: String, to chatId: Int64, replyToMessageId: Int64?, startIndex: Int) async {
+    private func preferredFormattedPayload(for text: String) -> TGFormattedPayload {
+        let (markdownText, markdownMode) = TGMessageFormatter.format(text)
+        let markdownChunks = TGMessageFormatter.split(formattedText: markdownText, parseMode: markdownMode)
+        let markdownPayload = TGFormattedPayload(
+            formattedText: markdownText,
+            parseMode: markdownMode,
+            chunks: markdownChunks
+        )
+
+        let (htmlText, htmlMode) = TGMessageFormatter.formatAsHTML(text)
+        let htmlChunks = TGMessageFormatter.split(formattedText: htmlText, parseMode: htmlMode)
+        let htmlPayload = TGFormattedPayload(
+            formattedText: htmlText,
+            parseMode: htmlMode,
+            chunks: htmlChunks
+        )
+
+        if htmlPayload.chunks.count < markdownPayload.chunks.count {
+            return htmlPayload
+        }
+
+        return markdownPayload
+    }
+
+    private func sendFallbackChunks(
+        text: String,
+        to chatId: Int64,
+        replyToMessageId: Int64?,
+        startIndex: Int,
+        failedMode: TGParseMode
+    ) async {
+        if failedMode == .markdownV2 {
+            await sendHTMLFallbackChunks(text: text, to: chatId, replyToMessageId: replyToMessageId, startIndex: startIndex)
+            return
+        }
+
+        await sendPlainFallbackChunks(text: text, to: chatId, replyToMessageId: replyToMessageId, startIndex: startIndex)
+    }
+
+    private func sendHTMLFallbackChunks(text: String, to chatId: Int64, replyToMessageId: Int64?, startIndex: Int) async {
         let (htmlFormatted, htmlMode) = TGMessageFormatter.formatAsHTML(text)
         let htmlChunks = TGMessageFormatter.split(formattedText: htmlFormatted, parseMode: htmlMode)
 
@@ -363,7 +415,6 @@ actor TelegramAdapter {
             do {
                 _ = try await apiClient.sendMessage(chatId: chatId, text: htmlChunk, parseMode: htmlMode, replyToMessageId: hReplyId)
             } catch {
-                // Final fallback to plain
                 await sendPlainFallbackChunks(text: text, to: chatId, replyToMessageId: replyToMessageId, startIndex: startIndex)
                 return
             }
