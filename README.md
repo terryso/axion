@@ -312,6 +312,42 @@ Add to your Claude Code MCP configuration:
 }
 ```
 
+### Telegram Gateway
+
+Always-on remote control via Telegram bot. Chat with Axion from your phone, receive streaming responses with typing indicators, and interact with inline keyboards for approval and skill browsing.
+
+**Setup:**
+
+```bash
+# Configure Telegram bot token and allowed users
+axion setup
+
+# Start gateway (standalone)
+axion gateway start
+
+# Start as launchd daemon (auto-start on login)
+axion daemon install --port 4242 --gateway
+```
+
+**Built-in commands:**
+
+| Command | Description |
+|---------|-------------|
+| `/help` | Getting started guide |
+| `/commands` | List all commands |
+| `/status` | Gateway status |
+| `/skills` | Browse available skills (paginated inline keyboard) |
+| `/new` | Start a new session |
+| `/queue` | View task queue |
+| `/stop` | Stop current task |
+
+**Interactive features:**
+- **Streaming responses** — Real-time typing indicators and incremental message updates during task execution
+- **Interactive approval** — Inline keyboard buttons for approve/reject/clarify when the agent needs user confirmation
+- **Skill browsing** — Paginated inline keyboard for browsing and triggering skills with one tap
+- **Rich text rendering** — Markdown formatting converted to Telegram-compatible HTML
+- **Task queuing** — Serial execution with queue management for concurrent requests
+
 ### Record and Replay Skills
 
 Record a workflow once, replay it anytime without LLM planning:
