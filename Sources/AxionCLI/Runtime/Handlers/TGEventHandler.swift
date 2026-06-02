@@ -34,17 +34,7 @@ actor TGEventHandler: EventHandler {
     private let streamingConfig: TGStreamingConfig
     private let sessionStore: TGInteractiveSessionStore?
     private let registerResumeHandle: (@Sendable (String, @Sendable @escaping (String) async -> Void) -> Void)?
-    private lazy var streamingController: TGStreamingController = {
-        TGStreamingController(
-            chatId: chatId,
-            originalTask: originalTask,
-            deferFinalDelivery: deferFinalDelivery,
-            sendMessage: sendMessage,
-            editMessage: editMessage,
-            sendChatAction: sendChatAction,
-            config: streamingConfig
-        )
-    }()
+    private let streamingController: TGStreamingController
 
     init(
         chatId: Int64,
@@ -70,6 +60,15 @@ actor TGEventHandler: EventHandler {
         self.sessionStore = sessionStore
         self.registerResumeHandle = registerResumeHandle
         self.sendMessageWithMarkup = sendMessageWithMarkup
+        self.streamingController = TGStreamingController(
+            chatId: chatId,
+            originalTask: originalTask,
+            deferFinalDelivery: deferFinalDelivery,
+            sendMessage: sendMessage,
+            editMessage: editMessage,
+            sendChatAction: sendChatAction,
+            config: streamingConfig
+        )
     }
 
     func finishRun(responseText: String?) async {

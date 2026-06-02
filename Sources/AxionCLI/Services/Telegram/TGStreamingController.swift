@@ -63,9 +63,13 @@ actor TGStreamingController {
         if lower.contains("bash") || lower.contains("terminal") || lower.contains("shell") {
             if let cmd = json["command"] as? String { return cmd }
         }
-        if lower.contains("read") || lower.contains("write") || lower.contains("file") {
+        if lower.contains("read") || lower.contains("write") || lower.contains("file")
+            || lower.contains("edit") || lower.contains("glob") || lower.contains("grep") {
             if let path = json["file_path"] as? String { return path }
             if let path = json["path"] as? String { return path }
+            if let pattern = json["pattern"] as? String, let path = json["path"] as? String {
+                return "\(path) — \(pattern)"
+            }
         }
         if lower.contains("reader") || lower.contains("url") || lower.contains("fetch") {
             if let url = json["url"] as? String { return url }
@@ -76,7 +80,7 @@ actor TGStreamingController {
 
         for (_, value) in json.sorted(by: { $0.key < $1.key }) {
             if let str = value as? String, !str.isEmpty {
-                return String(str.prefix(40))
+                return String(str.prefix(80))
             }
         }
 
@@ -100,7 +104,8 @@ actor TGStreamingController {
         if lower.contains("reader") || lower.contains("fetch") || lower.contains("url") {
             return "url: \(preview)"
         }
-        if lower.contains("read") || lower.contains("write") || lower.contains("file") {
+        if lower.contains("read") || lower.contains("write") || lower.contains("file")
+            || lower.contains("edit") || lower.contains("glob") || lower.contains("grep") {
             return "path: \(preview)"
         }
         return preview
@@ -246,8 +251,6 @@ actor TGStreamingController {
         let finalText: String
         if let resultText, !resultText.isEmpty {
             let stripped = TGEventHandler.stripMCPRawIO(from: resultText)
-                .replacingOccurrences(of: "\n{3,}", with: "\n\n", options: .regularExpression)
-                .trimmingCharacters(in: .whitespacesAndNewlines)
             let answer = stripped.isEmpty ? "✅ 已完成" : stripped
             finalText = Self.formatQuotedFinalAnswer(task: originalTask, answer: answer)
         } else {

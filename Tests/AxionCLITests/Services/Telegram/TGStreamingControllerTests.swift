@@ -157,8 +157,13 @@ struct TGStreamingControllerTests {
 
         let noisyResult = """
         🌐 Z.ai Built-in Tool: webReader
-        Input: {"url":"https://weather.example.com"}
-        Output: webReader_result_summary: {"text":{"forecast":"sunny"}}
+
+        Input:
+        {"url":"https://weather.example.com"}
+
+        Output:
+        webReader_result_summary: {"text":{"forecast":"sunny"}}
+
         广州明天多云，气温 26°C 到 32°C。
         [结果] 广州明天多云，气温 26°C 到 32°C。
         """
@@ -169,7 +174,8 @@ struct TGStreamingControllerTests {
         ))
 
         let finalMsg = log.sentMessages.last?.text ?? ""
-        #expect(finalMsg == "> 广州明天天气\n\n广州明天多云，气温 26°C 到 32°C。")
+        // stripMCPRawIO removes MCP I/O but keeps [结果] and narrative lines
+        #expect(finalMsg == "> 广州明天天气\n\n广州明天多云，气温 26°C 到 32°C。\n[结果] 广州明天多云，气温 26°C 到 32°C。")
         #expect(!finalMsg.contains("Built-in Tool"))
         #expect(!finalMsg.contains("result_summary"))
     }
