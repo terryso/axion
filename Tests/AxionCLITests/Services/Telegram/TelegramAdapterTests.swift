@@ -648,7 +648,7 @@ struct TelegramAdapterTests {
         let mock = MockTGAPIClient()
         let mockQueue = MockTaskSerialQueue()
         let registry = TGCommandRegistry(commands: [
-            TGCommandDef(name: "new", description: "开始新会话", helpText: "", menuPriority: 5) { _ in "新会话已开始" }
+            TGCommandDef(name: "new", description: "开始新会话", helpText: "", menuPriority: 5) { _ in TGCommandResult(text: "新会话已开始", markup: nil) }
         ])
         let commandRouter = TGCommandRouter(registry: registry)
         let adapter = TelegramAdapter(apiClient: mock, allowedUsers: ["123"], taskQueue: mockQueue, commandRouter: commandRouter, log: { _ in })
@@ -775,12 +775,12 @@ struct TelegramAdapterTests {
         let clear: @Sendable (Int64) async -> Void = clearSession ?? { _ in }
         return TGCommandRegistry(commands: [
             TGCommandDef(name: "status", description: "查看状态", helpText: "", menuPriority: 3) { _ in
-                "📊 Gateway Status\n状态: running\n运行中任务: 0"
+                TGCommandResult(text: "📊 Gateway Status\n状态: running\n运行中任务: 0", markup: nil)
             },
-            TGCommandDef(name: "skills", description: "查看技能", helpText: "", menuPriority: 4) { _ in "暂无可用技能" },
+            TGCommandDef(name: "skills", description: "查看技能", helpText: "", menuPriority: 4) { _ in TGCommandResult(text: "暂无可用技能", markup: nil) },
             TGCommandDef(name: "new", description: "开始新会话", helpText: "", menuPriority: 5) { chatId in
                 await clear(chatId)
-                return "新会话已开始"
+                return TGCommandResult(text: "新会话已开始", markup: nil)
             },
         ])
     }

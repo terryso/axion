@@ -1,11 +1,16 @@
 import Foundation
 
+struct TGCommandResult: Sendable {
+    let text: String
+    let markup: TGInlineKeyboardMarkup?
+}
+
 struct TGCommandDef: Sendable {
     let name: String
     let description: String
     let helpText: String
     let menuPriority: Int
-    let handler: @Sendable (Int64) async -> String
+    let handler: @Sendable (Int64) async -> TGCommandResult
 }
 
 struct TGCommandRegistry: Sendable {

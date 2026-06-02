@@ -141,7 +141,8 @@ enum TGMessageFormatter {
             }
 
             // Check for bold: **text**
-            if text[i] == "*" && i < text.index(before: text.endIndex) && text[text.index(after: i)] == "*" {
+            let afterCurrent = text.index(after: i)
+            if text[i] == "*" && afterCurrent < text.endIndex && text[afterCurrent] == "*" {
                 let afterStars = text.index(i, offsetBy: 2)
                 if let closeRange = text.range(of: "**", range: afterStars..<text.endIndex) {
                     let content = String(text[afterStars..<closeRange.lowerBound])
@@ -156,7 +157,7 @@ enum TGMessageFormatter {
             // Check for link: [label](url)
             if text[i] == "[" {
                 if let closeBracket = text.range(of: "]", range: text.index(after: i)..<text.endIndex),
-                   text[closeBracket.upperBound] == "(",
+                   closeBracket.upperBound < text.endIndex && text[closeBracket.upperBound] == "(",
                    let closeParen = text.range(of: ")", range: text.index(after: closeBracket.upperBound)..<text.endIndex) {
                     let label = String(text[text.index(after: i)..<closeBracket.lowerBound])
                     let url = String(text[text.index(after: closeBracket.upperBound)..<closeParen.lowerBound])

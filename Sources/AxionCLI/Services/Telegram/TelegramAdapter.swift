@@ -1,4 +1,5 @@
 import Foundation
+import OpenAgentSDK
 
 actor TelegramAdapter {
     private struct TGFormattedPayload {
@@ -11,6 +12,7 @@ actor TelegramAdapter {
     private let allowedUsers: Set<String>
     private let commandRouter: TGCommandRouter?
     private var taskQueue: (any TaskSerialQueueProtocol)?
+    private let skillsProvider: (@Sendable () -> [Skill])?
     private var lastUpdateId: Int64 = 0
     private var isRunning = false
     private let log: @Sendable (String) -> Void
@@ -18,12 +20,13 @@ actor TelegramAdapter {
 
     nonisolated(unsafe) private(set) var statusValue: String = "disabled"
 
-    init(apiClient: any TGAPIClientProtocol, allowedUsers: Set<String>, taskQueue: (any TaskSerialQueueProtocol)? = nil, commandRouter: TGCommandRouter? = nil, sessionStore: TGInteractiveSessionStore? = nil, log: @Sendable @escaping (String) -> Void = { fputs($0 + "\n", stderr) }) {
+    init(apiClient: any TGAPIClientProtocol, allowedUsers: Set<String>, taskQueue: (any TaskSerialQueueProtocol)? = nil, commandRouter: TGCommandRouter? = nil, sessionStore: TGInteractiveSessionStore? = nil, skillsProvider: (@Sendable () -> [Skill])? = nil, log: @Sendable @escaping (String) -> Void = { fputs($0 + "\n", stderr) }) {
         self.apiClient = apiClient
         self.allowedUsers = allowedUsers
         self.taskQueue = taskQueue
         self.commandRouter = commandRouter
         self.sessionStore = sessionStore
+        self.skillsProvider = skillsProvider
         self.log = log
     }
 
@@ -112,8 +115,12 @@ actor TelegramAdapter {
 
         guard let text = message.text, !text.isEmpty else { return }
 
-        if let reply = await commandRouter?.handle(text, chatId: message.chat.id) {
-            await sendReply(reply, to: message.chat.id)
+        if let result = await commandRouter?.handle(text, chatId: message.chat.id) {
+            if let markup = result.markup {
+                _ = await sendWithMarkup(result.text, to: message.chat.id, replyMarkup: markup)
+            } else {
+                await sendReply(result.text, to: message.chat.id)
+            }
             return
         }
 
@@ -217,6 +224,44 @@ actor TelegramAdapter {
                 try? await apiClient.answerCallbackQuery(callbackQueryId: query.id, text: "已过期")
             }
 
+        case .skillsPage:
+            guard let provider = skillsProvider else {
+                _ = try? await apiClient.answerCallbackQuery(callbackQueryId: query.id, text: "不可用")
+                return
+            }
+            let page = Int(callbackData.detail) ?? 0
+            let skills = provider().sorted { $0.name < $1.name }
+            let pageSize = 20
+            let totalPages = max(1, (skills.count + pageSize - 1) / pageSize)
+            let safePage = max(0, min(page, totalPages - 1))
+
+            let keyboard = Self.buildSkillsKeyboard(skills: skills, page: safePage, pageSize: pageSize)
+            let text = "📋 技能列表 (\(safePage + 1)/\(totalPages))"
+
+            if let messageId = query.message?.messageId, let chatId = query.message?.chat.id {
+                let (formatted, mode) = TGMessageFormatter.format(text)
+                _ = try? await apiClient.editMessageText(chatId: chatId, messageId: messageId, text: formatted, parseMode: mode, replyMarkup: keyboard)
+            }
+            _ = try? await apiClient.answerCallbackQuery(callbackQueryId: query.id, text: nil)
+
+        case .triggerSkill:
+            let skillName = callbackData.detail
+            guard !skillName.isEmpty else {
+                _ = try? await apiClient.answerCallbackQuery(callbackQueryId: query.id, text: "无效技能")
+                return
+            }
+            _ = try? await apiClient.answerCallbackQuery(callbackQueryId: query.id, text: nil)
+
+            if let messageId = query.message?.messageId, let chatId = query.message?.chat.id {
+                _ = await editMessage(chatId: chatId, messageId: messageId, text: "▶ /\(skillName)")
+            }
+
+            let taskText = "/\(skillName)"
+            log("[axion] Telegram skill triggered: \"\(taskText)\"")
+            if let queue = taskQueue, let chatId = query.message?.chat.id {
+                await queue.enqueue(task: taskText, chatId: chatId, userId: query.from.id)
+            }
+
         case .skip:
             let resumed = try? await store.resume(pendingId: pendingId, response: "skip")
             if resumed == true {
@@ -316,6 +361,37 @@ actor TelegramAdapter {
         } catch {
             log("[axion] Telegram sendChatAction failed: \(error.localizedDescription)")
         }
+    }
+
+    static func buildSkillsKeyboard(skills: [Skill], page: Int, pageSize: Int = 20) -> TGInlineKeyboardMarkup {
+        let start = page * pageSize
+        let end = min(start + pageSize, skills.count)
+        let pageSkills = Array(skills[start..<end])
+        let totalPages = (skills.count + pageSize - 1) / pageSize
+
+        var rows: [[TGInlineKeyboardButton]] = []
+
+        for index in stride(from: 0, to: pageSkills.count, by: 2) {
+            var row: [TGInlineKeyboardButton] = []
+            row.append(TGInlineKeyboardButton(text: pageSkills[index].name, callbackData: TGCallbackData(action: .triggerSkill, detail: pageSkills[index].name, pendingId: "0").encoded))
+            if index + 1 < pageSkills.count {
+                row.append(TGInlineKeyboardButton(text: pageSkills[index + 1].name, callbackData: TGCallbackData(action: .triggerSkill, detail: pageSkills[index + 1].name, pendingId: "0").encoded))
+            }
+            rows.append(row)
+        }
+
+        if totalPages > 1 {
+            var navRow: [TGInlineKeyboardButton] = []
+            if page > 0 {
+                navRow.append(TGInlineKeyboardButton(text: "◀ Prev", callbackData: TGCallbackData(action: .skillsPage, detail: String(page - 1), pendingId: "0").encoded))
+            }
+            if page < totalPages - 1 {
+                navRow.append(TGInlineKeyboardButton(text: "Next ▶", callbackData: TGCallbackData(action: .skillsPage, detail: String(page + 1), pendingId: "0").encoded))
+            }
+            rows.append(navRow)
+        }
+
+        return TGInlineKeyboardMarkup(inlineKeyboard: rows)
     }
 
     func sendWithMarkup(_ text: String, to chatId: Int64, replyMarkup: TGInlineKeyboardMarkup?) async -> Int64? {

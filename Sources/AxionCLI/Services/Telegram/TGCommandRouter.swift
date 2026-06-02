@@ -10,10 +10,10 @@ struct TGCommandRouter: Sendable {
         self.skillNameChecker = skillNameChecker
     }
 
-    /// Returns reply text for a command message, or nil if not a command.
+    /// Returns reply result for a command message, or nil if not a command.
     /// Returns nil for skill-like commands (e.g. "/webwright ...") so they
     /// fall through to the task queue as normal task text.
-    func handle(_ text: String, chatId: Int64) async -> String? {
+    func handle(_ text: String, chatId: Int64) async -> TGCommandResult? {
         guard text.hasPrefix("/") else { return nil }
 
         let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -33,8 +33,8 @@ struct TGCommandRouter: Sendable {
         return unknownCommandReply()
     }
 
-    private func unknownCommandReply() -> String {
+    private func unknownCommandReply() -> TGCommandResult {
         let names = registry.allCommands().map { "/\($0.name)" }
-        return "未知命令。可用命令：\(names.joined(separator: ", "))"
+        return TGCommandResult(text: "未知命令。可用命令：\(names.joined(separator: ", "))", markup: nil)
     }
 }

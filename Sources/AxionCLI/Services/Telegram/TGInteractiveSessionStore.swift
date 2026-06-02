@@ -38,6 +38,8 @@ enum TGCallbackAction: String, Sendable {
     case clarify
     case skip
     case respond
+    case skillsPage = "skills_page"
+    case triggerSkill = "trigger_skill"
 }
 
 struct TGCallbackData: Sendable {

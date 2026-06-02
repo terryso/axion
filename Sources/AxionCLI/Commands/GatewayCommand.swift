@@ -281,7 +281,7 @@ struct GatewayStartCommand: AsyncParsableCommand {
                 skillNameChecker: { [skillRegistry] name in skillRegistry.userInvocableSkills.contains { TGCommandRegistry.normalize($0.name) == name } }
             )
 
-            let adapter = TelegramAdapter(apiClient: tgClient, allowedUsers: allowedUsers, taskQueue: taskSerialQueue, commandRouter: commandRouter, sessionStore: sessionStore)
+            let adapter = TelegramAdapter(apiClient: tgClient, allowedUsers: allowedUsers, taskQueue: taskSerialQueue, commandRouter: commandRouter, sessionStore: sessionStore, skillsProvider: { [skillRegistry] in skillRegistry.userInvocableSkills })
 
             // Re-wire replyHandler to use the now-created adapter
             await taskSerialQueue.updateReplyHandler({ [weak adapter] chatId, message in
@@ -470,18 +470,18 @@ extension GatewayStartCommand {
         }
 
         let helpDef = TGCommandDef(name: "help", description: "入门指南", helpText: "", menuPriority: 1) { _ in
-            "Axion 是一个桌面自动化助手。\n\n直接发送文本即可执行任务。\n\n可用命令:\n/commands — 查看所有命令\n/status — 查看网关状态\n/skills — 查看技能列表\n/new — 开始新会话\n/queue — 查看任务队列\n/stop — 停止当前任务"
+            TGCommandResult(text: "Axion 是一个桌面自动化助手。\n\n直接发送文本即可执行任务。\n\n可用命令:\n/commands — 查看所有命令\n/status — 查看网关状态\n/skills — 查看技能列表\n/new — 开始新会话\n/queue — 查看任务队列\n/stop — 停止当前任务", markup: nil)
         }
         let commandsDescription = "查看所有命令"
         let statusDef = TGCommandDef(name: "status", description: "查看网关状态", helpText: "", menuPriority: 3) { _ in
-            await Self.formatStatus(statusProvider: statusProvider, skillsProvider: skillsProvider)
+            TGCommandResult(text: await Self.formatStatus(statusProvider: statusProvider, skillsProvider: skillsProvider), markup: nil)
         }
         let skillsDef = TGCommandDef(name: "skills", description: "查看技能列表", helpText: "", menuPriority: 4) { _ in
             Self.formatSkills(skillsProvider: skillsProvider)
         }
         let newDef = TGCommandDef(name: "new", description: "开始新会话", helpText: "", menuPriority: 5) { chatId in
             await clearSession(chatId)
-            return "新会话已开始"
+            return TGCommandResult(text: "新会话已开始", markup: nil)
         }
         let queueDef = TGCommandDef(name: "queue", description: "查看任务队列", helpText: "", menuPriority: 6) { chatId in
             let processing = await taskSerialQueue.isProcessing(chatId: chatId)
@@ -491,14 +491,14 @@ extension GatewayStartCommand {
             lines.append("执行中: \(processing ? "是" : "否")")
             lines.append("排队中: \(pending)")
             lines.append("会话: \(hasSession ? "活跃" : "无")")
-            return lines.joined(separator: "\n")
+            return TGCommandResult(text: lines.joined(separator: "\n"), markup: nil)
         }
         let stopDef = TGCommandDef(name: "stop", description: "停止当前任务", helpText: "", menuPriority: 7) { chatId in
             let cancelled = await taskSerialQueue.cancelCurrentTask(chatId: chatId)
             if cancelled {
-                return "⏹ 正在停止当前任务..."
+                return TGCommandResult(text: "⏹ 正在停止当前任务...", markup: nil)
             } else {
-                return "没有正在执行的任务"
+                return TGCommandResult(text: "没有正在执行的任务", markup: nil)
             }
         }
 
@@ -510,7 +510,7 @@ extension GatewayStartCommand {
                 lines.append("  /\(cmd.name) — \(cmd.description)")
             }
             lines.append("  /commands — \(commandsDescription)")
-            return lines.joined(separator: "\n")
+            return TGCommandResult(text: lines.joined(separator: "\n"), markup: nil)
         }
 
         return TGCommandRegistry(commands: [helpDef, commandsDef, statusDef, skillsDef, newDef, queueDef, stopDef])
@@ -542,14 +542,16 @@ extension GatewayStartCommand {
 
     private static func formatSkills(
         skillsProvider: @Sendable () -> [OpenAgentSDK.Skill]
-    ) -> String {
-        let skills = skillsProvider()
-        guard !skills.isEmpty else { return "暂无可用技能" }
-        var lines = ["📋 可用技能 (\(skills.count) 个):"]
-        for skill in skills.sorted(by: { $0.name < $1.name }) {
-            lines.append("  • \(skill.name): \(skill.description)")
-        }
-        return lines.joined(separator: "\n")
+    ) -> TGCommandResult {
+        let skills = skillsProvider().sorted { $0.name < $1.name }
+        guard !skills.isEmpty else { return TGCommandResult(text: "暂无可用技能", markup: nil) }
+
+        let pageSize = 20
+        let totalPages = max(1, (skills.count + pageSize - 1) / pageSize)
+        let keyboard = TelegramAdapter.buildSkillsKeyboard(skills: skills, page: 0, pageSize: pageSize)
+        let text = "📋 技能列表 (1/\(totalPages))"
+
+        return TGCommandResult(text: text, markup: keyboard)
     }
 }
 

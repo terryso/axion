@@ -10,7 +10,7 @@ struct TGCommandRegistryTests {
     @Test("Register and resolve a command")
     func registerAndResolve() async {
         let registry = TGCommandRegistry(commands: [
-            TGCommandDef(name: "status", description: "查看状态", helpText: "status help", menuPriority: 1) { _ in "ok" }
+            TGCommandDef(name: "status", description: "查看状态", helpText: "status help", menuPriority: 1) { _ in TGCommandResult(text: "ok", markup: nil) }
         ])
 
         let resolved = registry.resolve("status")
@@ -18,7 +18,8 @@ struct TGCommandRegistryTests {
         #expect(resolved!.name == "status")
 
         let reply = await resolved!.handler(100)
-        #expect(reply == "ok")
+        #expect(reply.text == "ok")
+        #expect(reply.markup == nil)
     }
 
     @Test("Resolve returns nil for unknown command")
@@ -30,12 +31,12 @@ struct TGCommandRegistryTests {
     @Test("Functional register adds command to new registry")
     func functionalRegister() async {
         let empty = TGCommandRegistry()
-        let registry = empty.register(TGCommandDef(name: "help", description: "帮助", helpText: "help text", menuPriority: 1) { _ in "help reply" })
+        let registry = empty.register(TGCommandDef(name: "help", description: "帮助", helpText: "help text", menuPriority: 1) { _ in TGCommandResult(text: "help reply", markup: nil) })
 
         let resolved = registry.resolve("help")
         #expect(resolved != nil)
         let reply = await resolved!.handler(100)
-        #expect(reply == "help reply")
+        #expect(reply.text == "help reply")
 
         // Original is unchanged
         #expect(empty.resolve("help") == nil)
@@ -80,9 +81,9 @@ struct TGCommandRegistryTests {
     @Test("allCommands returns commands sorted by menuPriority")
     func allCommandsSorted() {
         let registry = TGCommandRegistry(commands: [
-            TGCommandDef(name: "queue", description: "queue", helpText: "", menuPriority: 6) { _ in "" },
-            TGCommandDef(name: "help", description: "help", helpText: "", menuPriority: 1) { _ in "" },
-            TGCommandDef(name: "status", description: "status", helpText: "", menuPriority: 3) { _ in "" },
+            TGCommandDef(name: "queue", description: "queue", helpText: "", menuPriority: 6) { _ in TGCommandResult(text: "", markup: nil) },
+            TGCommandDef(name: "help", description: "help", helpText: "", menuPriority: 1) { _ in TGCommandResult(text: "", markup: nil) },
+            TGCommandDef(name: "status", description: "status", helpText: "", menuPriority: 3) { _ in TGCommandResult(text: "", markup: nil) },
         ])
 
         let all = registry.allCommands()
@@ -95,7 +96,7 @@ struct TGCommandRegistryTests {
     @Test("menuCommands trims to limit")
     func menuCommandsTrimsToLimit() {
         let commands = (1...10).map { i in
-            TGCommandDef(name: "cmd\(i)", description: "cmd \(i)", helpText: "", menuPriority: i) { _ in "" }
+            TGCommandDef(name: "cmd\(i)", description: "cmd \(i)", helpText: "", menuPriority: i) { _ in TGCommandResult(text: "", markup: nil) }
         }
         let registry = TGCommandRegistry(commands: commands)
 
@@ -108,8 +109,8 @@ struct TGCommandRegistryTests {
     @Test("menuCommands returns name and description tuples")
     func menuCommandsFormat() {
         let registry = TGCommandRegistry(commands: [
-            TGCommandDef(name: "help", description: "入门指南", helpText: "", menuPriority: 1) { _ in "" },
-            TGCommandDef(name: "status", description: "查看状态", helpText: "", menuPriority: 2) { _ in "" },
+            TGCommandDef(name: "help", description: "入门指南", helpText: "", menuPriority: 1) { _ in TGCommandResult(text: "", markup: nil) },
+            TGCommandDef(name: "status", description: "查看状态", helpText: "", menuPriority: 2) { _ in TGCommandResult(text: "", markup: nil) },
         ])
 
         let menu = registry.menuCommands()
@@ -121,15 +122,15 @@ struct TGCommandRegistryTests {
     @Test("Duplicate command name — last registration wins")
     func duplicateNameLastWins() async {
         let registry = TGCommandRegistry(commands: [
-            TGCommandDef(name: "status", description: "old", helpText: "", menuPriority: 1) { _ in "old" },
-            TGCommandDef(name: "status", description: "new", helpText: "", menuPriority: 2) { _ in "new" },
+            TGCommandDef(name: "status", description: "old", helpText: "", menuPriority: 1) { _ in TGCommandResult(text: "old", markup: nil) },
+            TGCommandDef(name: "status", description: "new", helpText: "", menuPriority: 2) { _ in TGCommandResult(text: "new", markup: nil) },
         ])
 
         let resolved = registry.resolve("status")
         #expect(resolved != nil)
         #expect(resolved!.description == "new")
         let reply = await resolved!.handler(100)
-        #expect(reply == "new")
+        #expect(reply.text == "new")
 
         // allCommands preserves insertion order (both entries)
         #expect(registry.allCommands().count == 2)

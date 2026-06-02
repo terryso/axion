@@ -12,11 +12,11 @@ struct TGCommandRouterTests {
     func statusCommandReturnsStatus() async throws {
         let router = makeRouter()
         let reply = await router.handle("/status", chatId: 100)
-        let text = try #require(reply)
-        #expect(text.contains("状态: running"))
-        #expect(text.contains("运行中任务: 2"))
-        #expect(text.contains("运行时长: 1h 1m 5s"))
-        #expect(text.contains("TG 连接: connected"))
+        let result = try #require(reply)
+        #expect(result.text.contains("状态: running"))
+        #expect(result.text.contains("运行中任务: 2"))
+        #expect(result.text.contains("运行时长: 1h 1m 5s"))
+        #expect(result.text.contains("TG 连接: connected"))
     }
 
     @Test("/status with zero uptime shows minutes and seconds")
@@ -27,9 +27,9 @@ struct TGCommandRouterTests {
         let router = TGCommandRouter(registry: registry)
 
         let reply = await router.handle("/status", chatId: 100)
-        let text = try #require(reply)
-        #expect(text.contains("0m 45s"))
-        #expect(text.contains("运行中任务: 0"))
+        let result = try #require(reply)
+        #expect(result.text.contains("0m 45s"))
+        #expect(result.text.contains("运行中任务: 0"))
     }
 
     @Test("/status includes skill count")
@@ -43,14 +43,14 @@ struct TGCommandRouterTests {
         let router = TGCommandRouter(registry: registry)
 
         let reply = await router.handle("/status", chatId: 100)
-        let text = try #require(reply)
-        #expect(text.contains("可用技能: 3 个"))
+        let result = try #require(reply)
+        #expect(result.text.contains("可用技能: 3 个"))
     }
 
     // MARK: - /skills Command
 
-    @Test("/skills returns skill list")
-    func skillsCommandReturnsList() async throws {
+    @Test("/skills returns inline keyboard with skill names")
+    func skillsCommandReturnsKeyboard() async throws {
         let skills: [Skill] = [
             Skill(name: "commit", description: "Create a git commit", promptTemplate: "t"),
             Skill(name: "review", description: "Review code changes", promptTemplate: "t"),
@@ -59,12 +59,13 @@ struct TGCommandRouterTests {
         let router = TGCommandRouter(registry: registry)
 
         let reply = await router.handle("/skills", chatId: 100)
-        let text = try #require(reply)
-        #expect(text.contains("commit"))
-        #expect(text.contains("Create a git commit"))
-        #expect(text.contains("review"))
-        #expect(text.contains("Review code changes"))
-        #expect(text.contains("2 个"))
+        let result = try #require(reply)
+        #expect(result.markup != nil)
+        #expect(result.text.contains("技能列表"))
+        let keyboard = try #require(result.markup)
+        // 2 skills = 1 row with 2 buttons, no nav row
+        #expect(keyboard.inlineKeyboard.count == 1)
+        #expect(keyboard.inlineKeyboard[0].count == 2)
     }
 
     @Test("/skills with empty list returns no skills message")
@@ -72,8 +73,9 @@ struct TGCommandRouterTests {
         let router = makeRouter()
 
         let reply = await router.handle("/skills", chatId: 100)
-        let text = try #require(reply)
-        #expect(text == "暂无可用技能")
+        let result = try #require(reply)
+        #expect(result.text == "暂无可用技能")
+        #expect(result.markup == nil)
     }
 
     @Test("/skills list is sorted alphabetically")
@@ -87,11 +89,30 @@ struct TGCommandRouterTests {
         let router = TGCommandRouter(registry: registry)
 
         let reply = await router.handle("/skills", chatId: 100)
-        let text = try #require(reply)
-        let lines = text.components(separatedBy: "\n")
-        #expect(lines[1].contains("alpha"))
-        #expect(lines[2].contains("middle"))
-        #expect(lines[3].contains("zebra"))
+        let result = try #require(reply)
+        let keyboard = try #require(result.markup)
+        // 3 skills: row1 = [alpha, middle], row2 = [zebra]
+        #expect(keyboard.inlineKeyboard.count == 2)
+        #expect(keyboard.inlineKeyboard[0][0].text == "alpha")
+        #expect(keyboard.inlineKeyboard[0][1].text == "middle")
+        #expect(keyboard.inlineKeyboard[1][0].text == "zebra")
+    }
+
+    @Test("/skills with more than 20 skills shows pagination")
+    func skillsCommandPagination() async throws {
+        let skills: [Skill] = (0..<25).map { i in
+            Skill(name: "skill_\(String(format: "%03d", i))", promptTemplate: "t")
+        }
+        let registry = makeRegistry(skills: skills)
+        let router = TGCommandRouter(registry: registry)
+
+        let reply = await router.handle("/skills", chatId: 100)
+        let result = try #require(reply)
+        let keyboard = try #require(result.markup)
+        // 20 skill buttons (10 rows of 2) + 1 nav row with Next
+        let navRow = keyboard.inlineKeyboard.last!
+        #expect(navRow.contains { $0.text.contains("Next") })
+        #expect(!navRow.contains { $0.text.contains("Prev") })
     }
 
     // MARK: - Skill Passthrough
@@ -132,7 +153,6 @@ struct TGCommandRouterTests {
     @Test("Skill with hyphens passthroughs after normalization")
     func skillWithHyphensPassthrough() async {
         let registry = makeRegistry()
-        // Simulates real skillNameChecker: skill name "polyv-live-cli" with normalize
         let router = TGCommandRouter(registry: registry, skillNameChecker: { name in
             TGCommandRegistry.normalize("polyv-live-cli") == name
         })
@@ -158,32 +178,30 @@ struct TGCommandRouterTests {
         let router = TGCommandRouter(registry: registry, skillNameChecker: { _ in false })
 
         let reply = await router.handle("/webwright 获取票房", chatId: 100)
-        let text = try #require(reply)
-        #expect(text.contains("未知命令"))
+        let result = try #require(reply)
+        #expect(result.text.contains("未知命令"))
     }
 
     @Test("Built-in commands take priority over skill names")
     func builtInCommandsTakePriority() async throws {
         let registry = makeRegistry()
         let router = TGCommandRouter(registry: registry, skillNameChecker: { name in
-            name == "status" // pretend "status" is also a skill name
+            name == "status"
         })
 
         let reply = await router.handle("/status", chatId: 100)
-        let text = try #require(reply)
-        // Should execute built-in /status, not passthrough
-        #expect(text.contains("Gateway Status"))
+        let result = try #require(reply)
+        #expect(result.text.contains("Gateway Status"))
     }
 
     @Test("Skill passthrough without skillNameChecker returns unknown command")
     func skillPassthroughWithoutChecker() async throws {
         let registry = makeRegistry()
-        // Default skillNameChecker returns false
         let router = TGCommandRouter(registry: registry)
 
         let reply = await router.handle("/webwright 获取票房", chatId: 100)
-        let text = try #require(reply)
-        #expect(text.contains("未知命令"))
+        let result = try #require(reply)
+        #expect(result.text.contains("未知命令"))
     }
 
     // MARK: - Unknown Command
@@ -193,13 +211,13 @@ struct TGCommandRouterTests {
         let router = makeRouter()
 
         let reply = await router.handle("/unknown_command", chatId: 100)
-        let text = try #require(reply)
-        #expect(text.contains("未知命令"))
-        #expect(text.contains("/help"))
-        #expect(text.contains("/status"))
-        #expect(text.contains("/skills"))
-        #expect(text.contains("/new"))
-        #expect(text.contains("/queue"))
+        let result = try #require(reply)
+        #expect(result.text.contains("未知命令"))
+        #expect(result.text.contains("/help"))
+        #expect(result.text.contains("/status"))
+        #expect(result.text.contains("/skills"))
+        #expect(result.text.contains("/new"))
+        #expect(result.text.contains("/queue"))
     }
 
     // MARK: - Case Insensitivity
@@ -210,11 +228,11 @@ struct TGCommandRouterTests {
 
         let replyUpper = await router.handle("/STATUS", chatId: 100)
         #expect(replyUpper != nil)
-        #expect(replyUpper!.contains("Gateway Status"))
+        #expect(replyUpper!.text.contains("Gateway Status"))
 
         let replyMixed = await router.handle("/Skills", chatId: 100)
         #expect(replyMixed != nil)
-        #expect(replyMixed!.contains("可用技能"))
+        #expect(replyMixed!.text.contains("技能"))
     }
 
     // MARK: - Non-Command Text
@@ -246,7 +264,7 @@ struct TGCommandRouterTests {
 
         let reply = await router.handle("/status  ", chatId: 100)
         #expect(reply != nil)
-        #expect(reply!.contains("Gateway Status"))
+        #expect(reply!.text.contains("Gateway Status"))
     }
 
     @Test("Command with trailing arguments uses first token only")
@@ -255,7 +273,7 @@ struct TGCommandRouterTests {
 
         let reply = await router.handle("/status hello world", chatId: 100)
         #expect(reply != nil)
-        #expect(reply!.contains("Gateway Status"))
+        #expect(reply!.text.contains("Gateway Status"))
     }
 
     // MARK: - @botname Stripping
@@ -266,11 +284,11 @@ struct TGCommandRouterTests {
 
         let reply = await router.handle("/status@my_axion_bot", chatId: 100)
         #expect(reply != nil)
-        #expect(reply!.contains("Gateway Status"))
+        #expect(reply!.text.contains("Gateway Status"))
 
         let replySkills = await router.handle("/skills@my_axion_bot", chatId: 100)
         #expect(replySkills != nil)
-        #expect(replySkills!.contains("可用技能"))
+        #expect(replySkills!.text.contains("技能"))
     }
 
     // MARK: - /help Command
@@ -280,11 +298,11 @@ struct TGCommandRouterTests {
         let router = makeRouter()
 
         let reply = await router.handle("/help", chatId: 100)
-        let text = try #require(reply)
-        #expect(text.contains("Axion"))
-        #expect(text.contains("直接发送"))
-        #expect(text.contains("/commands"))
-        #expect(text.contains("/status"))
+        let result = try #require(reply)
+        #expect(result.text.contains("Axion"))
+        #expect(result.text.contains("直接发送"))
+        #expect(result.text.contains("/commands"))
+        #expect(result.text.contains("/status"))
     }
 
     // MARK: - /commands Command
@@ -294,13 +312,13 @@ struct TGCommandRouterTests {
         let router = makeRouter()
 
         let reply = await router.handle("/commands", chatId: 100)
-        let text = try #require(reply)
-        #expect(text.contains("help"))
-        #expect(text.contains("commands"))
-        #expect(text.contains("status"))
-        #expect(text.contains("skills"))
-        #expect(text.contains("new"))
-        #expect(text.contains("queue"))
+        let result = try #require(reply)
+        #expect(result.text.contains("help"))
+        #expect(result.text.contains("commands"))
+        #expect(result.text.contains("status"))
+        #expect(result.text.contains("skills"))
+        #expect(result.text.contains("new"))
+        #expect(result.text.contains("queue"))
     }
 
     // MARK: - /new Command
@@ -316,8 +334,8 @@ struct TGCommandRouterTests {
         let router = TGCommandRouter(registry: registry)
 
         let reply = await router.handle("/new", chatId: 42)
-        let text = try #require(reply)
-        #expect(text == "新会话已开始")
+        let result = try #require(reply)
+        #expect(result.text == "新会话已开始")
         #expect(collector.ids == [42])
     }
 
@@ -326,7 +344,7 @@ struct TGCommandRouterTests {
         let router = makeRouter()
 
         let reply = await router.handle("/NEW", chatId: 100)
-        #expect(reply == "新会话已开始")
+        #expect(reply?.text == "新会话已开始")
     }
 
     @Test("/new with @botname suffix works")
@@ -334,7 +352,7 @@ struct TGCommandRouterTests {
         let router = makeRouter()
 
         let reply = await router.handle("/new@my_bot", chatId: 100)
-        #expect(reply == "新会话已开始")
+        #expect(reply?.text == "新会话已开始")
     }
 
     // MARK: - /queue Command
@@ -347,30 +365,9 @@ struct TGCommandRouterTests {
         let router = TGCommandRouter(registry: registry)
 
         let reply = await router.handle("/queue", chatId: 100)
-        let text = try #require(reply)
-        #expect(text.contains("队列"))
-        #expect(text.contains("执行中"))
-    }
-
-    // MARK: - /skills long list splitting
-
-    @Test("/skills long list produces text suitable for splitMessage")
-    func skillsLongListFormat() async throws {
-        let skills: [Skill] = (0..<100).map { i in
-            Skill(
-                name: "skill_\(String(format: "%03d", i))",
-                description: String(repeating: "x", count: 40),
-                promptTemplate: "t"
-            )
-        }
-        let registry = makeRegistry(skills: skills)
-        let router = TGCommandRouter(registry: registry)
-
-        let reply = await router.handle("/skills", chatId: 100)
-        let text = try #require(reply)
-        #expect(text.count > 4096)
-        let lines = text.components(separatedBy: "\n")
-        #expect(lines.count == 101) // header + 100 skills
+        let result = try #require(reply)
+        #expect(result.text.contains("队列"))
+        #expect(result.text.contains("执行中"))
     }
 
     // MARK: - Helpers
@@ -403,11 +400,11 @@ struct TGCommandRouterTests {
         let clearSessionHandler: @Sendable (Int64) async -> Void = clearSession ?? { _ in }
         let queueStatusHandler: @Sendable (Int64) async -> String = queueStatus ?? { chatId in "队列: 空闲\n执行中: 否\n会话: 无" }
 
-        let coreRegistry = makeCoreRegistry(statusProvider: statusProvider, skillsProvider: skillsProvider)
+        let coreRegistry = makeCoreRegistry()
 
         return TGCommandRegistry(commands: [
             TGCommandDef(name: "help", description: "入门指南", helpText: "", menuPriority: 1) { _ in
-                "Axion 是一个桌面自动化助手。\n\n直接发送文本即可执行任务。\n\n可用命令:\n/commands — 查看所有命令\n/status — 查看网关状态\n/skills — 查看技能列表\n/new — 开始新会话\n/queue — 查看任务队列"
+                TGCommandResult(text: "Axion 是一个桌面自动化助手。\n\n直接发送文本即可执行任务。\n\n可用命令:\n/commands — 查看所有命令\n/status — 查看网关状态\n/skills — 查看技能列表\n/new — 开始新会话\n/queue — 查看任务队列", markup: nil)
             },
             TGCommandDef(name: "commands", description: "查看所有命令", helpText: "", menuPriority: 2) { _ in
                 let cmds = coreRegistry.allCommands()
@@ -415,38 +412,32 @@ struct TGCommandRouterTests {
                 for cmd in cmds {
                     lines.append("  /\(cmd.name) — \(cmd.description)")
                 }
-                return lines.joined(separator: "\n")
+                return TGCommandResult(text: lines.joined(separator: "\n"), markup: nil)
             },
             TGCommandDef(name: "status", description: "查看网关状态", helpText: "", menuPriority: 3) { _ in
-                await formatStatus(statusProvider: statusProvider, skillsProvider: skillsProvider)
+                TGCommandResult(text: await formatStatus(statusProvider: statusProvider, skillsProvider: skillsProvider), markup: nil)
             },
             TGCommandDef(name: "skills", description: "查看技能列表", helpText: "", menuPriority: 4) { _ in
                 formatSkills(skillsProvider: skillsProvider)
             },
             TGCommandDef(name: "new", description: "开始新会话", helpText: "", menuPriority: 5) { chatId in
                 await clearSessionHandler(chatId)
-                return "新会话已开始"
+                return TGCommandResult(text: "新会话已开始", markup: nil)
             },
             TGCommandDef(name: "queue", description: "查看任务队列", helpText: "", menuPriority: 6) { chatId in
-                await queueStatusHandler(chatId)
+                TGCommandResult(text: await queueStatusHandler(chatId), markup: nil)
             },
         ])
     }
 
-    /// Minimal registry for the /commands handler to reference.
-    /// Avoids infinite recursion by only containing core command metadata.
-    /// (The /commands handler captures this to list available commands.)
-    private func makeCoreRegistry(
-        statusProvider: @Sendable () async -> GatewayRunnerStatus,
-        skillsProvider: @Sendable () -> [Skill]
-    ) -> TGCommandRegistry {
+    private func makeCoreRegistry() -> TGCommandRegistry {
         TGCommandRegistry(commands: [
-            TGCommandDef(name: "help", description: "入门指南", helpText: "", menuPriority: 1) { _ in "" },
-            TGCommandDef(name: "commands", description: "查看所有命令", helpText: "", menuPriority: 2) { _ in "" },
-            TGCommandDef(name: "status", description: "查看网关状态", helpText: "", menuPriority: 3) { _ in "" },
-            TGCommandDef(name: "skills", description: "查看技能列表", helpText: "", menuPriority: 4) { _ in "" },
-            TGCommandDef(name: "new", description: "开始新会话", helpText: "", menuPriority: 5) { _ in "" },
-            TGCommandDef(name: "queue", description: "查看任务队列", helpText: "", menuPriority: 6) { _ in "" },
+            TGCommandDef(name: "help", description: "入门指南", helpText: "", menuPriority: 1) { _ in TGCommandResult(text: "", markup: nil) },
+            TGCommandDef(name: "commands", description: "查看所有命令", helpText: "", menuPriority: 2) { _ in TGCommandResult(text: "", markup: nil) },
+            TGCommandDef(name: "status", description: "查看网关状态", helpText: "", menuPriority: 3) { _ in TGCommandResult(text: "", markup: nil) },
+            TGCommandDef(name: "skills", description: "查看技能列表", helpText: "", menuPriority: 4) { _ in TGCommandResult(text: "", markup: nil) },
+            TGCommandDef(name: "new", description: "开始新会话", helpText: "", menuPriority: 5) { _ in TGCommandResult(text: "", markup: nil) },
+            TGCommandDef(name: "queue", description: "查看任务队列", helpText: "", menuPriority: 6) { _ in TGCommandResult(text: "", markup: nil) },
         ])
     }
 
@@ -475,16 +466,13 @@ struct TGCommandRouterTests {
         return lines.joined(separator: "\n")
     }
 
-    private func formatSkills(skillsProvider: @Sendable () -> [Skill]) -> String {
-        let skills = skillsProvider()
-        guard !skills.isEmpty else {
-            return "暂无可用技能"
-        }
+    private func formatSkills(skillsProvider: @Sendable () -> [Skill]) -> TGCommandResult {
+        let skills = skillsProvider().sorted { $0.name < $1.name }
+        guard !skills.isEmpty else { return TGCommandResult(text: "暂无可用技能", markup: nil) }
 
-        var lines = ["📋 可用技能 (\(skills.count) 个):"]
-        for skill in skills.sorted(by: { $0.name < $1.name }) {
-            lines.append("  • \(skill.name): \(skill.description)")
-        }
-        return lines.joined(separator: "\n")
+        let pageSize = 20
+        let totalPages = max(1, (skills.count + pageSize - 1) / pageSize)
+        let keyboard = TelegramAdapter.buildSkillsKeyboard(skills: skills, page: 0, pageSize: pageSize)
+        return TGCommandResult(text: "📋 技能列表 (1/\(totalPages))", markup: keyboard)
     }
 }
