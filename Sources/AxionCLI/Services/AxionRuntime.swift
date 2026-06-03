@@ -183,7 +183,11 @@ public actor AxionRuntime: AxionRuntimeRunning, AxionRuntimeResuming, SessionLis
 
         let buildResult: AgentBuildResult
         do {
+            let buildStart = ContinuousClock.now
             buildResult = try await builder.build(sessionedBuildConfig, eventBus: eventBus)
+            let buildElapsed = ContinuousClock.now - buildStart
+            let buildMs = Int(buildElapsed.components.seconds * 1000 + buildElapsed.components.attoseconds / 1_000_000_000_000_000)
+            fputs("[axion] 构建完成 [\(formatDurationMs(buildMs))]\n", stderr)
         } catch {
             currentState = .failed
             try? writeAxionState(
@@ -372,7 +376,11 @@ public actor AxionRuntime: AxionRuntimeRunning, AxionRuntimeResuming, SessionLis
         // 5. Build agent
         let buildResult: AgentBuildResult
         do {
+            let buildStart = ContinuousClock.now
             buildResult = try await builder.build(resumeBuildConfig, eventBus: eventBus)
+            let buildElapsed = ContinuousClock.now - buildStart
+            let buildMs = Int(buildElapsed.components.seconds * 1000 + buildElapsed.components.attoseconds / 1_000_000_000_000_000)
+            fputs("[axion] 构建完成 [\(formatDurationMs(buildMs))]\n", stderr)
         } catch {
             currentState = .failed
             return AxionRunResult(
@@ -570,4 +578,11 @@ public actor AxionRuntime: AxionRuntimeRunning, AxionRuntimeResuming, SessionLis
             }
         }
     }
+}
+
+private func formatDurationMs(_ ms: Int) -> String {
+    if ms < 1000 {
+        return "\(ms)ms"
+    }
+    return String(format: "%.1fs", Double(ms) / 1000.0)
 }

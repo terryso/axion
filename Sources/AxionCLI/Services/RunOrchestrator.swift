@@ -338,11 +338,14 @@ enum RunOrchestrator {
                     reviewSkills: doSkill
                 )
                 tunedConfig.allowedTools.append("review_save_universal_memory")
+                let reviewStart = ContinuousClock.now
                 let result = await orchestrator.executeReview(
                     parentAgent: agent,
                     messages: collectedMessages,
                     config: tunedConfig
                 )
+                let reviewElapsed = ContinuousClock.now - reviewStart
+                let reviewMs = Int(reviewElapsed.components.seconds * 1000 + reviewElapsed.components.attoseconds / 1_000_000_000_000_000)
                 if let result {
                     let logger = Logger(subsystem: "com.axion.cli", category: "ReviewOrchestrator")
                     logger.info("Review completed: \(result.summary)")
@@ -367,7 +370,7 @@ enum RunOrchestrator {
                     )
 
                     // Terminal output for review result
-                    if let output = Self.formatReviewSummary(memoryChanges: result.memoryChanges, skillChanges: result.skillChanges) {
+                    if let output = Self.formatReviewSummary(memoryChanges: result.memoryChanges, skillChanges: result.skillChanges, durationMs: reviewMs) {
                         fputs("\(output)\n", stderr)
                     }
 
@@ -390,6 +393,7 @@ enum RunOrchestrator {
             let curatorState = await curator.curatorStore.loadState()
             if curator.skillCurator.shouldRun(state: curatorState) {
                 do {
+                    let curatorStart = ContinuousClock.now
                     let result = try await curator.execute(parentAgent: agent, dryRun: curatorDryRun)
                     let report = CuratorRunReport(from: result)
                     let logger = Logger(subsystem: "com.axion.cli", category: "IntelligentCurator")
@@ -404,7 +408,9 @@ enum RunOrchestrator {
                     )
 
                     // Terminal output for curator result
-                    if let output = Self.formatCuratorSummary(consolidationCount: result.consolidations.count, pruningCount: result.prunings.count) {
+                    let curatorElapsed = ContinuousClock.now - curatorStart
+                    let curatorMs = Int(curatorElapsed.components.seconds * 1000 + curatorElapsed.components.attoseconds / 1_000_000_000_000_000)
+                    if let output = Self.formatCuratorSummary(consolidationCount: result.consolidations.count, pruningCount: result.prunings.count, durationMs: curatorMs) {
                         fputs("\(output)\n", stderr)
                     }
                 } catch {
@@ -757,7 +763,7 @@ enum RunOrchestrator {
 
     /// Formats a review summary string for terminal output.
     /// Returns nil when there are no changes (to avoid noise).
-    static func formatReviewSummary(memoryChanges: [String], skillChanges: [String]) -> String? {
+    static func formatReviewSummary(memoryChanges: [String], skillChanges: [String], durationMs: Int = 0) -> String? {
         guard !memoryChanges.isEmpty || !skillChanges.isEmpty else { return nil }
         var parts: [String] = []
         if !memoryChanges.isEmpty {
@@ -766,12 +772,13 @@ enum RunOrchestrator {
         if !skillChanges.isEmpty {
             parts.append("更新了 \(skillChanges.count) 个技能")
         }
-        return "[axion] Review: \(parts.joined(separator: ", "))"
+        let timing = durationMs > 0 ? " [\(formatDurationMs(durationMs))]" : ""
+        return "[axion] Review: \(parts.joined(separator: ", "))\(timing)"
     }
 
     /// Formats a curator summary string for terminal output.
     /// Returns nil when there are no changes (to avoid noise).
-    static func formatCuratorSummary(consolidationCount: Int, pruningCount: Int) -> String? {
+    static func formatCuratorSummary(consolidationCount: Int, pruningCount: Int, durationMs: Int = 0) -> String? {
         guard consolidationCount > 0 || pruningCount > 0 else { return nil }
         var parts: [String] = []
         if consolidationCount > 0 {
@@ -780,7 +787,15 @@ enum RunOrchestrator {
         if pruningCount > 0 {
             parts.append("归档 \(pruningCount) 个技能")
         }
-        return "[axion] Curator: \(parts.joined(separator: ", "))"
+        let timing = durationMs > 0 ? " [\(formatDurationMs(durationMs))]" : ""
+        return "[axion] Curator: \(parts.joined(separator: ", "))\(timing)"
+    }
+
+    private static func formatDurationMs(_ ms: Int) -> String {
+        if ms < 1000 {
+            return "\(ms)ms"
+        }
+        return String(format: "%.1fs", Double(ms) / 1000.0)
     }
 
     /// Extracts the skill name from a Skill tool's JSON input.

@@ -13,6 +13,8 @@ final class SDKTerminalOutputHandler: OpenAgentSDK.SDKMessageOutputHandler, @unc
     private var lastFlushedText = ""
     private var startTime: ContinuousClock.Instant?
     private var totalSteps = 0
+    private var toolStartTimes: [String: ContinuousClock.Instant] = [:]
+    private var llmWaitStart: ContinuousClock.Instant?
 
     init(write: @escaping (String) -> Void = { fputs($0 + "\n", stdout); fflush(stdout) }, mode: String = "standard") {
         self.write = write
@@ -21,6 +23,7 @@ final class SDKTerminalOutputHandler: OpenAgentSDK.SDKMessageOutputHandler, @unc
 
     func displayRunStart(runId: String, task: String) {
         startTime = ContinuousClock.now
+        llmWaitStart = .now
         write("[axion] 模式: \(mode)")
         write("[axion] 运行 ID: \(runId)")
         write("[axion] 任务: \(task)")
@@ -29,6 +32,11 @@ final class SDKTerminalOutputHandler: OpenAgentSDK.SDKMessageOutputHandler, @unc
     func handle(_ message: SDKMessage) {
         switch message {
         case .assistant(let data):
+            if let waitStart = llmWaitStart {
+                let elapsed = ContinuousClock.now - waitStart
+                write("[axion] LLM: \(formatDuration(elapsed))")
+                llmWaitStart = nil
+            }
             if !streamBuffer.isEmpty {
                 flushStreamBuffer()
             } else if !data.text.isEmpty && data.text != lastFlushedText {
@@ -39,15 +47,18 @@ final class SDKTerminalOutputHandler: OpenAgentSDK.SDKMessageOutputHandler, @unc
         case .toolUse(let data):
             flushStreamBuffer()
             totalSteps += 1
+            toolStartTimes[data.toolUseId] = .now
             write("[axion] 执行: \(data.toolName)")
 
         case .toolResult(let data):
             flushStreamBuffer()
+            llmWaitStart = .now
+            let toolDuration = toolStartTimes.removeValue(forKey: data.toolUseId).map { formatDuration(ContinuousClock.now - $0) }
             if data.isError {
-                write("[axion] 结果: 错误 — \(String(data.content.prefix(100)))")
+                write("[axion] 结果: 错误 — \(String(data.content.prefix(100)))\(toolDuration.map { " [\($0)]" } ?? "")")
             } else {
                 let snippet = summarizeResult(data.content)
-                write("[axion] 结果: \(snippet)")
+                write("[axion] 结果: \(snippet)\(toolDuration.map { " [\($0)]" } ?? "")")
             }
 
         case .result(let data):
@@ -81,6 +92,11 @@ final class SDKTerminalOutputHandler: OpenAgentSDK.SDKMessageOutputHandler, @unc
             }
 
         case .partialMessage(let data):
+            if let waitStart = llmWaitStart {
+                let elapsed = ContinuousClock.now - waitStart
+                write("[axion] LLM: \(formatDuration(elapsed))")
+                llmWaitStart = nil
+            }
             streamBuffer += data.text
 
         case .system(let data):
@@ -130,6 +146,14 @@ final class SDKTerminalOutputHandler: OpenAgentSDK.SDKMessageOutputHandler, @unc
         let elapsed = ContinuousClock.now - startTime
         return Int(elapsed.components.seconds)
     }
+
+    private func formatDuration(_ duration: ContinuousClock.Duration) -> String {
+        let ms = Int(duration.components.seconds * 1000 + duration.components.attoseconds / 1_000_000_000_000_000)
+        if ms < 1000 {
+            return "\(ms)ms"
+        }
+        return String(format: "%.1fs", Double(ms) / 1000.0)
+    }
 }
 
 /// JSON output handler — accumulates data and produces structured JSON at completion.
@@ -142,6 +166,9 @@ final class SDKJSONOutputHandler: OpenAgentSDK.SDKMessageOutputHandler, @uncheck
     private var steps: [[String: Any]] = []
     private var errors: [[String: String]] = []
     private var resultData: SDKMessage.ResultData?
+    private var toolStartTimes: [String: ContinuousClock.Instant] = [:]
+    private var llmTimings: [[String: Any]] = []
+    private var llmWaitStart: ContinuousClock.Instant?
 
     init(
         mode: String = "standard",
@@ -156,16 +183,26 @@ final class SDKJSONOutputHandler: OpenAgentSDK.SDKMessageOutputHandler, @uncheck
     func displayRunStart(runId: String, task: String) {
         self.runId = runId
         self.task = task
+        llmWaitStart = .now
     }
 
     func handle(_ message: SDKMessage) {
         switch message {
         case .toolUse(let data):
+            toolStartTimes[data.toolUseId] = .now
             steps.append([
                 "tool": data.toolName,
                 "toolUseId": data.toolUseId
             ])
         case .toolResult(let data):
+            llmWaitStart = .now
+            if let start = toolStartTimes.removeValue(forKey: data.toolUseId) {
+                let elapsed = ContinuousClock.now - start
+                let ms = Int(elapsed.components.seconds * 1000 + elapsed.components.attoseconds / 1_000_000_000_000_000)
+                if let lastIdx = steps.indices.last, steps[lastIdx]["toolUseId"] as? String == data.toolUseId {
+                    steps[lastIdx]["duration_ms"] = ms
+                }
+            }
             if data.isError {
                 errors.append([
                     "toolUseId": data.toolUseId,
@@ -173,7 +210,19 @@ final class SDKJSONOutputHandler: OpenAgentSDK.SDKMessageOutputHandler, @uncheck
                 ])
             }
         case .result(let data):
+            if let waitStart = llmWaitStart {
+                let elapsed = ContinuousClock.now - waitStart
+                let ms = Int(elapsed.components.seconds * 1000 + elapsed.components.attoseconds / 1_000_000_000_000_000)
+                llmTimings.append(["duration_ms": ms])
+            }
             resultData = data
+        case .assistant:
+            if let waitStart = llmWaitStart {
+                let elapsed = ContinuousClock.now - waitStart
+                let ms = Int(elapsed.components.seconds * 1000 + elapsed.components.attoseconds / 1_000_000_000_000_000)
+                llmTimings.append(["duration_ms": ms])
+                llmWaitStart = nil
+            }
         case .system(let data):
             switch data.subtype {
             case .paused:
@@ -230,6 +279,7 @@ final class SDKJSONOutputHandler: OpenAgentSDK.SDKMessageOutputHandler, @uncheck
 
         result["steps"] = steps
         result["errors"] = errors
+        result["llm_timings"] = llmTimings
         result["mode"] = mode
 
         let jsonData = (try? JSONSerialization.data(
