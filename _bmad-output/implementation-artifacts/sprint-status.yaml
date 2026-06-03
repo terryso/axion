@@ -1,56 +1,5 @@
 # generated: 2026-05-08
-# last_updated: 2026-05-31
-# retro-epic-30: 2026-05-30
-# story-30.3-created: 2026-05-30
-# story-30.2-created: 2026-05-30
-# story-29-1-started: 2026-05-29
-# story-29.1-created: 2026-05-29
-# retro-epic-28: 2026-05-29
-# story-28.2-created: 2026-05-29
-# story-28.1-created: 2026-05-29
-# story-27.2-created: 2026-05-27
-# story-27.3-created: 2026-05-27
-# story-26.3-created: 2026-05-27
-# epic-24-27-added: 2026-05-27
-# story-23.2-created: 2026-05-24
-# epic-23-started: 2026-05-24
-# story-23.1-created: 2026-05-24
-# retro-epic-21: 2026-05-21
-# story-21.6-created: 2026-05-21
-# story-21-5-started: 2026-05-21
-# story-21.4-created: 2026-05-21
-# story-21.5-created: 2026-05-21
-# story-21-3-review: 2026-05-21
-# story-16.1-created: 2026-05-17
-# story-15.2-created: 2026-05-17
-# story-15.1-review: 2026-05-17
-# retro-epic-14: 2026-05-17
-# story-15.1-created: 2026-05-17
-# story-14.1-created: 2026-05-17
-# story-14.2-created: 2026-05-17
-# story-14.3-created: 2026-05-17
-# retro-epic-13: 2026-05-17
-# story-13.4-review: 2026-05-17
-# story-13.3-created: 2026-05-17
-# story-13.2-created: 2026-05-17
-# story-13.1-created: 2026-05-17
-# retro-epic-12: 2026-05-17
-# story-12.3-created: 2026-05-17
-# story-12.1-created: 2026-05-16
-# retro-epic-11: 2026-05-15
-# story-11.3-created: 2026-05-15
-# story-11.2-created: 2026-05-15
-# story-11.1-created: 2026-05-15
-# retro-epic-10: 2026-05-15
-# story-10.1-created: 2026-05-15
-# story-10.2-created: 2026-05-15
-# story-10.3-created: 2026-05-15
-# retro-epic-4: 2026-05-14
-# retro-epic-5: 2026-05-14
-# retro-epic-6: 2026-05-14
-# retro-epic-7: 2026-05-14
-# retro-epic-8: 2026-05-14
-# retro-epic-9: 2026-05-15
+# last_updated: 2026-06-03
 # project: axion
 # project_key: NOKEY
 # tracking_system: file-system
@@ -86,86 +35,8 @@
 # - Dev moves story to 'review', then runs code-review (fresh context, different LLM recommended)
 
 generated: 2026-05-08
-last_updated: 2026-05-31
-# retro-epic-32: 2026-05-31
-# story-32.5-created: 2026-05-31
-# story-32.4-created: 2026-05-31
-# story-32.3-created: 2026-05-31
-# story-32.2-created: 2026-05-31
-# epic-32-started: 2026-05-31
-# story-32.1-created: 2026-05-31
-# epic-32-added: 2026-05-31
-# story-31-5-started: 2026-05-31
-# story-31.5-created: 2026-05-31
-# story-31-4-started: 2026-05-31
-# story-31.4-created: 2026-05-31
-# story-31.3-created: 2026-05-31
-# story-31.2-created: 2026-05-31
-# story-31.1-created: 2026-05-31
-# story-29-4-started: 2026-05-29
-# story-29.4-created: 2026-05-29
-# story-29.3-created: 2026-05-29
-# story-29.2-created: 2026-05-29
-# story-28-4-started: 2026-05-29
-# story-28.4-created: 2026-05-29
-# story-28.3-created: 2026-05-29
-# retro-epic-27: 2026-05-27
-# epic-27-started: 2026-05-27
-# story-27.1-created: 2026-05-27
-# retro-epic-26: 2026-05-27
-# story-26.2-created: 2026-05-27
-# story-26.1-created: 2026-05-27
-# epic-26-started: 2026-05-27
-# story-24.3-created: 2026-05-27
-# story-24.2-created: 2026-05-27
-# story-24.1-created: 2026-05-27
-# story-22-5-started: 2026-05-24
-# story-22.5-created: 2026-05-24
-# story-22.4-created: 2026-05-24
-# story-22.3-created: 2026-05-24
-# story-22.2-created: 2026-05-24
-# story-22.1-created: 2026-05-24
-# epic-22-started: 2026-05-24
-# story-21-6-done: 2026-05-21
-# story-21-3-created: 2026-05-21
-# story-21-2-review: 2026-05-21
-# story-21-2-created: 2026-05-21
-# story-21-1-done: 2026-05-21
-# story-21-1-review: 2026-05-21
-# story-21-1-started: 2026-05-21
-# story-21-1-created: 2026-05-21
-# epic-21-added: 2026-05-21
-# retro-epic-20: 2026-05-19
-# story-19-3-started: 2026-05-18
-# story-20-1-created: 2026-05-18
-# story-19-3-created: 2026-05-18
-# story-19-2-created: 2026-05-18
-# story-19-1-created: 2026-05-18
-# retro-epic-18: 2026-05-18
-# story-18-3-done: 2026-05-18
-# story-18-3-created: 2026-05-18
-# story-18-2-created: 2026-05-18
-# story-18-1-done: 2026-05-18
-# story-18-1-started: 2026-05-18
-# story-18-1-created: 2026-05-18
-# retro-epic-17: 2026-05-18
-# story-17-4-started: 2026-05-18
-# story-17-4-created: 2026-05-18
-# story-17-3-created: 2026-05-18
-# story-17-2-created: 2026-05-18
-# story-17-1-created: 2026-05-18
-# story-16-1-started: 2026-05-17
-# retro-epic-15: 2026-05-17
-# retro-epic-16: 2026-05-17
-# phase-8-added: 2026-05-24
-# epic-22-added: 2026-05-24
-# epic-23-added: 2026-05-24
-# phase-9-added: 2026-05-27
-# phase-10-added: 2026-05-29
-# epic-28-30-added: 2026-05-29
-# phase-11-added: 2026-05-31
-# epic-31-added: 2026-05-31
-
+last_updated: 2026-06-03
+project: axion
 project_key: NOKEY
 tracking_system: file-system
 story_location: _bmad-output/implementation-artifacts
@@ -183,7 +54,7 @@ development_status:
   1-4-mouse-keyboard-operations: done
   1-5-screenshot-ax-tree-url-open: done
   1-6-helper-integration-app-packaging: done
-  epic-1-retrospective: optional
+  epic-1-retrospective: done
 
   # Epic 2: CLI 安装配置与首次运行体验
   epic-2: done
@@ -192,7 +63,7 @@ development_status:
   2-3-axion-setup-first-time-config: done
   2-4-axion-doctor-environment-check: done
   2-5-homebrew-tap-distribution-packaging: done
-  epic-2-retrospective: optional
+  epic-2-retrospective: done
 
   # Epic 3: 自然语言任务执行
   epic-3: done
@@ -204,7 +75,7 @@ development_status:
   3-6-run-engine-state-machine: done
   3-7-sdk-integration-run-command: done
   3-8-sdk-boundary-doc-e2e-verification: done
-  epic-3-retrospective: optional
+  epic-3-retrospective: done
 
   # ============================================================
   # Phase 2 — 成长功能 (已完成 2026-05-14)
@@ -395,7 +266,7 @@ development_status:
   25-5-memory-processing-handler: done
   25-6-review-notification-handler: done
   25-7-trace-event-handler: done
-  epic-25-retrospective: optional
+  epic-25-retrospective: done
 
   # Epic 26: CLI + API 改造
   epic-26: done
@@ -465,3 +336,61 @@ development_status:
   32-4-command-registry-bot-menu: done
   32-5-interactive-approval-clarify: done
   epic-32-retrospective: done
+
+  # ============================================================
+  # Phase 13 — TG 基础体验补强与命令运行控制
+  # ============================================================
+
+  # Epic 33: TG 基础体验补强 — 通知、批处理、状态反馈
+  epic-33: backlog
+  33-1-notification-silent-mode: backlog
+  33-2-message-batching-text-batching: backlog
+  # 33-3: Follow-up Grace Window — 已由 TaskSerialQueue 实现，跳过
+  33-4-reaction-status-feedback: backlog
+  33-5-edit-overflow-split: backlog
+  epic-33-retrospective: optional
+
+  # Epic 34: TG 命令与运行控制补强
+  epic-34: backlog
+  34-1-queue-write-mode-steer-command: backlog
+  34-2-model-interactive-selector: backlog
+  34-3-retry-usage-curator-commands: backlog
+  34-4-reload-skills-fast-yolo-commands: backlog
+  34-5-exec-approval-scope-backend-logic: backlog
+  # 34-6: Clarify "其他" 输入模式 — 已实现，跳过
+  epic-34-retrospective: optional
+
+  # ============================================================
+  # Phase 14 — TG 会话管理与网络增强
+  # ============================================================
+
+  # Epic 35: TG 会话管理与运行时控制
+  epic-35: backlog
+  35-1-sessions-resume-commands: backlog
+  35-2-title-command: backlog
+  35-3-agents-command: backlog
+  epic-35-retrospective: optional
+
+  # Epic 36: TG 网络容错与 Markdown 增强（可选，P3）
+  epic-36: backlog
+  36-1-network-reconnection-enhancement: backlog
+  36-2-markdownv2-formatting-pipeline-hermes-parity: backlog
+  36-3-reasoning-verbose-commands: backlog
+  epic-36-retrospective: optional
+
+  # ============================================================
+  # Phase 3.5 — 技术债务清理: 测试框架迁移
+  # ============================================================
+
+  # Epic TM: XCTest → Swift Testing 框架迁移 (已完成 2026-06-03)
+  epic-tm: done
+  tm-1-migrate-axioncoretests: done
+  tm-2-migrate-helper-tests-models-services: done
+  tm-3-migrate-helper-tests-tools: done
+  tm-4-migrate-helper-tests-mcp: done
+  tm-5-migrate-cli-tests-core: done
+  tm-6-migrate-cli-tests-api-mcp: done
+  tm-7-migrate-cli-tests-commands: done
+  tm-8-migrate-integration-tests: done
+  tm-9-migrate-e2e-tests-cleanup-xctest: done
+  epic-tm-retrospective: done

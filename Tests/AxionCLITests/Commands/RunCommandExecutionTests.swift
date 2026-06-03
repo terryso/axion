@@ -180,7 +180,7 @@ struct RunCommandExecutionTests {
             try await cmd.run()
 
             let count = await mock.handlerCount
-            #expect(count == 6, "Expected 6 handlers (Cost, Trace, LLMInfo, MemoryProcessing, VisualDelta, SeatMonitor) — Review skipped when noMemory")
+            #expect(count == 5, "Expected 5 handlers (Cost, Trace, MemoryProcessing, VisualDelta, SeatMonitor) — Review skipped when noMemory")
         }
     }
 

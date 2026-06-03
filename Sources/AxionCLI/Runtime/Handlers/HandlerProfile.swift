@@ -30,10 +30,9 @@ struct HandlerProfile: Sendable {
     func buildHandlers() -> [any EventHandler] {
         var handlers: [any EventHandler] = []
 
-        // All contexts: cost + trace + llm-info + memory
+        // All contexts: cost + trace + memory
         handlers.append(CostEventHandler())
         handlers.append(TraceEventHandler(traceDir: traceDir))
-        handlers.append(LLMInfoHandler())
 
         if context != .api {
             handlers.append(MemoryProcessingHandler(noMemory: noMemory, memoryDir: memoryDir))

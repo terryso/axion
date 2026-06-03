@@ -190,7 +190,7 @@ struct ResumeCommandTests {
             try await cmd.run()
 
             let count = await mock.handlerCount
-            #expect(count == 7, "Expected 7 handlers (Cost, Trace, LLMInfo, VisualDelta, SeatMonitor, MemoryProcessing, Review)")
+            #expect(count == 6, "Expected 6 handlers (Cost, Trace, VisualDelta, SeatMonitor, MemoryProcessing, Review)")
         }
     }
 
