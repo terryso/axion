@@ -50,11 +50,10 @@ struct ServerCommandExecutionTests {
             let eventBus = EventBus()
             let runtime = ServerCommand.createRuntime(eventBus) as! MockAxionRuntime
 
-            await runtime.registerHandler(CostEventHandler())
             await runtime.registerHandler(TraceEventHandler(traceDir: "/tmp/test-traces"))
 
             let finalCount = await runtime.handlerCount
-            #expect(finalCount == 2, "ServerCommand should register exactly 2 handlers (cost + trace)")
+            #expect(finalCount == 1, "ServerCommand should register exactly 1 handler (trace)")
         }
     }
 

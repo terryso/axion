@@ -258,16 +258,25 @@ actor TGStreamingController {
     private static func summarizeOutput(_ output: String, maxLines: Int = 4) -> String {
         // Tool output is raw data, not agent prose — do NOT apply stripMCPRawIO
         // (which would strip everything inside MCP I/O blocks).
-        // Just do basic whitespace cleanup.
-        var cleaned = output
+        // Strip ANSI escape codes and clean up box-drawing table noise.
+        let cleaned = output
+            .replacingOccurrences(of: "\u{001B}\\[[0-9;]*[A-Za-z]", with: "", options: .regularExpression)
             .replacingOccurrences(of: "\n{3,}", with: "\n\n", options: .regularExpression)
             .trimmingCharacters(in: .whitespacesAndNewlines)
         guard !cleaned.isEmpty else { return "" }
 
-        let lines = cleaned.components(separatedBy: "\n").filter { !$0.trimmingCharacters(in: .whitespaces).isEmpty }
+        let lines = cleaned.components(separatedBy: "\n")
+            .map { $0.trimmingCharacters(in: .whitespaces) }
+            .filter { !$0.isEmpty && !isBoxDrawingBorderLine($0) }
         let truncated = lines.prefix(maxLines)
         let suffix = lines.count > maxLines ? "\n… (\(lines.count - maxLines) 行省略)" : ""
         return truncated.joined(separator: "\n") + suffix
+    }
+
+    private static func isBoxDrawingBorderLine(_ line: String) -> Bool {
+        let borderChars = CharacterSet(charactersIn: "─━┌┐└┘├┤┬┴┼╋┠┨┯┷╂╀╁╃╅╔╗╚╝║═╠╣╦╩╬")
+        let stripped = line.unicodeScalars.filter { !borderChars.contains($0) && !CharacterSet.whitespaces.contains($0) }
+        return line.unicodeScalars.contains(where: { borderChars.contains($0) }) && stripped.count <= 2
     }
 
     // MARK: - Agent Completed

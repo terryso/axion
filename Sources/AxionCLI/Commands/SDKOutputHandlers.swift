@@ -147,7 +147,37 @@ final class SDKTerminalOutputHandler: OpenAgentSDK.SDKMessageOutputHandler, @unc
         if content.contains("Base64") || content.contains("base64") {
             return "[screenshot captured]"
         }
-        return String(content.prefix(120))
+        // JSON blob (skill definitions, structured data) — show short summary
+        if content.hasPrefix("{") && content.hasSuffix("}") {
+            return summarizeJSON(content)
+        }
+        let cleaned = content.replacingOccurrences(of: "\u{001B}\\[[0-9;]*[A-Za-z]", with: "", options: .regularExpression)
+        let lines = cleaned.components(separatedBy: "\n")
+            .map { $0.trimmingCharacters(in: .whitespaces) }
+            .filter { !$0.isEmpty && !isBoxDrawingBorder($0) }
+        // Truncate very long lines
+        return lines.prefix(4).map { line in
+            line.count > 100 ? String(line.prefix(100)) + "…" : line
+        }.joined(separator: "\n")
+    }
+
+    private func summarizeJSON(_ content: String) -> String {
+        if let data = content.data(using: .utf8),
+           let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any] {
+            if let commandName = json["commandName"] as? String {
+                return "[skill loaded: \(commandName)]"
+            }
+            if let success = json["success"] as? Bool {
+                return "[JSON result: \(success ? "success" : "failed")]"
+            }
+        }
+        return String(content.prefix(100)) + "…"
+    }
+
+    private func isBoxDrawingBorder(_ line: String) -> Bool {
+        let borderChars = CharacterSet(charactersIn: "─━┌┐└┘├┤┬┴┼╋┠┨┯┷╂╀╁╃╅╔╗╚╝║═╠╣╦╩╬")
+        let nonBorder = line.unicodeScalars.filter { !borderChars.contains($0) && !CharacterSet.whitespaces.contains($0) }
+        return line.unicodeScalars.contains(where: { borderChars.contains($0) }) && nonBorder.count <= 2
     }
 
     private func computeElapsedSeconds() -> Int {

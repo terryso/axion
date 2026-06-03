@@ -15,7 +15,7 @@ let package = Package(
     dependencies: [
         .package(
             url: "https://github.com/terryso/open-agent-sdk-swift.git",
-            from: "0.7.2"
+            from: "0.7.3"
         ),
         .package(
             url: "https://github.com/terryso/swift-mcp.git",

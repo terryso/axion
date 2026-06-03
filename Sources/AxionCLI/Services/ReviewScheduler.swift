@@ -102,6 +102,15 @@ actor ReviewScheduler: EventHandler {
         let dataContext = self.reviewDataContext
         var tunedConfig = ReviewAgentConfig(reviewMemory: doMemory, reviewSkills: doSkill)
         tunedConfig.allowedTools.append("review_save_universal_memory")
+        tunedConfig.promptSuffix = """
+            **Universal Memory**: In addition to `review_save_memory`, you also have access \
+            to `review_save_universal_memory`. Use it to persist durable user preferences, \
+            persona facts, and behavioral expectations that should survive across sessions. \
+            Actions: `add` (append an entry), `replace` (replace all content). \
+            Targets: `user` (personal preferences, style), `memory` (project/environment facts). \
+            Prefer `review_save_universal_memory` over `review_save_memory` for style, language, \
+            and interaction preferences that the user wants applied every time.
+            """
         let sessionId = context.sessionId ?? "unknown"
         let traceDir = self.traceDir
         let memoryDir = self.memoryDir
@@ -244,8 +253,9 @@ actor ReviewScheduler: EventHandler {
         )
     }
 
-    // SDK review prompts still point memory saves at review_save_memory; preserve
-    // explicit long-lived response preferences in USER.md until the upstream prompt catches up.
+    // Fallback: catches explicit Chinese-language preference patterns that the review agent
+    // may miss. The primary path is now the review agent using review_save_universal_memory
+    // (guided by promptSuffix in ReviewAgentConfig).
     private static func extractExplicitUserPreference(from messages: [SDKMessage]) -> String? {
         let styleKeywords = ["回答", "回复", "emoji", "表情", "简洁", "详细", "中文", "英文", "格式", "语气", "解释", "markdown"]
         let futureMarkers = ["以后", "今后", "之后", "后续", "下次"]

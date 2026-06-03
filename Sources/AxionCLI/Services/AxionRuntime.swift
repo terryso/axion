@@ -15,7 +15,7 @@ public actor AxionRuntime: AxionRuntimeRunning, AxionRuntimeResuming, SessionLis
     private(set) var externallyModified: Bool = false
     private var externallyModifiedFlag = ExternallyModifiedFlag()
     private(set) var takeoverEvent: RunMemoryProcessor.TakeoverEventContext?
-    private(set) var lastRunCompleteContext: RunCompleteContext?
+    private var runCompleteBox: RunCompleteContextBox?
     private var handlers: [any EventHandler] = []
     private var eventSubscriptionId: UUID?
 
@@ -78,6 +78,8 @@ public actor AxionRuntime: AxionRuntimeRunning, AxionRuntimeResuming, SessionLis
             totalSteps: 0, durationMs: 0
         )
 
+        runCompleteBox = buildResult.runCompleteBox
+
         let modifiedConfig = RunOrchestrator.RunConfig(
             task: runConfig.task,
             fast: runConfig.fast,
@@ -103,7 +105,13 @@ public actor AxionRuntime: AxionRuntimeRunning, AxionRuntimeResuming, SessionLis
             )
             externallyModified = result.externallyModified
             takeoverEvent = result.takeoverEvent
-            lastRunCompleteContext = result.runCompleteContext
+
+            // Output cost summary — printed here because AgentCompletedEvent fires
+            // before lastRunCompleteContext is set, making event-handler-based logging impossible.
+            if let ctx = result.runCompleteContext {
+                let tokens = ctx.usage.inputTokens + ctx.usage.outputTokens
+                fputs("[axion] LLM 调用: \(ctx.numTurns)轮, Tokens: \(tokens), 预估成本: $\(String(format: "%.4f", ctx.totalCostUsd))\n", stderr)
+            }
             currentState = .completed
             let ctxWrapper = result.runCompleteContext.map { ctx in
                 RunCompleteContextWrapper(
@@ -261,6 +269,7 @@ public actor AxionRuntime: AxionRuntimeRunning, AxionRuntimeResuming, SessionLis
                 verbose: buildConfig.verbose,
                 eventBus: eventBus
             )
+            runCompleteBox = skillRunCompleteBox
 
             let args = RunOrchestrator.parseSkillName(from: task).flatMap { skillName in
                 let prefix = "/\(skillName) "
@@ -453,6 +462,9 @@ public actor AxionRuntime: AxionRuntimeRunning, AxionRuntimeResuming, SessionLis
     }
 
     private func dispatchToHandlers(_ event: any AgentEvent) async {
+        // AgentCompletedEvent/AgentFailedEvent fire during stream completion,
+        // before execute() returns. Read runCompleteContext directly from the box
+        // that SDK's onRunComplete callback populates.
         let context = EventHandlerContext(
             sessionId: sessionId,
             config: AxionConfig(apiKey: ""),
@@ -460,7 +472,7 @@ public actor AxionRuntime: AxionRuntimeRunning, AxionRuntimeResuming, SessionLis
             externallyModified: externallyModified,
             externallyModifiedFlag: externallyModifiedFlag,
             takeoverEvent: takeoverEvent,
-            runCompleteContext: lastRunCompleteContext,
+            runCompleteContext: runCompleteBox?.context,
             sessionStore: sessionStore
         )
         for handler in handlers {

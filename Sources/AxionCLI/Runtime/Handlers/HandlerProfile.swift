@@ -30,8 +30,7 @@ struct HandlerProfile: Sendable {
     func buildHandlers() -> [any EventHandler] {
         var handlers: [any EventHandler] = []
 
-        // All contexts: cost + trace + memory
-        handlers.append(CostEventHandler())
+        // All contexts: trace + memory
         handlers.append(TraceEventHandler(traceDir: traceDir))
 
         if context != .api {

@@ -35,7 +35,7 @@
 # - Dev moves story to 'review', then runs code-review (fresh context, different LLM recommended)
 
 generated: 2026-05-08
-last_updated: 2026-06-03
+last_updated: 2026-06-04
 project: axion
 project_key: NOKEY
 tracking_system: file-system
@@ -372,9 +372,9 @@ development_status:
   epic-35-retrospective: optional
 
   # Epic 36: TG 网络容错与 Markdown 增强（可选，P3）
-  epic-36: backlog
+  epic-36: in-progress
   36-1-network-reconnection-enhancement: backlog
-  36-2-markdownv2-formatting-pipeline-hermes-parity: backlog
+  36-2-markdownv2-formatting-pipeline-hermes-parity: done
   36-3-reasoning-verbose-commands: backlog
   epic-36-retrospective: optional
 

@@ -172,7 +172,7 @@ struct RunCommandExecutionTests {
         }
     }
 
-    @Test("handler registration count matches expected 6")
+    @Test("handler registration count matches expected")
     func handlerRegistrationCount() async throws {
         let mock = MockAxionRuntime(executeResult: Self.completedResult())
         try await withMockRuntime(mock) {
@@ -180,7 +180,7 @@ struct RunCommandExecutionTests {
             try await cmd.run()
 
             let count = await mock.handlerCount
-            #expect(count == 5, "Expected 5 handlers (Cost, Trace, MemoryProcessing, VisualDelta, SeatMonitor) — Review skipped when noMemory")
+            #expect(count == 4, "Expected 4 handlers (Trace, MemoryProcessing, VisualDelta, SeatMonitor) — Review skipped when noMemory")
         }
     }
 

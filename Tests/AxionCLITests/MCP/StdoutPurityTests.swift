@@ -51,41 +51,36 @@ struct StdoutPurityTests {
 
     @Test("axion mcp process stderr has output on missing config")
     func axionMcpProcessStderrHasOutputOnMissingConfig() async throws {
-        let axionBinary = productsBinaryURL()
+        let (process, stdoutPipe, stderrPipe) = launchMcpProcess()
 
-        let process = Process()
-        let stdoutPipe = Pipe()
-        let stderrPipe = Pipe()
-        process.executableURL = axionBinary
-        process.arguments = ["mcp"]
-        process.standardOutput = stdoutPipe
-        process.standardError = stderrPipe
-        process.environment = [
-            "AXION_API_KEY": "test-key-for-stdout-purity",
-            "HOME": "/tmp/axion-test-nohome-\(UUID().uuidString.prefix(8))",
-        ]
-
-        try process.run()
-
-        try await Task.sleep(for: .milliseconds(2000))
-
-        let stderrContent = readAvailableData(stderrPipe)
+        let stderrContent = await pollPipe(stderrPipe, timeoutMs: 500)
         let stdoutContent = readAvailableData(stdoutPipe)
 
         process.terminate()
 
         #expect(!stderrContent.isEmpty)
-
         #expect(stdoutContent.isEmpty)
     }
 
     @Test("axion mcp process stderr contains error on missing helper")
     func axionMcpProcessStderrContainsErrorOnMissingHelper() async throws {
+        let (process, stdoutPipe, stderrPipe) = launchMcpProcess()
+
+        let stderrContent = await pollPipe(stderrPipe, timeoutMs: 500)
+        let stdoutContent = readAvailableData(stdoutPipe)
+
+        process.terminate()
+
+        #expect(!stderrContent.isEmpty)
+        #expect(stdoutContent.isEmpty)
+    }
+
+    private func launchMcpProcess() -> (Process, Pipe, Pipe) {
         let axionBinary = productsBinaryURL()
 
         let process = Process()
-        let stderrPipe = Pipe()
         let stdoutPipe = Pipe()
+        let stderrPipe = Pipe()
         process.executableURL = axionBinary
         process.arguments = ["mcp"]
         process.standardOutput = stdoutPipe
@@ -95,18 +90,18 @@ struct StdoutPurityTests {
             "HOME": "/tmp/axion-test-nohome-\(UUID().uuidString.prefix(8))",
         ]
 
-        try process.run()
+        try! process.run()
+        return (process, stdoutPipe, stderrPipe)
+    }
 
-        try await Task.sleep(for: .milliseconds(2000))
-
-        let stderrContent = readAvailableData(stderrPipe)
-        let stdoutContent = readAvailableData(stdoutPipe)
-
-        process.terminate()
-
-        #expect(!stderrContent.isEmpty)
-
-        #expect(stdoutContent.isEmpty)
+    private func pollPipe(_ pipe: Pipe, timeoutMs: Int) async -> String {
+        let deadline = ContinuousClock.now + .milliseconds(timeoutMs)
+        while ContinuousClock.now < deadline {
+            let content = readAvailableData(pipe)
+            if !content.isEmpty { return content }
+            try? await Task.sleep(for: .milliseconds(50))
+        }
+        return readAvailableData(pipe)
     }
 
     private static func projectRoot() -> URL {

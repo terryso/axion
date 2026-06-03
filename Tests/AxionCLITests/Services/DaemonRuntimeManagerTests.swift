@@ -217,7 +217,7 @@ struct DaemonRuntimeManagerTests {
         #expect(mock.executeCount == 1)
     }
 
-    @Test("Handlers registered — 2 API handlers (cost + trace)")
+    @Test("Handlers registered — 1 API handler (trace)")
     func handlersRegistered() async throws {
         let mock = MockDaemonRuntime(result: makeResult())
 
@@ -234,7 +234,7 @@ struct DaemonRuntimeManagerTests {
             sessionId: nil
         )
 
-        #expect(mock.handlerCount == 2, "Should register CostEventHandler + TraceEventHandler")
+        #expect(mock.handlerCount == 1, "Should register TraceEventHandler")
     }
 
     @Test("Event loop lifecycle — execute completes without hanging")
