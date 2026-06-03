@@ -14,9 +14,7 @@ final class SDKTerminalOutputHandler: OpenAgentSDK.SDKMessageOutputHandler, @unc
     private var startTime: ContinuousClock.Instant?
     private var totalSteps = 0
     private var toolStartTimes: [String: ContinuousClock.Instant] = [:]
-    private var hookStartTimes: [String: ContinuousClock.Instant] = [:]
     private var llmWaitStart: ContinuousClock.Instant?
-    private var llmRound = 0
 
     init(write: @escaping (String) -> Void = { fputs($0 + "\n", stdout); fflush(stdout) }, mode: String = "standard") {
         self.write = write
@@ -34,12 +32,7 @@ final class SDKTerminalOutputHandler: OpenAgentSDK.SDKMessageOutputHandler, @unc
     func handle(_ message: SDKMessage) {
         switch message {
         case .assistant(let data):
-            if let waitStart = llmWaitStart {
-                llmRound += 1
-                let elapsed = ContinuousClock.now - waitStart
-                write("[axion] LLM #\(llmRound): \(formatDuration(elapsed))")
-                llmWaitStart = nil
-            }
+            llmWaitStart = nil
             if !streamBuffer.isEmpty {
                 flushStreamBuffer()
             } else if !data.text.isEmpty && data.text != lastFlushedText {
@@ -95,12 +88,7 @@ final class SDKTerminalOutputHandler: OpenAgentSDK.SDKMessageOutputHandler, @unc
             }
 
         case .partialMessage(let data):
-            if let waitStart = llmWaitStart {
-                llmRound += 1
-                let elapsed = ContinuousClock.now - waitStart
-                write("[axion] LLM #\(llmRound): \(formatDuration(elapsed))")
-                llmWaitStart = nil
-            }
+            llmWaitStart = nil
             streamBuffer += data.text
 
         case .system(let data):
@@ -117,14 +105,11 @@ final class SDKTerminalOutputHandler: OpenAgentSDK.SDKMessageOutputHandler, @unc
                 break
             }
 
-        case .hookStarted(let data):
-            hookStartTimes[data.hookId] = .now
+        case .hookStarted:
+            break
 
-        case .hookResponse(let data):
-            let hookDuration = hookStartTimes.removeValue(forKey: data.hookId).map { formatDuration(ContinuousClock.now - $0) }
-            if let duration = hookDuration {
-                write("[axion] Hook \(data.hookName): \(duration)")
-            }
+        case .hookResponse:
+            break
 
         default:
             break
