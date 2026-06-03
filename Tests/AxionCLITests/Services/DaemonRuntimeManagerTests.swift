@@ -234,7 +234,7 @@ struct DaemonRuntimeManagerTests {
             sessionId: nil
         )
 
-        #expect(mock.handlerCount == 2, "Should register CostEventHandler + TraceEventHandler")
+        #expect(mock.handlerCount == 3, "Should register CostEventHandler + TraceEventHandler + LLMInfoHandler")
     }
 
     @Test("Event loop lifecycle — execute completes without hanging")

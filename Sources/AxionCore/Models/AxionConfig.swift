@@ -38,6 +38,7 @@ public struct AxionConfig: Equatable, Sendable {
     public var telegramAllowedUsers: String?
     public var telegramTypingEnabled: Bool?
     public var telegramTypingInterval: Double?
+    public var env: [String: String]?
 
     public static let `default` = AxionConfig(
         apiKey: nil,
@@ -69,7 +70,8 @@ public struct AxionConfig: Equatable, Sendable {
         telegramChatId: nil,
         telegramAllowedUsers: nil,
         telegramTypingEnabled: nil,
-        telegramTypingInterval: nil
+        telegramTypingInterval: nil,
+        env: nil
     )
 
     public init(
@@ -102,7 +104,8 @@ public struct AxionConfig: Equatable, Sendable {
         telegramChatId: String? = nil,
         telegramAllowedUsers: String? = nil,
         telegramTypingEnabled: Bool? = nil,
-        telegramTypingInterval: Double? = nil
+        telegramTypingInterval: Double? = nil,
+        env: [String: String]? = nil
     ) {
         self.apiKey = apiKey
         self.provider = provider
@@ -134,6 +137,7 @@ public struct AxionConfig: Equatable, Sendable {
         self.telegramAllowedUsers = telegramAllowedUsers
         self.telegramTypingEnabled = telegramTypingEnabled
         self.telegramTypingInterval = telegramTypingInterval
+        self.env = env
     }
 
     public var tgTypingEnabled: Bool { telegramTypingEnabled ?? true }
@@ -147,6 +151,7 @@ extension AxionConfig: Codable {
         case curatorEnabled, curatorDryRun, curatorIntervalHours, curatorStaleAfterDays, curatorArchiveAfterDays
         case gatewayEnabled, gatewayCuratorIdleHours, gatewayCuratorIntervalHours, gatewayTaskTimeoutMinutes, gatewayNotifyCuratorResults
         case telegramBotToken, telegramChatId, telegramAllowedUsers, telegramTypingEnabled, telegramTypingInterval
+        case env
     }
 
     public init(from decoder: Decoder) throws {
@@ -181,5 +186,6 @@ extension AxionConfig: Codable {
         telegramAllowedUsers = try c.decodeIfPresent(String.self, forKey: .telegramAllowedUsers)
         telegramTypingEnabled = try c.decodeIfPresent(Bool.self, forKey: .telegramTypingEnabled)
         telegramTypingInterval = try c.decodeIfPresent(Double.self, forKey: .telegramTypingInterval)
+        env = try c.decodeIfPresent([String: String].self, forKey: .env)
     }
 }

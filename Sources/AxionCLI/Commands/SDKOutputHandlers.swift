@@ -14,7 +14,9 @@ final class SDKTerminalOutputHandler: OpenAgentSDK.SDKMessageOutputHandler, @unc
     private var startTime: ContinuousClock.Instant?
     private var totalSteps = 0
     private var toolStartTimes: [String: ContinuousClock.Instant] = [:]
+    private var hookStartTimes: [String: ContinuousClock.Instant] = [:]
     private var llmWaitStart: ContinuousClock.Instant?
+    private var llmRound = 0
 
     init(write: @escaping (String) -> Void = { fputs($0 + "\n", stdout); fflush(stdout) }, mode: String = "standard") {
         self.write = write
@@ -33,8 +35,9 @@ final class SDKTerminalOutputHandler: OpenAgentSDK.SDKMessageOutputHandler, @unc
         switch message {
         case .assistant(let data):
             if let waitStart = llmWaitStart {
+                llmRound += 1
                 let elapsed = ContinuousClock.now - waitStart
-                write("[axion] LLM: \(formatDuration(elapsed))")
+                write("[axion] LLM #\(llmRound): \(formatDuration(elapsed))")
                 llmWaitStart = nil
             }
             if !streamBuffer.isEmpty {
@@ -93,8 +96,9 @@ final class SDKTerminalOutputHandler: OpenAgentSDK.SDKMessageOutputHandler, @unc
 
         case .partialMessage(let data):
             if let waitStart = llmWaitStart {
+                llmRound += 1
                 let elapsed = ContinuousClock.now - waitStart
-                write("[axion] LLM: \(formatDuration(elapsed))")
+                write("[axion] LLM #\(llmRound): \(formatDuration(elapsed))")
                 llmWaitStart = nil
             }
             streamBuffer += data.text
@@ -111,6 +115,15 @@ final class SDKTerminalOutputHandler: OpenAgentSDK.SDKMessageOutputHandler, @unc
                 write("[axion] 接管超时（5 分钟无操作），任务终止。")
             default:
                 break
+            }
+
+        case .hookStarted(let data):
+            hookStartTimes[data.hookId] = .now
+
+        case .hookResponse(let data):
+            let hookDuration = hookStartTimes.removeValue(forKey: data.hookId).map { formatDuration(ContinuousClock.now - $0) }
+            if let duration = hookDuration {
+                write("[axion] Hook \(data.hookName): \(duration)")
             }
 
         default:
@@ -168,6 +181,7 @@ final class SDKJSONOutputHandler: OpenAgentSDK.SDKMessageOutputHandler, @uncheck
     private var resultData: SDKMessage.ResultData?
     private var toolStartTimes: [String: ContinuousClock.Instant] = [:]
     private var llmTimings: [[String: Any]] = []
+    private var llmRound = 0
     private var llmWaitStart: ContinuousClock.Instant?
 
     init(
@@ -211,16 +225,18 @@ final class SDKJSONOutputHandler: OpenAgentSDK.SDKMessageOutputHandler, @uncheck
             }
         case .result(let data):
             if let waitStart = llmWaitStart {
+                llmRound += 1
                 let elapsed = ContinuousClock.now - waitStart
                 let ms = Int(elapsed.components.seconds * 1000 + elapsed.components.attoseconds / 1_000_000_000_000_000)
-                llmTimings.append(["duration_ms": ms])
+                llmTimings.append(["round": llmRound, "duration_ms": ms])
             }
             resultData = data
         case .assistant:
             if let waitStart = llmWaitStart {
+                llmRound += 1
                 let elapsed = ContinuousClock.now - waitStart
                 let ms = Int(elapsed.components.seconds * 1000 + elapsed.components.attoseconds / 1_000_000_000_000_000)
-                llmTimings.append(["duration_ms": ms])
+                llmTimings.append(["round": llmRound, "duration_ms": ms])
                 llmWaitStart = nil
             }
         case .system(let data):

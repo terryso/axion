@@ -382,15 +382,17 @@ struct TGStreamingControllerTests {
         let config = TGStreamingConfig(typingEnabled: true, typingInterval: 0.05)
         let controller = makeController(log: log, config: config)
 
-        try? await _Concurrency.Task.sleep(nanoseconds: 80_000_000)
+        try? await _Concurrency.Task.sleep(nanoseconds: 100_000_000)
+
+        let actionsBefore = log.chatActions.count
 
         // Send LLM tokens — typing should NOT stop
         await controller.handle(LLMTokenStreamEvent(sessionId: nil, chunk: "Hello"))
 
-        try? await _Concurrency.Task.sleep(nanoseconds: 120_000_000)
+        try? await _Concurrency.Task.sleep(nanoseconds: 150_000_000)
 
         let actionsAfter = log.chatActions.count
-        #expect(actionsAfter >= 3) // Still firing during streaming
+        #expect(actionsAfter > actionsBefore) // Still firing during streaming
     }
 
     @Test("Typing stops after AgentCompleted")

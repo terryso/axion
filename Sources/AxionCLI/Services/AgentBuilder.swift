@@ -281,6 +281,7 @@ enum AgentBuilder {
             pauseTimeoutMs: 300_000
         )
         agentOptions.maxModelCalls = config.maxModelCalls
+        agentOptions.env = config.env
         agentOptions.runId = buildConfig.runId
         agentOptions.traceEnabled = true
         agentOptions.traceBaseURL = (ConfigManager.defaultConfigDirectory as NSString).appendingPathComponent("runs")
@@ -434,6 +435,7 @@ enum AgentBuilder {
             logLevel: verbose ? .debug : .info
         )
         agentOptions.eventBus = eventBus
+        agentOptions.env = config.env
 
         let runCompleteBox = RunCompleteContextBox()
         agentOptions.onRunComplete = { context in

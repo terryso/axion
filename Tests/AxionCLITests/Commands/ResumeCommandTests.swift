@@ -182,7 +182,7 @@ struct ResumeCommandTests {
         }
     }
 
-    @Test("handler registration count matches expected 6")
+    @Test("handler registration count matches expected 7")
     func handlerRegistrationCount() async throws {
         let mock = MockResumeRuntime(resumeResult: Self.completedResult())
         try await withMockRuntime(mock) {
@@ -190,7 +190,7 @@ struct ResumeCommandTests {
             try await cmd.run()
 
             let count = await mock.handlerCount
-            #expect(count == 6, "Expected 6 handlers (Cost, VisualDelta, SeatMonitor, MemoryProcessing, Review, Trace)")
+            #expect(count == 7, "Expected 7 handlers (Cost, Trace, LLMInfo, VisualDelta, SeatMonitor, MemoryProcessing, Review)")
         }
     }
 
