@@ -15,6 +15,7 @@ final class SDKTerminalOutputHandler: OpenAgentSDK.SDKMessageOutputHandler, @unc
     private var totalSteps = 0
     private var toolStartTimes: [String: ContinuousClock.Instant] = [:]
     private var llmWaitStart: ContinuousClock.Instant?
+    private var llmRound = 0
 
     init(write: @escaping (String) -> Void = { fputs($0 + "\n", stdout); fflush(stdout) }, mode: String = "standard") {
         self.write = write
@@ -32,7 +33,12 @@ final class SDKTerminalOutputHandler: OpenAgentSDK.SDKMessageOutputHandler, @unc
     func handle(_ message: SDKMessage) {
         switch message {
         case .assistant(let data):
-            llmWaitStart = nil
+            if let waitStart = llmWaitStart {
+                llmRound += 1
+                let elapsed = ContinuousClock.now - waitStart
+                write("[axion] LLM #\(llmRound): \(formatDuration(elapsed))")
+                llmWaitStart = nil
+            }
             if !streamBuffer.isEmpty {
                 flushStreamBuffer()
             } else if !data.text.isEmpty && data.text != lastFlushedText {
@@ -88,7 +94,12 @@ final class SDKTerminalOutputHandler: OpenAgentSDK.SDKMessageOutputHandler, @unc
             }
 
         case .partialMessage(let data):
-            llmWaitStart = nil
+            if let waitStart = llmWaitStart {
+                llmRound += 1
+                let elapsed = ContinuousClock.now - waitStart
+                write("[axion] LLM #\(llmRound): \(formatDuration(elapsed))")
+                llmWaitStart = nil
+            }
             streamBuffer += data.text
 
         case .system(let data):
