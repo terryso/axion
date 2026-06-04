@@ -197,12 +197,16 @@ enum AgentBuilder {
         let memoryDir = (ConfigManager.defaultConfigDirectory as NSString).appendingPathComponent("memory")
         let memoryStore = FileBasedMemoryStore(memoryDir: memoryDir)
 
+        // 3b. Prepare skillsDir + SkillUsageStore (shared by step 8 tools and step 11 review/curator)
+        let skillsDir = (ConfigManager.defaultConfigDirectory as NSString).appendingPathComponent("skills")
+        let usageStore: SkillUsageStore? = (!buildConfig.noMemory && !buildConfig.dryrun) ? SkillUsageStore(skillsDir: skillsDir) : nil
+
         // 4. Discover and register skills (owned by AgentBuilder)
         let skillRegistry = SkillRegistry()
         var skillRegisteredCount = 0
         if !buildConfig.noSkills {
             AxionBuiltInSkills.registerAll(into: skillRegistry)
-            _ = skillRegistry.registerDiscoveredSkills()
+            _ = skillRegistry.registerDiscoveredSkills(from: ConfigManager.skillDiscoveryDirectories)
             skillRegisteredCount = skillRegistry.allSkills.count
         }
 
@@ -216,7 +220,8 @@ enum AgentBuilder {
             noMemory: buildConfig.noMemory,
             noSkills: buildConfig.noSkills,
             fast: buildConfig.fast,
-            dryrun: buildConfig.dryrun
+            dryrun: buildConfig.dryrun,
+            includeSaveSkillGuidance: usageStore != nil
         )
 
         // 6. Configure MCP servers (skip in dryrun — no side-effect tools allowed)
@@ -258,6 +263,15 @@ enum AgentBuilder {
         if !buildConfig.noMemory, !buildConfig.dryrun {
             let universalStore = UniversalMemoryStore(memoryDir: memoryDir)
             agentTools.append(MemoryTool(store: universalStore))
+        }
+
+        // save_skill tool — Agent can persist reusable skills to disk
+        if let usageStore {
+            agentTools.append(createSaveSkillTool(
+                skillRegistry: skillRegistry,
+                usageStore: usageStore,
+                skillsDir: skillsDir
+            ))
         }
 
         // 9. Build AgentOptions
@@ -312,8 +326,7 @@ enum AgentBuilder {
         // 11. Create ReviewOrchestrator + IntelligentCurator (when memory is on and not dryrun)
         let reviewOrchestrator: ReviewOrchestrator?
         let intelligentCurator: IntelligentCurator?
-        let usageStore: SkillUsageStore?
-        if !buildConfig.noMemory, !buildConfig.dryrun {
+        if let usageStore {
             let scheduleConfig = ReviewScheduleConfig(
                 memoryReviewInterval: config.reviewMemoryInterval ?? ReviewScheduleConfig().memoryReviewInterval,
                 skillReviewInterval: config.reviewSkillInterval ?? ReviewScheduleConfig().skillReviewInterval,
@@ -321,9 +334,6 @@ enum AgentBuilder {
                 reviewModel: config.reviewModel
             )
             let reviewFactStore = FactStore(memoryDir: memoryDir)
-            let skillsDir = (ConfigManager.defaultConfigDirectory as NSString).appendingPathComponent("skills")
-            let concreteStore = SkillUsageStore(skillsDir: skillsDir)
-            usageStore = concreteStore
             let evolverClient = AnthropicClient(
                 apiKey: apiKey,
                 baseURL: config.baseURL
@@ -339,7 +349,8 @@ enum AgentBuilder {
                 factStore: reviewFactStore,
                 skillRegistry: skillRegistry,
                 skillEvolver: skillEvolver,
-                usageStore: concreteStore,
+                usageStore: usageStore,
+                skillsDir: skillsDir,
                 additionalReviewTools: [reviewSaveMemoryTool]
             )
 
@@ -353,7 +364,7 @@ enum AgentBuilder {
                 enabled: config.curatorEnabled ?? true
             )
             let skillCurator = SkillCurator(
-                usageStore: concreteStore,
+                usageStore: usageStore,
                 curatorStore: curatorStore,
                 config: curatorConfig
             )
@@ -362,13 +373,13 @@ enum AgentBuilder {
                 factStore: reviewFactStore,
                 skillRegistry: skillRegistry,
                 skillEvolver: skillEvolver,
-                usageStore: concreteStore,
-                curatorStore: curatorStore
+                usageStore: usageStore,
+                curatorStore: curatorStore,
+                skillsDir: skillsDir
             )
         } else {
             reviewOrchestrator = nil
             intelligentCurator = nil
-            usageStore = nil
         }
 
         return AgentBuildResult(
@@ -458,7 +469,8 @@ enum AgentBuilder {
         noMemory: Bool,
         noSkills: Bool,
         fast: Bool,
-        dryrun: Bool
+        dryrun: Bool,
+        includeSaveSkillGuidance: Bool = false
     ) async -> String {
         let promptDir = PromptBuilder.resolvePromptDirectory()
         let mcpPrefixedToolNames = ToolNames.allToolNames.map { "mcp__axion-helper__\($0)" }
@@ -504,7 +516,8 @@ enum AgentBuilder {
             basePrompt: baseSystemPrompt,
             memoryContext: memoryContext,
             universalMemoryContext: universalMemoryContext,
-            skillsPrompt: skillsPrompt
+            skillsPrompt: skillsPrompt,
+            includeSaveSkillGuidance: includeSaveSkillGuidance
         )
 
         return appendModeInstructions(to: prompt, fast: fast, dryrun: dryrun)
@@ -534,7 +547,8 @@ enum AgentBuilder {
         basePrompt: String,
         memoryContext: String? = nil,
         universalMemoryContext: String? = nil,
-        skillsPrompt: String = ""
+        skillsPrompt: String = "",
+        includeSaveSkillGuidance: Bool = false
     ) -> String {
         var prompt = basePrompt
 
@@ -557,6 +571,9 @@ enum AgentBuilder {
         - If the `memory` tool rejects content with `security_rejection`, tell the user that the save/update was blocked by the security scanner and do not fall back to storing it elsewhere.
         - Use target `user` for personal preferences and target `memory` for durable project/environment facts.
         """
+        if includeSaveSkillGuidance {
+            prompt += "\n- When you identify a reusable pattern, user preference, or workflow during conversation, use the `save_skill` tool to persist it as a skill. Saved skills are written to disk and automatically loaded in future sessions. Skills should be class-level general instructions, not session-level temporary notes."
+        }
 
         if !skillsPrompt.isEmpty {
             prompt += """

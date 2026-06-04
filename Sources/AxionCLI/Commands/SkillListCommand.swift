@@ -16,7 +16,7 @@ struct SkillListCommand: AsyncParsableCommand {
         // Prompt skills (from SkillRegistry including built-in)
         let registry = SkillRegistry()
         AxionBuiltInSkills.registerAll(into: registry)
-        registry.registerDiscoveredSkills()
+        registry.registerDiscoveredSkills(from: ConfigManager.skillDiscoveryDirectories)
         let promptOutput = Self.listPromptSkills(from: registry)
 
         if recordedOutput.contains("无已保存的技能") && promptOutput.isEmpty {

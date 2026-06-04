@@ -35,7 +35,7 @@ struct CuratorRunCommand: AsyncParsableCommand {
         let factStore = FactStore(memoryDir: memoryDir)
         let skillRegistry = SkillRegistry()
         AxionBuiltInSkills.registerAll(into: skillRegistry)
-        _ = skillRegistry.registerDiscoveredSkills()
+        _ = skillRegistry.registerDiscoveredSkills(from: ConfigManager.skillDiscoveryDirectories)
 
         guard let apiKey = config.apiKey, !apiKey.isEmpty else {
             throw AxionError.configError(reason: "API Key 未配置")
@@ -63,7 +63,8 @@ struct CuratorRunCommand: AsyncParsableCommand {
             skillRegistry: skillRegistry,
             skillEvolver: skillEvolver,
             usageStore: usageStore,
-            curatorStore: curatorStore
+            curatorStore: curatorStore,
+            skillsDir: skillsDir
         )
 
         let buildConfig = AgentBuilder.BuildConfig.forCLI(

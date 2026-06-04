@@ -1,4 +1,5 @@
 import Foundation
+import OpenAgentSDK
 
 import AxionCore
 
@@ -88,6 +89,12 @@ enum ConfigManager {
 
     static var defaultConfigDirectory: String {
         (NSHomeDirectory() as NSString).appendingPathComponent(".axion")
+    }
+
+    /// Unified skill discovery directories: SDK defaults + `~/.axion/skills/` (highest priority).
+    static var skillDiscoveryDirectories: [String] {
+        let axionSkillsDir = (defaultConfigDirectory as NSString).appendingPathComponent("skills")
+        return SkillLoader.defaultSkillDirectories() + [axionSkillsDir]
     }
 
     /// 应用环境变量覆盖。

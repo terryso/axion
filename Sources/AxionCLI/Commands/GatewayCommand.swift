@@ -61,7 +61,7 @@ struct GatewayStartCommand: AsyncParsableCommand {
 
         let skillRegistry = SkillRegistry()
         AxionBuiltInSkills.registerAll(into: skillRegistry)
-        skillRegistry.registerDiscoveredSkills()
+        skillRegistry.registerDiscoveredSkills(from: ConfigManager.skillDiscoveryDirectories)
 
         await AxionRunRecovery.recover(
             from: runCoordinator,
@@ -421,7 +421,7 @@ struct GatewayStartCommand: AsyncParsableCommand {
         let curatorFactStore = FactStore(memoryDir: memoryDir)
         let curatorSkillRegistry = SkillRegistry()
         AxionBuiltInSkills.registerAll(into: curatorSkillRegistry)
-        _ = curatorSkillRegistry.registerDiscoveredSkills()
+        _ = curatorSkillRegistry.registerDiscoveredSkills(from: ConfigManager.skillDiscoveryDirectories)
         let curatorConfig = SkillCuratorConfig(
             intervalHours: curatorIntervalHours,
             staleAfterDays: config.curatorStaleAfterDays ?? 30,
@@ -448,7 +448,8 @@ struct GatewayStartCommand: AsyncParsableCommand {
             skillRegistry: curatorSkillRegistry,
             skillEvolver: curatorEvolver,
             usageStore: curatorUsageStore,
-            curatorStore: curatorStore
+            curatorStore: curatorStore,
+            skillsDir: skillsDir
         )
         return CuratorScheduler(
             curatorIdleHours: curatorIdleHours,

@@ -51,7 +51,7 @@ struct ServerCommand: AsyncParsableCommand {
 
         let skillRegistry = SkillRegistry()
         AxionBuiltInSkills.registerAll(into: skillRegistry)
-        skillRegistry.registerDiscoveredSkills()
+        skillRegistry.registerDiscoveredSkills(from: ConfigManager.skillDiscoveryDirectories)
 
         await AxionRunRecovery.recover(
             from: runCoordinator,

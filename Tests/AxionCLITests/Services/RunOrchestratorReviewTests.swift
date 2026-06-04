@@ -14,6 +14,7 @@ struct RunOrchestratorReviewTests {
         skillInterval: Int = 6,
         minMessages: Int = 4
     ) -> ReviewOrchestrator {
+        let tempDir = NSTemporaryDirectory() + "axion-test-usage-\(UUID().uuidString)"
         let schedule = ReviewScheduleConfig(
             memoryReviewInterval: memoryInterval,
             skillReviewInterval: skillInterval,
@@ -24,7 +25,8 @@ struct RunOrchestratorReviewTests {
             factStore: FactStore(),
             skillRegistry: SkillRegistry(),
             skillEvolver: MockSkillEvolver(),
-            usageStore: SkillUsageStore(skillsDir: NSTemporaryDirectory() + "axion-test-usage-\(UUID().uuidString)")
+            usageStore: SkillUsageStore(skillsDir: tempDir),
+            skillsDir: tempDir
         )
     }
 
@@ -255,12 +257,14 @@ struct RunOrchestratorReviewTests {
         #expect(skillEvolver.evolutionModel == AxionConfig.defaultReviewModel)
 
         // Verify it can be wired into ReviewOrchestrator
+        let tmpSkillsDir = NSTemporaryDirectory() + "axion-test-usage-\(UUID().uuidString)"
         let _ = ReviewOrchestrator(
             scheduleConfig: ReviewScheduleConfig(),
             factStore: FactStore(),
             skillRegistry: SkillRegistry(),
             skillEvolver: skillEvolver,
-            usageStore: SkillUsageStore(skillsDir: NSTemporaryDirectory() + "axion-test-usage-\(UUID().uuidString)")
+            usageStore: SkillUsageStore(skillsDir: tmpSkillsDir),
+            skillsDir: tmpSkillsDir
         )
     }
 
@@ -345,7 +349,8 @@ struct RunOrchestratorReviewTests {
             factStore: FactStore(memoryDir: tmpDir),
             skillRegistry: SkillRegistry(),
             skillEvolver: MockSkillEvolver(),
-            usageStore: SkillUsageStore(skillsDir: tmpDir)
+            usageStore: SkillUsageStore(skillsDir: tmpDir),
+            skillsDir: tmpDir
         )
         let _: ReviewOrchestrator = orchestrator
     }
@@ -380,7 +385,8 @@ struct RunOrchestratorReviewTests {
             skillRegistry: SkillRegistry(),
             skillEvolver: MockSkillEvolver(),
             usageStore: SkillUsageStore(skillsDir: tmpDir),
-            curatorStore: SkillCuratorStore(skillsDir: tmpDir)
+            curatorStore: SkillCuratorStore(skillsDir: tmpDir),
+            skillsDir: tmpDir
         )
         let _: IntelligentCurator = curator
     }
@@ -484,7 +490,8 @@ struct RunOrchestratorReviewTests {
             factStore: factStore,
             skillRegistry: skillRegistry,
             skillEvolver: evolver,
-            usageStore: usageStore
+            usageStore: usageStore,
+            skillsDir: tempSkillsDir
         )
 
         // Verify all dependencies are accessible via public properties
@@ -498,7 +505,8 @@ struct RunOrchestratorReviewTests {
             factStore: factStore,
             skillRegistry: skillRegistry,
             skillEvolver: evolver,
-            usageStore: usageStore
+            usageStore: usageStore,
+            skillsDir: tempSkillsDir
         )
         #expect(!tools.isEmpty)
         #expect(tools.count >= 5)
@@ -723,7 +731,8 @@ struct RunOrchestratorReviewTests {
             skillRegistry: skillRegistry,
             skillEvolver: skillEvolver,
             usageStore: usageStore,
-            curatorStore: curatorStore
+            curatorStore: curatorStore,
+            skillsDir: tempSkillsDir
         )
 
         // Verify all 6 deps accessible

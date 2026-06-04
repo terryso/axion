@@ -83,7 +83,7 @@ struct RunCommand: AsyncParsableCommand {
         if !noSkills, let skillName = RunOrchestrator.parseSkillName(from: task) {
             let registry = SkillRegistry()
             AxionBuiltInSkills.registerAll(into: registry)
-            _ = registry.registerDiscoveredSkills()
+            _ = registry.registerDiscoveredSkills(from: ConfigManager.skillDiscoveryDirectories)
             if let skill = registry.find(skillName) {
                 fputs("[axion] 已加载 \(registry.allSkills.count) 个技能\n", stderr)
                 if let override = Self.skillExecutorOverride {
