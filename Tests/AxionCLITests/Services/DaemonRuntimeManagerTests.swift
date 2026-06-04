@@ -70,6 +70,10 @@ final class MockDaemonRuntime: AxionRuntimeRunning, @unchecked Sendable {
         guard let result else { fatalError("MockDaemonRuntime: no result and no error") }
         return result
     }
+
+    func setContextOverrides(chatId: Int64?, shouldReviewMemory: Bool, shouldReviewSkills: Bool) async {
+        // no-op for tests
+    }
 }
 
 private final class LockedCounter: @unchecked Sendable {
@@ -149,7 +153,10 @@ final class MockDaemonRuntimeManager: DaemonRuntimeManaging, @unchecked Sendable
         runOverrides: AxionRuntime.RunOverrides,
         handlerProfile: HandlerProfile,
         extraHandlers: [any EventHandler],
-        sessionId: String? = nil
+        sessionId: String? = nil,
+        chatId: Int64? = nil,
+        shouldReviewMemory: Bool = false,
+        shouldReviewSkills: Bool = false
     ) async throws -> AxionRunResult {
         _executeCount.increment()
         if let error { throw error }
@@ -178,7 +185,10 @@ final class MockDaemonRuntimeManager: DaemonRuntimeManaging, @unchecked Sendable
         eventBus: EventBus,
         runOverrides: AxionRuntime.RunOverrides,
         handlerProfile: HandlerProfile,
-        extraHandlers: [any EventHandler]
+        extraHandlers: [any EventHandler],
+        chatId: Int64? = nil,
+        shouldReviewMemory: Bool = false,
+        shouldReviewSkills: Bool = false
     ) async throws -> AxionRunResult {
         _executeCount.increment()
         if let error { throw error }
@@ -518,7 +528,10 @@ struct ServerCommandRuntimeManagerTests {
             runOverrides: AxionRuntime.RunOverrides.default,
             handlerProfile: makeTestProfile(),
             extraHandlers: [],
-            sessionId: nil
+            sessionId: nil,
+            chatId: nil,
+            shouldReviewMemory: false,
+            shouldReviewSkills: false
         )
 
         #expect(result.sessionId == "seam-test")
@@ -543,7 +556,10 @@ struct ServerCommandRuntimeManagerTests {
                 runOverrides: AxionRuntime.RunOverrides.default,
             handlerProfile: makeTestProfile(),
             extraHandlers: [],
-            sessionId: nil
+            sessionId: nil,
+            chatId: nil,
+            shouldReviewMemory: false,
+            shouldReviewSkills: false
             )
             Issue.record("Expected error to be thrown")
         } catch {

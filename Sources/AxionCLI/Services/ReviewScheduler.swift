@@ -34,6 +34,7 @@ actor ReviewScheduler: EventHandler {
     private let reviewDataContext: ReviewDataContext
     private let traceDir: String
     private let memoryDir: String
+    private let gatewaySessionStore: GatewaySessionStore?
 
     /// Thread-safe box for lastReviewAt, readable without actor isolation.
     private let _lastReviewAtBox: LockedStringBox = LockedStringBox()
@@ -59,6 +60,7 @@ actor ReviewScheduler: EventHandler {
         reviewDataContext: ReviewDataContext,
         traceDir: String,
         memoryDir: String = (ConfigManager.defaultConfigDirectory as NSString).appendingPathComponent("memory"),
+        gatewaySessionStore: GatewaySessionStore? = nil,
         onReviewResult: (@Sendable (ReviewResultEvent) async -> Void)? = nil
     ) {
         self.noReview = noReview
@@ -66,6 +68,7 @@ actor ReviewScheduler: EventHandler {
         self.reviewDataContext = reviewDataContext
         self.traceDir = traceDir
         self.memoryDir = memoryDir
+        self.gatewaySessionStore = gatewaySessionStore
         self._onReviewResult = onReviewResult
     }
 
@@ -76,31 +79,22 @@ actor ReviewScheduler: EventHandler {
     func handle(_ event: any AgentEvent, context: EventHandlerContext) async {
         guard !noReview else { return }
         guard !noMemory else { return }
-        guard let completedEvent = event as? AgentCompletedEvent else { return }
-        guard let orchestrator = reviewDataContext.reviewOrchestrator else { return }
+        guard event is AgentCompletedEvent else { return }
 
-        // Use totalSteps from the event itself — context.runCompleteContext is nil
-        // during event dispatch because the run hasn't returned yet.
-        let messageCount = completedEvent.totalSteps
-        var reviewConfig = ReviewAgentConfig()
-        reviewConfig.allowedTools.append("review_save_universal_memory")
-        let (doMemory, doSkill) = orchestrator.shouldReview(
-            sessionId: context.sessionId ?? "",
-            messageCount: messageCount,
-            config: reviewConfig
-        )
-
-        guard doMemory || doSkill else { return }
+        guard context.shouldReviewMemory else { return }
 
         guard let agent = reviewDataContext.agent else {
             let logger = Logger(subsystem: "com.axion.cli", category: "ReviewScheduler")
             logger.warning("Review scheduled but agent not available — skipping")
             return
         }
-        // Capture reviewDataContext reference so detached Task reads messages lazily
-        // (messages may not be populated until post-stream update completes)
-        let dataContext = self.reviewDataContext
-        var tunedConfig = ReviewAgentConfig(reviewMemory: doMemory, reviewSkills: doSkill)
+        guard let orchestrator = reviewDataContext.reviewOrchestrator else { return }
+        guard let chatId = context.chatId else { return }
+
+        let sessionStore = context.sessionStore
+        let currentSessionId = context.sessionId
+
+        var tunedConfig = ReviewAgentConfig(reviewMemory: true, reviewSkills: false)
         tunedConfig.allowedTools.append("review_save_universal_memory")
         tunedConfig.promptSuffix = """
             **Universal Memory**: In addition to `review_save_memory`, you also have access \
@@ -114,6 +108,7 @@ actor ReviewScheduler: EventHandler {
         let sessionId = context.sessionId ?? "unknown"
         let traceDir = self.traceDir
         let memoryDir = self.memoryDir
+        let gatewayStore = self.gatewaySessionStore
 
         let lastReviewAtBox = self._lastReviewAtBox
         let lastReviewSummaryBox = self._lastReviewSummaryBox
@@ -121,10 +116,31 @@ actor ReviewScheduler: EventHandler {
         let onReviewResult = self._onReviewResult
         let reviewStartTime = ContinuousClock.now
 
-        _Concurrency.Task.detached { [orchestrator, agent, dataContext, tunedConfig, sessionId, traceDir, memoryDir, lastReviewAtBox, lastReviewSummaryBox, eventBus, onReviewResult, reviewStartTime] in
-            // Wait for post-stream messages — RunOrchestrator writes them after the
-            // stream ends, which may race with this detached Task.
-            let messages = await dataContext.waitForMessages()
+        _Concurrency.Task.detached { [orchestrator, agent, tunedConfig, sessionId, chatId, sessionStore, traceDir, memoryDir, gatewayStore, lastReviewAtBox, lastReviewSummaryBox, eventBus, onReviewResult, reviewStartTime] in
+            // Load current run's messages (wait for post-stream write)
+            let dataContext = self.reviewDataContext
+            let currentMessages = await dataContext.waitForMessages()
+
+            // Load full conversation history from all sessions for this chatId
+            var allMessages: [SDKMessage] = []
+
+            // Collect all sessionIds for this chatId from GatewaySessionStore
+            let state = await gatewayStore?.state(for: chatId)
+            let olderSessionIds = state?.sessionIds.filter { $0 != sessionId } ?? []
+
+            // Load older session transcripts and convert to SDKMessage
+            for olderSid in olderSessionIds {
+                if let sessionData = try? await sessionStore.load(sessionId: olderSid) {
+                    allMessages.append(contentsOf: Self.convertTranscriptMessages(sessionData.messages))
+                }
+            }
+
+            // Append current run's messages (most reliable — already as SDKMessage)
+            allMessages.append(contentsOf: currentMessages)
+
+            // Fallback: if no history loaded, use current messages alone
+            let messages = allMessages.isEmpty ? currentMessages : allMessages
+
             let reviewResult = await orchestrator.executeReview(
                 parentAgent: agent,
                 messages: messages,
@@ -212,6 +228,36 @@ actor ReviewScheduler: EventHandler {
                     await eventBus.publish(event)
                 }
                 await onReviewResult?(event)
+            }
+        }
+    }
+
+    /// Convert transcript `[[String: Any]]` dicts (from SessionStore) to `[SDKMessage]`.
+    private static func convertTranscriptMessages(_ rawMessages: [[String: Any]]) -> [SDKMessage] {
+        rawMessages.compactMap { dict -> SDKMessage? in
+            let role = dict["type"] as? String ?? dict["role"] as? String ?? ""
+            switch role {
+            case "user":
+                let content = dict["message"] as? String ?? dict["content"] as? String ?? ""
+                guard !content.isEmpty else { return nil }
+                return .userMessage(SDKMessage.UserMessageData(
+                    uuid: dict["uuid"] as? String,
+                    sessionId: dict["session_id"] as? String ?? dict["sessionId"] as? String,
+                    message: content,
+                    parentToolUseId: dict["parent_tool_use_id"] as? String ?? dict["parentToolUseId"] as? String
+                ))
+            case "assistant":
+                let text = dict["message"] as? String ?? dict["content"] as? String ?? ""
+                guard !text.isEmpty else { return nil }
+                return .assistant(SDKMessage.AssistantData(
+                    text: text,
+                    model: dict["model"] as? String ?? "unknown",
+                    stopReason: dict["stop_reason"] as? String ?? "end_turn",
+                    uuid: dict["uuid"] as? String,
+                    sessionId: dict["session_id"] as? String ?? dict["sessionId"] as? String
+                ))
+            default:
+                return nil
             }
         }
     }

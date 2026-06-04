@@ -33,6 +33,7 @@ public struct AxionConfig: Equatable, Sendable {
     public var gatewayCuratorIntervalHours: Double?
     public var gatewayTaskTimeoutMinutes: Double?
     public var gatewayNotifyCuratorResults: Bool?
+    public var gatewayMemoryNudgeInterval: Int?
     public var telegramBotToken: String?
     public var telegramChatId: String?
     public var telegramAllowedUsers: String?
@@ -66,6 +67,7 @@ public struct AxionConfig: Equatable, Sendable {
         gatewayCuratorIntervalHours: nil,
         gatewayTaskTimeoutMinutes: nil,
         gatewayNotifyCuratorResults: nil,
+        gatewayMemoryNudgeInterval: nil,
         telegramBotToken: nil,
         telegramChatId: nil,
         telegramAllowedUsers: nil,
@@ -100,6 +102,7 @@ public struct AxionConfig: Equatable, Sendable {
         gatewayCuratorIntervalHours: Double? = nil,
         gatewayTaskTimeoutMinutes: Double? = nil,
         gatewayNotifyCuratorResults: Bool? = nil,
+        gatewayMemoryNudgeInterval: Int? = nil,
         telegramBotToken: String? = nil,
         telegramChatId: String? = nil,
         telegramAllowedUsers: String? = nil,
@@ -132,6 +135,7 @@ public struct AxionConfig: Equatable, Sendable {
         self.gatewayCuratorIntervalHours = gatewayCuratorIntervalHours
         self.gatewayTaskTimeoutMinutes = gatewayTaskTimeoutMinutes
         self.gatewayNotifyCuratorResults = gatewayNotifyCuratorResults
+        self.gatewayMemoryNudgeInterval = gatewayMemoryNudgeInterval
         self.telegramBotToken = telegramBotToken
         self.telegramChatId = telegramChatId
         self.telegramAllowedUsers = telegramAllowedUsers
@@ -142,6 +146,7 @@ public struct AxionConfig: Equatable, Sendable {
 
     public var tgTypingEnabled: Bool { telegramTypingEnabled ?? true }
     public var tgTypingInterval: Double { telegramTypingInterval ?? 4.0 }
+    public var memoryNudgeInterval: Int { gatewayMemoryNudgeInterval ?? 4 }
 }
 
 extension AxionConfig: Codable {
@@ -149,7 +154,7 @@ extension AxionConfig: Codable {
         case apiKey, provider, baseURL, model, maxSteps, maxBatches, maxReplanRetries, traceEnabled, sharedSeatMode, maxModelCalls, maxScreenshots
         case reviewMemoryInterval, reviewSkillInterval, reviewMinMessages, reviewModel
         case curatorEnabled, curatorDryRun, curatorIntervalHours, curatorStaleAfterDays, curatorArchiveAfterDays
-        case gatewayEnabled, gatewayCuratorIdleHours, gatewayCuratorIntervalHours, gatewayTaskTimeoutMinutes, gatewayNotifyCuratorResults
+        case gatewayEnabled, gatewayCuratorIdleHours, gatewayCuratorIntervalHours, gatewayTaskTimeoutMinutes, gatewayNotifyCuratorResults, gatewayMemoryNudgeInterval
         case telegramBotToken, telegramChatId, telegramAllowedUsers, telegramTypingEnabled, telegramTypingInterval
         case env
     }
@@ -181,6 +186,7 @@ extension AxionConfig: Codable {
         gatewayCuratorIntervalHours = try c.decodeIfPresent(Double.self, forKey: .gatewayCuratorIntervalHours)
         gatewayTaskTimeoutMinutes = try c.decodeIfPresent(Double.self, forKey: .gatewayTaskTimeoutMinutes)
         gatewayNotifyCuratorResults = try c.decodeIfPresent(Bool.self, forKey: .gatewayNotifyCuratorResults)
+        gatewayMemoryNudgeInterval = try c.decodeIfPresent(Int.self, forKey: .gatewayMemoryNudgeInterval)
         telegramBotToken = try c.decodeIfPresent(String.self, forKey: .telegramBotToken)
         telegramChatId = try c.decodeIfPresent(String.self, forKey: .telegramChatId)
         telegramAllowedUsers = try c.decodeIfPresent(String.self, forKey: .telegramAllowedUsers)

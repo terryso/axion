@@ -19,7 +19,10 @@ protocol DaemonRuntimeManaging: Sendable {
         runOverrides: AxionRuntime.RunOverrides,
         handlerProfile: HandlerProfile,
         extraHandlers: [any EventHandler],
-        sessionId: String?
+        sessionId: String?,
+        chatId: Int64?,
+        shouldReviewMemory: Bool,
+        shouldReviewSkills: Bool
     ) async throws -> AxionRunResult
 
     /// Resume an existing session with additional event handlers.
@@ -30,7 +33,10 @@ protocol DaemonRuntimeManaging: Sendable {
         eventBus: EventBus,
         runOverrides: AxionRuntime.RunOverrides,
         handlerProfile: HandlerProfile,
-        extraHandlers: [any EventHandler]
+        extraHandlers: [any EventHandler],
+        chatId: Int64?,
+        shouldReviewMemory: Bool,
+        shouldReviewSkills: Bool
     ) async throws -> AxionRunResult
 
     /// Execute a skill through a per-request AxionRuntime with pre-registered API handlers.

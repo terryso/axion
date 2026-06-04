@@ -75,6 +75,12 @@ struct GatewayStartCommand: AsyncParsableCommand {
         let memoryDir = (ConfigManager.defaultConfigDirectory as NSString).appendingPathComponent("memory")
         let runtimeManager = Self.createRuntimeManager(traceDir)
         let reviewDataContext = ReviewDataContext()
+
+        // Create and load GatewaySessionStore for session-aware review triggering
+        let gatewaySessionsPath = (ConfigManager.defaultConfigDirectory as NSString).appendingPathComponent("gateway-sessions.json")
+        let gatewaySessionStore = GatewaySessionStore(filePath: gatewaySessionsPath)
+        try? await gatewaySessionStore.load()
+
         let gatewayProfile = HandlerProfile(
             context: .gateway,
             config: config,
@@ -90,7 +96,8 @@ struct GatewayStartCommand: AsyncParsableCommand {
             noMemory: false,
             reviewDataContext: reviewDataContext,
             traceDir: traceDir,
-            memoryDir: memoryDir
+            memoryDir: memoryDir,
+            gatewaySessionStore: gatewaySessionStore
         )
         let curatorScheduler = Self.makeCuratorScheduler(
             config: config,
@@ -171,7 +178,10 @@ struct GatewayStartCommand: AsyncParsableCommand {
                     runOverrides: runOverrides,
                     handlerProfile: gatewayProfile,
                     extraHandlers: extraHandlers,
-                    sessionId: runId
+                    sessionId: runId,
+                    chatId: nil,
+                    shouldReviewMemory: false,
+                    shouldReviewSkills: false
                 )
             } catch {
                 await bridge.stop()
@@ -257,6 +267,7 @@ struct GatewayStartCommand: AsyncParsableCommand {
                 runner: runner,
                 extraHandlers: [reviewScheduler] + (curatorScheduler.map { [$0] } ?? []),
                 handlerProfile: gatewayProfile,
+                gatewaySessionStore: gatewaySessionStore,
                 replyHandler: { (chatId: Int64, message: String) -> Int64? in
                     // Adapter not yet created; will be wired below
                     return nil

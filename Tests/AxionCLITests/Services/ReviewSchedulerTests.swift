@@ -105,7 +105,9 @@ struct ReviewSchedulerTests {
 
     private func makeContext(
         sessionId: String = "test-session",
-        runCompleteContext: RunCompleteContext? = nil
+        runCompleteContext: RunCompleteContext? = nil,
+        shouldReviewMemory: Bool = true,
+        chatId: Int64 = 12345
     ) -> EventHandlerContext {
         EventHandlerContext(
             sessionId: sessionId,
@@ -115,7 +117,9 @@ struct ReviewSchedulerTests {
             externallyModifiedFlag: nil,
             takeoverEvent: nil,
             runCompleteContext: runCompleteContext,
-            sessionStore: SessionStore(sessionsDir: nil)
+            sessionStore: SessionStore(sessionsDir: nil),
+            chatId: chatId,
+            shouldReviewMemory: shouldReviewMemory
         )
     }
 
@@ -232,7 +236,6 @@ struct ReviewSchedulerTests {
             try? await _Concurrency.Task.sleep(nanoseconds: 50_000_000)
         }
 
-        #expect(mockOrchestrator.callTracker.shouldReviewConfig?.allowedTools.contains("review_save_universal_memory") == true)
         #expect(mockOrchestrator.callTracker.executeReviewConfig?.allowedTools.contains("review_save_universal_memory") == true)
     }
 
@@ -280,7 +283,14 @@ struct ReviewSchedulerTests {
         }
 
         #expect(content.contains("以后回答不要加 emoji"))
-        #expect(scheduler.lastReviewSummaryValue == "新增 1 条记忆")
+        // Wait for detached task to update lastReviewSummaryValue
+        var summaryValue: String?
+        let summaryDeadline = ContinuousClock.now + .seconds(3)
+        while summaryValue == nil, ContinuousClock.now < summaryDeadline {
+            try? await _Concurrency.Task.sleep(nanoseconds: 50_000_000)
+            summaryValue = scheduler.lastReviewSummaryValue
+        }
+        #expect(summaryValue == "新增 1 条记忆")
     }
 
     // MARK: - Task 4.3: lastReviewAt state update
@@ -508,7 +518,7 @@ struct ReviewSchedulerTests {
         #expect(!mockOrchestrator.callTracker.executeReviewCalled)
     }
 
-    @Test("shouldReview returning false does not trigger review")
+    @Test("shouldReviewMemory false does not trigger review")
     func testShouldReviewFalseSkips() async {
         let mockOrchestrator = MockReviewOrchestrator(
             shouldReviewResult: (memory: false, skill: false),
@@ -530,7 +540,7 @@ struct ReviewSchedulerTests {
             traceDir: "/tmp/test-trace"
         )
 
-        let context = makeContext(runCompleteContext: makeRunCompleteContext(numTurns: 3))
+        let context = makeContext(runCompleteContext: makeRunCompleteContext(numTurns: 3), shouldReviewMemory: false)
         let event = makeCompletedEvent()
 
         await scheduler.handle(event, context: context)
@@ -853,7 +863,9 @@ struct ReviewSchedulerTests {
     private func makeContextWithEventBus(
         _ eventBus: EventBus,
         sessionId: String = "test-session",
-        runCompleteContext: RunCompleteContext? = nil
+        runCompleteContext: RunCompleteContext? = nil,
+        shouldReviewMemory: Bool = true,
+        chatId: Int64 = 12345
     ) -> EventHandlerContext {
         EventHandlerContext(
             sessionId: sessionId,
@@ -863,7 +875,9 @@ struct ReviewSchedulerTests {
             externallyModifiedFlag: nil,
             takeoverEvent: nil,
             runCompleteContext: runCompleteContext,
-            sessionStore: SessionStore(sessionsDir: nil)
+            sessionStore: SessionStore(sessionsDir: nil),
+            chatId: chatId,
+            shouldReviewMemory: shouldReviewMemory
         )
     }
 }

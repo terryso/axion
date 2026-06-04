@@ -134,7 +134,10 @@ struct ServerCommand: AsyncParsableCommand {
                     runOverrides: .default,
                     handlerProfile: apiProfile,
                     extraHandlers: [],
-                    sessionId: runId
+                    sessionId: runId,
+                    chatId: nil,
+                    shouldReviewMemory: false,
+                    shouldReviewSkills: false
                 )
             } catch {
                 await bridge.stop()

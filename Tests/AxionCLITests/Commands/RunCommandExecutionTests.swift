@@ -68,6 +68,10 @@ actor MockAxionRuntime: AxionRuntimeRunning {
         if let error = executeError { throw error }
         return executeResult!
     }
+
+    func setContextOverrides(chatId: Int64?, shouldReviewMemory: Bool, shouldReviewSkills: Bool) async {
+        // no-op for tests
+    }
 }
 
 // MARK: - Helpers

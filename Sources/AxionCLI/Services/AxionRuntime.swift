@@ -16,6 +16,9 @@ public actor AxionRuntime: AxionRuntimeRunning, AxionRuntimeResuming, SessionLis
     private var externallyModifiedFlag = ExternallyModifiedFlag()
     private(set) var takeoverEvent: RunMemoryProcessor.TakeoverEventContext?
     private var runCompleteBox: RunCompleteContextBox?
+    private var contextChatId: Int64?
+    private var contextShouldReviewMemory: Bool = false
+    private var contextShouldReviewSkills: Bool = false
     private var handlers: [any EventHandler] = []
     private var eventSubscriptionId: UUID?
 
@@ -446,6 +449,12 @@ public actor AxionRuntime: AxionRuntimeRunning, AxionRuntimeResuming, SessionLis
         handlers.append(handler)
     }
 
+    func setContextOverrides(chatId: Int64?, shouldReviewMemory: Bool, shouldReviewSkills: Bool) async {
+        contextChatId = chatId
+        contextShouldReviewMemory = shouldReviewMemory
+        contextShouldReviewSkills = shouldReviewSkills
+    }
+
     func startEventLoop() async {
         guard let bus = eventBus, eventSubscriptionId == nil else { return }
         let (id, stream) = await bus.subscribe()
@@ -473,7 +482,10 @@ public actor AxionRuntime: AxionRuntimeRunning, AxionRuntimeResuming, SessionLis
             externallyModifiedFlag: externallyModifiedFlag,
             takeoverEvent: takeoverEvent,
             runCompleteContext: runCompleteBox?.context,
-            sessionStore: sessionStore
+            sessionStore: sessionStore,
+            chatId: contextChatId,
+            shouldReviewMemory: contextShouldReviewMemory,
+            shouldReviewSkills: contextShouldReviewSkills
         )
         for handler in handlers {
             let shouldDispatch = await shouldDispatch(event: event, to: handler)

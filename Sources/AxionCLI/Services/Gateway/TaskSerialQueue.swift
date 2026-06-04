@@ -35,6 +35,7 @@ actor TaskSerialQueue: TaskSerialQueueProtocol {
         let userId: Int64
         let shouldResume: Bool
         let existingSessionId: String?
+        let shouldReviewMemory: Bool
     }
 
     private struct TaskTimeoutError: Error {}
@@ -60,6 +61,7 @@ actor TaskSerialQueue: TaskSerialQueueProtocol {
     private var chatActionHandler: @Sendable (Int64, String) async -> Void
     private let sessionStore: TGInteractiveSessionStore?
     private var sendMessageWithMarkupHandler: @Sendable (Int64, String, TGInlineKeyboardMarkup?) async -> Int64?
+    private let gatewaySessionStore: GatewaySessionStore?
 
     init(
         runtimeManager: any DaemonRuntimeManaging,
@@ -67,6 +69,7 @@ actor TaskSerialQueue: TaskSerialQueueProtocol {
         runner: GatewayRunner,
         extraHandlers: [any EventHandler] = [],
         handlerProfile: HandlerProfile,
+        gatewaySessionStore: GatewaySessionStore? = nil,
         replyHandler: @Sendable @escaping (Int64, String) async -> Int64?,
         editHandler: @Sendable @escaping (Int64, Int64, String) async -> Bool = { _, _, _ in false },
         chatActionHandler: @Sendable @escaping (Int64, String) async -> Void = { _, _ in },
@@ -78,6 +81,7 @@ actor TaskSerialQueue: TaskSerialQueueProtocol {
         self.runner = runner
         self.extraHandlers = extraHandlers
         self.handlerProfile = handlerProfile
+        self.gatewaySessionStore = gatewaySessionStore
         self.replyHandler = replyHandler
         self.editHandler = editHandler
         self.chatActionHandler = chatActionHandler
@@ -109,13 +113,28 @@ actor TaskSerialQueue: TaskSerialQueueProtocol {
             shouldResume = false
             existingSessionId = nil
         }
+        // Track user turns for session-aware review triggering (non-resume only)
+        var shouldReviewMemory = false
+        if !shouldResume {
+            if let store = gatewaySessionStore {
+                await store.recordTurn(chatId: chatId, sessionId: existingSessionId ?? "")
+                let state = await store.state(for: chatId)
+                let nudgeInterval = config.memoryNudgeInterval
+                shouldReviewMemory = (state?.turnsSinceMemory ?? 0) >= nudgeInterval
+                if shouldReviewMemory {
+                    await store.resetMemoryCounter(chatId: chatId)
+                }
+            }
+        }
+
         let pendingCount = queue.count
         queue.append(PendingTask(
             task: task,
             chatId: chatId,
             userId: userId,
             shouldResume: shouldResume,
-            existingSessionId: existingSessionId
+            existingSessionId: existingSessionId,
+            shouldReviewMemory: shouldReviewMemory
         ))
         if isExecuting {
             _ = await replyHandler(chatId, "任务已排队 (队列: \(pendingCount + 1))")
@@ -176,6 +195,9 @@ actor TaskSerialQueue: TaskSerialQueueProtocol {
                 )
             }
             updateSession(from: result, chatId: pending.chatId)
+            if let store = gatewaySessionStore {
+                await store.recordSessionId(chatId: pending.chatId, sessionId: result.sessionId)
+            }
         } catch is TaskTimeoutError {
             _ = await replyHandler(pending.chatId, "任务超时已取消 (\(Int(timeoutMinutes)) 分钟)")
         } catch is CancellationError {
@@ -216,6 +238,9 @@ actor TaskSerialQueue: TaskSerialQueueProtocol {
 
     func clearSession(chatId: Int64) async {
         chatSessions.removeValue(forKey: chatId)
+        if let store = gatewaySessionStore {
+            await store.clearSession(chatId: chatId)
+        }
     }
 
     func updateReplyHandler(_ handler: @Sendable @escaping (Int64, String) async -> Int64?) {
@@ -336,7 +361,10 @@ actor TaskSerialQueue: TaskSerialQueueProtocol {
                     runOverrides: self.makeGatewayRunOverrides(),
                     handlerProfile: self.handlerProfile,
                     extraHandlers: allHandlers,
-                    sessionId: nil
+                    sessionId: nil,
+                    chatId: pending.chatId,
+                    shouldReviewMemory: pending.shouldReviewMemory,
+                    shouldReviewSkills: false
                 )
                 await tgHandler.finishRun(responseText: result.responseText)
                 return result
@@ -407,7 +435,10 @@ actor TaskSerialQueue: TaskSerialQueueProtocol {
                         eventBus: eventBus,
                         runOverrides: self.makeGatewayRunOverrides(),
                         handlerProfile: self.handlerProfile,
-                        extraHandlers: allHandlers
+                        extraHandlers: allHandlers,
+                        chatId: pending.chatId,
+                        shouldReviewMemory: pending.shouldReviewMemory,
+                        shouldReviewSkills: false
                     )
                     await tgHandler.finishRun(responseText: result.responseText)
                     return result

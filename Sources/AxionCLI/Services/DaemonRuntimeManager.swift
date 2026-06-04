@@ -28,13 +28,18 @@ actor DaemonRuntimeManager: DaemonRuntimeManaging {
         runOverrides: AxionRuntime.RunOverrides = .default,
         handlerProfile: HandlerProfile,
         extraHandlers: [any EventHandler] = [],
-        sessionId: String? = nil
+        sessionId: String? = nil,
+        chatId: Int64? = nil,
+        shouldReviewMemory: Bool = false,
+        shouldReviewSkills: Bool = false
     ) async throws -> AxionRunResult {
         let runtime = runtimeFactory(eventBus)
 
         for handler in handlerProfile.buildHandlers() + extraHandlers {
             await runtime.registerHandler(handler)
         }
+
+        await runtime.setContextOverrides(chatId: chatId, shouldReviewMemory: shouldReviewMemory, shouldReviewSkills: shouldReviewSkills)
 
         let eventLoopTask = _Concurrency.Task { await runtime.startEventLoop() }
 
@@ -71,13 +76,18 @@ actor DaemonRuntimeManager: DaemonRuntimeManaging {
         eventBus: EventBus,
         runOverrides: AxionRuntime.RunOverrides = .default,
         handlerProfile: HandlerProfile,
-        extraHandlers: [any EventHandler] = []
+        extraHandlers: [any EventHandler] = [],
+        chatId: Int64? = nil,
+        shouldReviewMemory: Bool = false,
+        shouldReviewSkills: Bool = false
     ) async throws -> AxionRunResult {
         let runtime = runtimeFactory(eventBus)
 
         for handler in handlerProfile.buildHandlers() + extraHandlers {
             await runtime.registerHandler(handler)
         }
+
+        await runtime.setContextOverrides(chatId: chatId, shouldReviewMemory: shouldReviewMemory, shouldReviewSkills: shouldReviewSkills)
 
         let eventLoopTask = _Concurrency.Task { await runtime.startEventLoop() }
 

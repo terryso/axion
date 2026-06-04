@@ -35,7 +35,7 @@ struct TaskSerialQueueTests {
             resumeError = error
         }
 
-        func executeRun(task: String, buildConfig: AgentBuilder.BuildConfig, eventBus: OpenAgentSDK.EventBus, runOverrides: AxionRuntime.RunOverrides, handlerProfile: HandlerProfile, extraHandlers: [any EventHandler], sessionId: String? = nil) async throws -> AxionRunResult {
+        func executeRun(task: String, buildConfig: AgentBuilder.BuildConfig, eventBus: OpenAgentSDK.EventBus, runOverrides: AxionRuntime.RunOverrides, handlerProfile: HandlerProfile, extraHandlers: [any EventHandler], sessionId: String? = nil, chatId: Int64? = nil, shouldReviewMemory: Bool = false, shouldReviewSkills: Bool = false) async throws -> AxionRunResult {
             executedTasks.append(task)
             executeCallCount += 1
             if let delay = delays[task] {
@@ -55,7 +55,7 @@ struct TaskSerialQueueTests {
             return result
         }
 
-        func resumeRun(sessionId: String, task: String, buildConfig: AgentBuilder.BuildConfig, eventBus: OpenAgentSDK.EventBus, runOverrides: AxionRuntime.RunOverrides, handlerProfile: HandlerProfile, extraHandlers: [any EventHandler]) async throws -> AxionRunResult {
+        func resumeRun(sessionId: String, task: String, buildConfig: AgentBuilder.BuildConfig, eventBus: OpenAgentSDK.EventBus, runOverrides: AxionRuntime.RunOverrides, handlerProfile: HandlerProfile, extraHandlers: [any EventHandler], chatId: Int64? = nil, shouldReviewMemory: Bool = false, shouldReviewSkills: Bool = false) async throws -> AxionRunResult {
             if let error = resumeError {
                 throw error
             }

@@ -3,6 +3,7 @@ import OpenAgentSDK
 
 protocol AxionRuntimeRunning: Sendable {
     func registerHandler(_ handler: any EventHandler) async
+    func setContextOverrides(chatId: Int64?, shouldReviewMemory: Bool, shouldReviewSkills: Bool) async
     func startEventLoop() async
     func stopEventLoop() async
     func execute(

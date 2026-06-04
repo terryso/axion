@@ -29,4 +29,33 @@ struct EventHandlerContext: Sendable {
     let takeoverEvent: RunMemoryProcessor.TakeoverEventContext?
     let runCompleteContext: RunCompleteContext?
     let sessionStore: SessionStore
+    let chatId: Int64?
+    let shouldReviewMemory: Bool
+    let shouldReviewSkills: Bool
+
+    init(
+        sessionId: String?,
+        config: AxionConfig,
+        eventBus: EventBus?,
+        externallyModified: Bool,
+        externallyModifiedFlag: ExternallyModifiedFlag?,
+        takeoverEvent: RunMemoryProcessor.TakeoverEventContext?,
+        runCompleteContext: RunCompleteContext?,
+        sessionStore: SessionStore,
+        chatId: Int64? = nil,
+        shouldReviewMemory: Bool = false,
+        shouldReviewSkills: Bool = false
+    ) {
+        self.sessionId = sessionId
+        self.config = config
+        self.eventBus = eventBus
+        self.externallyModified = externallyModified
+        self.externallyModifiedFlag = externallyModifiedFlag
+        self.takeoverEvent = takeoverEvent
+        self.runCompleteContext = runCompleteContext
+        self.sessionStore = sessionStore
+        self.chatId = chatId
+        self.shouldReviewMemory = shouldReviewMemory
+        self.shouldReviewSkills = shouldReviewSkills
+    }
 }
