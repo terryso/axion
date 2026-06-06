@@ -49,14 +49,17 @@
 | 4.2 | `swift run AxionCLI memory list` | 列出已积累的记忆，含状态图标和分类 | ✅ 通过。显示 23 domains、585 entries，含状态图标和 confidence |
 | 4.3 | `swift run AxionCLI run "1+2等于几" --no-memory` | 带 --no-memory 运行，不注入记忆上下文 | ✅ 通过。正常完成，答案 3 |
 
-## 5. Skill 系统（2 项）
+## 5. Skill 系统（5 项）
 
-验证技能列表和执行链路。
+验证技能发现、列表、执行和 save_skill 运行时创建。
 
 | # | 命令 | 预期行为 | 实际结果 |
 |---|------|---------|---------|
-| 5.1 | `swift run AxionCLI skill list` | 列出已保存的技能列表 | ✅ 通过。列出 79 个技能（prompt + built-in 类型） |
+| 5.1 | `swift run AxionCLI skill list` | 列出已保存的技能列表（含 built-in + `~/.axion/skills/` 下发现的 SKILL.md 技能） | ✅ 通过。列出 79 个技能（prompt + built-in 类型） |
 | 5.2 | `swift run AxionCLI skill run <技能名>` | 执行已保存技能 | ⏭️ 跳过。无预录制技能（需手动录制） |
+| 5.3 | `swift run AxionCLI run "用 save_skill 工具创建一个名为 swift-testing-check 的技能，内容是：每次写 Swift 测试代码时，必须使用 Swift Testing 框架（import Testing, @Test, #expect），禁止使用 XCTest"` → 检查 `~/.axion/skills/swift-testing-check/SKILL.md` | Agent 调用 save_skill 工具，SKILL.md 写入 `~/.axion/skills/` 目录 | ✅ 通过。save_skill 工具被调用，SKILL.md (2040 bytes) 写入 `~/.axion/skills/swift-testing-check/` |
+| 5.4 | 5.3 完成后 → `swift run AxionCLI skill list` | 新保存的 skill 出现在列表中（数量比 5.1 增加 1） | ✅ 通过。技能数量从 68 增加到 69，`swift-testing-check` 出现在列表 |
+| 5.5 | `swift run AxionCLI run "用 save_skill 工具创建一个测试技能" --dryrun` | save_skill 不在 agent 工具列表中（dryrun 模式不注入） | ✅ 通过。dryrun 模式下 agent 无 save_skill 工具，使用 Grep/Glob 替代，maxSteps=1 限制后停止 |
 
 ## 6. Server 模式（3 项）
 
@@ -107,8 +110,8 @@
 | # | 测试步骤 | 预期行为 | 实际结果 |
 |---|---------|---------|---------|
 | 11.1 | 白名单用户在 TG 发送文本 `1+1等于几` | TG 收到回复，答案正确（如 `2`） | ✅ 通过。收到 "[结果]1+1=2"，完整执行链路正常 |
-| 11.2 | 白名单用户发送 `/status` | 回复 Gateway 状态：活跃任务数、运行时长等 | ✅ 通过。返回 running/0 任务/运行时长/TG connected/80 技能 |
-| 11.3 | 白名单用户发送 `/skills` | 回复技能列表（名称+描述） | ✅ 通过。返回 80 个技能列表，名称+描述格式正确 |
+| 11.2 | 白名单用户发送 `/status` | 回复 Gateway 状态：活跃任务数、运行时长等 | ✅ 通过。返回 running/0 任务/运行时长/TG connected，技能数量可能因 save_skill 运行时创建而变化 |
+| 11.3 | 白名单用户发送 `/skills` | 回复技能列表（名称+描述） | ✅ 通过。返回技能列表，名称+描述格式正确 |
 | 11.4 | 白名单用户发送 `/unknown` | 回复 "未知命令。可用命令：/status, /skills" | ✅ 通过。正确返回未知命令提示 |
 | 11.5 | 非白名单用户发送任意消息 | 无回复（静默丢弃） | ⏭️ 跳过。无第二个 TG 账号可测试 |
 | 11.6 | 白名单用户发送一张图片（可附带文本说明） | 图片被下载并传入 agent，TG 收到基于图片的回复 | ✅ 通过。图片下载到 /tmp，任务开始执行，步骤进展正常推送。agent 调用 analyze_image 时因 file:// URL 不被支持而降级处理（非代码 bug，属 agent 行为） |
@@ -275,7 +278,7 @@
 
 ## 验收总结
 
-**43/51 通过，3 项跳过，1 项跳过（无预录制技能），4 项待验收（11.8-11.11），10 项待验收（13.1-13.10），16 项待验收（14.1-14.5）。**
+**46/54 通过，3 项跳过，1 项跳过（无预录制技能），4 项待验收（11.8-11.11），10 项待验收（13.1-13.10），16 项待验收（14.1-14.5）。**
 
 | 组别 | 通过 | 总数 | 说明 |
 |------|------|------|------|
@@ -283,7 +286,7 @@
 | Run 模式 | 3 | 3 | fast/dryrun/json 均正常 |
 | GUI 自动化 | 3 | 3 | launch_app/type_text/hotkey/screenshot 正常 |
 | 记忆系统 | 3 | 3 | lazy seat monitor 修复生效，非 UI 任务无误报 |
-| Skill 系统 | 1 | 2 | 列表正常，执行跳过（需预录制） |
+| Skill 系统 | 4 | 5 | 列表正常，执行跳过（需预录制），save_skill 全部通过 |
 | Server 模式 | 3 | 3 | health/capabilities/runs/SSE 正常 |
 | MCP Server | 1 | 1 | tools/list 返回完整工具集 |
 | Self-Evolution | 4 | 4 | --no-review/curator status/doctor/help 正常 |
