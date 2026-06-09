@@ -40,10 +40,10 @@ struct TranscriptIntegrationTests {
         let output = stdout.captured
         // 应包含黄色圆点 ANSI 码
         #expect(output.contains("\u{1B}[33m"))
-        // 仍包含工具名
-        #expect(output.contains("Bash"))
-        // 仍包含 ⏳ 图标（增量添加，不替换）
-        #expect(output.contains("⏳"))
+        // Codex-inspired: 包含类别标签（exec for Bash）
+        #expect(output.contains("exec"))
+        // 包含类别图标
+        #expect(output.contains("🔧"))
     }
 
     @Test("toolUse: 非 TTY 模式输出 [tool] 纯文本前缀")
@@ -53,8 +53,8 @@ struct TranscriptIntegrationTests {
             .init(toolName: "Bash", toolUseId: "tu-1", input: "{\"command\":\"ls\"}")
         ))
         let output = stdout.captured
-        #expect(output.contains("[tool]"))
-        #expect(output.contains("Bash"))
+        #expect(output.contains("exec"))
+        #expect(output.contains("🔧"))
     }
 
     // MARK: - toolResult 角色标识 (AC3)
@@ -73,7 +73,7 @@ struct TranscriptIntegrationTests {
         ))
         let output = stdout.captured
         #expect(output.contains("\u{1B}[33m"))
-        #expect(output.contains("✅"))
+        #expect(output.contains("✓"))
     }
 
     @Test("toolResult error: TTY 模式输出包含红色圆点")
@@ -89,7 +89,7 @@ struct TranscriptIntegrationTests {
         ))
         let output = stdout.captured
         #expect(output.contains("\u{1B}[31m"))
-        #expect(output.contains("❌"))
+        #expect(output.contains("✗"))
     }
 
     // MARK: - result 状态角色标识 (AC3)
@@ -145,16 +145,16 @@ struct TranscriptIntegrationTests {
 
     // MARK: - 向后兼容（增量添加，不破坏现有图标）
 
-    @Test("toolUse: 集成后仍保留 ⏳ 图标")
-    func toolUse_retainsHourglassIcon() {
+    @Test("toolUse: 集成后仍保留类别图标")
+    func toolUse_retainsCategoryIcon() {
         let (formatter, stdout, _) = makeThemedFormatter(profile: .ansi16, isTTY: true)
         formatter.handle(.toolUse(
             .init(toolName: "Bash", toolUseId: "tu-1", input: "{\"command\":\"ls\"}")
         ))
-        #expect(stdout.captured.contains("⏳"))
+        #expect(stdout.captured.contains("🔧"))
     }
 
-    @Test("toolResult success: 集成后仍保留 ✅ 图标")
+    @Test("toolResult success: 集成后仍保留 ✓ 图标")
     func toolResult_retainsCheckIcon() {
         let (formatter, stdout, _) = makeThemedFormatter(profile: .ansi16, isTTY: true)
         formatter.handle(.toolUse(
@@ -164,10 +164,10 @@ struct TranscriptIntegrationTests {
         formatter.handle(.toolResult(
             .init(toolUseId: "tu-1", content: "ok", isError: false)
         ))
-        #expect(stdout.captured.contains("✅"))
+        #expect(stdout.captured.contains("✓"))
     }
 
-    @Test("toolResult error: 集成后仍保留 ❌ 图标")
+    @Test("toolResult error: 集成后仍保留 ✗ 图标")
     func toolResult_retainsCrossIcon() {
         let (formatter, stdout, _) = makeThemedFormatter(profile: .ansi16, isTTY: true)
         formatter.handle(.toolUse(
@@ -177,7 +177,7 @@ struct TranscriptIntegrationTests {
         formatter.handle(.toolResult(
             .init(toolUseId: "tu-2", content: "fail", isError: true)
         ))
-        #expect(stdout.captured.contains("❌"))
+        #expect(stdout.captured.contains("✗"))
     }
 
     // MARK: - 无主题（nil theme）向后兼容
@@ -197,7 +197,7 @@ struct TranscriptIntegrationTests {
             .init(toolName: "Bash", toolUseId: "tu-1", input: "{\"command\":\"ls\"}")
         ))
         let output = stdout.captured
-        #expect(output.contains("⏳"))
-        #expect(output.contains("Bash"))
+        #expect(output.contains("🔧"))
+        #expect(output.contains("exec"))
     }
 }

@@ -13,6 +13,7 @@ final class ChatOutputFormatter: OpenAgentSDK.SDKMessageOutputHandler, @unchecke
     private let writeStderr: (String) -> Void
     private let spinner: SpinnerRenderer
     private var toolStartTimes: [String: ContinuousClock.Instant] = [:]
+    private var toolNames: [String: String] = [:]  // toolUseId → toolName lookup
     private var hasOutputText = false  // 跟踪是否已输出 LLM 文本（用于空行分隔）
 
     // AC1/AC2/AC3: 角色视觉语义层
@@ -116,10 +117,14 @@ final class ChatOutputFormatter: OpenAgentSDK.SDKMessageOutputHandler, @unchecke
             }
 
             toolStartTimes[data.toolUseId] = .now
+            toolNames[data.toolUseId] = data.toolName
 
-            // AC3: 工具事件角色标识（增量添加，保留原有 ⏳ 图标）
-            let inputSummary = summarizeInput(data.input)
-            writeToolLine(role: .tool, content: "⏳ \(data.toolName): \(inputSummary)\n")
+            // Codex-inspired: 按工具类别使用不同的视觉样式
+            let startedLine = ToolCategoryFormatter.formatStarted(
+                toolName: data.toolName,
+                input: data.input
+            )
+            writeToolLine(role: .tool, content: startedLine)
 
             // 启动工具执行 spinner（立即，无延迟）
             spinner.start(message: data.toolName)
@@ -131,19 +136,22 @@ final class ChatOutputFormatter: OpenAgentSDK.SDKMessageOutputHandler, @unchecke
         case .toolResult(let data):
             spinner.stop()
 
-            let toolDuration = toolStartTimes.removeValue(forKey: data.toolUseId).map {
-                formatDuration(ContinuousClock.now - $0)
+            let toolDurationMs = toolStartTimes.removeValue(forKey: data.toolUseId).map {
+                durationToMs(ContinuousClock.now - $0)
             }
-            let durationStr = toolDuration.map { " [\($0)]" } ?? ""
+            let resolvedToolName = toolNames.removeValue(forKey: data.toolUseId) ?? "unknown"
 
+            // Codex-inspired: 按工具类别使用不同的结果格式化
+            let completedLine = ToolCategoryFormatter.formatCompleted(
+                toolName: resolvedToolName,
+                content: data.content,
+                isError: data.isError,
+                durationMs: toolDurationMs
+            )
             if data.isError {
-                let errorSummary = summarizeToolContent(String(data.content.prefix(200)), maxLines: 3)
-                // AC3: 错误结果使用红色圆点
-                writeToolLine(role: .warning, content: "\r❌ \(errorSummary)\(durationStr)\n")
+                writeToolLine(role: .warning, content: "\r\(completedLine)")
             } else {
-                let resultSummary = summarizeToolContent(data.content, maxLines: 3)
-                // AC3: 成功结果使用黄色圆点
-                writeToolLine(role: .tool, content: "\r✅ \(resultSummary)\(durationStr)\n")
+                writeToolLine(role: .tool, content: "\r\(completedLine)")
             }
 
             // 工具结果后开始等待 LLM 下一轮响应（500ms 延迟 spinner）

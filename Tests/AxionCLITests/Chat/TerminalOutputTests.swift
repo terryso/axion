@@ -25,7 +25,7 @@ struct ChatOutputFormatterTests {
 
     // MARK: - Tool Use Format (AC #1)
 
-    @Test("toolUse: 显示 ⏳ <工具名>: <参数摘要>")
+    @Test("toolUse: 按类别显示工具标签和参数摘要")
     func toolUseFormat() {
         let (formatter, stdout, _) = makeFormatter()
         let toolUse = SDKMessage.toolUse(
@@ -33,13 +33,14 @@ struct ChatOutputFormatterTests {
         )
         formatter.handle(toolUse)
         let output = stdout.captured
-        #expect(output.contains("⏳ Bash:"))
+        // Codex-inspired: 按类别显示 "exec" 标签而非通用 ⏳
+        #expect(output.contains("exec"))
         #expect(output.contains("ls -la"))
     }
 
     // MARK: - Tool Result Format (AC #1)
 
-    @Test("toolResult success: 显示 ✅ <结果摘要> [<耗时>]")
+    @Test("toolResult success: 显示 ✓ 完成标记")
     func toolResultSuccess() {
         let (formatter, stdout, _) = makeFormatter()
 
@@ -56,11 +57,12 @@ struct ChatOutputFormatterTests {
         )
         formatter.handle(toolResult)
         let output = stdout.captured
-        #expect(output.contains("✅"))
+        // Codex-inspired: ✓ 标记（而非 ✅）
+        #expect(output.contains("✓"))
         #expect(output.contains("file1.txt"))
     }
 
-    @Test("toolResult error: 显示 ❌ <错误摘要>")
+    @Test("toolResult error: 显示 ✗ 错误标记")
     func toolResultError() {
         let (formatter, stdout, _) = makeFormatter()
 
@@ -76,7 +78,8 @@ struct ChatOutputFormatterTests {
         )
         formatter.handle(toolResult)
         let output = stdout.captured
-        #expect(output.contains("❌"))
+        // Codex-inspired: ✗ 标记（而非 ❌）
+        #expect(output.contains("✗"))
         #expect(output.contains("command not found"))
     }
 
@@ -112,12 +115,14 @@ struct ChatOutputFormatterTests {
 
         // 应在工具调用前有空行分隔
         let output = stdout.captured
-        #expect(output.hasPrefix("\n⏳"))
+        // Codex-inspired: 类别标签格式（非 ⏳）
+        #expect(output.hasPrefix("\n"))
+        #expect(output.contains("exec"))
     }
 
     // MARK: - Screenshot Detection
 
-    @Test("toolResult: screenshot 内容摘要为 [screenshot captured]")
+    @Test("toolResult: screenshot 完成显示 ✓ 标记")
     func screenshotResultSummarized() {
         let (formatter, stdout, _) = makeFormatter()
 
@@ -130,7 +135,8 @@ struct ChatOutputFormatterTests {
             .init(toolUseId: "tu-4", content: "{\"action\":\"screenshot\",\"image_data\":\"...\"}", isError: false)
         ))
         let output = stdout.captured
-        #expect(output.contains("[screenshot captured]"))
+        // Codex-inspired: ✓ 标记代替旧的 ✅
+        #expect(output.contains("✓"))
     }
 
     // MARK: - Result Status
@@ -190,7 +196,7 @@ struct ChatOutputFormatterTests {
             .init(toolUseId: "tu-5", content: "file.txt", isError: false)
         ))
 
-        #expect(stdout.captured.contains("✅"))
+        #expect(stdout.captured.contains("✓"))
 
         // 然后收到 partialMessage → spinner 停止（无崩溃）
         formatter.handle(.partialMessage(.init(text: "Done!")))
