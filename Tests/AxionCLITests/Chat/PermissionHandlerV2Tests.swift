@@ -157,7 +157,7 @@ struct PermissionHandlerV2Tests {
         #expect(result?.message?.contains("拒绝") == true)
     }
 
-    @Test("空输入 → cancel")
+    @Test("空输入 → decline")
     func shortcutCancelEmpty() async {
         let allowList = SessionAllowListRef()
         let canUseTool = PermissionHandler.createCanUseTool(
@@ -169,7 +169,7 @@ struct PermissionHandlerV2Tests {
         let tool = MockTool(toolName: "Bash", readOnly: false)
         let result = await canUseTool(tool, ["command": "ls"], makeContext())
         #expect(result?.behavior == .deny)
-        #expect(result?.message?.contains("取消") == true)
+        #expect(result?.message?.contains("拒绝") == true)
     }
 
     // MARK: - AC8: 非 TTY 安全降级
@@ -357,11 +357,11 @@ struct PermissionHandlerV2Tests {
         #expect(decision == .decline)
     }
 
-    @Test("mapInputToDecision: 空 → cancel")
+    @Test("mapInputToDecision: 空 → decline")
     func mapEmpty() {
         let options = ApprovalOption.allOptions(toolName: "Bash", input: ["command": "ls"])
         let decision = PermissionHandler.mapInputToDecision("", options: options)
-        #expect(decision == .cancel)
+        #expect(decision == .decline)
     }
 
     @Test("mapInputToDecision: 未知字符 → decline")

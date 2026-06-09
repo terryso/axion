@@ -1,4 +1,5 @@
 import Darwin
+import Dispatch
 
 /// ESC 键中断监听器 — agent streaming 期间并发监听 ESC 按键。
 ///
@@ -11,16 +12,25 @@ import Darwin
 /// 2. streaming 循环运行中 → Task 轮询 stdin
 /// 3. `cancel()` → 停止 Task + 恢复 termios
 ///
+/// 权限提示期间可调用 `pause()` 暂停 stdin 轮询和恢复 canonical mode，
+/// 让 `readLine()` 能正常读取用户输入；权限响应后调用 `resume()` 恢复监听。
+///
 /// 线程安全：`cancel()` 可从任意线程/actor 调用（通过 Task.cancel()）。
 final class EscapeInterruptListener: @unchecked Sendable {
     private let originalTermios: termios
     private let storedTermios: Bool
-    private let task: Task<Void, Never>
+    private var task: Task<Void, Never>?
+    private var isPaused: Bool = false
+    private let onEscape: @Sendable () -> Void
+    /// 信号量 — 确认 polling Task 已完全退出（解决与 readLine() 的竞争）
+    private let taskStopped = DispatchSemaphore(value: 0)
 
     /// 启动 ESC 监听。
     ///
     /// - Parameter onEscape: 检测到 ESC 时调用的闭包（调用 `agent.interrupt()`）。
     init(onEscape: @escaping @Sendable () -> Void) {
+        self.onEscape = onEscape
+
         // 保存当前 termios
         var original = termios()
         let stored = tcgetattr(STDIN_FILENO, &original) == 0
@@ -29,39 +39,143 @@ final class EscapeInterruptListener: @unchecked Sendable {
 
         // 进入最小化 raw mode（仅影响输入，保留 OPOST 保证输出正常）
         if stored {
-            var raw = original
-            raw.c_iflag &= ~UInt(ICRNL | IXON)
-            raw.c_lflag &= ~UInt(ECHO | ICANON | ISIG)
-            raw.c_cc.16 = 0  // VMIN = 0（非阻塞）
-            raw.c_cc.17 = 1  // VTIME = 1（100ms 超时轮询）
-            tcsetattr(STDIN_FILENO, TCSANOW, &raw)
+            applyRawMode()
         }
 
         // 启动并发监听 Task
-        task = Task<Void, Never> { [stored] in
-            guard stored else { return }
+        self.task = startPollingTask()
+    }
+
+    // MARK: - Pause / Resume（供权限提示使用）
+
+    /// 暂停 ESC 监听：停止 polling Task 并恢复 canonical mode。
+    ///
+    /// 调用后 `readLine()` 可以正常工作（终端回到 canonical mode，无并发 Task 抢夺 stdin）。
+    /// - Returns: `true` 成功暂停；`false` 监听器未激活或已暂停。
+    func pause() -> Bool {
+        guard !isPaused else { return false }
+        guard storedTermios else { return false }
+
+        // 停止 polling Task 并等待其完全退出
+        task?.cancel()
+        _ = taskStopped.wait(timeout: .now() + .milliseconds(200))
+        task = nil
+
+        // 恢复 canonical mode
+        restoreTermios()
+
+        // 清除残留字节（如方向键 escape sequence 的残余字节 0x5B 0x41 等）
+        // 防止后续 readSingleKey() 读到脏数据
+        tcflush(STDIN_FILENO, TCIFLUSH)
+
+        isPaused = true
+        return true
+    }
+
+    /// 恢复 ESC 监听：重新进入 raw mode 并启动 polling Task。
+    func resume() {
+        guard isPaused else { return }
+        guard storedTermios else { return }
+
+        // 重新进入 raw mode
+        applyRawMode()
+
+        // 启动新的 polling Task
+        task = startPollingTask()
+
+        isPaused = false
+    }
+
+    /// 停止监听并恢复终端设置。
+    func cancel() {
+        // 如果当前处于暂停状态，Task 已停止，只需恢复状态
+        if !isPaused {
+            task?.cancel()
+            // 不等待 Task 退出 — cancel() 是最终清理，下一个 turn 会创建新 listener
+        }
+        isPaused = false
+        task = nil
+        if storedTermios {
+            restoreTermios()
+        }
+    }
+
+    // MARK: - Private
+
+    /// 将终端设为 raw mode（最小化：仅影响输入处理）。
+    private func applyRawMode() {
+        var raw = originalTermios
+        raw.c_iflag &= ~UInt(ICRNL | IXON)
+        raw.c_lflag &= ~UInt(ECHO | ICANON | ISIG)
+        raw.c_cc.16 = 0  // VMIN = 0（非阻塞）
+        raw.c_cc.17 = 1  // VTIME = 1（100ms 超时轮询）
+        tcsetattr(STDIN_FILENO, TCSANOW, &raw)
+    }
+
+    /// 恢复终端到原始设置。
+    private func restoreTermios() {
+        var restore = originalTermios
+        tcsetattr(STDIN_FILENO, TCSANOW, &restore)
+    }
+
+    /// 创建 ESC 轮询 Task。
+    ///
+    /// Task 退出时通过 `taskStopped` 信号量通知调用方（`pause()`），
+    /// 确保在恢复 canonical mode 前已无并发 stdin 读取。
+    private func startPollingTask() -> Task<Void, Never> {
+        let stopped = taskStopped
+        return Task<Void, Never> { [storedTermios, onEscape] in
+            guard storedTermios else {
+                stopped.signal()
+                return
+            }
             var byte: UInt8 = 0
             while !Task.isCancelled {
                 let bytesRead = read(STDIN_FILENO, &byte, 1)
                 if bytesRead == 1 && byte == 0x1B {
                     onEscape()
+                    stopped.signal()
                     return
                 }
                 // bytesRead == 0 → VTIME 超时，继续轮询
                 // bytesRead == -1 → 错误或被取消，退出
                 if bytesRead < 0 && errno != EINTR {
+                    stopped.signal()
                     return
                 }
             }
+            // Task 被 cancel — 通知 pause() 可以安全恢复 canonical mode
+            stopped.signal()
         }
     }
+}
 
-    /// 停止监听并恢复终端设置。
-    func cancel() {
-        task.cancel()
-        if storedTermios {
-            var restore = originalTermios
-            tcsetattr(STDIN_FILENO, TCSANOW, &restore)
-        }
+// MARK: - Reference Wrapper
+
+/// EscapeInterruptListener 的引用包装器。
+///
+/// 用于在 `@Sendable` 闭包（如 `canUseTool`）中共享当前 turn 的 ESC 监听器引用。
+/// `canUseTool` 在 REPL 循环前创建一次，但 ESC 监听器每轮 turn 重建，
+/// 通过此包装器桥接生命周期差异。
+///
+/// 模式参照 `SessionAllowListRef`。
+final class EscapeInterruptListenerRef: @unchecked Sendable {
+    private var _listener: EscapeInterruptListener?
+
+    init() {}
+
+    func set(_ listener: EscapeInterruptListener?) {
+        _listener = listener
+    }
+
+    /// 暂停当前 ESC 监听器。
+    /// - Returns: 是否成功暂停。
+    func pause() -> Bool {
+        _listener?.pause() ?? false
+    }
+
+    /// 恢复当前 ESC 监听器。
+    func resume() {
+        _listener?.resume()
     }
 }
