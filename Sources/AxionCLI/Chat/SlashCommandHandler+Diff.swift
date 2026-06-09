@@ -24,7 +24,12 @@ extension SlashCommandHandler {
         }
     }
 
-    /// 执行 git diff 并格式化摘要输出。AC4。
+    /// 执行 git diff 并格式化彩色 unified diff 输出。AC4。
+    ///
+    /// Codex 启发：Codex 的 `TurnDiffTracker` 和 `scrollable_diff.rs` 展示实际的
+    /// unified diff 而非仅 --stat 摘要。Axion 使用 `DiffFormatter` 将 `git diff`
+    /// 输出渲染为带 ANSI 颜色的终端输出（绿/红/青/灰），大幅提升变更审查体验。
+    ///
     /// 通过 `processLauncher` 闭包注入 Process 调用（测试可 Mock）。
     static func handleDiff(
         cwd: String,
@@ -41,19 +46,21 @@ extension SlashCommandHandler {
 
         var output = ""
 
-        // Staged
-        if let staged = processLauncher(cwd, ["git", "diff", "--stat", "--cached"]),
-           !staged.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-            output += "Staged:\n\(staged)"
+        // --- Staged changes (unified diff) ---
+        if let stagedDiff = processLauncher(cwd, ["git", "diff", "--unified=3", "--cached"]),
+           !stagedDiff.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            output += "Staged:\n"
+            output += DiffFormatter.format(stagedDiff)
         }
 
-        // Unstaged
-        if let unstaged = processLauncher(cwd, ["git", "diff", "--stat"]),
-           !unstaged.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-            output += "Unstaged:\n\(unstaged)"
+        // --- Unstaged changes (unified diff) ---
+        if let unstagedDiff = processLauncher(cwd, ["git", "diff", "--unified=3"]),
+           !unstagedDiff.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            output += "Unstaged:\n"
+            output += DiffFormatter.format(unstagedDiff)
         }
 
-        // Untracked
+        // --- Untracked files ---
         if let untracked = processLauncher(cwd, ["git", "ls-files", "--others", "--exclude-standard"]),
            !untracked.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
             let files = untracked.split(separator: "\n").map(String.init)

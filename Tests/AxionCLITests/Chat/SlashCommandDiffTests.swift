@@ -14,8 +14,13 @@ struct SlashCommandDiffTests {
             if args.contains("--version") { return "git version 2.x\n" }
             let cmd = args.joined(separator: " ")
             if cmd.contains("rev-parse") { return "true\n" }
-            if cmd.contains("--cached") { return "1 file changed, 5 insertions(+)\n" }
-            if cmd.contains("--stat") && !cmd.contains("--cached") { return "2 files changed, 10 deletions(-)\n" }
+            if cmd.contains("--cached") {
+                // 返回 unified diff 格式
+                return "diff --git a/file.swift b/file.swift\n--- a/file.swift\n+++ b/file.swift\n@@ -1 +1 @@\n-old\n+new\n"
+            }
+            if cmd.contains("--unified") && !cmd.contains("--cached") {
+                return "diff --git a/other.swift b/other.swift\n--- a/other.swift\n+++ b/other.swift\n@@ -1 +1 @@\n-old2\n+new2\n"
+            }
             if cmd.contains("ls-files") { return "newfile.swift\nanother.swift\n" }
             return nil
         }
@@ -54,7 +59,9 @@ struct SlashCommandDiffTests {
         let mockLauncher: @Sendable (String, [String]) -> String? = { _, args in
             if args.contains("--version") { return "git version 2.x\n" }
             if args.contains("rev-parse") { return "true\n" }
-            if args.contains("--cached") { return "1 file changed, 5 insertions(+)\n" }
+            if args.contains("--cached") {
+                return "diff --git a/file.swift b/file.swift\n--- a/file.swift\n+++ b/file.swift\n@@ -1 +1 @@\n-old\n+new\n"
+            }
             return ""
         }
         let output = SlashCommandHandler.handleDiff(cwd: "/tmp", processLauncher: mockLauncher)
@@ -85,5 +92,24 @@ struct SlashCommandDiffTests {
         let output = SlashCommandHandler.handleDiff(cwd: "/tmp", processLauncher: mockLauncher)
         #expect(output.contains("git 命令不可用"))
         #expect(!output.contains("当前目录不是 git 仓库"))
+    }
+
+    // MARK: - DiffFormatter 集成
+
+    @Test("handleDiff — staged diff 包含 unified diff 内容")
+    func handleDiffStagedFormatted() {
+        let mockLauncher: @Sendable (String, [String]) -> String? = { _, args in
+            if args.contains("--version") { return "git version 2.x\n" }
+            if args.contains("rev-parse") { return "true\n" }
+            if args.contains("--cached") {
+                return "diff --git a/test.swift b/test.swift\n--- a/test.swift\n+++ b/test.swift\n@@ -1 +1 @@\n-old\n+new\n"
+            }
+            return ""
+        }
+        let output = SlashCommandHandler.handleDiff(cwd: "/tmp", processLauncher: mockLauncher)
+        // 应包含 Staged 段标题和 unified diff 内容
+        // 非 TTY 环境下 DiffFormatter 原样输出，但内容仍然存在
+        #expect(output.contains("Staged:"))
+        #expect(output.contains("diff --git"))
     }
 }
