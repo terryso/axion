@@ -20,17 +20,22 @@ final class ChatOutputFormatter: OpenAgentSDK.SDKMessageOutputHandler, @unchecke
     private let transcriptRenderer: TranscriptRenderer?
     private var assistantBlockStarted = false  // 同一轮 assistant 输出共享圆点标记
 
+    // 流式代码块渲染器 — 检测代码围栏并渲染视觉边框
+    private var codeBlockRenderer: StreamingCodeBlockRenderer
+
     init(
         writeStdout: @escaping (String) -> Void = { fputs($0, stdout); fflush(stdout) },
         writeStderr: @escaping (String) -> Void = { fputs($0, stderr); fflush(stderr) },
         spinner: SpinnerRenderer? = nil,
-        theme: ChatTheme? = nil  // AC7: 可选注入，nil 时保持原有行为
+        theme: ChatTheme? = nil,  // AC7: 可选注入，nil 时保持原有行为
+        codeBlockRenderer: StreamingCodeBlockRenderer? = nil
     ) {
         self.writeStdout = writeStdout
         self.writeStderr = writeStderr
         self.spinner = spinner ?? SpinnerRenderer()
         self.theme = theme
         self.transcriptRenderer = theme.map { TranscriptRenderer(theme: $0) }
+        self.codeBlockRenderer = codeBlockRenderer ?? StreamingCodeBlockRenderer()
     }
 
     /// 开始等待 LLM 首次响应（用户提交 prompt 后调用）。
@@ -76,9 +81,11 @@ final class ChatOutputFormatter: OpenAgentSDK.SDKMessageOutputHandler, @unchecke
                 assistantBlockStarted = true
             }
 
-            // 直接输出 LLM 文本，无前缀
+            // 通过代码块渲染器处理 LLM 文本 — 检测代码围栏并渲染视觉边框
             if !data.text.isEmpty {
-                writeStdout(data.text)
+                codeBlockRenderer.process(data.text) { [writeStdout] output in
+                    writeStdout(output)
+                }
                 hasOutputText = true
             }
 
@@ -89,6 +96,12 @@ final class ChatOutputFormatter: OpenAgentSDK.SDKMessageOutputHandler, @unchecke
             if !data.text.isEmpty && hasOutputText {
                 writeStdout("\n")
             }
+
+            // 刷新代码块渲染器缓冲区并重置状态
+            codeBlockRenderer.flush { [writeStdout] output in
+                writeStdout(output)
+            }
+            codeBlockRenderer.reset()
 
             // assistant 结束标记后重置 block 状态
             assistantBlockStarted = false
@@ -111,7 +124,8 @@ final class ChatOutputFormatter: OpenAgentSDK.SDKMessageOutputHandler, @unchecke
             // 启动工具执行 spinner（立即，无延迟）
             spinner.start(message: data.toolName)
 
-            // 重置 assistant block
+            // 重置 assistant block 和代码块渲染器（工具调用中断 LLM 流式输出）
+            codeBlockRenderer.reset()
             assistantBlockStarted = false
 
         case .toolResult(let data):
@@ -160,7 +174,8 @@ final class ChatOutputFormatter: OpenAgentSDK.SDKMessageOutputHandler, @unchecke
                 writeWarning("⚠️ 已达到模型调用上限")
             }
 
-            // 重置 assistant block
+            // 重置 assistant block 和代码块渲染器
+            codeBlockRenderer.reset()
             assistantBlockStarted = false
 
         case .system(let data):
