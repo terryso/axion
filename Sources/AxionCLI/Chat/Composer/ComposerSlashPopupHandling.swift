@@ -24,9 +24,15 @@ extension ChatComposer {
         let rendered = SlashPopup.render(items: popupItems, selectedIndex: selectedPopupIndex, theme: theme)
         let lines = rendered.components(separatedBy: "\n")
         popupRenderedLines = lines.count
-        writeStdout("\r\n\(rendered)")
-        // 重新显示当前 prompt + buffer
-        writeStdout("\r\(prompt)\(buffer)")
+        // 写入弹窗内容到输入行下方
+        // 注意：raw mode 关闭了 OPOST，\n 不会自动转 \r\n，
+        // 必须手动确保每行 \r\n 以回到第 0 列
+        let terminalRendered = rendered.replacingOccurrences(of: "\n", with: "\r\n")
+        writeStdout("\r\n\(terminalRendered)")
+        // 光标移回输入行（弹窗 N 行在下方，上移 N 行）
+        writeStdout("\u{1B}[\(popupRenderedLines)A")
+        // 在输入行上写 prompt + buffer（\e[K 清除行尾残留）
+        writeStdout("\r\(prompt)\(buffer)\u{1B}[K")
     }
 
     /// 刷新 slashPopup 过滤和渲染 — AC2。
@@ -51,8 +57,11 @@ extension ChatComposer {
         clearPopupOutput()
         popupRenderedLines = newLines
 
-        // 输出新 popup
-        writeStdout("\r\n\(rendered)")
+        // 输出新 popup（\n → \r\n，确保 raw mode 下每行回到第 0 列）
+        let terminalRendered = rendered.replacingOccurrences(of: "\n", with: "\r\n")
+        writeStdout("\r\n\(terminalRendered)")
+        // 光标移回输入行
+        writeStdout("\u{1B}[\(popupRenderedLines)A")
         writeStdout("\r\(prompt)\(buffer)\u{1B}[K")
     }
 
@@ -65,7 +74,11 @@ extension ChatComposer {
         clearPopupOutput()
         popupRenderedLines = newLines
 
-        writeStdout("\r\n\(rendered)")
+        // 重新渲染 popup（\n → \r\n，确保 raw mode 下每行回到第 0 列）
+        let terminalRendered = rendered.replacingOccurrences(of: "\n", with: "\r\n")
+        writeStdout("\r\n\(terminalRendered)")
+        // 光标移回输入行
+        writeStdout("\u{1B}[\(popupRenderedLines)A")
         writeStdout("\r\(prompt)\(buffer)\u{1B}[K")
     }
 

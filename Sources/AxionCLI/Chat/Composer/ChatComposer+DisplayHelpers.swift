@@ -4,16 +4,15 @@ import Foundation
 
 extension ChatComposer {
 
-    /// 清除终端中已渲染的行（上移 + 清行 + 回到原位）。
+    /// 清除终端中已渲染的弹窗行。
     /// popup 和 fileSearch 的清除逻辑共用此方法。
+    ///
+    /// 前提：光标已在输入行（由渲染函数的 `\e[N A` 保证）。
+    /// 使用 `\e[J`（Erase Display）清除光标到屏幕末尾的所有弹窗内容。
     func clearRenderedOutput(lineCount: Int) {
         guard lineCount > 0 else { return }
-        writeStdout("\u{1B}[\(lineCount)A")
-        for _ in 0..<lineCount {
-            writeStdout("\r\u{1B}[K")
-            writeStdout("\u{1B}[1B")
-        }
-        writeStdout("\u{1B}[\(lineCount)A")
+        // 光标在输入行，\e[J 清除从光标到屏幕末尾的所有内容
+        writeStdout("\u{1B}[J")
     }
 
     /// 在光标位置插入字符。

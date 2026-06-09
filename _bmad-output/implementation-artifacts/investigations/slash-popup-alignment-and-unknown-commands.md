@@ -12,7 +12,7 @@
 | ---------------- | -------------------------------------------------------------------------- |
 | Ticket           | N/A                                                                        |
 | Date opened      | 2026-06-09                                                                 |
-| Status           | Active                                                                     |
+| Status           | Concluded                                                                  |
 | System           | macOS (Terminal.app / iTerm2), Swift 6.1+, SPM                             |
 | Evidence sources | SlashPopup.swift, SlashCommand.swift, ChatCommand.swift, SlashCommandHandler.swift, ComposerSlashPopupHandling.swift |
 

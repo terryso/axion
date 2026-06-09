@@ -158,7 +158,11 @@ extension ChatComposer {
         clearFileSearchOutput()
         fileSearchRenderedLines = newLines
 
-        writeStdout("\r\n\(rendered)")
+        // 渲染文件搜索 popup（\n → \r\n，确保 raw mode 下每行回到第 0 列）
+        let terminalRendered = rendered.replacingOccurrences(of: "\n", with: "\r\n")
+        writeStdout("\r\n\(terminalRendered)")
+        // 光标移回输入行
+        writeStdout("\u{1B}[\(fileSearchRenderedLines)A")
         writeStdout("\r\(prompt)\(buffer)\u{1B}[K")
     }
 
