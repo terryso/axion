@@ -261,6 +261,34 @@ struct ChatCommand: AsyncParsableCommand {
                     continue
                 }
 
+                // /clear — 清除对话上下文（Claude Code 风格）
+                if cmd == .clear {
+                    // 1. 清空 session store 中当前会话的消息
+                    if let store = state.buildConfig.sessionStore {
+                        let cwd = FileManager.default.currentDirectoryPath
+                        try? await store.save(
+                            sessionId: state.sessionId,
+                            messages: [],
+                            metadata: PartialSessionMetadata(
+                                cwd: cwd,
+                                model: state.buildResult.agent.model
+                            )
+                        )
+                    }
+                    // 2. 清空 agent 内存状态
+                    state.buildResult.agent.clear()
+                    // 3. 重置 REPL 状态
+                    state.sessionUserMessages = []
+                    state.contextTokens = 0
+                    state.sessionUsage = TokenUsage(inputTokens: 0, outputTokens: 0)
+                    state.resumedMessageBaseCount = 0
+                    // 4. 清屏
+                    fputs("\u{1B}[2J\u{1B}[H", stdout)
+                    fflush(stdout)
+                    fputs("🗑️ 对话上下文已清除\n", stderr)
+                    continue
+                }
+
                 // 38.7: /new — 创建新会话
                 if cmd == .newSession {
                     let newSessionId = "chat-\(UUID().uuidString.prefix(8))"

@@ -37,7 +37,7 @@ struct SlashCommandHandler {
         case .help:
             fputs(handleHelp(), stderr)
         case .clear:
-            handleClear()
+            return .none  // 由 ChatCommand 直接处理上下文清理
         case .compact:
             fputs(handleCompact(contextTokens: contextTokens, contextWindow: contextWindow), stderr)
         case .model:

@@ -54,7 +54,7 @@ enum SlashCommand: String, CaseIterable, Equatable {
     var helpText: String {
         switch self {
         case .help:    return "显示帮助信息"
-        case .clear:   return "清屏（不重置会话）"
+        case .clear:   return "清除对话上下文"
         case .compact: return "压缩上下文"
         case .model:   return "显示/切换模型（/model [name]）"
         case .cost:    return "显示当前会话 token 用量和成本"
