@@ -108,24 +108,168 @@ struct BannerRendererTests {
         #expect(!banner.contains(longPath))
     }
 
-    // MARK: - renderPrompt
+    // MARK: - renderPrompt (enhanced with progress bar)
 
-    @Test("renderPrompt 零用量时显示 0/200k")
-    func renderPrompt_zeroUsage() {
-        let prompt = BannerRenderer.renderPrompt(usedTokens: 0, contextWindow: 200_000)
-        #expect(prompt == "axion [0/200k]> ")
+    @Test("renderPrompt 非 TTY 零用量时显示 0/200k 0%")
+    func renderPrompt_nonTTY_zeroUsage() {
+        let prompt = BannerRenderer.renderPrompt(
+            usedTokens: 0,
+            contextWindow: 200_000,
+            isTTY: false,
+            colorProfile: .unknown
+        )
+        #expect(prompt == "axion [0/200k 0%]> ")
     }
 
-    @Test("renderPrompt 有用量时显示正确格式")
-    func renderPrompt_withUsage() {
-        let prompt = BannerRenderer.renderPrompt(usedTokens: 3_200, contextWindow: 200_000)
-        #expect(prompt == "axion [3.2k/200k]> ")
+    @Test("renderPrompt 非 TTY 有用量时显示正确格式")
+    func renderPrompt_nonTTY_withUsage() {
+        let prompt = BannerRenderer.renderPrompt(
+            usedTokens: 3_200,
+            contextWindow: 200_000,
+            isTTY: false,
+            colorProfile: .unknown
+        )
+        #expect(prompt == "axion [3.2k/200k 1%]> ")
     }
 
-    @Test("renderPrompt 百万级上下文窗口")
-    func renderPrompt_largeContextWindow() {
-        let prompt = BannerRenderer.renderPrompt(usedTokens: 0, contextWindow: 1_000_000)
-        #expect(prompt == "axion [0/1m]> ")
+    @Test("renderPrompt TTY 包含进度条和颜色码")
+    func renderPrompt_tty_containsBar() {
+        // 30k/200k = 15%, 15% of 10 blocks = 1.5 → 1 filled block
+        let prompt = BannerRenderer.renderPrompt(
+            usedTokens: 30_000,
+            contextWindow: 200_000,
+            isTTY: true,
+            colorProfile: .trueColor
+        )
+        // Should contain percentage and progress bar characters
+        #expect(prompt.contains("15%"))
+        #expect(prompt.contains("█"))
+        #expect(prompt.contains("░"))
+        // Should contain ANSI color codes for green (<50%)
+        #expect(prompt.contains("\u{1B}[38;2;76;175;80m"))
+        #expect(prompt.contains("\u{1B}[0m"))
+        #expect(prompt.hasSuffix("]> "))
+    }
+
+    @Test("renderPrompt TTY 高使用率使用红色")
+    func renderPrompt_tty_highUsage_red() {
+        let prompt = BannerRenderer.renderPrompt(
+            usedTokens: 180_000,
+            contextWindow: 200_000,
+            isTTY: true,
+            colorProfile: .trueColor
+        )
+        #expect(prompt.contains("90%"))
+        // Red color for >80%
+        #expect(prompt.contains("\u{1B}[38;2;244;67;54m"))
+    }
+
+    @Test("renderPrompt TTY 中等使用率使用黄色")
+    func renderPrompt_tty_mediumUsage_yellow() {
+        let prompt = BannerRenderer.renderPrompt(
+            usedTokens: 120_000,
+            contextWindow: 200_000,
+            isTTY: true,
+            colorProfile: .trueColor
+        )
+        #expect(prompt.contains("60%"))
+        // Yellow color for 50-80%
+        #expect(prompt.contains("\u{1B}[38;2;255;193;7m"))
+    }
+
+    @Test("renderPrompt ANSI16 颜色降级")
+    func renderPrompt_ansi16_color() {
+        let prompt = BannerRenderer.renderPrompt(
+            usedTokens: 10_000,
+            contextWindow: 200_000,
+            isTTY: true,
+            colorProfile: .ansi16
+        )
+        // Green ANSI16
+        #expect(prompt.contains("\u{1B}[32m"))
+    }
+
+    @Test("renderPrompt 上下文窗口为零时百分比也为零")
+    func renderPrompt_zeroContextWindow() {
+        let prompt = BannerRenderer.renderPrompt(
+            usedTokens: 1_000,
+            contextWindow: 0,
+            isTTY: false,
+            colorProfile: .unknown
+        )
+        #expect(prompt == "axion [1k/0 0%]> ")
+    }
+
+    // MARK: - renderContextBar
+
+    @Test("renderContextBar: 0% → 全空")
+    func renderContextBar_zero() {
+        #expect(BannerRenderer.renderContextBar(pct: 0, width: 10) == "░░░░░░░░░░")
+    }
+
+    @Test("renderContextBar: 50% → 一半填充")
+    func renderContextBar_half() {
+        #expect(BannerRenderer.renderContextBar(pct: 50, width: 10) == "█████░░░░░")
+    }
+
+    @Test("renderContextBar: 100% → 全填充")
+    func renderContextBar_full() {
+        #expect(BannerRenderer.renderContextBar(pct: 100, width: 10) == "██████████")
+    }
+
+    @Test("renderContextBar: 超出范围被 clamp")
+    func renderContextBar_clamp() {
+        #expect(BannerRenderer.renderContextBar(pct: -10, width: 10) == "░░░░░░░░░░")
+        #expect(BannerRenderer.renderContextBar(pct: 150, width: 10) == "██████████")
+    }
+
+    @Test("renderContextBar: 自定义宽度")
+    func renderContextBar_customWidth() {
+        #expect(BannerRenderer.renderContextBar(pct: 50, width: 4) == "██░░")
+    }
+
+    // MARK: - contextBarColor
+
+    @Test("contextBarColor: <50% 绿色")
+    func contextBarColor_green() {
+        let color = BannerRenderer.contextBarColor(pct: 10, profile: .trueColor)
+        #expect(color == "\u{1B}[38;2;76;175;80m")
+    }
+
+    @Test("contextBarColor: 50-80% 黄色")
+    func contextBarColor_yellow() {
+        let color = BannerRenderer.contextBarColor(pct: 65, profile: .trueColor)
+        #expect(color == "\u{1B}[38;2;255;193;7m")
+    }
+
+    @Test("contextBarColor: >80% 红色")
+    func contextBarColor_red() {
+        let color = BannerRenderer.contextBarColor(pct: 90, profile: .trueColor)
+        #expect(color == "\u{1B}[38;2;244;67;54m")
+    }
+
+    @Test("contextBarColor: unknown profile 无颜色")
+    func contextBarColor_unknown() {
+        let color = BannerRenderer.contextBarColor(pct: 50, profile: .unknown)
+        #expect(color.isEmpty)
+    }
+
+    @Test("contextBarColor: 边界值 50% 黄色")
+    func contextBarColor_boundary50() {
+        let color = BannerRenderer.contextBarColor(pct: 50, profile: .ansi16)
+        #expect(color == "\u{1B}[33m")  // yellow
+    }
+
+    @Test("contextBarColor: 边界值 80% 红色")
+    func contextBarColor_boundary80() {
+        let color = BannerRenderer.contextBarColor(pct: 80, profile: .ansi16)
+        #expect(color == "\u{1B}[33m")  // yellow (80% still yellow, >80% red)
+    }
+
+    @Test("contextBarColor: 边界值 81% 红色")
+    func contextBarColor_boundary81() {
+        let color = BannerRenderer.contextBarColor(pct: 81, profile: .ansi16)
+        #expect(color == "\u{1B}[31m")  // red
     }
 
     // MARK: - renderExit

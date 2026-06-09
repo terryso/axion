@@ -104,6 +104,10 @@ struct ChatCommand: AsyncParsableCommand {
             stderr
         )
 
+        // Terminal title — Codex-inspired tab bar status
+        let terminalTitle = TerminalTitleRenderer()
+        terminalTitle.setIdle()
+
         // Initialize REPL state
         var state = ChatREPLState(
             buildResult: buildResult,
@@ -143,11 +147,24 @@ struct ChatCommand: AsyncParsableCommand {
             // Story 38.5: 同步 inputQueue 到 composer
             composer.inputQueue = inputQueue
 
-            // AC2: 动态提示符
+            // AC2: 动态提示符（含上下文进度条）
+            let colorProfile = TerminalColorProfile.detect()
             let prompt = BannerRenderer.renderPrompt(
                 usedTokens: state.contextTokens,
-                contextWindow: state.contextWindow
+                contextWindow: state.contextWindow,
+                isTTY: isatty(STDERR_FILENO) != 0,
+                colorProfile: colorProfile
             )
+
+            // 上下文使用率警告标题
+            let contextPct = state.contextWindow > 0
+                ? Int(Double(state.contextTokens) / Double(state.contextWindow) * 100)
+                : 0
+            if contextPct > 80 {
+                terminalTitle.setContextWarning(pct: contextPct)
+            } else {
+                terminalTitle.setIdle()
+            }
 
             // Story 38.5 AC6: 排队预览
             if let preview = composer.renderQueuePreview() {
@@ -346,7 +363,6 @@ struct ChatCommand: AsyncParsableCommand {
 
             // ── Execute agent stream ────────────────────────────────────
 
-            let colorProfile = TerminalColorProfile.detect()
             let chatTheme = ChatTheme(profile: colorProfile, isTTY: isatty(STDERR_FILENO) != 0)
             let transcriptRenderer = TranscriptRenderer(theme: chatTheme)
 
@@ -361,12 +377,14 @@ struct ChatCommand: AsyncParsableCommand {
 
             let outputHandler = ChatOutputFormatter(theme: chatTheme)
             outputHandler.startLLMWaiting()
+            terminalTitle.setThinking()
             let messageStream = state.buildResult.agent.stream(trimmed)
             for await message in messageStream {
                 outputHandler.handle(message)
                 switch message {
-                case .toolUse:
+                case .toolUse(let data):
                     turnToolCount += 1
+                    terminalTitle.setToolExecuting(data.toolName)
                 case .result(let data):
                     if let usage = data.usage {
                         state.sessionUsage = state.sessionUsage + usage
@@ -416,6 +434,13 @@ struct ChatCommand: AsyncParsableCommand {
 
             composer.slashContext = SlashCommandContext(isAgentBusy: false, isSideSession: false)
 
+            // Reset terminal title to idle or context warning
+            if contextPct > 80 {
+                terminalTitle.setContextWarning(pct: contextPct)
+            } else {
+                terminalTitle.setIdle()
+            }
+
             // Turn completion summary — Codex-inspired "worked for Xs" pattern
             let turnElapsed = ContinuousClock.now - turnStartTime
             let turnDuration = formatDuration(turnElapsed)
@@ -456,6 +481,7 @@ struct ChatCommand: AsyncParsableCommand {
 
         SignalHandler.uninstall()
         try? await state.buildResult.agent.close()
+        terminalTitle.clear()
         fputs(BannerRenderer.renderExit(sessionId: state.sessionId), stderr)
     }
 }

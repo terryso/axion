@@ -40,11 +40,92 @@ struct BannerRenderer {
             """
     }
 
-    /// 生成带上下文用量的提示符。
-    static func renderPrompt(usedTokens: Int, contextWindow: Int) -> String {
+    /// 生成带上下文用量和可视化进度条的提示符。
+    ///
+    /// Codex-inspired: 显示上下文窗口使用百分比 + 微型进度条 + 颜色编码。
+    /// 进度条使用 Unicode block 元素：█▓▒░
+    /// 颜色随使用率变化：绿(<50%) → 黄(50-80%) → 红(>80%)
+    ///
+    /// - TTY 示例：`axion [12k/200k 6% ▏░░░░░░░░░]> `
+    /// - 高使用率：`axion [180k/200k 90% ████████░░]> `（红色）
+    /// - 非 TTY：  `axion [12k/200k 6%]> `（无进度条、无颜色）
+    static func renderPrompt(
+        usedTokens: Int,
+        contextWindow: Int,
+        isTTY: Bool = isatty(STDERR_FILENO) != 0,
+        colorProfile: TerminalColorProfile = .detect()
+    ) -> String {
         let used = formatTokenCount(usedTokens)
         let max = formatTokenCount(contextWindow)
-        return "axion [\(used)/\(max)]> "
+        let pct = contextWindow > 0
+            ? Int(Double(usedTokens) / Double(contextWindow) * 100)
+            : 0
+
+        guard isTTY else {
+            return "axion [\(used)/\(max) \(pct)%]> "
+        }
+
+        let bar = renderContextBar(pct: pct, width: 10)
+        let colorCode = contextBarColor(pct: pct, profile: colorProfile)
+        let reset = "\u{1B}[0m"
+
+        return "axion [\(used)/\(max) \(colorCode)\(pct)%\(reset) \(colorCode)\(bar)\(reset)]> "
+    }
+
+    // MARK: - Context Progress Bar
+
+    /// 渲染上下文窗口使用率的微型进度条。
+    ///
+    /// 使用 Unicode block 元素表示进度：
+    /// - `█` 已使用
+    /// - `░` 未使用
+    ///
+    /// - Parameters:
+    ///   - pct: 使用百分比 (0-100)
+    ///   - width: 进度条宽度（字符数）
+    /// - Returns: 进度条字符串，如 `███░░░░░░░`
+    static func renderContextBar(pct: Int, width: Int = 10) -> String {
+        let clampedPct = max(0, min(100, pct))
+        let filled = Int(Double(clampedPct) / 100.0 * Double(width))
+        let empty = width - filled
+        return String(repeating: "█", count: filled) + String(repeating: "░", count: empty)
+    }
+
+    /// 根据上下文使用百分比返回颜色 ANSI 码。
+    ///
+    /// - < 50% → 绿色（充裕）
+    /// - 50-80% → 黄色（注意）
+    /// - > 80% → 红色（紧张）
+    static func contextBarColor(pct: Int, profile: TerminalColorProfile) -> String {
+        let clampedPct = max(0, min(100, pct))
+        switch profile {
+        case .trueColor:
+            if clampedPct > 80 {
+                return "\u{1B}[38;2;244;67;54m"   // 红
+            } else if clampedPct >= 50 {
+                return "\u{1B}[38;2;255;193;7m"   // 黄
+            } else {
+                return "\u{1B}[38;2;76;175;80m"   // 绿
+            }
+        case .ansi256:
+            if clampedPct > 80 {
+                return "\u{1B}[38;5;160m"   // 暗红
+            } else if clampedPct >= 50 {
+                return "\u{1B}[38;5;178m"   // 黄
+            } else {
+                return "\u{1B}[38;5;71m"    // 绿
+            }
+        case .ansi16:
+            if clampedPct > 80 {
+                return "\u{1B}[31m"  // red
+            } else if clampedPct >= 50 {
+                return "\u{1B}[33m"  // yellow
+            } else {
+                return "\u{1B}[32m"  // green
+            }
+        case .unknown:
+            return ""
+        }
     }
 
     /// 生成退出信息。
