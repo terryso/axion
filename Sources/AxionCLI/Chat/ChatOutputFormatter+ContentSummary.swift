@@ -51,22 +51,27 @@ func summarizeToolContent(_ content: String, maxLines: Int = 4) -> String {
 extension ChatOutputFormatter {
 
     /// Summarizes tool input JSON by extracting the most relevant parameter.
-    /// Enhanced with path-aware truncation (Codex-inspired center_truncate_path).
+    /// Enhanced with path-aware truncation (Codex-inspired center_truncate_path)
+    /// and OSC 8 hyperlinks for file paths (Codex-inspired terminal_hyperlinks).
     func summarizeInput(_ input: String) -> String {
         // 尝试提取工具输入的关键参数
         guard let json = parseJSONDict(from: input) else {
             return ToolOutputFormatter.truncateText(input, maxLength: 80)
         }
 
-        // 常见工具参数提取 — 路径类参数使用居中截断保留首尾
+        // 常见工具参数提取 — 路径类参数使用居中截断 + OSC 8 超链接
         if let command = json["command"] as? String {
             return ToolOutputFormatter.truncateText(command, maxLength: 80)
         }
         if let filePath = json["file_path"] as? String {
-            return ToolOutputFormatter.truncatePathCenter(filePath, maxWidth: 80)
+            let truncated = ToolOutputFormatter.truncatePathCenter(filePath, maxWidth: 80)
+            let linker = TerminalHyperlinkFormatter()
+            return linker.formatFilePath(filePath, visibleText: truncated)
         }
         if let path = json["path"] as? String {
-            return ToolOutputFormatter.truncatePathCenter(path, maxWidth: 80)
+            let truncated = ToolOutputFormatter.truncatePathCenter(path, maxWidth: 80)
+            let linker = TerminalHyperlinkFormatter()
+            return linker.formatFilePath(path, visibleText: truncated)
         }
         if let content = json["content"] as? String {
             let preview = ToolOutputFormatter.truncateText(content, maxLength: 60)

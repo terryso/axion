@@ -176,13 +176,18 @@ struct TurnFileChangeTracker: Sendable {
         let reset = "\u{1B}[0m"
         let green = greenCode(for: profile)
         let red = redCode(for: profile)
+        let linker = TerminalHyperlinkFormatter()
 
         var lines: [String] = []
         lines.append("\(dim)\(header)\(reset)")
 
         for change in files {
-            let path = ToolOutputFormatter.truncatePathCenter(
+            let truncatedPath = ToolOutputFormatter.truncatePathCenter(
                 change.filePath, maxWidth: maxWidth - 15
+            )
+            // Wrap file path in OSC 8 hyperlink (clickable in supported terminals)
+            let displayPath = linker.formatFilePath(
+                change.filePath, visibleText: truncatedPath
             )
             var changeParts: [String] = []
             if change.addedLines > 0 {
@@ -192,7 +197,7 @@ struct TurnFileChangeTracker: Sendable {
                 changeParts.append("\(red)-\(change.removedLines)\(reset)")
             }
             let changeStr = changeParts.isEmpty ? "" : " (\(changeParts.joined(separator: " ")))"
-            lines.append("\(dim)   \(path)\(changeStr)\(reset)")
+            lines.append("\(dim)   \(displayPath)\(changeStr)\(reset)")
         }
 
         return lines.joined(separator: "\n") + "\n"
