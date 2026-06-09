@@ -392,6 +392,10 @@ struct ChatCommand: AsyncParsableCommand {
             terminalTitle.setThinking()
             let messageStream = state.buildResult.agent.stream(trimmed)
             for await message in messageStream {
+                // Ctrl+C 中断时：抑制 "执行错误" 显示
+                if SignalHandler.fireCount() > 0 {
+                    outputHandler.suppressInterruptError = true
+                }
                 outputHandler.handle(message)
                 switch message {
                 case .toolUse(let data):
@@ -458,33 +462,6 @@ struct ChatCommand: AsyncParsableCommand {
                 terminalTitle.setIdle()
             }
 
-            // Turn completion summary — Codex-inspired "worked for Xs" pattern
-            let turnElapsed = ContinuousClock.now - turnStartTime
-            let turnDuration = formatDuration(turnElapsed)
-            let turnInputDelta = state.sessionUsage.inputTokens - preTurnUsage.inputTokens
-            let turnOutputDelta = state.sessionUsage.outputTokens - preTurnUsage.outputTokens
-            sessionTotalTools += turnToolCount
-            fputs(
-                transcriptRenderer.renderTurnSummary(
-                    duration: turnDuration,
-                    toolCount: turnToolCount,
-                    inputTokens: BannerRenderer.formatTokenCount(turnInputDelta),
-                    outputTokens: BannerRenderer.formatTokenCount(turnOutputDelta)
-                ),
-                stderr
-            )
-
-            // Codex-inspired file change summary — show files modified this turn
-            if let fileSummary = turnFileTracker.renderSummary(
-                isTTY: isatty(STDERR_FILENO) != 0,
-                profile: colorProfile
-            ) {
-                fputs(fileSummary, stderr)
-            }
-
-            // Desktop notification — Codex-inspired OSC 9 / BEL on turn complete
-            desktopNotifier.notify(.agentTurnComplete(preview: lastAssistantText))
-
             // Story 38.5 AC2: Turn 结束后检查队列 — 仅正常完成时自动消费，中断时不消费
             // （避免 Ctrl+C 中断后排队消息被自动发送，用户被迫多次 Ctrl+C）
             let interruptCount = SignalHandler.fireCount()
@@ -496,8 +473,36 @@ struct ChatCommand: AsyncParsableCommand {
                     break
                 }
                 state.lastInterruptTime = now
-                fputs("[axion] 已中断\n", stderr)
+                // 中断：不显示 turn summary / file summary，预填上次输入
+                composer.prefill = trimmed
             } else {
+                // Turn completion summary — Codex-inspired "worked for Xs" pattern
+                let turnElapsed = ContinuousClock.now - turnStartTime
+                let turnDuration = formatDuration(turnElapsed)
+                let turnInputDelta = state.sessionUsage.inputTokens - preTurnUsage.inputTokens
+                let turnOutputDelta = state.sessionUsage.outputTokens - preTurnUsage.outputTokens
+                sessionTotalTools += turnToolCount
+                fputs(
+                    transcriptRenderer.renderTurnSummary(
+                        duration: turnDuration,
+                        toolCount: turnToolCount,
+                        inputTokens: BannerRenderer.formatTokenCount(turnInputDelta),
+                        outputTokens: BannerRenderer.formatTokenCount(turnOutputDelta)
+                    ),
+                    stderr
+                )
+
+                // Codex-inspired file change summary — show files modified this turn
+                if let fileSummary = turnFileTracker.renderSummary(
+                    isTTY: isatty(STDERR_FILENO) != 0,
+                    profile: colorProfile
+                ) {
+                    fputs(fileSummary, stderr)
+                }
+
+                // Desktop notification — Codex-inspired OSC 9 / BEL on turn complete
+                desktopNotifier.notify(.agentTurnComplete(preview: lastAssistantText))
+
                 // 正常完成 → 检查队列，非空则下轮自动消费
                 if !inputQueue.isEmpty {
                     skipNextRead = true

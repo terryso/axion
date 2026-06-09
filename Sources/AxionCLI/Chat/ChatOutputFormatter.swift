@@ -27,6 +27,10 @@ final class ChatOutputFormatter: OpenAgentSDK.SDKMessageOutputHandler, @unchecke
     // 流式 Markdown 内联格式化器 — 增强标题、粗体、内联代码等
     private let markdownFormatter: StreamingMarkdownFormatter
 
+    /// 中断标记：为 true 时，.cancelled 和 .errorDuringExecution 不输出警告。
+    /// 由 ChatCommand 在检测到 Ctrl+C 中断后设置。
+    var suppressInterruptError: Bool = false
+
     init(
         writeStdout: @escaping (String) -> Void = { fputs($0, stdout); fflush(stdout) },
         writeStderr: @escaping (String) -> Void = { fputs($0, stderr); fflush(stderr) },
@@ -182,9 +186,15 @@ final class ChatOutputFormatter: OpenAgentSDK.SDKMessageOutputHandler, @unchecke
             case .errorMaxBudgetUsd:
                 writeWarning("⚠️ 预算超限")
             case .cancelled:
-                writeWarning("⚠️ 已取消")
+                if !suppressInterruptError {
+                    writeWarning("⚠️ 已取消")
+                }
+                suppressInterruptError = false
             case .errorDuringExecution:
-                writeWarning("❌ 执行错误")
+                if !suppressInterruptError {
+                    writeWarning("❌ 执行错误")
+                }
+                suppressInterruptError = false
             case .errorMaxStructuredOutputRetries:
                 writeWarning("❌ 结构化输出重试超限")
             case .errorMaxModelCalls:

@@ -78,7 +78,6 @@ extension ChatComposer {
 
             // 从末尾位置移动到目标位置
             let endRow = endDisplayCol / termWidth
-            let endCol = endDisplayCol % termWidth
             let cursorRow = cursorDisplayCol / termWidth
             let cursorCol = cursorDisplayCol % termWidth
 

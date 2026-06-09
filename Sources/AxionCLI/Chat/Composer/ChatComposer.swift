@@ -110,6 +110,12 @@ struct ChatComposer {
     /// 用于在下次重绘时上移光标到正确的起始行。
     var previousDisplayLines: Int = 1
 
+    // MARK: - Prefill State
+
+    /// 下次 readInput 时预填到 buffer 的文本（由外部设置，readRawLoop 消费后清空）。
+    /// 用于 Ctrl+C 中断后恢复上次的输入内容。
+    var prefill: String? = nil
+
     // MARK: - Init
 
     init(
@@ -186,8 +192,15 @@ struct ChatComposer {
         prompt: String,
         continuationPrompt: String
     ) -> String? {
-        buffer = ""
-        cursor = 0
+        // Prefill 支持：Ctrl+C 中断后恢复上次的输入
+        if let prefillText = prefill {
+            buffer = prefillText
+            cursor = prefillText.count
+            self.prefill = nil
+        } else {
+            buffer = ""
+            cursor = 0
+        }
         mode = .normal
         savedDraft = nil
         popupItems = []
@@ -206,8 +219,12 @@ struct ChatComposer {
 
         // 显示主提示符
         writeStdout(prompt)
-        // 初始化：计算 prompt 空行的物理行数
-        previousDisplayLines = Self.calculateDisplayLines(prompt: prompt, buffer: "")
+        // 如果有 prefill 内容，显示它
+        if !buffer.isEmpty {
+            writeStdout(buffer)
+        }
+        // 初始化：计算 prompt + buffer 的物理行数
+        previousDisplayLines = Self.calculateDisplayLines(prompt: prompt, buffer: buffer)
 
         // Bracket paste 状态
         var inBracketPaste = false
