@@ -301,6 +301,62 @@ struct SpinnerRendererTests {
         let brailleChars = CharacterSet(charactersIn: "⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏")
         #expect(captured.unicodeScalars.contains(where: { brailleChars.contains($0) }))
     }
+
+    @Test("TTY 模式：spinner 输出包含实时耗时")
+    func ttySpinnerOutputContainsElapsedTime() {
+        let output = CaptureOutput()
+        let spinner = SpinnerRenderer(isTTY: true, writeStderr: { output.write($0) })
+
+        spinner.start(message: "thinking")
+        Thread.sleep(forTimeInterval: 0.25)  // 等待几帧
+
+        spinner.stop()
+
+        let captured = output.captured
+        // 应包含耗时格式 "X.Xs"
+        let elapsedPattern = Regex(/[0-9]+\.[0-9]s/)
+        #expect(captured.contains(elapsedPattern))
+        #expect(captured.contains("thinking"))
+    }
+}
+
+// MARK: - SpinnerRenderer.formatElapsedMs Tests
+
+@Suite("SpinnerRenderer.formatElapsedMs")
+struct SpinnerFormatElapsedMsTests {
+
+    @Test("小于 1 秒显示小数格式")
+    func subSecond() {
+        #expect(SpinnerRenderer.formatElapsedMs(300) == "0.3s")
+        #expect(SpinnerRenderer.formatElapsedMs(50) == "0.1s")
+        #expect(SpinnerRenderer.formatElapsedMs(999) == "1.0s")
+    }
+
+    @Test("1-59 秒显示秒格式")
+    func seconds() {
+        #expect(SpinnerRenderer.formatElapsedMs(1200) == "1.2s")
+        #expect(SpinnerRenderer.formatElapsedMs(12300) == "12.3s")
+        #expect(SpinnerRenderer.formatElapsedMs(59999) == "60.0s")
+    }
+
+    @Test("60 秒以上显示分秒格式")
+    func minutesSeconds() {
+        #expect(SpinnerRenderer.formatElapsedMs(60_000) == "1m 00s")
+        #expect(SpinnerRenderer.formatElapsedMs(122_000) == "2m 02s")
+        #expect(SpinnerRenderer.formatElapsedMs(3599_000) == "59m 59s")
+    }
+
+    @Test("1 小时以上显示时分秒格式")
+    func hoursMinutesSeconds() {
+        #expect(SpinnerRenderer.formatElapsedMs(3_600_000) == "1h 00m 00s")
+        #expect(SpinnerRenderer.formatElapsedMs(3_723_000) == "1h 02m 03s")
+        #expect(SpinnerRenderer.formatElapsedMs(7_380_000) == "2h 03m 00s")
+    }
+
+    @Test("0 毫秒显示 0.0s")
+    func zeroMs() {
+        #expect(SpinnerRenderer.formatElapsedMs(0) == "0.0s")
+    }
 }
 
 // MARK: - Capture Output Helper
