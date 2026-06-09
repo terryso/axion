@@ -1,3 +1,4 @@
+import Darwin
 import Foundation
 
 // MARK: - Display & Buffer Helpers
@@ -46,24 +47,176 @@ extension ChatComposer {
         return theme
     }
 
-    /// 刷新终端显示：回车 + prompt + buffer + 清除行尾。
-    func refreshDisplay(prompt: String) {
-        if cursor == buffer.count {
-            // 光标在末尾
-            writeStdout("\r\(prompt)\(buffer)\u{1B}[K")
-        } else {
-            // 光标在中间 — 显示全部内容后移动光标
-            writeStdout("\r\(prompt)\(buffer)\u{1B}[K")
-            // 将光标移回正确位置
-            let charsAfterCursor = buffer.count - cursor
-            if charsAfterCursor > 0 {
-                writeStdout("\u{1B}[\(charsAfterCursor)D")
+    /// 刷新终端显示 — 多行感知重绘。
+    ///
+    /// 当 prompt + buffer 超过终端宽度换行时：
+    /// 1. 上移到第一行
+    /// 2. 清除旧内容
+    /// 3. 重写 prompt + buffer
+    /// 4. 定位光标到正确位置
+    mutating func refreshDisplay(prompt: String) {
+        let newLineCount = Self.calculateDisplayLines(prompt: prompt, buffer: buffer)
+
+        // 1. 上移到第一行（如果之前占多行）
+        if previousDisplayLines > 1 {
+            writeStdout("\u{1B}[\(previousDisplayLines - 1)A")
+        }
+
+        // 2. 回到第 0 列 + 清除到屏幕末尾（清除旧内容）
+        writeStdout("\r\u{1B}[J")
+
+        // 3. 重写 prompt + buffer
+        writeStdout("\(prompt)\(buffer)")
+
+        // 4. 光标定位（如果不在末尾）
+        if cursor != buffer.count {
+            let promptWidth = Self.displayWidth(prompt)
+            let cursorIndex = buffer.index(buffer.startIndex, offsetBy: cursor)
+            let cursorDisplayCol = promptWidth + Self.displayWidth(String(buffer[..<cursorIndex]))
+            let endDisplayCol = promptWidth + Self.displayWidth(buffer)
+            let termWidth = max(1, Self.terminalColumns())
+
+            // 从末尾位置移动到目标位置
+            let endRow = endDisplayCol / termWidth
+            let endCol = endDisplayCol % termWidth
+            let cursorRow = cursorDisplayCol / termWidth
+            let cursorCol = cursorDisplayCol % termWidth
+
+            // 先上移行差
+            let rowsUp = endRow - cursorRow
+            if rowsUp > 0 {
+                writeStdout("\u{1B}[\(rowsUp)A")
+            }
+            // 回到第 0 列，然后右移到目标列
+            writeStdout("\r")
+            if cursorCol > 0 {
+                writeStdout("\u{1B}[\(cursorCol)C")
             }
         }
+
+        // 5. 更新状态
+        previousDisplayLines = newLineCount
     }
 
     /// 保存当前编辑状态为 draft。
     mutating func saveDraft() {
         savedDraft = ComposerDraft.snapshot(text: buffer, cursor: cursor)
+    }
+
+    // MARK: - Multi-line Display Helpers
+
+    /// 获取终端宽度（列数）。
+    ///
+    /// 使用 `ioctl(TIOCGWINSZ)` 查询，fallback 到 80 列。
+    static func terminalColumns() -> Int {
+        var ws = winsize()
+        guard ioctl(STDOUT_FILENO, TIOCGWINSZ, &ws) == 0, ws.ws_col > 0 else {
+            return 80
+        }
+        return Int(ws.ws_col)
+    }
+
+    /// 剥离字符串中的 ANSI 转义序列。
+    ///
+    /// 支持 CSI (`\e[...字母`) 和 OSC (`\e]...BEL/ST`) 序列。
+    static func stripAnsi(_ s: String) -> String {
+        var result = ""
+        var i = s.startIndex
+        while i < s.endIndex {
+            if s[i] == "\u{1B}" {
+                let next = s.index(after: i)
+                if next < s.endIndex {
+                    let c = s[next]
+                    if c == "[" {
+                        // CSI sequence: skip until final byte (0x40-0x7E)
+                        i = s.index(after: next)
+                        while i < s.endIndex {
+                            let b = s[i]
+                            if let ascii = b.asciiValue, ascii >= 0x40 && ascii <= 0x7E {
+                                i = s.index(after: i)
+                                break
+                            }
+                            i = s.index(after: i)
+                        }
+                    } else if c == "]" {
+                        // OSC sequence: skip until BEL (0x07) or ST (\e\\)
+                        i = s.index(after: next)
+                        while i < s.endIndex {
+                            if s[i] == "\u{07}" {
+                                i = s.index(after: i)
+                                break
+                            }
+                            if s[i] == "\u{1B}" {
+                                let afterEsc = s.index(after: i)
+                                if afterEsc < s.endIndex && s[afterEsc] == "\\" {
+                                    i = s.index(after: afterEsc)
+                                    break
+                                }
+                            }
+                            i = s.index(after: i)
+                        }
+                    } else {
+                        // Other: 2-char escape sequence
+                        i = s.index(after: next)
+                    }
+                } else {
+                    i = next
+                }
+            } else {
+                result.append(s[i])
+                i = s.index(after: i)
+            }
+        }
+        return result
+    }
+
+    /// 计算字符串的终端显示宽度。
+    ///
+    /// 先剥离 ANSI 转义码，然后统计：
+    /// - CJK/wide 字符 → 2 列
+    /// - 其他可打印字符 → 1 列
+    /// - Default-ignorable code points → 0 列
+    static func displayWidth(_ s: String) -> Int {
+        let stripped = stripAnsi(s)
+        var width = 0
+        for scalar in stripped.unicodeScalars {
+            if scalar.properties.isDefaultIgnorableCodePoint { continue }
+            width += isWideScalar(scalar) ? 2 : 1
+        }
+        return width
+    }
+
+    /// 判断 Unicode scalar 是否为宽字符（CJK/全角等）。
+    ///
+    /// 与 `TGMessageFormatter+Tables.isWideScalar` 逻辑一致。
+    static func isWideScalar(_ scalar: Unicode.Scalar) -> Bool {
+        let v = scalar.value
+        // CJK Unified Ideographs
+        if v >= 0x4E00 && v <= 0x9FFF { return true }
+        // CJK Extension A
+        if v >= 0x3400 && v <= 0x4DBF { return true }
+        // CJK Compatibility Ideographs
+        if v >= 0xF900 && v <= 0xFAFF { return true }
+        // CJK Radicals / Kangxi
+        if v >= 0x2E80 && v <= 0x2FDF { return true }
+        // CJK Symbols, Hiragana, Katakana
+        if v >= 0x3000 && v <= 0x33FF { return true }
+        // Hangul Syllables
+        if v >= 0xAC00 && v <= 0xD7AF { return true }
+        // Fullwidth Forms
+        if v >= 0xFF01 && v <= 0xFF60 { return true }
+        // CJK Compatibility Forms
+        if v >= 0xFE30 && v <= 0xFE4F { return true }
+        // Emoji ranges (common ones that render wide in monospace)
+        if scalar.properties.isEmoji && v > 0x1F000 { return true }
+        return false
+    }
+
+    /// 计算 prompt + buffer 占用的终端物理行数。
+    static func calculateDisplayLines(prompt: String, buffer: String) -> Int {
+        let totalWidth = displayWidth(prompt) + displayWidth(buffer)
+        let cols = max(1, terminalColumns())
+        // 向上取整除法：0 width → 1 line（至少占一行）
+        return max(1, (totalWidth + cols - 1) / cols)
     }
 }

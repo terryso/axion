@@ -335,4 +335,86 @@ struct ChatComposerTests {
         composer.enableBracketPaste()
         #expect(capture.stderr.isEmpty)
     }
+
+    // MARK: - Multi-line Wrapping
+
+    @Test("stripAnsi 剥离 ANSI 转义码")
+    func stripAnsiRemovesCodes() {
+        let input = "\u{1B}[32mgreen\u{1B}[0m text"
+        let result = ChatComposer.stripAnsi(input)
+        #expect(result == "green text")
+    }
+
+    @Test("stripAnsi 处理纯文本（无 ANSI）")
+    func stripAnsiPlain() {
+        let input = "hello world"
+        let result = ChatComposer.stripAnsi(input)
+        #expect(result == "hello world")
+    }
+
+    @Test("stripAnsi 处理 OSC 序列")
+    func stripAnsiOSC() {
+        let input = "\u{1B}]0;title\u{07}content"
+        let result = ChatComposer.stripAnsi(input)
+        #expect(result == "content")
+    }
+
+    @Test("displayWidth 计算 ASCII 宽度")
+    func displayWidthASCII() {
+        #expect(ChatComposer.displayWidth("hello") == 5)
+        #expect(ChatComposer.displayWidth("") == 0)
+    }
+
+    @Test("displayWidth 计算 CJK 宽度（双宽字符）")
+    func displayWidthCJK() {
+        // 每个 CJK 字符占 2 列
+        #expect(ChatComposer.displayWidth("你好") == 4)
+        #expect(ChatComposer.displayWidth("a你b") == 4)  // 1 + 2 + 1
+    }
+
+    @Test("displayWidth 忽略 ANSI 转义码")
+    func displayWidthIgnoresAnsi() {
+        let colored = "\u{1B}[32mhello\u{1B}[0m"
+        #expect(ChatComposer.displayWidth(colored) == 5)
+    }
+
+    @Test("长中文输入超过终端宽度 — 重绘使用多行感知")
+    func longCJKInputWrapsCorrectly() {
+        // 40 个中文字符 = 80 列显示宽度，正好超过一个 80 列终端行
+        let longText = String(repeating: "测", count: 40)
+        var ctx = makeComposer(events: [
+            .printable("测"), .printable("测"), .printable("测"),
+            .printable("测"), .printable("测"), .printable("测"),
+            .printable("测"), .printable("测"), .printable("测"),
+            .printable("测"), .printable("测"), .printable("测"),
+            .printable("测"), .printable("测"), .printable("测"),
+            .printable("测"), .printable("测"), .printable("测"),
+            .printable("测"), .printable("测"), .printable("测"),
+            .printable("测"), .printable("测"), .printable("测"),
+            .printable("测"), .printable("测"), .printable("测"),
+            .printable("测"), .printable("测"), .printable("测"),
+            .printable("测"), .printable("测"), .printable("测"),
+            .printable("测"), .printable("测"), .printable("测"),
+            .printable("测"), .printable("测"), .printable("测"),
+            .printable("测"),
+            .enter
+        ])
+        let result = ctx.composer.readInput(prompt: "> ", continuationPrompt: "...> ")
+        #expect(result == longText)
+        // 验证重绘输出了光标上移和清除序列
+        let output = ctx.capture.stdout
+        // \e[J 用于清除旧内容（多行感知刷新的核心标志）
+        #expect(output.contains("\u{1B}[J"))
+    }
+
+    @Test("长文本 backspace 重绘正确")
+    func longTextBackspace() {
+        // 输入长文本后 backspace，验证重绘正确
+        var ctx = makeComposer(events: [
+            .printable("你"), .printable("好"), .printable("世"), .printable("界"),
+            .backspace, .enter
+        ])
+        let result = ctx.composer.readInput(prompt: "> ", continuationPrompt: "...> ")
+        #expect(result == "你好世")
+    }
 }

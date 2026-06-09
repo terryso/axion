@@ -104,6 +104,12 @@ struct ChatComposer {
     /// 搜索 footer 占用的行数（用于清除）
     var searchFooterLines: Int = 0
 
+    // MARK: - Multi-line Display State
+
+    /// 上一次 refreshDisplay 占用的终端物理行数。
+    /// 用于在下次重绘时上移光标到正确的起始行。
+    var previousDisplayLines: Int = 1
+
     // MARK: - Init
 
     init(
@@ -196,9 +202,12 @@ struct ChatComposer {
         fileSearchSelectedIndex = 0
         fileSearchRenderedLines = 0
         fileSearchDraftBackup = nil
+        previousDisplayLines = 1
 
         // 显示主提示符
         writeStdout(prompt)
+        // 初始化：计算 prompt 空行的物理行数
+        previousDisplayLines = Self.calculateDisplayLines(prompt: prompt, buffer: "")
 
         // Bracket paste 状态
         var inBracketPaste = false
@@ -246,8 +255,8 @@ struct ChatComposer {
                 let result = pasteBuffer
                 buffer = result
                 cursor = buffer.count
-                // 回显粘贴内容
-                writeStdout("\r\(prompt)\(buffer)\u{1B}[K")
+                // 回显粘贴内容（多行感知）
+                refreshDisplay(prompt: prompt)
                 continue
 
             // AC1: 可打印字符

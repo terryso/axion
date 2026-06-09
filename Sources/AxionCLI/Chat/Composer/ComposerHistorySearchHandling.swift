@@ -155,8 +155,8 @@ extension ChatComposer {
 
         searchFooterLines = 1
         writeStderr("\r\n\(footer)")
-        // 重新显示当前 prompt + buffer
-        writeStdout("\r\(prompt)\(buffer)\u{1B}[K")
+        // 重新显示当前 prompt + buffer（多行感知）
+        refreshDisplay(prompt: prompt)
     }
 
     /// 清除搜索 footer 渲染。
