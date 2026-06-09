@@ -384,6 +384,7 @@ struct ChatCommand: AsyncParsableCommand {
             let preTurnUsage = state.sessionUsage
             var turnToolCount = 0
             var lastAssistantText = ""  // For desktop notification preview
+            var turnFileTracker = TurnFileChangeTracker()  // Codex-inspired file change tracking
             sessionTurnCount += 1
 
             let outputHandler = ChatOutputFormatter(theme: chatTheme)
@@ -396,6 +397,7 @@ struct ChatCommand: AsyncParsableCommand {
                 case .toolUse(let data):
                     turnToolCount += 1
                     terminalTitle.setToolExecuting(data.toolName)
+                    turnFileTracker.recordToolUse(toolName: data.toolName, input: data.input)
                 case .assistant(let data):
                     if !data.text.isEmpty {
                         lastAssistantText = data.text
@@ -471,6 +473,14 @@ struct ChatCommand: AsyncParsableCommand {
                 ),
                 stderr
             )
+
+            // Codex-inspired file change summary — show files modified this turn
+            if let fileSummary = turnFileTracker.renderSummary(
+                isTTY: isatty(STDERR_FILENO) != 0,
+                profile: colorProfile
+            ) {
+                fputs(fileSummary, stderr)
+            }
 
             // Desktop notification — Codex-inspired OSC 9 / BEL on turn complete
             desktopNotifier.notify(.agentTurnComplete(preview: lastAssistantText))
