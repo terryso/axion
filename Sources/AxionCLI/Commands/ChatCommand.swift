@@ -409,10 +409,8 @@ struct ChatCommand: AsyncParsableCommand {
 
             composer.slashContext = SlashCommandContext(isAgentBusy: false, isSideSession: false)
 
-            if !inputQueue.isEmpty {
-                skipNextRead = true
-            }
-
+            // Story 38.5 AC2: Turn 结束后检查队列 — 仅正常完成时自动消费，中断时不消费
+            // （避免 Ctrl+C 中断后排队消息被自动发送，用户被迫多次 Ctrl+C）
             let interruptCount = SignalHandler.fireCount()
             if interruptCount > 0 {
                 let now = ContinuousClock.now
@@ -424,6 +422,10 @@ struct ChatCommand: AsyncParsableCommand {
                 state.lastInterruptTime = now
                 fputs("[axion] 已中断\n", stderr)
             } else {
+                // 正常完成 → 检查队列，非空则下轮自动消费
+                if !inputQueue.isEmpty {
+                    skipNextRead = true
+                }
                 state.lastInterruptTime = nil
                 outputHandler.displayCompletion()
                 fputs("\n", stdout)

@@ -29,6 +29,8 @@ extension ChatComposer {
                 }
                 query.append(char)
                 mode = .fileSearch(query: query)
+                buffer = "@" + query
+                cursor = buffer.count
                 let searchResult = fileSearcher.search(query: query, in: cwd, maxResults: 20)
                 cachedFileResults = searchResult.results
                 totalFileMatches = searchResult.totalMatches
