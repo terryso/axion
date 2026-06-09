@@ -34,7 +34,8 @@ struct SlashCommandHandler {
         contextWindow: Int = 0,
         contextTokens: Int = 0,
         isAgentBusy: Bool = false,  // AC6: 38.7
-        skillRegistry: SkillRegistry? = nil
+        skillRegistry: SkillRegistry? = nil,
+        lastAssistantText: String = ""  // /copy 需要
     ) -> SlashCommandAction {
         switch command {
         case .help:
@@ -96,6 +97,8 @@ struct SlashCommandHandler {
             return .exit
         case .skills:
             fputs(handleSkills(registry: skillRegistry), stderr)
+        case .copy:
+            fputs(handleCopy(lastAssistantText: lastAssistantText), stderr)
         }
         return .none
     }
@@ -263,5 +266,33 @@ struct SlashCommandHandler {
         }
         lines.append("\n提示: 直接输入 /技能名 即可执行，例如 /\(skills[0].name)")
         return lines.joined(separator: "\n") + "\n"
+    }
+
+    /// /copy — 复制最后一条 assistant 响应到剪贴板。
+    ///
+    /// Codex-inspired (clipboard_copy.rs): 支持多种剪贴板后端自动降级。
+    /// 使用 ClipboardService 执行实际复制操作。
+    ///
+    /// - Parameters:
+    ///   - lastAssistantText: 最后一条 assistant 响应文本
+    ///   - copyFn: 剪贴板复制闭包（默认使用 ClipboardService.copy）
+    static func handleCopy(
+        lastAssistantText: String,
+        copyFn: (String) -> ClipboardService.CopyResult = { ClipboardService.copy(text: $0) }
+    ) -> String {
+        guard !lastAssistantText.isEmpty else {
+            return ClipboardService.formatNoContent()
+        }
+
+        let result = copyFn(lastAssistantText)
+        switch result {
+        case .success(let backend):
+            return ClipboardService.formatSuccess(
+                backend: backend,
+                charCount: lastAssistantText.count
+            )
+        case .failure(let error):
+            return ClipboardService.formatFailure(error)
+        }
     }
 }

@@ -37,11 +37,11 @@ struct SlashCommandContextTests {
         }
     }
 
-    @Test("agent 忙碌时过滤后只有 9 个命令")
+    @Test("agent 忙碌时过滤后只有 10 个命令")
     func agentBusyResultCount() {
         let ctx = SlashCommandContext(isAgentBusy: true, isSideSession: false)
         let result = ctx.filter(SlashCommand.allCases)
-        #expect(result.count == 9)
+        #expect(result.count == 10)
     }
 
     // MARK: - Side session filtering (all available now)
@@ -59,7 +59,7 @@ struct SlashCommandContextTests {
         let result = ctx.filter(SlashCommand.allCases)
         #expect(!result.contains(.resume))
         // 所有命令 availableInSide == true，所以 side session 不额外过滤
-        #expect(result.count == 9)
+        #expect(result.count == 10)
     }
 
     // MARK: - Empty input

@@ -49,7 +49,7 @@ struct SlashPopupTests {
         #expect(names.contains("/compact"))
         #expect(names.contains("/cost"))
         #expect(names.contains("/config"))
-        #expect(items.count == 4)
+        #expect(items.count == 5)
     }
 
     @Test("/h 返回 /help")
@@ -59,14 +59,15 @@ struct SlashPopupTests {
         #expect(items[0].command == .help)
     }
 
-    @Test("/co 返回 /compact, /cost, /config")
-    func queryCoReturnsThree() {
+    @Test("/co 返回 /compact, /cost, /config, /copy")
+    func queryCoReturnsFour() {
         let items = SlashPopup.filter(query: "/co")
         let names = items.map(\.command.rawValue)
         #expect(names.contains("/compact"))
         #expect(names.contains("/cost"))
         #expect(names.contains("/config"))
-        #expect(items.count == 3)
+        #expect(names.contains("/copy"))
+        #expect(items.count == 4)
     }
 
     @Test("/xyz 无匹配返回空")
@@ -143,7 +144,7 @@ struct SlashPopupTests {
         let items = SlashPopup.filter(query: "/", context: ctx)
         let names = items.map(\.command.rawValue)
         #expect(!names.contains("/resume"), "/resume should be filtered when agent busy")
-        #expect(items.count == 9, "Should have 9 commands (all except /resume)")
+        #expect(items.count == 10, "Should have 10 commands (all except /resume, /new, /fork, /archive, /skills)")
     }
 
     // MARK: - Filter: matchRange

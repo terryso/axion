@@ -165,6 +165,7 @@ struct ChatCommand: AsyncParsableCommand {
         // Codex-inspired session metrics: turn counter, total tools, session start time
         var sessionTurnCount = 0
         var sessionTotalTools = 0
+        var sessionLastAssistantText = ""  // /copy 需要：跨 turn 持久化
         let sessionStartTime = ContinuousClock.now
 
         // REPL loop: each turn calls agent.stream() for full streaming events.
@@ -380,7 +381,8 @@ struct ChatCommand: AsyncParsableCommand {
                     buildConfig: state.buildConfig,
                     contextWindow: state.contextWindow,
                     contextTokens: state.contextTokens,
-                    skillRegistry: skillRegistry
+                    skillRegistry: skillRegistry,
+                    lastAssistantText: sessionLastAssistantText
                 )
 
                 switch action {
@@ -488,6 +490,7 @@ struct ChatCommand: AsyncParsableCommand {
                 case .assistant(let data):
                     if !data.text.isEmpty {
                         lastAssistantText = data.text
+                        sessionLastAssistantText = data.text  // /copy 需要：持久化到 session 级别
                     }
                 case .result(let data):
                     if let usage = data.usage {

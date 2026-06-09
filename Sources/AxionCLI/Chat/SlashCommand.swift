@@ -18,6 +18,7 @@ enum SlashCommand: String, CaseIterable, Equatable {
     case fork = "/fork"             // AC2: 分叉当前会话 (38.7)
     case archive = "/archive"       // AC3: 归档当前会话 (38.7)
     case skills = "/skills"         // 列出可用技能
+    case copy = "/copy"             // 复制最后一条 assistant 响应到剪贴板
 
     /// 解析用户输入为 SlashCommand。非斜杠命令或未知命令返回 nil。
     static func parse(_ input: String) -> SlashCommand? {
@@ -40,6 +41,7 @@ enum SlashCommand: String, CaseIterable, Equatable {
         case "/fork":    return .fork            // 38.7 AC2
         case "/archive": return .archive         // 38.7 AC3
         case "/skills":  return .skills
+        case "/copy":    return .copy
         default: return nil
         }
     }
@@ -69,6 +71,7 @@ enum SlashCommand: String, CaseIterable, Equatable {
         case .fork:       return "分叉当前会话"      // 38.7 AC2
         case .archive:    return "归档当前会话"      // 38.7 AC3
         case .skills:     return "列出可用技能"
+        case .copy:       return "复制最后一条 AI 响应到剪贴板"
         }
     }
 
@@ -96,7 +99,7 @@ enum SlashCommand: String, CaseIterable, Equatable {
     /// `.resume` 等结构性命令在 agent 忙碌时不可用。
     var availableDuringTask: Bool {
         switch self {
-        case .help, .cost, .config, .clear, .exit:  return true
+        case .help, .cost, .config, .clear, .copy, .exit:  return true
         case .resume, .newSession, .fork, .archive, .skills:  return false  // AC6: 38.7
         default:                                     return true
         }
