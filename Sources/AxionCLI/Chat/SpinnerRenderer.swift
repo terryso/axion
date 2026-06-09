@@ -6,19 +6,25 @@ import Foundation
 /// 支持延迟启动（delayMs > 500ms 时不立即显示 spinner）。
 ///
 /// 显示实时耗时：`⏳ 思考中 2.3s ⠙` — 受 Codex StatusIndicatorWidget 启发。
+///
+/// Codex-inspired shimmer: 消息文本施加余弦扫描微光效果，
+/// 使"思考中"等状态文字产生流动光效，增强活跃工作状态的视觉反馈。
 final class SpinnerRenderer {
     private let frames = Array("⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏")
     private var animationTimer: DispatchSourceTimer?
     private var delayTimer: DispatchSourceTimer?
     private let isTTY: Bool
+    private let colorProfile: TerminalColorProfile
     private let writeStderr: (String) -> Void
 
     /// 动画开始时刻，用于计算实时耗时。
     private var animationStartTime: DispatchTime?
 
     init(isTTY: Bool = isatty(STDERR_FILENO) != 0,
+         colorProfile: TerminalColorProfile = .detect(),
          writeStderr: @escaping (String) -> Void = { fputs($0, stderr); fflush(stderr) }) {
         self.isTTY = isTTY
+        self.colorProfile = colorProfile
         self.writeStderr = writeStderr
     }
 
@@ -73,13 +79,22 @@ final class SpinnerRenderer {
         let frames = self.frames
         var index = 0
         let writer = self.writeStderr
+        let shimmerTTY = self.isTTY
+        let shimmerProfile = self.colorProfile
 
         timer.setEventHandler {
             let frame = frames[index % frames.count]
             let elapsedNs = DispatchTime.now().uptimeNanoseconds - startTime.uptimeNanoseconds
             let elapsedMs = Int(elapsedNs / 1_000_000)
             let elapsedStr = Self.formatElapsedMs(elapsedMs)
-            writer("\r\("⏳") \(message) \(elapsedStr) \(frame) ")
+            // Codex-inspired shimmer: 消息文本施加流动微光效果
+            let shimmeredMessage = ShimmerText.render(
+                text: message,
+                elapsedMs: elapsedMs,
+                isTTY: shimmerTTY,
+                profile: shimmerProfile
+            )
+            writer("\r\("⏳") \(shimmeredMessage) \(elapsedStr) \(frame) ")
             index += 1
         }
         timer.resume()
