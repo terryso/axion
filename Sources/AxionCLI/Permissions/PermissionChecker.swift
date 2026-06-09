@@ -1,6 +1,5 @@
 import ApplicationServices
 import CoreGraphics
-import Foundation
 
 /// 权限检查结果状态
 enum PermissionStatus: Equatable {

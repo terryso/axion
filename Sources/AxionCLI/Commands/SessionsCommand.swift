@@ -66,16 +66,13 @@ struct SessionsCommand: AsyncParsableCommand {
 
         var lines = [header]
 
-        let dateFormatter = DateFormatter()
-        dateFormatter.dateFormat = "yyyy-MM-dd HH:mm"
-
         for session in sessions {
             let sessionId = truncate(session.sessionId, maxLength: 8)
             let task = truncate(session.summary ?? "-", maxLength: 27)
             let status = session.status
             let steps = "\(session.totalSteps)"
             let duration = formatDuration(session.durationMs)
-            let created = session.createdAt.map { dateFormatter.string(from: $0) } ?? "-"
+            let created = session.createdAt.map { axionDateTimeFormatter.string(from: $0) } ?? "-"
 
             let line = pad(sessionId, to: 12) + pad(task, to: 30) + pad(status, to: 12) + pad(steps, to: 6) + pad(duration, to: 10) + created
             lines.append(line)
@@ -85,20 +82,6 @@ struct SessionsCommand: AsyncParsableCommand {
     }
 
     // MARK: - Private Helpers
-
-    private static func pad(_ string: String, to width: Int) -> String {
-        if string.count >= width {
-            return string
-        }
-        return string + String(repeating: " ", count: width - string.count)
-    }
-
-    private static func truncate(_ string: String, maxLength: Int) -> String {
-        if string.count > maxLength {
-            return String(string.prefix(maxLength)) + "..."
-        }
-        return string
-    }
 
     private static func formatDuration(_ ms: Int?) -> String {
         guard let ms else { return "-" }

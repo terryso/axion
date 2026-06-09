@@ -6,7 +6,7 @@
 
 # Core Configuration Values
 project_name: axion
-document_output_language: English
+document_output_language: Mandarin
 output_folder: "{project-root}/_bmad-output"
 user_name: Nick
-communication_language: English
+communication_language: Mandarin

@@ -1,4 +1,3 @@
-import Foundation
 import MCP
 import MCPTool
 
@@ -32,20 +31,9 @@ struct TypeTextTool {
         do {
             try ServiceContainer.shared.inputSimulation.typeText(text)
             let result = TextActionResult(success: true, action: "type_text", text: text)
-            let encoder = JSONEncoder()
-            encoder.outputFormatting = [.sortedKeys]
-            let data = try encoder.encode(result)
-            return String(data: data, encoding: .utf8) ?? "{}"
+            return encodeToolResult(result)
         } catch let error as InputSimulationError {
-            let payload = ToolErrorPayload(
-                error: error.errorCode,
-                message: error.localizedDescription,
-                suggestion: error.suggestion
-            )
-            let encoder = JSONEncoder()
-            encoder.outputFormatting = [.sortedKeys]
-            let data = try encoder.encode(payload)
-            return String(data: data, encoding: .utf8) ?? "{}"
+            return encodeToolError(error)
         }
     }
 }
@@ -68,20 +56,9 @@ struct PressKeyTool {
         do {
             try ServiceContainer.shared.inputSimulation.pressKey(key)
             let result = KeyActionResult(success: true, action: "press_key", key: key)
-            let encoder = JSONEncoder()
-            encoder.outputFormatting = [.sortedKeys]
-            let data = try encoder.encode(result)
-            return String(data: data, encoding: .utf8) ?? "{}"
+            return encodeToolResult(result)
         } catch let error as InputSimulationError {
-            let payload = ToolErrorPayload(
-                error: error.errorCode,
-                message: error.localizedDescription,
-                suggestion: error.suggestion
-            )
-            let encoder = JSONEncoder()
-            encoder.outputFormatting = [.sortedKeys]
-            let data = try encoder.encode(payload)
-            return String(data: data, encoding: .utf8) ?? "{}"
+            return encodeToolError(error)
         }
     }
 }
@@ -104,20 +81,9 @@ struct HotkeyTool {
         do {
             try ServiceContainer.shared.inputSimulation.hotkey(keys)
             let result = HotkeyActionResult(success: true, action: "hotkey", keys: keys)
-            let encoder = JSONEncoder()
-            encoder.outputFormatting = [.sortedKeys]
-            let data = try encoder.encode(result)
-            return String(data: data, encoding: .utf8) ?? "{}"
+            return encodeToolResult(result)
         } catch let error as InputSimulationError {
-            let payload = ToolErrorPayload(
-                error: error.errorCode,
-                message: error.localizedDescription,
-                suggestion: error.suggestion
-            )
-            let encoder = JSONEncoder()
-            encoder.outputFormatting = [.sortedKeys]
-            let data = try encoder.encode(payload)
-            return String(data: data, encoding: .utf8) ?? "{}"
+            return encodeToolError(error)
         }
     }
 }

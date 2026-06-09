@@ -1,4 +1,3 @@
-import Foundation
 import OpenAgentSDK
 
 actor VisualDeltaHandler: EventHandler {

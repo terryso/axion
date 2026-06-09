@@ -6,31 +6,6 @@ import Foundation
 @Suite("APITypes")
 struct APITypesTests {
 
-    @Test("HealthResponse codable round trip preserves all fields")
-    func healthResponseCodableRoundTripPreservesAllFields() throws {
-        let response = HealthResponse(status: "ok", version: AxionCore.AxionVersion.current)
-
-        let encoder = JSONEncoder()
-        let data = try encoder.encode(response)
-        let decoded = try JSONDecoder().decode(HealthResponse.self, from: data)
-
-        #expect(decoded.status == "ok")
-        #expect(decoded.version == AxionCore.AxionVersion.current)
-    }
-
-    @Test("HealthResponse JSON keys are snake case")
-    func healthResponseJsonKeysAreSnakeCase() throws {
-        let response = HealthResponse(status: "ok", version: AxionCore.AxionVersion.current)
-
-        let encoder = JSONEncoder()
-        encoder.outputFormatting = [.sortedKeys]
-        let data = try encoder.encode(response)
-        let json = try #require(String(data: data, encoding: .utf8))
-
-        #expect(json.contains("\"status\""))
-        #expect(json.contains("\"version\""))
-    }
-
     @Test("CreateRunRequest codable round trip preserves all fields")
     func createRunRequestCodableRoundTripPreservesAllFields() throws {
         let request = CreateRunRequest(
@@ -464,36 +439,6 @@ struct APITypesTests {
 
         #expect(json.contains("\"available_actions\""))
         #expect(json.contains("\"blocking_issue\""))
-    }
-
-    // MARK: - Result Kind Inference Tests
-
-    @Test("inferResultKind returns answer for query tasks")
-    func inferResultKindReturnsAnswerForQueryTasks() {
-        #expect(ApiRunner.inferResultKind(task: "读取最新邮件") == .answer)
-        #expect(ApiRunner.inferResultKind(task: "查询系统信息") == .answer)
-        #expect(ApiRunner.inferResultKind(task: "获取文件列表") == .answer)
-        #expect(ApiRunner.inferResultKind(task: "列出所有进程") == .answer)
-        #expect(ApiRunner.inferResultKind(task: "搜索相关文档") == .answer)
-        #expect(ApiRunner.inferResultKind(task: "告诉我时间") == .answer)
-        #expect(ApiRunner.inferResultKind(task: "显示磁盘使用") == .answer)
-        #expect(ApiRunner.inferResultKind(task: "查看当前目录") == .answer)
-    }
-
-    @Test("inferResultKind returns confirmation for action tasks")
-    func inferResultKindReturnsConfirmationForActionTasks() {
-        #expect(ApiRunner.inferResultKind(task: "打开计算器") == .confirmation)
-        #expect(ApiRunner.inferResultKind(task: "关闭窗口") == .confirmation)
-        #expect(ApiRunner.inferResultKind(task: "移动文件到桌面") == .confirmation)
-        #expect(ApiRunner.inferResultKind(task: "删除临时文件") == .confirmation)
-        #expect(ApiRunner.inferResultKind(task: "创建新文件夹") == .confirmation)
-        #expect(ApiRunner.inferResultKind(task: "安装应用") == .confirmation)
-    }
-
-    @Test("inferResultKind defaults to confirmation for ambiguous tasks")
-    func inferResultKindDefaultsToConfirmation() {
-        #expect(ApiRunner.inferResultKind(task: "do something") == .confirmation)
-        #expect(ApiRunner.inferResultKind(task: "处理数据") == .confirmation)
     }
 
     // MARK: - StandardTaskOutput Serialization Performance

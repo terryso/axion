@@ -1,5 +1,4 @@
 import AxionCore
-import Foundation
 
 struct HelperMCPClientAdapter: MCPClientProtocol {
     let manager: HelperProcessManager

@@ -1,8 +1,6 @@
 import ArgumentParser
 import AxionCore
 import Foundation
-import os
-import OpenAgentSDK
 
 struct SkillRunCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
@@ -20,22 +18,13 @@ struct SkillRunCommand: AsyncParsableCommand {
     var allowForeground: Bool = false
 
     mutating func run() async throws {
-        let safeName = RecordCommand.sanitizeFileName(name)
-        let skillsDir = SkillCompileCommand.skillsDirectory()
-        let skillPath = (skillsDir as NSString).appendingPathComponent("\(safeName).json")
+        let skillPath = resolveFilePath(name: name, in: ConfigManager.skillsDirectory)
 
         guard FileManager.default.fileExists(atPath: skillPath) else {
-            throw ValidationError("技能不存在: \(safeName)")
+            throw ValidationError("技能不存在: \(name)")
         }
-
-        let skillData = try Data(contentsOf: URL(fileURLWithPath: skillPath))
-        let decoder = JSONDecoder()
-        decoder.dateDecodingStrategy = .iso8601
-        let skill: AxionCore.Skill
-        do {
-            skill = try decoder.decode(Skill.self, from: skillData)
-        } catch {
-            throw ValidationError("无法解析技能文件: \(error.localizedDescription)")
+        guard let skill = loadDecodableFile(skillPath, as: AxionCore.Skill.self, decoder: axionPersistentDecoder) else {
+            throw ValidationError("无法解析技能文件")
         }
 
         let paramValues = try parseParams()
@@ -53,13 +42,7 @@ struct SkillRunCommand: AsyncParsableCommand {
         )
 
         // Track skill usage
-        let usageStore = SkillUsageStore(skillsDir: skillsDir)
-        do {
-            try await usageStore.bumpView(skillName: skill.name)
-        } catch {
-            let logger = Logger(subsystem: "com.axion.cli", category: "SkillUsage")
-            logger.warning("Skill usage tracking failed for '\(skill.name)': \(error.localizedDescription)")
-        }
+        await trackSkillUsage(skillName: skill.name)
     }
 
     private func parseParams() throws -> [String: String] {

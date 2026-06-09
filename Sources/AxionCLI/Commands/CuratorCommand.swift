@@ -27,45 +27,27 @@ struct CuratorRunCommand: AsyncParsableCommand {
     mutating func run() async throws {
         let config = try await ConfigManager.loadConfig()
 
-        let skillsDir = (ConfigManager.defaultConfigDirectory as NSString).appendingPathComponent("skills")
-        let memoryDir = (ConfigManager.defaultConfigDirectory as NSString).appendingPathComponent("memory")
-
-        let usageStore = SkillUsageStore(skillsDir: skillsDir)
-        let curatorStore = SkillCuratorStore(skillsDir: skillsDir)
-        let factStore = FactStore(memoryDir: memoryDir)
-        let skillRegistry = SkillRegistry()
-        AxionBuiltInSkills.registerAll(into: skillRegistry)
-        _ = skillRegistry.registerDiscoveredSkills(from: ConfigManager.skillDiscoveryDirectories)
+        let skillsDir = ConfigManager.skillsDirectory
+        let memoryDir = ConfigManager.memoryDirectory
 
         guard let apiKey = config.apiKey, !apiKey.isEmpty else {
             throw AxionError.configError(reason: "API Key 未配置")
         }
 
-        let evolverClient = AnthropicClient(apiKey: apiKey, baseURL: config.baseURL)
-        let evolutionModel = config.reviewModel ?? AxionConfig.defaultReviewModel
-        let skillEvolver = LLMSkillEvolver(client: evolverClient, evolutionModel: evolutionModel)
+        let skillRegistry = SkillRegistry()
+        AxionBuiltInSkills.registerAll(into: skillRegistry)
+        _ = skillRegistry.registerDiscoveredSkills(from: ConfigManager.skillDiscoveryDirectories)
 
-        let curatorConfig = SkillCuratorConfig(
-            intervalHours: config.curatorIntervalHours ?? 168.0,
-            staleAfterDays: config.curatorStaleAfterDays ?? 30,
-            archiveAfterDays: config.curatorArchiveAfterDays ?? 90,
-            dryRun: dryRun,
-            enabled: true
-        )
-        let skillCurator = SkillCurator(
-            usageStore: usageStore,
-            curatorStore: curatorStore,
-            config: curatorConfig
-        )
-        let curator = IntelligentCurator(
-            skillCurator: skillCurator,
-            factStore: factStore,
+        let curatorDeps = AgentBuilder.buildCuratorDeps(
+            config: config,
+            apiKey: apiKey,
+            memoryDir: memoryDir,
+            skillsDir: skillsDir,
             skillRegistry: skillRegistry,
-            skillEvolver: skillEvolver,
-            usageStore: usageStore,
-            curatorStore: curatorStore,
-            skillsDir: skillsDir
+            dryRun: dryRun
         )
+        let curator = curatorDeps.intelligentCurator
+        let curatorStore = curatorDeps.curatorStore
 
         let buildConfig = AgentBuilder.BuildConfig.forCLI(
             config: config,
@@ -113,7 +95,7 @@ struct CuratorStatusCommand: AsyncParsableCommand {
     func run() async throws {
         let config = try await ConfigManager.loadConfig()
 
-        let skillsDir = (ConfigManager.defaultConfigDirectory as NSString).appendingPathComponent("skills")
+        let skillsDir = ConfigManager.skillsDirectory
         let curatorStore = SkillCuratorStore(skillsDir: skillsDir)
         let state = await curatorStore.loadState()
 
@@ -125,16 +107,14 @@ struct CuratorStatusCommand: AsyncParsableCommand {
         fputs("  间隔: \(intervalHours) 小时\n", stdout)
 
         if let lastRun = state.lastRunAt {
-            let formatter = DateFormatter()
-            formatter.dateFormat = "yyyy-MM-dd HH:mm:ss"
-            fputs("  上次策展: \(formatter.string(from: lastRun))\n", stdout)
+            fputs("  上次策展: \(axionDateTimeSecondsFormatter.string(from: lastRun))\n", stdout)
 
             let nextRun = lastRun.addingTimeInterval(intervalHours * 3600)
             let remaining = nextRun.timeIntervalSinceNow
             if remaining > 0 {
                 let hours = Int(remaining) / 3600
                 let minutes = (Int(remaining) % 3600) / 60
-                fputs("  下次策展: \(formatter.string(from: nextRun)) (剩余 \(hours)h \(minutes)m)\n", stdout)
+                fputs("  下次策展: \(axionDateTimeSecondsFormatter.string(from: nextRun)) (剩余 \(hours)h \(minutes)m)\n", stdout)
             } else {
                 fputs("  下次策展: 即可执行（已过间隔）\n", stdout)
             }

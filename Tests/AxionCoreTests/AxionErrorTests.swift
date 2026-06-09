@@ -1,22 +1,10 @@
-import Foundation
 import Testing
 @testable import AxionCore
 
 @Suite("AxionError")
 struct AxionErrorTests {
 
-    // MARK: - MCP ToolResult Error Format
-
-    @Test("error toToolResultJSON contains required fields")
-    func errorToToolResultJSONContainsRequiredFields() throws {
-        let error = AxionError.helperNotRunning
-        let jsonString = error.toToolResultJSON()
-        let json = try JSONSerialization.jsonObject(with: Data(jsonString.utf8)) as! [String: Any]
-
-        #expect(json["error"] != nil)
-        #expect(json["message"] != nil)
-        #expect(json["suggestion"] != nil)
-    }
+    // MARK: - Error Payload Format
 
     @Test("error planningFailed format")
     func errorPlanningFailedFormat() throws {
@@ -65,36 +53,6 @@ struct AxionErrorTests {
 
         #expect(payload.error == "max_retries_exceeded")
         #expect(payload.message.contains("5"))
-    }
-
-    @Test("error toToolResultJSON valid JSON for all cases")
-    func errorToToolResultJSONValidJSONForAllCases() throws {
-        let allErrors: [AxionError] = [
-            .planningFailed(reason: "test"),
-            .executionFailed(step: 0, reason: "test"),
-            .verificationFailed(step: 0, reason: "test"),
-            .helperNotRunning,
-            .helperConnectionFailed(reason: "test"),
-            .configError(reason: "test"),
-            .mcpError(tool: "test", reason: "test"),
-            .invalidPlan(reason: "test"),
-            .maxRetriesExceeded(retries: 1),
-            .stepBudgetExceeded(steps: 20, limit: 20),
-            .batchBudgetExceeded(batches: 6, limit: 6),
-            .timeout(operation: "test", seconds: 30),
-            .cancelled,
-            .unknown(reason: "test"),
-        ]
-
-        for error in allErrors {
-            let jsonString = error.toToolResultJSON()
-            let data = jsonString.data(using: .utf8)!
-            let json = try JSONSerialization.jsonObject(with: data) as! [String: Any]
-
-            #expect(json["error"] != nil, "Missing 'error' field for \(error)")
-            #expect(json["message"] != nil, "Missing 'message' field for \(error)")
-            #expect(json["suggestion"] != nil, "Missing 'suggestion' field for \(error)")
-        }
     }
 
     // MARK: - All Error Cases
@@ -168,46 +126,6 @@ struct AxionErrorTests {
         #expect(payload.error == "unknown")
         #expect(payload.message.contains("something unexpected"))
         #expect(!payload.suggestion.isEmpty)
-    }
-
-    // MARK: - toToolResultJSON Format
-
-    @Test("toToolResultJSON produces sorted keys")
-    func toToolResultJSONProducesSortedKeys() throws {
-        let error = AxionError.mcpError(tool: "click", reason: "failed")
-        let jsonString = error.toToolResultJSON()
-        let data = Data(jsonString.utf8)
-
-        let json = try JSONSerialization.jsonObject(with: data) as! [String: Any]
-        let sortedKeys = Array(json.keys).sorted()
-        #expect(sortedKeys == ["error", "message", "suggestion"])
-    }
-
-    @Test("toToolResultJSON all cases produce valid JSON")
-    func toToolResultJSONAllCasesProduceValidJSON() throws {
-        let allErrors: [AxionError] = [
-            .planningFailed(reason: "r"),
-            .executionFailed(step: 1, reason: "r"),
-            .verificationFailed(step: 1, reason: "r"),
-            .helperNotRunning,
-            .helperConnectionFailed(reason: "r"),
-            .configError(reason: "r"),
-            .mcpError(tool: "t", reason: "r"),
-            .invalidPlan(reason: "r"),
-            .maxRetriesExceeded(retries: 3),
-            .stepBudgetExceeded(steps: 20, limit: 20),
-            .batchBudgetExceeded(batches: 6, limit: 6),
-            .timeout(operation: "op", seconds: 1.0),
-            .cancelled,
-            .unknown(reason: "r"),
-        ]
-        for error in allErrors {
-            let jsonString = error.toToolResultJSON()
-            let data = Data(jsonString.utf8)
-            let json = try JSONSerialization.jsonObject(with: data) as? [String: Any]
-            #expect(json != nil, "toToolResultJSON should produce valid JSON for \(error)")
-            #expect(json?["error"] as? String == error.errorPayload.error)
-        }
     }
 
     // MARK: - MCPErrorPayload

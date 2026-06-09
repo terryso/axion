@@ -166,12 +166,4 @@ public enum AxionError: Error, Equatable {
         }
     }
 
-    public func toToolResultJSON() -> String {
-        let encoder = JSONEncoder()
-        encoder.outputFormatting = [.sortedKeys, .prettyPrinted]
-        guard let data = try? encoder.encode(errorPayload) else {
-            return "{\"error\": \"encoding_failed\", \"message\": \"Failed to encode error\", \"suggestion\": \"\"}"
-        }
-        return String(data: data, encoding: .utf8) ?? "{}"
-    }
 }

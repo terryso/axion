@@ -11,6 +11,7 @@ public struct SessionInfo: Codable, Equatable, Sendable {
     public let status: String
     public let totalSteps: Int
     public let durationMs: Int?
+    public let tag: String?  // 38.7: 归档标记 ("archived")
 
     public init(
         sessionId: String,
@@ -22,7 +23,8 @@ public struct SessionInfo: Codable, Equatable, Sendable {
         summary: String? = nil,
         status: String = "unknown",
         totalSteps: Int = 0,
-        durationMs: Int? = nil
+        durationMs: Int? = nil,
+        tag: String? = nil
     ) {
         self.sessionId = sessionId
         self.cwd = cwd
@@ -34,5 +36,6 @@ public struct SessionInfo: Codable, Equatable, Sendable {
         self.status = status
         self.totalSteps = totalSteps
         self.durationMs = durationMs
+        self.tag = tag
     }
 }

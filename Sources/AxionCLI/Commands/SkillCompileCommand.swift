@@ -15,24 +15,14 @@ struct SkillCompileCommand: AsyncParsableCommand {
     var param: [String] = []
 
     mutating func run() async throws {
-        let safeName = RecordCommand.sanitizeFileName(name)
-
         // Load recording file
-        let recordingsDir = RecordCommand.recordingsDirectory()
-        let recordingPath = (recordingsDir as NSString).appendingPathComponent("\(safeName).json")
+        let recordingPath = resolveFilePath(name: name, in: ConfigManager.recordingsDirectory)
 
         guard FileManager.default.fileExists(atPath: recordingPath) else {
             throw ValidationError("录制文件不存在: \(recordingPath)")
         }
-
-        let recordingData = try Data(contentsOf: URL(fileURLWithPath: recordingPath))
-        let decoder = JSONDecoder()
-        decoder.dateDecodingStrategy = .iso8601
-        let recording: Recording
-        do {
-            recording = try decoder.decode(Recording.self, from: recordingData)
-        } catch {
-            throw ValidationError("无法解析录制文件: \(error.localizedDescription)")
+        guard let recording = loadDecodableFile(recordingPath, as: Recording.self, decoder: axionPersistentDecoder) else {
+            throw ValidationError("无法解析录制文件")
         }
 
         // Compile
@@ -40,14 +30,11 @@ struct SkillCompileCommand: AsyncParsableCommand {
         let result = compiler.compile(recording: recording, paramNames: param)
 
         // Save skill file
-        let skillsDir = Self.skillsDirectory()
+        let skillsDir = ConfigManager.skillsDirectory
         try FileManager.default.createDirectory(atPath: skillsDir, withIntermediateDirectories: true)
 
-        let skillPath = (skillsDir as NSString).appendingPathComponent("\(safeName).json")
-        let encoder = JSONEncoder()
-        encoder.outputFormatting = [.sortedKeys, .prettyPrinted]
-        encoder.dateEncodingStrategy = .iso8601
-        let skillData = try encoder.encode(result.skill)
+        let skillPath = resolveFilePath(name: name, in: skillsDir)
+        let skillData = try axionPersistentEncoder.encode(result.skill)
         try skillData.write(to: URL(fileURLWithPath: skillPath))
 
         // Print summary
@@ -59,10 +46,5 @@ struct SkillCompileCommand: AsyncParsableCommand {
         if result.optimizedStepCount > 0 {
             print("[axion] 优化移除的冗余步骤: \(result.optimizedStepCount)")
         }
-    }
-
-    static func skillsDirectory() -> String {
-        let homeDir = FileManager.default.homeDirectoryForCurrentUser.path
-        return (homeDir as NSString).appendingPathComponent(".axion/skills")
     }
 }

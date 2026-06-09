@@ -1,5 +1,5 @@
 # generated: 2026-05-08
-# last_updated: 2026-06-03
+# last_updated: 2026-06-07 (38-7 in-progress)
 # project: axion
 # project_key: NOKEY
 # tracking_system: file-system
@@ -35,7 +35,8 @@
 # - Dev moves story to 'review', then runs code-review (fresh context, different LLM recommended)
 
 generated: 2026-05-08
-last_updated: 2026-06-04
+last_updated: 2026-06-07
+
 project: axion
 project_key: NOKEY
 tracking_system: file-system
@@ -394,3 +395,38 @@ development_status:
   tm-8-migrate-integration-tests: done
   tm-9-migrate-e2e-tests-cleanup-xctest: done
   epic-tm-retrospective: done
+
+  # ============================================================
+  # Phase 15 — 交互聊天模式 (Claude Code-like)
+  # ============================================================
+
+  # Epic 37: 交互聊天模式
+  epic-37: done
+  37-0-coding-agent-system-prompt-project-context: done
+  37-1-slash-command-system: done
+  37-2-ctrl-c-graceful-interrupt: done
+  37-3-startup-banner-session-info: done
+  37-4-terminal-output-optimization: done
+  37-5-permission-approval-mechanism: done
+  37-6-multiline-input-support: done
+  37-7-context-management: done
+  37-8-session-resume: done
+  37-9-chinese-input-fix: done
+  epic-37-retrospective: done
+
+  # ============================================================
+  # Phase 16 — 终端对话体验增强
+  # ============================================================
+
+  # Epic 38: 终端对话体验增强
+  epic-38: in-progress
+  38-0-lightweight-composer-input-foundation: done
+  38-1-conversation-visual-semantic-layer: done
+  38-2-slash-command-panel-completion: done
+  38-3-approval-center-v2: done
+  38-4-composer-efficiency-enhancement: done
+  38-5-busy-turn-input-queue: done
+  38-6-workspace-quick-context: done
+  38-7-session-workflow: done
+  # 38-8-side-conversation: 延后至 Epic 39，不阻塞 Epic 38 交付
+  epic-38-retrospective: optional

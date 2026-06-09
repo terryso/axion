@@ -34,15 +34,7 @@ enum ConfigManager {
     ) async throws -> AxionConfig {
         // 第 1-2 层：config.json（部分 JSON 由 AxionConfig.init(from:) 处理默认值回退）
         let dir = configDirectory ?? defaultConfigDirectory
-        let filePath = (dir as NSString).appendingPathComponent("config.json")
-
-        var config: AxionConfig
-        if let fileData = FileManager.default.contents(atPath: filePath),
-           let fileConfig = try? JSONDecoder().decode(AxionConfig.self, from: fileData) {
-            config = fileConfig
-        } else {
-            config = AxionConfig.default
-        }
+        var config = loadRawConfig(from: dir) ?? AxionConfig.default
 
         // 第 3 层：环境变量
         applyEnvOverrides(&config, env: environment ?? ProcessInfo.processInfo.environment)
@@ -55,13 +47,21 @@ enum ConfigManager {
         return config
     }
 
+    /// Read and decode config.json from the given directory, returning `nil` if missing or corrupt.
+    static func loadRawConfig(from directory: String) -> AxionConfig? {
+        loadDecodableFile(configFilePath(in: directory), as: AxionConfig.self)
+    }
+
+    /// Full path to config.json in the given directory.
+    static func configFilePath(in directory: String) -> String {
+        (directory as NSString).appendingPathComponent("config.json")
+    }
+
     /// 将配置保存到指定目录的 config.json 文件中。
     static func saveConfigFile(_ config: AxionConfig, toDirectory directory: String) throws {
-        let filePath = (directory as NSString).appendingPathComponent("config.json")
+        let filePath = configFilePath(in: directory)
 
-        let encoder = JSONEncoder()
-        encoder.outputFormatting = [.sortedKeys, .prettyPrinted]
-        let data = try encoder.encode(config)
+        let data = try axionPrettyEncoder.encode(config)
 
         // 文件权限 0o600（仅用户可读写）
         try FileManager.default.createDirectory(
@@ -91,10 +91,30 @@ enum ConfigManager {
         (NSHomeDirectory() as NSString).appendingPathComponent(".axion")
     }
 
+    /// Convenience subdirectory paths off the default config directory.
+    static var memoryDirectory: String {
+        (defaultConfigDirectory as NSString).appendingPathComponent("memory")
+    }
+
+    static var traceDirectory: String {
+        (defaultConfigDirectory as NSString).appendingPathComponent("runs")
+    }
+
+    static var skillsDirectory: String {
+        (defaultConfigDirectory as NSString).appendingPathComponent("skills")
+    }
+
+    static var recordingsDirectory: String {
+        (defaultConfigDirectory as NSString).appendingPathComponent("recordings")
+    }
+
+    static var sessionsDirectory: String {
+        (defaultConfigDirectory as NSString).appendingPathComponent("sessions")
+    }
+
     /// Unified skill discovery directories: SDK defaults + `~/.axion/skills/` (highest priority).
     static var skillDiscoveryDirectories: [String] {
-        let axionSkillsDir = (defaultConfigDirectory as NSString).appendingPathComponent("skills")
-        return SkillLoader.defaultSkillDirectories() + [axionSkillsDir]
+        return SkillLoader.defaultSkillDirectories() + [skillsDirectory]
     }
 
     /// 应用环境变量覆盖。

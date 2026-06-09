@@ -92,56 +92,22 @@ struct RunCommand: AsyncParsableCommand {
                     let effectiveMaxSteps = RunOrchestrator.computeEffectiveMaxSteps(
                         fast: fast, maxSteps: maxSteps, configMaxSteps: config.maxSteps
                     )
-
                     let skillBuildConfig = AgentBuilder.BuildConfig.forSkillExecution(
                         config: config,
                         skill: skill,
                         maxSteps: effectiveMaxSteps,
                         verbose: verbose
                     )
-
-                    let eventBus = EventBus()
-                    let runtime = Self.createRuntime(eventBus)
-                    let reviewDC = await registerHandlers(into: runtime, config: config)
-
-                    let eventLoopTask = _Concurrency.Task { await runtime.startEventLoop() }
-
-                    let overrides = AxionRuntime.RunOverrides(
-                        json: json,
-                        noVisualDelta: noVisualDelta,
-                        noReview: noReview,
-                        onReviewCompleted: nil,
-                        reviewDataContext: reviewDC,
-                        nonInteractivePause: false, registerResumeHandle: nil
-                    )
-
-                    let result: AxionRunResult
-                    do {
-                        result = try await runtime.executeSkill(
+                    let result = try await executeWithRuntime(config: config) { runtime, overrides in
+                        try await runtime.executeSkill(
                             skill: skill,
                             task: task,
                             config: config,
                             buildConfig: skillBuildConfig,
                             runOverrides: overrides
                         )
-                    } catch {
-                        eventLoopTask.cancel()
-                        await runtime.stopEventLoop()
-                        throw error
                     }
-                    eventLoopTask.cancel()
-                    await runtime.stopEventLoop()
-
-                    if !json {
-                        sendCompletionNotification(result: result)
-                    }
-
-                    if result.state == .failed {
-                        if let msg = result.errorMessage {
-                            fputs("[axion] 错误: \(msg)\n", stderr)
-                        }
-                        throw ExitCode(1)
-                    }
+                    try handleResult(result)
                 }
                 return
             }
@@ -159,99 +125,43 @@ struct RunCommand: AsyncParsableCommand {
             maxTokens: effectiveMaxTokens, verbose: verbose, dryrun: dryrun, fast: fast
         )
 
+        let result = try await executeWithRuntime(config: config) { runtime, overrides in
+            try await runtime.execute(buildConfig: buildConfig, runOverrides: overrides, sessionId: nil)
+        }
+        try handleResult(result)
+    }
+
+    // MARK: - Runtime Lifecycle
+
+    private func executeWithRuntime(
+        config: AxionConfig,
+        execute: (any AxionRuntimeRunning, AxionRuntime.RunOverrides) async throws -> AxionRunResult
+    ) async throws -> AxionRunResult {
         let eventBus = EventBus()
         let runtime = Self.createRuntime(eventBus)
-        let reviewDC = await registerHandlers(into: runtime, config: config)
-
-        // Start event loop concurrently so handlers receive events during execution
-        let eventLoopTask = _Concurrency.Task { await runtime.startEventLoop() }
-
-        let overrides = AxionRuntime.RunOverrides(
-            json: json,
-            noVisualDelta: noVisualDelta,
-            noReview: noReview,
-            onReviewCompleted: nil,
-            reviewDataContext: reviewDC,
-            nonInteractivePause: false, registerResumeHandle: nil
-        )
-
-        let result: AxionRunResult
-        do {
-            result = try await runtime.execute(buildConfig: buildConfig, runOverrides: overrides, sessionId: nil)
-        } catch {
-            eventLoopTask.cancel()
-            await runtime.stopEventLoop()
-            throw error
+        return try await executeCLIWithRuntime(
+            config: config, json: json,
+            noMemory: noMemory, noReview: noReview, noVisualDelta: noVisualDelta,
+            runtime: runtime
+        ) { overrides in
+            try await execute(runtime, overrides)
         }
-        eventLoopTask.cancel()
-        await runtime.stopEventLoop()
+    }
 
+    private func handleResult(_ result: AxionRunResult) throws {
         if !json {
             sendCompletionNotification(result: result)
         }
-
-        if result.state == .failed {
-            if let msg = result.errorMessage {
-                if json {
-                    let encoder = JSONEncoder()
-                    encoder.outputFormatting = [.sortedKeys]
-                    let obj: [String: String] = ["error": msg, "runId": result.sessionId, "status": "failed"]
-                    if let data = try? encoder.encode(obj) {
-                        fputs(String(data: data, encoding: .utf8) ?? "{}\n", stdout)
-                    }
-                } else {
-                    fputs("[axion] 错误: \(msg)\n", stderr)
-                }
-            }
+        if outputCLIError(result, json: json) {
             throw ExitCode(1)
         }
     }
 
-    @discardableResult
-    private func registerHandlers(into runtime: any AxionRuntimeRunning, config: AxionConfig) async -> ReviewDataContext {
-        let memoryDir = (ConfigManager.defaultConfigDirectory as NSString).appendingPathComponent("memory")
-        let traceDir = (ConfigManager.defaultConfigDirectory as NSString).appendingPathComponent("runs")
-        let reviewDataContext = ReviewDataContext()
-
-        let profile = HandlerProfile(
-            context: .cli,
-            config: config,
-            memoryDir: memoryDir,
-            traceDir: traceDir,
-            noMemory: noMemory,
-            noReview: noReview,
-            noVisualDelta: noVisualDelta,
-            reviewDataContext: reviewDataContext
-        )
-        for handler in profile.buildHandlers() {
-            await runtime.registerHandler(handler)
-        }
-        return reviewDataContext
-    }
+    // MARK: - Completion Notification
 
     private func sendCompletionNotification(result: AxionRunResult) {
-        let elapsedSec = result.durationMs / 1000
-        let numTurns = result.runCompleteContext?.numTurns ?? result.totalSteps
-
         let summary = extractSummaryLine(from: result.responseText ?? result.task)
-
-        let title: String
-        switch result.state {
-        case .completed: title = "Axion 完成"
-        case .failed: title = "Axion 失败"
-        default: title = "Axion"
-        }
-
-        var subtitle = "耗时 \(elapsedSec)s · \(numTurns) 次调用"
-        if let cost = result.runCompleteContext?.totalCostUsd, cost > 0 {
-            subtitle += " · $\(String(format: "%.4f", cost))"
-        }
-
-        Self.notify(
-            title,
-            subtitle,
-            String(summary.prefix(200))
-        )
+        sendRunCompletionNotification(result: result, message: summary, notify: Self.notify)
     }
 
     private func extractSummaryLine(from text: String) -> String {

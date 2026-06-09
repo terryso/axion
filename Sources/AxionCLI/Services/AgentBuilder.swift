@@ -33,134 +33,23 @@ struct AgentBuildResult: Sendable {
 /// any caller-specific concerns like TakeoverIO, SSE broadcasting, or cost tracking.
 enum AgentBuilder {
 
-    // MARK: - Configuration
+    // MARK: - Shared Helpers
 
-    struct BuildConfig: Sendable {
-        let config: AxionConfig
-        let task: String
-        let noMemory: Bool
-        let noSkills: Bool
-        let includePlaywright: Bool
-        let allowForeground: Bool
-        let maxSteps: Int?
-        let maxTokens: Int?
-        let verbose: Bool
-        let dryrun: Bool
-        let fast: Bool
-        let runId: String?
-        let sessionId: String?
-        let sessionStore: SessionStore?
-        let emitTokenStream: Bool
+    /// Tool names excluded from all agent builds — ToolSearch confuses GLM models,
+    /// AskUser is handled by the system prompt.
+    static let excludedToolNames: Set<String> = ["ToolSearch", "AskUser"]
 
-        static func forCLI(
-            config: AxionConfig,
-            task: String,
-            noMemory: Bool = false,
-            noSkills: Bool = false,
-            allowForeground: Bool = false,
-            maxSteps: Int? = nil,
-            maxTokens: Int? = nil,
-            verbose: Bool = false,
-            dryrun: Bool = false,
-            fast: Bool = false,
-            runId: String? = nil,
-            sessionId: String? = nil,
-            sessionStore: SessionStore? = nil
-        ) -> BuildConfig {
-            BuildConfig(
-                config: config,
-                task: task,
-                noMemory: noMemory,
-                noSkills: noSkills,
-                includePlaywright: true,
-                allowForeground: allowForeground,
-                maxSteps: maxSteps,
-                maxTokens: maxTokens,
-                verbose: verbose,
-                dryrun: dryrun,
-                fast: fast,
-                runId: runId,
-                sessionId: sessionId,
-                sessionStore: sessionStore,
-                emitTokenStream: false
+    /// Resolves the API key from config or environment, throwing if neither is available.
+    static func resolveApiKey(from config: AxionConfig) throws -> String {
+        let apiKey = config.apiKey
+            ?? ProcessInfo.processInfo.environment["AXION_API_KEY"]
+
+        guard let apiKey, !apiKey.isEmpty else {
+            throw AxionError.missingApiKey(
+                suggestion: "Run 'axion setup' to configure your API key, or set AXION_API_KEY environment variable."
             )
         }
-
-        static func forAPI(
-            config: AxionConfig,
-            task: String,
-            request: CreateRunRequest
-        ) -> BuildConfig {
-            BuildConfig(
-                config: config,
-                task: task,
-                noMemory: false,
-                noSkills: false,
-                includePlaywright: false,
-                allowForeground: request.allowForeground ?? false,
-                maxSteps: request.maxSteps,
-                maxTokens: nil,
-                verbose: false,
-                dryrun: false,
-                fast: false,
-                runId: nil,
-                sessionId: nil,
-                sessionStore: nil,
-                emitTokenStream: false
-            )
-        }
-
-        /// Build config for skill execution via SDK's `executeSkillStream()`.
-        /// Creates a minimal agent: no MCP, no SkillTool, core tools only (no ToolSearch/AskUser).
-        static func forSkillExecution(
-            config: AxionConfig,
-            skill: OpenAgentSDK.Skill,
-            maxSteps: Int? = nil,
-            verbose: Bool = false
-        ) -> BuildConfig {
-            BuildConfig(
-                config: config,
-                task: "",
-                noMemory: true,
-                noSkills: true,
-                includePlaywright: false,
-                allowForeground: false,
-                maxSteps: maxSteps,
-                maxTokens: nil,
-                verbose: verbose,
-                dryrun: false,
-                fast: false,
-                runId: nil,
-                sessionId: nil,
-                sessionStore: nil,
-                emitTokenStream: false
-            )
-        }
-
-        /// Build config for MCP Server mode (`axion mcp`).
-        /// No skills, no Playwright, no fast/dryrun modes. Memory context included.
-        static func forMCP(
-            config: AxionConfig,
-            verbose: Bool = false
-        ) -> BuildConfig {
-            BuildConfig(
-                config: config,
-                task: "",
-                noMemory: false,
-                noSkills: true,
-                includePlaywright: false,
-                allowForeground: false,
-                maxSteps: nil,
-                maxTokens: nil,
-                verbose: verbose,
-                dryrun: false,
-                fast: false,
-                runId: nil,
-                sessionId: nil,
-                sessionStore: nil,
-                emitTokenStream: false
-            )
-        }
+        return apiKey
     }
 
     // MARK: - Build
@@ -175,18 +64,11 @@ enum AgentBuilder {
         let task = buildConfig.task
 
         // 1. Resolve API key
-        let apiKey = config.apiKey
-            ?? ProcessInfo.processInfo.environment["AXION_API_KEY"]
+        let apiKey = try resolveApiKey(from: config)
 
-        guard let apiKey, !apiKey.isEmpty else {
-            throw AxionError.missingApiKey(
-                suggestion: "Run 'axion setup' to configure your API key, or set AXION_API_KEY environment variable."
-            )
-        }
-
-        // 2. Resolve Helper path
+        // 2. Resolve Helper path (only required for desktop automation mode)
         let resolvedHelperPath = HelperPathResolver.resolveHelperPath()
-        guard resolvedHelperPath != nil || buildConfig.dryrun else {
+        guard resolvedHelperPath != nil || buildConfig.dryrun || buildConfig.mode == .codingAgent else {
             throw AxionError.helperNotFound(
                 suggestion: "Ensure AxionHelper.app is installed. Run 'axion doctor' to diagnose."
             )
@@ -194,12 +76,11 @@ enum AgentBuilder {
         let helperPath = resolvedHelperPath ?? "/usr/bin/true"
 
         // 3. Create MemoryStore
-        let memoryDir = (ConfigManager.defaultConfigDirectory as NSString).appendingPathComponent("memory")
+        let memoryDir = ConfigManager.memoryDirectory
         let memoryStore = FileBasedMemoryStore(memoryDir: memoryDir)
 
-        // 3b. Prepare skillsDir + SkillUsageStore (shared by step 8 tools and step 11 review/curator)
-        let skillsDir = (ConfigManager.defaultConfigDirectory as NSString).appendingPathComponent("skills")
-        let usageStore: SkillUsageStore? = (!buildConfig.noMemory && !buildConfig.dryrun) ? SkillUsageStore(skillsDir: skillsDir) : nil
+        // 3b. Prepare skillsDir
+        let skillsDir = ConfigManager.skillsDirectory
 
         // 4. Discover and register skills (owned by AgentBuilder)
         let skillRegistry = SkillRegistry()
@@ -210,23 +91,41 @@ enum AgentBuilder {
             skillRegisteredCount = skillRegistry.allSkills.count
         }
 
-        // 5. Build system prompt
-        let systemPrompt = await buildSystemPrompt(
-            config: config,
-            task: task,
-            memoryStore: memoryStore,
-            memoryDir: memoryDir,
-            skillRegistry: skillRegistry,
-            noMemory: buildConfig.noMemory,
-            noSkills: buildConfig.noSkills,
-            fast: buildConfig.fast,
-            dryrun: buildConfig.dryrun,
-            includeSaveSkillGuidance: usageStore != nil
-        )
+        // 5. Build system prompt (branch by mode)
+        let noMemory = buildConfig.noMemory
+        let noSkills = buildConfig.noSkills
+        let dryrun = buildConfig.dryrun
+        let includeSaveSkillGuidance = !noMemory && !dryrun
 
-        // 6. Configure MCP servers (skip in dryrun — no side-effect tools allowed)
+        let systemPrompt: String
+        switch buildConfig.mode {
+        case .desktopAutomation:
+            systemPrompt = await buildSystemPrompt(
+                config: config,
+                task: task,
+                memoryStore: memoryStore,
+                memoryDir: memoryDir,
+                skillRegistry: skillRegistry,
+                noMemory: noMemory,
+                noSkills: noSkills,
+                fast: buildConfig.fast,
+                dryrun: dryrun,
+                includeSaveSkillGuidance: includeSaveSkillGuidance
+            )
+        case .codingAgent:
+            systemPrompt = await buildCodingSystemPrompt(
+                memoryStore: memoryStore,
+                memoryDir: memoryDir,
+                skillRegistry: skillRegistry,
+                noMemory: noMemory,
+                noSkills: noSkills,
+                includeSaveSkillGuidance: includeSaveSkillGuidance
+            )
+        }
+
+        // 6. Configure MCP servers (skip in dryrun and coding agent — no side-effect tools allowed)
         let mcpServers: [String: McpServerConfig]?
-        if buildConfig.dryrun {
+        if dryrun || buildConfig.mode == .codingAgent {
             mcpServers = nil
         } else {
             mcpServers = MCPConfigResolver.resolveMCPServers(
@@ -250,20 +149,33 @@ enum AgentBuilder {
         //
         // In dryrun mode, strip side-effect tools (Bash, Skill) so the agent
         // can only plan — never execute.
-        let excludedToolNames: Set<String> = ["ToolSearch", "AskUser"]
         let dryrunExcludedToolNames: Set<String> = ["Bash", "Skill"]
         var agentTools: [ToolProtocol] = (getAllBaseTools(tier: .core) + getAllBaseTools(tier: .specialist))
             .filter { !excludedToolNames.contains($0.name) }
-            .filter { !buildConfig.dryrun || !dryrunExcludedToolNames.contains($0.name) }
-        if !buildConfig.noSkills, !buildConfig.dryrun {
+            .filter { !dryrun || !dryrunExcludedToolNames.contains($0.name) }
+        if !noSkills, !dryrun {
             agentTools.append(createSkillTool(registry: skillRegistry))
         }
 
         // Memory tool — Agent can actively read/write MEMORY.md and USER.md
-        if !buildConfig.noMemory, !buildConfig.dryrun {
+        if !noMemory, !dryrun {
             let universalStore = UniversalMemoryStore(memoryDir: memoryDir)
             agentTools.append(MemoryTool(store: universalStore))
         }
+
+        // 8b. Create review infrastructure (ReviewOrchestrator + IntelligentCurator + SkillUsageStore)
+        let infra = buildReviewInfrastructure(
+            config: config,
+            apiKey: apiKey,
+            memoryDir: memoryDir,
+            skillsDir: skillsDir,
+            skillRegistry: skillRegistry,
+            noMemory: noMemory,
+            dryrun: dryrun
+        )
+        let reviewOrchestrator = infra.reviewOrchestrator
+        let intelligentCurator = infra.intelligentCurator
+        let usageStore = infra.usageStore
 
         // save_skill tool — Agent can persist reusable skills to disk
         if let usageStore {
@@ -298,12 +210,18 @@ enum AgentBuilder {
         agentOptions.env = config.env
         agentOptions.runId = buildConfig.runId
         agentOptions.traceEnabled = true
-        agentOptions.traceBaseURL = (ConfigManager.defaultConfigDirectory as NSString).appendingPathComponent("runs")
+        agentOptions.traceBaseURL = ConfigManager.traceDirectory
 
         // Wire EventBus so SDK publishes events (AgentCompletedEvent etc.)
         agentOptions.eventBus = eventBus
 
         // Session resume: inject sessionId + sessionStore into SDK AgentOptions
+        // Permission: inject canUseTool from ChatCommand (codingAgent mode only)
+        if let canUseTool = buildConfig.canUseTool {
+            agentOptions.canUseTool = canUseTool
+        } else if buildConfig.mode == .codingAgent {
+            fputs("⚠️  [Axion] codingAgent 模式未设置 canUseTool，所有工具将无权限检查\n", stderr)
+        }
         if let sid = buildConfig.sessionId {
             agentOptions.sessionId = sid
             agentOptions.sessionStore = buildConfig.sessionStore
@@ -322,65 +240,6 @@ enum AgentBuilder {
 
         // 10. Create Agent
         let agent = createAgent(options: agentOptions)
-
-        // 11. Create ReviewOrchestrator + IntelligentCurator (when memory is on and not dryrun)
-        let reviewOrchestrator: ReviewOrchestrator?
-        let intelligentCurator: IntelligentCurator?
-        if let usageStore {
-            let scheduleConfig = ReviewScheduleConfig(
-                memoryReviewInterval: config.reviewMemoryInterval ?? ReviewScheduleConfig().memoryReviewInterval,
-                skillReviewInterval: config.reviewSkillInterval ?? ReviewScheduleConfig().skillReviewInterval,
-                minMessagesForReview: config.reviewMinMessages ?? ReviewScheduleConfig().minMessagesForReview,
-                reviewModel: config.reviewModel
-            )
-            let reviewFactStore = FactStore(memoryDir: memoryDir)
-            let evolverClient = AnthropicClient(
-                apiKey: apiKey,
-                baseURL: config.baseURL
-            )
-            let skillEvolver = LLMSkillEvolver(
-                client: evolverClient,
-                evolutionModel: config.reviewModel ?? AxionConfig.defaultReviewModel
-            )
-            let universalMemoryStore = UniversalMemoryStore(memoryDir: memoryDir)
-            let reviewSaveMemoryTool = ReviewSaveUniversalMemoryTool(store: universalMemoryStore)
-            reviewOrchestrator = ReviewOrchestrator(
-                scheduleConfig: scheduleConfig,
-                factStore: reviewFactStore,
-                skillRegistry: skillRegistry,
-                skillEvolver: skillEvolver,
-                usageStore: usageStore,
-                skillsDir: skillsDir,
-                additionalReviewTools: [reviewSaveMemoryTool]
-            )
-
-            // IntelligentCurator — reuses deps from ReviewOrchestrator block
-            let curatorStore = SkillCuratorStore(skillsDir: skillsDir)
-            let curatorConfig = SkillCuratorConfig(
-                intervalHours: config.curatorIntervalHours ?? 168.0,
-                staleAfterDays: config.curatorStaleAfterDays ?? 30,
-                archiveAfterDays: config.curatorArchiveAfterDays ?? 90,
-                dryRun: config.curatorDryRun ?? false,
-                enabled: config.curatorEnabled ?? true
-            )
-            let skillCurator = SkillCurator(
-                usageStore: usageStore,
-                curatorStore: curatorStore,
-                config: curatorConfig
-            )
-            intelligentCurator = IntelligentCurator(
-                skillCurator: skillCurator,
-                factStore: reviewFactStore,
-                skillRegistry: skillRegistry,
-                skillEvolver: skillEvolver,
-                usageStore: usageStore,
-                curatorStore: curatorStore,
-                skillsDir: skillsDir
-            )
-        } else {
-            reviewOrchestrator = nil
-            intelligentCurator = nil
-        }
 
         return AgentBuildResult(
             agent: agent,
@@ -412,21 +271,13 @@ enum AgentBuilder {
         verbose: Bool = false,
         eventBus: EventBus? = nil
     ) async throws -> (agent: Agent, runCompleteBox: RunCompleteContextBox) {
-        let apiKey = config.apiKey
-            ?? ProcessInfo.processInfo.environment["AXION_API_KEY"]
-
-        guard let apiKey, !apiKey.isEmpty else {
-            throw AxionError.missingApiKey(
-                suggestion: "Run 'axion setup' to configure your API key, or set AXION_API_KEY environment variable."
-            )
-        }
+        let apiKey = try resolveApiKey(from: config)
 
         let registry = SkillRegistry()
         registry.register(skill)
 
         // Core tools only — exclude ToolSearch/AskUser to avoid confusing the LLM
-        let excludedTools: Set<String> = ["ToolSearch", "AskUser"]
-        let tools = getAllBaseTools(tier: .core).filter { !excludedTools.contains($0.name) }
+        let tools = getAllBaseTools(tier: .core).filter { !excludedToolNames.contains($0.name) }
 
         let effectiveMaxSteps = maxSteps ?? config.maxSteps
         let effectiveModel = skill.modelOverride ?? config.model
@@ -456,137 +307,4 @@ enum AgentBuilder {
         let agent = createAgent(options: agentOptions)
         return (agent, runCompleteBox)
     }
-
-    // MARK: - System Prompt
-
-    /// Builds the full system prompt for desktop automation.
-    private static func buildSystemPrompt(
-        config: AxionConfig,
-        task: String,
-        memoryStore: FileBasedMemoryStore,
-        memoryDir: String,
-        skillRegistry: SkillRegistry,
-        noMemory: Bool,
-        noSkills: Bool,
-        fast: Bool,
-        dryrun: Bool,
-        includeSaveSkillGuidance: Bool = false
-    ) async -> String {
-        let promptDir = PromptBuilder.resolvePromptDirectory()
-        let mcpPrefixedToolNames = ToolNames.allToolNames.map { "mcp__axion-helper__\($0)" }
-
-        // Memory context
-        var memoryContext: String? = nil
-        var universalMemoryContext: String? = nil
-        if !noMemory {
-            let contextProvider = MemoryContextProvider()
-            let factStore = AxionFactStore(memoryDir: memoryDir)
-            do {
-                if let factContext = await contextProvider.buildFactMemoryContext(
-                    task: task,
-                    factStore: factStore
-                ) {
-                    memoryContext = factContext
-                } else {
-                    memoryContext = try await contextProvider.buildMemoryContext(
-                        task: task,
-                        store: memoryStore
-                    )
-                }
-            } catch {
-                // Non-fatal: continue without memory context
-            }
-
-            // Universal memory (MEMORY.md + USER.md) — frozen at prompt build time
-            universalMemoryContext = await contextProvider.buildUniversalMemoryContext(memoryDir: memoryDir)
-        }
-
-        let baseSystemPrompt = (try? PromptBuilder.load(
-            name: "planner-system",
-            variables: [
-                "tools": PromptBuilder.buildToolListDescription(from: mcpPrefixedToolNames),
-                "max_steps": String(config.maxSteps),
-            ],
-            fromDirectory: promptDir
-        )) ?? ""
-
-        let skillsPrompt = noSkills ? "" : skillRegistry.formatSkillsForPrompt()
-
-        let prompt = buildFullSystemPrompt(
-            basePrompt: baseSystemPrompt,
-            memoryContext: memoryContext,
-            universalMemoryContext: universalMemoryContext,
-            skillsPrompt: skillsPrompt,
-            includeSaveSkillGuidance: includeSaveSkillGuidance
-        )
-
-        return appendModeInstructions(to: prompt, fast: fast, dryrun: dryrun)
-    }
-
-    /// Appends fast/dryrun mode instructions to a system prompt.
-    static func appendModeInstructions(to prompt: String, fast: Bool, dryrun: Bool) -> String {
-        var prompt = prompt
-        if fast {
-            prompt += """
-
-            IMPORTANT: You are in FAST mode. Generate the MINIMUM steps needed (1-3 steps max).
-            - Skip discovery steps (list_apps, list_windows, get_accessibility_tree) when the target app is obvious
-            - Do NOT call screenshot for verification — trust tool results
-            - Prefer direct actions (launch_app, type_text, hotkey) over exploration
-            - If a step fails, do NOT retry with alternative approaches — report failure immediately
-            """
-        }
-        if dryrun {
-            prompt += "\n\nIMPORTANT: You are in DRYRUN mode. Generate a plan but do NOT execute any tools. Return a plan JSON with status 'done' and the steps you would execute."
-        }
-        return prompt
-    }
-
-    /// Builds the full system prompt with memory context and skills section appended.
-    static func buildFullSystemPrompt(
-        basePrompt: String,
-        memoryContext: String? = nil,
-        universalMemoryContext: String? = nil,
-        skillsPrompt: String = "",
-        includeSaveSkillGuidance: Bool = false
-    ) -> String {
-        var prompt = basePrompt
-
-        if let memoryContext, !memoryContext.isEmpty {
-            prompt += "\n\n\(memoryContext)"
-        }
-
-        if let universalMemoryContext, !universalMemoryContext.isEmpty {
-            prompt += "\n\n\(universalMemoryContext)"
-        }
-        prompt += """
-
-        ## Universal Memory Operations
-
-        Treat Universal Memory as long-lived memory, not live repository state.
-        - If the user asks you to remember or save a durable preference/fact, use the `memory` tool with `add`.
-        - If the user corrects, updates, or rephrases something already in Universal Memory, prefer the `memory` tool with `replace` (or `remove` + `add`) instead of searching the repo or editing files, unless the user explicitly asks to change code, docs, or configuration.
-        - If the user asks you to forget or delete a remembered preference/fact, use the `memory` tool with `remove`.
-        - For explicit memory-management requests (`remember/save/update/delete this memory`), do not short-circuit based on your own safety judgment. Call the `memory` tool first and let its security scanner accept or reject the content.
-        - If the `memory` tool rejects content with `security_rejection`, tell the user that the save/update was blocked by the security scanner and do not fall back to storing it elsewhere.
-        - Use target `user` for personal preferences and target `memory` for durable project/environment facts.
-        """
-        if includeSaveSkillGuidance {
-            prompt += "\n- When you identify a reusable pattern, user preference, or workflow during conversation, use the `save_skill` tool to persist it as a skill. Saved skills are written to disk and automatically loaded in future sessions. Skills should be class-level general instructions, not session-level temporary notes."
-        }
-
-        if !skillsPrompt.isEmpty {
-            prompt += """
-
-            ## Available Skills
-
-            When the user's task matches a skill's TRIGGER condition, call the `Skill` tool with the skill name and arguments. Parameters: `skill` (skill name, required) and `args` (user arguments, optional). The tool returns a JSON with `prompt` (the skill's prompt template) — follow that prompt as your operating instructions for the rest of the task.
-
-            \(skillsPrompt)
-            """
-        }
-
-        return prompt
-    }
-
 }

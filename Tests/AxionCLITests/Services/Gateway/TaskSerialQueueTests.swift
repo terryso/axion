@@ -320,59 +320,6 @@ struct TaskSerialQueueTests {
         await server.stop()
     }
 
-    // MARK: - Tests: Result Summary Truncation (Task 5.7)
-
-    @Test("Result summary is truncated at 500 characters")
-    func resultSummaryTruncation() async {
-        let longError = String(repeating: "X", count: 600)
-        let result = AxionRunResult(
-            sessionId: "s1",
-            task: "task",
-            state: .completed,
-            totalSteps: 5,
-            durationMs: 10_000,
-            runSucceeded: false,
-            errorMessage: longError,
-            createdAt: Date()
-        )
-        let summary = TaskSerialQueue.summarize(result)
-        #expect(summary.count > 500)
-        #expect(summary.contains("完整结果"))
-    }
-
-    @Test("Short result summary is not truncated")
-    func shortResultNotTruncated() async {
-        let result = AxionRunResult(
-            sessionId: "s1",
-            task: "task",
-            state: .completed,
-            totalSteps: 3,
-            durationMs: 5_000,
-            runSucceeded: true,
-            createdAt: Date()
-        )
-        let summary = TaskSerialQueue.summarize(result)
-        #expect(summary.contains("任务完成"))
-        #expect(!summary.contains("完整结果"))
-    }
-
-    @Test("Error result summary shows error message")
-    func errorResultSummary() async {
-        let result = AxionRunResult(
-            sessionId: "s1",
-            task: "task",
-            state: .completed,
-            totalSteps: 1,
-            durationMs: 100,
-            runSucceeded: false,
-            errorMessage: "something went wrong",
-            createdAt: Date()
-        )
-        let summary = TaskSerialQueue.summarize(result)
-        #expect(summary.contains("任务失败"))
-        #expect(summary.contains("something went wrong"))
-    }
-
     // MARK: - Tests: Start Execution Notification (AC #1, #3)
 
     @Test("First task does not send standalone start notification")

@@ -8,135 +8,29 @@ import Testing
 @Suite("Command Pure Logic Tests")
 struct CommandPureLogicTests {
 
-    // MARK: - SkillRunCommand.parseParamStrings
-
-    @Test("parseParamStrings parses single key=value")
-    func parseParamStringsSingle() throws {
-        let result = try SkillRunCommand.parseParamStrings(["key=value"])
-        #expect(result == ["key": "value"])
-    }
-
-    @Test("parseParamStrings parses multiple params")
-    func parseParamStringsMultiple() throws {
-        let result = try SkillRunCommand.parseParamStrings(["url=https://example.com", "count=5"])
-        #expect(result == ["url": "https://example.com", "count": "5"])
-    }
-
-    @Test("parseParamStrings handles empty array")
-    func parseParamStringsEmpty() throws {
-        let result = try SkillRunCommand.parseParamStrings([])
-        #expect(result.isEmpty)
-    }
-
-    @Test("parseParamStrings handles value with equals sign")
-    func parseParamStringsValueWithEquals() throws {
-        let result = try SkillRunCommand.parseParamStrings(["expr=a=b+c"])
-        #expect(result == ["expr": "a=b+c"])
-    }
-
-    @Test("parseParamStrings throws on missing equals")
-    func parseParamStringsThrowsOnMissingEquals() {
-        #expect(throws: ValidationError.self) {
-            try SkillRunCommand.parseParamStrings(["noequalssign"])
-        }
-    }
-
-    @Test("parseParamStrings throws on empty key")
-    func parseParamStringsThrowsOnEmptyKey() {
-        #expect(throws: ValidationError.self) {
-            try SkillRunCommand.parseParamStrings(["=value"])
-        }
-    }
-
-    @Test("parseParamStrings handles empty value")
-    func parseParamStringsEmptyValue() throws {
-        let result = try SkillRunCommand.parseParamStrings(["key="])
-        #expect(result == ["key": ""])
-    }
-
-    // MARK: - RecordCommand.parseRecordingEvents
-
-    @Test("parseRecordingEvents returns empty for invalid JSON")
-    func parseRecordingEventsInvalidJSON() {
-        let result = RecordCommand.parseRecordingEvents(from: "not json")
-        #expect(result.isEmpty)
-    }
-
-    @Test("parseRecordingEvents returns empty for missing events key")
-    func parseRecordingEventsMissingKey() {
-        let result = RecordCommand.parseRecordingEvents(from: "{\"other\":[]}")
-        #expect(result.isEmpty)
-    }
-
-    @Test("parseRecordingEvents parses valid events")
-    func parseRecordingEventsValid() throws {
-        let event = RecordedEvent(type: .click, timestamp: 1.5, parameters: ["x": .int(100), "y": .int(200)], windowContext: nil)
-        let eventData = try JSONEncoder().encode(event)
-        let eventString = String(data: eventData, encoding: .utf8)!
-
-        // Build JSON with events as an array of JSON-encoded strings
-        let wrapper: [String: Any] = ["events": [eventString]]
-        let wrapperData = try JSONSerialization.data(withJSONObject: wrapper)
-        let input = String(data: wrapperData, encoding: .utf8)!
-
-        let result = RecordCommand.parseRecordingEvents(from: input)
-        #expect(result.count == 1)
-        #expect(result[0].type == .click)
-        #expect(result[0].timestamp == 1.5)
-    }
-
-    @Test("parseRecordingEvents skips invalid event entries")
-    func parseRecordingEventsSkipsInvalid() throws {
-        let validEvent = RecordedEvent(type: .hotkey, timestamp: 1.0, parameters: ["key": .string("a")], windowContext: nil)
-        let validData = try JSONEncoder().encode(validEvent)
-        let validString = String(data: validData, encoding: .utf8)!
-
-        let wrapper: [String: Any] = ["events": ["invalid json", validString]]
-        let wrapperData = try JSONSerialization.data(withJSONObject: wrapper)
-        let input = String(data: wrapperData, encoding: .utf8)!
-
-        let result = RecordCommand.parseRecordingEvents(from: input)
-        #expect(result.count == 1)
-        #expect(result[0].type == .hotkey)
-    }
-
-    // MARK: - RecordCommand.parseWindowSnapshots
-
-    @Test("parseWindowSnapshots returns empty for invalid JSON")
-    func parseWindowSnapshotsInvalidJSON() {
-        let result = RecordCommand.parseWindowSnapshots(from: "not json")
-        #expect(result.isEmpty)
-    }
-
-    @Test("parseWindowSnapshots returns empty for missing key")
-    func parseWindowSnapshotsMissingKey() {
-        let result = RecordCommand.parseWindowSnapshots(from: "{\"other\":[]}")
-        #expect(result.isEmpty)
-    }
-
-    // MARK: - RecordCommand.sanitizeFileName
+    // MARK: - sanitizeFileName
 
     @Test("sanitizeFileName removes path separators")
     func sanitizeFileNameRemovesSlashes() {
-        let result = RecordCommand.sanitizeFileName("path/to/file")
+        let result = sanitizeFileName("path/to/file")
         #expect(!result.contains("/"))
     }
 
     @Test("sanitizeFileName removes path traversal")
     func sanitizeFileNameRemovesTraversal() {
-        let result = RecordCommand.sanitizeFileName("../../etc/passwd")
+        let result = sanitizeFileName("../../etc/passwd")
         #expect(!result.contains(".."))
     }
 
     @Test("sanitizeFileName returns untitled for empty/whitespace input")
     func sanitizeFileNameEmptyReturnsUntitled() {
-        let result = RecordCommand.sanitizeFileName("   ")
+        let result = sanitizeFileName("   ")
         #expect(result == "untitled")
     }
 
     @Test("sanitizeFileName handles normal names")
     func sanitizeFileNameNormal() {
-        let result = RecordCommand.sanitizeFileName("my_recording")
+        let result = sanitizeFileName("my_recording")
         #expect(result == "my_recording")
     }
 
@@ -191,19 +85,17 @@ struct CommandPureLogicTests {
         #expect(command.host == "127.0.0.1")
     }
 
-    // MARK: - SkillCompileCommand.skillsDirectory
+    // MARK: - ConfigManager directory paths
 
     @Test("skillsDirectory returns path under .axion/skills")
     func skillsDirectoryPath() {
-        let path = SkillCompileCommand.skillsDirectory()
+        let path = ConfigManager.skillsDirectory
         #expect(path.hasSuffix(".axion/skills"))
     }
 
-    // MARK: - RecordCommand.recordingsDirectory
-
     @Test("recordingsDirectory returns path under .axion/recordings")
     func recordingsDirectoryPath() {
-        let path = RecordCommand.recordingsDirectory()
+        let path = ConfigManager.recordingsDirectory
         #expect(path.hasSuffix(".axion/recordings"))
     }
 }

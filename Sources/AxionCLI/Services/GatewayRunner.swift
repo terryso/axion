@@ -1,8 +1,6 @@
 import Foundation
-import Hummingbird
 import OpenAgentSDK
 
-import AxionCore
 
 // MARK: - GatewayHTTPControlling Protocol
 
@@ -53,50 +51,19 @@ struct GatewayRunnerStatus: Sendable, Equatable, Codable {
         case lastCuratorAt = "last_curator_at"
     }
 
-    init(from decoder: Decoder) throws {
-        let container = try decoder.container(keyedBy: CodingKeys.self)
-        state = try container.decode(String.self, forKey: .state)
-        activeTaskCount = try container.decode(Int.self, forKey: .activeTaskCount)
-        uptimeSeconds = try container.decode(Double.self, forKey: .uptimeSeconds)
-        label = try container.decode(String.self, forKey: .label)
-        pid = try container.decodeIfPresent(Int.self, forKey: .pid)
-        tgConnected = try container.decodeIfPresent(String.self, forKey: .tgConnected)
-        lastReviewAt = try container.decodeIfPresent(String.self, forKey: .lastReviewAt)
-        lastReviewSummary = try container.decodeIfPresent(String.self, forKey: .lastReviewSummary)
-        lastCuratorAt = try container.decodeIfPresent(String.self, forKey: .lastCuratorAt)
-    }
-
+    // Custom encode to ensure nil optional fields are encoded as JSON null (not omitted).
+    // encodeIfPresent omits nil keys entirely, so we use encodeNullIfNil for explicit null output.
     func encode(to encoder: Encoder) throws {
         var container = encoder.container(keyedBy: CodingKeys.self)
         try container.encode(state, forKey: .state)
         try container.encode(activeTaskCount, forKey: .activeTaskCount)
         try container.encode(uptimeSeconds, forKey: .uptimeSeconds)
         try container.encode(label, forKey: .label)
-        if let pid {
-            try container.encode(pid, forKey: .pid)
-        } else {
-            try container.encodeNil(forKey: .pid)
-        }
-        if let tgConnected {
-            try container.encode(tgConnected, forKey: .tgConnected)
-        } else {
-            try container.encodeNil(forKey: .tgConnected)
-        }
-        if let lastReviewAt {
-            try container.encode(lastReviewAt, forKey: .lastReviewAt)
-        } else {
-            try container.encodeNil(forKey: .lastReviewAt)
-        }
-        if let lastReviewSummary {
-            try container.encode(lastReviewSummary, forKey: .lastReviewSummary)
-        } else {
-            try container.encodeNil(forKey: .lastReviewSummary)
-        }
-        if let lastCuratorAt {
-            try container.encode(lastCuratorAt, forKey: .lastCuratorAt)
-        } else {
-            try container.encodeNil(forKey: .lastCuratorAt)
-        }
+        try container.encodeNullIfNil(pid, forKey: .pid)
+        try container.encodeNullIfNil(tgConnected, forKey: .tgConnected)
+        try container.encodeNullIfNil(lastReviewAt, forKey: .lastReviewAt)
+        try container.encodeNullIfNil(lastReviewSummary, forKey: .lastReviewSummary)
+        try container.encodeNullIfNil(lastCuratorAt, forKey: .lastCuratorAt)
     }
 }
 

@@ -1,7 +1,5 @@
-import Foundation
 import OpenAgentSDK
 
-import AxionCore
 
 /// Tool that queries the status of a previously submitted task.
 struct QueryTaskStatusTool: ToolProtocol {

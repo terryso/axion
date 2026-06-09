@@ -1,4 +1,5 @@
 import Foundation
+import AxionCore
 
 // MARK: - Models
 
@@ -49,14 +50,14 @@ final class DaemonService {
     let plistPath: String
     let logDir: String
 
-    private let subcommand: String
-    private let logFileName: String
-    private let errLogFileName: String
-    private let keepAliveCrashOnly: Bool
-    private let environmentVariables: [String: String]?
-    private let runLaunchctl: @Sendable ([String]) throws -> String
-    private let fileManager: FileManager
-    private let resolveBin: () -> String
+    let subcommand: String
+    let logFileName: String
+    let errLogFileName: String
+    let keepAliveCrashOnly: Bool
+    let environmentVariables: [String: String]?
+    let runLaunchctl: @Sendable ([String]) throws -> String
+    let fileManager: FileManager
+    let resolveBin: () -> String
 
     init(
         label: String = "dev.axion.server",
@@ -76,31 +77,15 @@ final class DaemonService {
         self.errLogFileName = errLogFileName
         self.keepAliveCrashOnly = keepAliveCrashOnly
         self.environmentVariables = environmentVariables
-        let home = NSHomeDirectory()
         self.plistPath = plistPath
-            ?? (home as NSString).appendingPathComponent("Library/LaunchAgents/\(label).plist")
-        self.logDir = (home as NSString).appendingPathComponent(".axion")
+            ?? (NSHomeDirectory() as NSString).appendingPathComponent("Library/LaunchAgents/\(label).plist")
+        self.logDir = ConfigManager.defaultConfigDirectory
         self.runLaunchctl = runLaunchctl
         self.fileManager = fileManager
         self.resolveBin = resolveBin
     }
 
     // MARK: - Path Resolution
-
-    static func resolvePlistPath() -> String {
-        let home = NSHomeDirectory()
-        return (home as NSString).appendingPathComponent("Library/LaunchAgents/dev.axion.server.plist")
-    }
-
-    static func resolveLogPath() -> String {
-        let home = NSHomeDirectory()
-        return (home as NSString).appendingPathComponent(".axion/server.log")
-    }
-
-    static func resolveErrorLogPath() -> String {
-        let home = NSHomeDirectory()
-        return (home as NSString).appendingPathComponent(".axion/server.err.log")
-    }
 
     static func resolveAxionBin() -> String {
         // 1. Environment variable override
@@ -134,87 +119,7 @@ final class DaemonService {
         return "axion"
     }
 
-    // MARK: - Plist Generation
-
-    func buildPlist(host: String = defaultHost, port: Int = defaultPort, authKey: String? = nil) -> String {
-        let binPath = resolveBin()
-        let logPath = (logDir as NSString).appendingPathComponent(logFileName)
-        let errLogPath = (logDir as NSString).appendingPathComponent(errLogFileName)
-
-        let subcommandParts = subcommand.split(separator: " ").map(String.init)
-
-        var xml = """
-        <?xml version="1.0" encoding="UTF-8"?>
-        <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
-        <plist version="1.0">
-        <dict>
-        \t<key>Label</key>
-        \t<string>\(Self.escapeXML(label))</string>
-        \t<key>ProgramArguments</key>
-        \t<array>
-        \t\t<string>\(Self.escapeXML(binPath))</string>
-        """
-
-        for part in subcommandParts {
-            xml += "\n\t\t<string>\(Self.escapeXML(part))</string>"
-        }
-
-        xml += """
-        \n\t\t<string>--host</string>
-        \t\t<string>\(Self.escapeXML(host))</string>
-        \t\t<string>--port</string>
-        \t\t<string>\(Self.escapeXML(String(port)))</string>
-        \t</array>
-        """
-
-        var envDict: [(String, String)] = []
-        if let authKey {
-            envDict.append(("AXION_AUTH_KEY", authKey))
-        }
-        if let environmentVariables {
-            for (key, value) in environmentVariables.sorted(by: { $0.key < $1.key }) {
-                envDict.append((key, value))
-            }
-        }
-
-        if !envDict.isEmpty {
-            xml += "\n\t<key>EnvironmentVariables</key>\n\t<dict>\n"
-            for (key, value) in envDict {
-                xml += "\t\t<key>\(Self.escapeXML(key))</key>\n\t\t<string>\(Self.escapeXML(value))</string>\n"
-            }
-            xml += "\t</dict>\n"
-        }
-
-        xml += """
-        \t<key>RunAtLoad</key>
-        \t<true/>
-        \t<key>KeepAlive</key>
-        """
-
-        if keepAliveCrashOnly {
-            xml += """
-            \n\t<dict>
-            \t\t<key>Crashed</key>
-            \t\t<true/>
-            \t</dict>
-            """
-        } else {
-            xml += "\n\t<true/>\n"
-        }
-
-        xml += """
-        \t<key>ThrottleInterval</key>
-        \t<integer>10</integer>
-        \t<key>StandardOutPath</key>
-        \t<string>\(Self.escapeXML(logPath))</string>
-        \t<key>StandardErrorPath</key>
-        \t<string>\(Self.escapeXML(errLogPath))</string>
-        </dict>
-        </plist>
-        """
-
-        return xml
-    }
+    // MARK: - Plist Generation (see DaemonService+PlistGeneration.swift)
 
     // MARK: - Install
 
@@ -289,109 +194,7 @@ final class DaemonService {
         }
     }
 
-    // MARK: - Status
-
-    func status() -> DaemonStatus {
-        // Check plist exists
-        guard fileManager.fileExists(atPath: plistPath) else {
-            return DaemonStatus(
-                status: .notInstalled,
-                pid: nil,
-                port: nil,
-                host: nil,
-                plistPath: plistPath,
-                label: label
-            )
-        }
-
-        let uid = getuid()
-        let domain = "gui/\(uid)"
-        let servicePath = "\(domain)/\(label)"
-
-        // Query launchctl for status
-        let output: String
-        do {
-            output = try runLaunchctl(["print", servicePath])
-        } catch {
-            return DaemonStatus(
-                status: .stopped,
-                pid: nil,
-                port: nil,
-                host: nil,
-                plistPath: plistPath,
-                label: label
-            )
-        }
-
-        // Parse PID from output
-        let pid = parsePID(from: output)
-
-        // Parse host/port from plist
-        let (host, port) = parseHostPortFromPlist()
-
-        return DaemonStatus(
-            status: pid != nil ? .running : .stopped,
-            pid: pid,
-            port: port,
-            host: host,
-            plistPath: plistPath,
-            label: label
-        )
-    }
-
-    // MARK: - Helpers
-
-    private func parsePID(from output: String) -> Int? {
-        // launchctl print output contains "pid = <number>"
-        let lines = output.components(separatedBy: .newlines)
-        for line in lines {
-            let trimmed = line.trimmingCharacters(in: .whitespaces)
-            if trimmed.hasPrefix("pid = ") {
-                let value = trimmed.dropFirst(6).trimmingCharacters(in: .whitespaces)
-                return Int(value)
-            }
-        }
-        return nil
-    }
-
-    private func parseHostPortFromPlist() -> (host: String?, port: Int?) {
-        guard let data = fileManager.contents(atPath: plistPath),
-              let content = String(data: data, encoding: .utf8) else {
-            return (nil, nil)
-        }
-
-        var host: String?
-        var port: Int?
-
-        // Simple XML parsing for host/port from ProgramArguments
-        let lines = content.components(separatedBy: .newlines)
-        for (index, line) in lines.enumerated() {
-            let trimmed = line.trimmingCharacters(in: .whitespaces)
-            if trimmed == "<string>--host</string>", index + 1 < lines.count {
-                let nextLine = lines[index + 1].trimmingCharacters(in: .whitespaces)
-                if nextLine.hasPrefix("<string>") && nextLine.hasSuffix("</string>") {
-                    host = String(nextLine.dropFirst(8).dropLast(9))
-                }
-            }
-            if trimmed == "<string>--port</string>", index + 1 < lines.count {
-                let nextLine = lines[index + 1].trimmingCharacters(in: .whitespaces)
-                if nextLine.hasPrefix("<string>") && nextLine.hasSuffix("</string>") {
-                    port = Int(nextLine.dropFirst(8).dropLast(9))
-                }
-            }
-        }
-
-        return (host, port)
-    }
-
-    static func escapeXML(_ value: String) -> String {
-        value
-            .replacingOccurrences(of: "&", with: "&amp;")
-            .replacingOccurrences(of: "<", with: "&lt;")
-            .replacingOccurrences(of: ">", with: "&gt;")
-            .replacingOccurrences(of: "\"", with: "&quot;")
-            .replacingOccurrences(of: "'", with: "&apos;")
-    }
+    // MARK: - Status & Parsing (see DaemonService+Status.swift)
 
     // MARK: - Default launchctl runner
 

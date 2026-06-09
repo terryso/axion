@@ -1,4 +1,3 @@
-import Foundation
 import OpenAgentSDK
 
 /// Protocol for event handlers that subscribe to specific AgentEvent types.

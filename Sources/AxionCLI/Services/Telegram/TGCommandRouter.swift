@@ -1,6 +1,3 @@
-import Foundation
-import OpenAgentSDK
-
 struct TGCommandRouter: Sendable {
     private let registry: TGCommandRegistry
     private let skillNameChecker: @Sendable (String) -> Bool

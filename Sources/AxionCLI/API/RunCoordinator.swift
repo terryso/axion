@@ -22,20 +22,8 @@ actor RunCoordinator {
 
     // MARK: - Run Lifecycle
 
-    private static let runIdDateFormatter: DateFormatter = {
-        let f = DateFormatter()
-        f.dateFormat = "yyyyMMdd"
-        return f
-    }()
-
-    private nonisolated(unsafe) static let isoFormatter: ISO8601DateFormatter = {
-        let f = ISO8601DateFormatter()
-        f.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
-        return f
-    }()
-
     func submitRun(task: String, request: OpenAgentSDK.CreateRunRequest = OpenAgentSDK.CreateRunRequest(task: "")) -> String {
-        let runId = Self.generateRunId()
+        let runId = RunOrchestrator.generateRunId()
         _submitRun(runId: runId, task: task, request: request)
         return runId
     }
@@ -46,7 +34,7 @@ actor RunCoordinator {
     }
 
     private func _submitRun(runId: String, task: String, request: OpenAgentSDK.CreateRunRequest) {
-        let submittedAt = Self.isoFormatter.string(from: Date())
+        let submittedAt = axionISO8601Formatter.string(from: Date())
 
         let run = TrackedRun(
             runId: runId,
@@ -74,7 +62,7 @@ actor RunCoordinator {
     ) async {
         guard runs[runId] != nil else { return }
 
-        let completedAt = Self.isoFormatter.string(from: Date())
+        let completedAt = axionISO8601Formatter.string(from: Date())
         let resolvedTotalSteps = totalSteps ?? steps.count
 
         runs[runId]?.status = status
@@ -103,30 +91,6 @@ actor RunCoordinator {
         }
     }
 
-    func updateRunResult(runId: String, result: ApiTaskResult) {
-        guard runs[runId] != nil else { return }
-        runs[runId]?.result = result
-        if let run = runs[runId] {
-            persistRecordSafely(run)
-        }
-    }
-
-    func updateRunIntervention(runId: String, intervention: InterventionData) {
-        guard runs[runId] != nil else { return }
-        runs[runId]?.intervention = intervention
-        if let run = runs[runId] {
-            persistRecordSafely(run)
-        }
-    }
-
-    func updateRunReviewSummary(runId: String, reviewSummary: String) {
-        guard runs[runId] != nil else { return }
-        runs[runId]?.reviewSummary = reviewSummary
-        if let run = runs[runId] {
-            persistRecordSafely(run)
-        }
-    }
-
     // MARK: - Query
 
     func restoreRun(_ run: TrackedRun) {
@@ -143,13 +107,6 @@ actor RunCoordinator {
 
     // MARK: - Private
 
-    private static func generateRunId() -> String {
-        let datePart = runIdDateFormatter.string(from: Date())
-        let chars = "abcdefghijklmnopqrstuvwxyz0123456789"
-        let randomPart = String((0..<6).map { _ in chars.randomElement()! })
-        return "\(datePart)-\(randomPart)"
-    }
-
     private func evictOldRuns() {
         if runs.count > Self.maxTrackedRuns {
             let completedKeys = runs.filter { $0.value.status != .running }
@@ -164,13 +121,6 @@ actor RunCoordinator {
 
     private func persistRecordSafely(_ run: TrackedRun) {
         guard let persistence = persistenceService else { return }
-        do {
-            let dir = persistence.runDirectory(runId: run.runId)
-            let path = (dir as NSString).appendingPathComponent("api-output.json")
-            let data = try JSONEncoder().encode(run)
-            try data.write(to: URL(fileURLWithPath: path), options: .atomic)
-        } catch {
-            print("[RunCoordinator] Warning: failed to persist record for run \(run.runId): \(error)")
-        }
+        persistRunRecord(run, toDirectory: persistence.runDirectory(runId: run.runId))
     }
 }

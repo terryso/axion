@@ -21,7 +21,7 @@ struct AxionAPIRoutesTests {
             try await client.execute(uri: "/v1/health", method: .get) { response in
                 #expect(response.status == .ok)
 
-                let body = try JSONDecoder().decode(HealthResponse.self, from: response.body)
+                let body = try JSONDecoder().decode(OpenAgentSDK.HealthResponse.self, from: response.body)
                 #expect(body.status == "ok")
                 #expect(!body.version.isEmpty)
             }
@@ -382,7 +382,7 @@ struct AxionAPIRoutesTests {
         try await app.test(.router) { client in
             try await client.execute(uri: "/v1/health", method: .get) { response in
                 #expect(response.status == .ok)
-                let body = try JSONDecoder().decode(HealthResponse.self, from: response.body)
+                let body = try JSONDecoder().decode(OpenAgentSDK.HealthResponse.self, from: response.body)
                 #expect(body.status == "ok")
             }
         }

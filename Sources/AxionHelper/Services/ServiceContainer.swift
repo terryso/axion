@@ -1,4 +1,3 @@
-import Foundation
 
 /// Holds service instances used by MCP tools.
 ///

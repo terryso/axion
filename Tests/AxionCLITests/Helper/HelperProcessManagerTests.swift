@@ -307,12 +307,6 @@ struct HelperProcessManagerTests {
         #expect(!running)
     }
 
-    @Test("setupSignalHandling registers SIGINT handler")
-    func setupSignalHandlingRegistersSIGINTHandler() async {
-        let manager = HelperProcessManager()
-        await manager.setupSignalHandling()
-    }
-
     @Test("crash monitor detects crash via transport state")
     func crashMonitorDetectsCrashViaTransportState() async throws {
         let transport = MockHelperTransport()

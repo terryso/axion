@@ -57,7 +57,7 @@ struct MemoryListCommandTests {
         let facts: [AppMemoryFact] = [
             AppMemoryFact.create(domain: "com.apple.calculator", kind: .observation, description: "Test run", evidence: ["r1"]),
         ]
-        try await store.saveAll(domain: "com.apple.calculator", facts: facts)
+        for fact in facts { try await store.save(domain: "com.apple.calculator", fact: fact) }
 
         let output = await MemoryListCommand.listMemory(in: tempDir)
 
@@ -85,7 +85,7 @@ struct MemoryListCommandTests {
             fact.evidenceCount = 3
             facts.append(fact)
         }
-        try await store.saveAll(domain: domain, facts: facts)
+        for fact in facts { try await store.save(domain: domain, fact: fact) }
 
         let output = await MemoryListCommand.listMemory(in: tempDir)
 
@@ -207,7 +207,7 @@ struct MemoryListCommandTests {
         observation.status = .retired
         observation.evidenceCount = 4
 
-        try await store.saveAll(domain: domain, facts: [affordance, avoid, observation])
+        for fact in [affordance, avoid, observation] { try await store.save(domain: domain, fact: fact) }
 
         let output = await MemoryListCommand.listMemory(in: tempDir)
 

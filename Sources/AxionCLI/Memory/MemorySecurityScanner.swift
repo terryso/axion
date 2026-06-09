@@ -11,7 +11,7 @@ enum MemoryScanResult: Equatable, Sendable {
 ///
 /// Two modes:
 /// - **Write-time** (`scan`): Rejects dangerous content before it's persisted.
-/// - **Load-time** (`scanOnLoad`): Returns warnings for suspicious entries without blocking.
+/// - **Entry-level** (`scanEntry`): Combines write-time checks with invisible Unicode detection.
 struct MemorySecurityScanner: Sendable {
 
     /// Unicode scalar values for invisible characters that should be flagged.
@@ -61,46 +61,6 @@ struct MemorySecurityScanner: Sendable {
         }
 
         return .safe
-    }
-
-    // MARK: - Load-time scan
-
-    /// Scan persisted content at load time. Returns a list of warning strings
-    /// for suspicious entries. Does NOT block loading.
-    func scanOnLoad(content: String) -> [String] {
-        var warnings: [String] = []
-
-        // Invisible Unicode detection (zero-width characters, BOM)
-        for scalarValue in Self.invisibleScalarValues {
-            if content.unicodeScalars.contains(where: { $0.value == scalarValue }) {
-                warnings.append("Invisible Unicode character detected")
-                break
-            }
-        }
-
-        let lowered = content.lowercased()
-
-        // Prompt injection (warn, don't block)
-        if matches(lowered, pattern: #"ignore\s+(?:(?:all\s+)?(?:previous|above|prior)\s+instructions|all\s+instructions)"#) {
-            warnings.append("Prompt injection pattern detected in stored memory")
-        }
-
-        // Role hijack
-        if matches(lowered, pattern: #"you\s+are\s+now\s+"#) {
-            warnings.append("Role hijack pattern detected in stored memory")
-        }
-
-        // Deception / hiding
-        if matches(lowered, pattern: #"do\s+not\s+tell\s+the\s+user"#) {
-            warnings.append("Deception pattern detected in stored memory")
-        }
-
-        // Credential exfiltration
-        if matches(lowered, pattern: #"curl\s+.*\$(KEY|TOKEN|SECRET|PASSWORD)"#) {
-            warnings.append("Credential exfiltration pattern detected in stored memory")
-        }
-
-        return warnings
     }
 
     // MARK: - Private

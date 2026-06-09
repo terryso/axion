@@ -1,5 +1,4 @@
 import AxionCore
-import Foundation
 
 protocol EventRecording: Sendable {
     func startRecording() throws

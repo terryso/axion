@@ -1,4 +1,3 @@
-import Foundation
 
 /// SetupIO — 抽象终端 I/O，方便测试 setup 命令。
 /// 通过协议注入，测试可以提供 MockSetupIO 预设输入序列。

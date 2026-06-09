@@ -1,7 +1,6 @@
 import Foundation
 import OpenAgentSDK
 
-import AxionCore
 
 actor NotificationHandler: EventHandler {
     let identifier = "notification"

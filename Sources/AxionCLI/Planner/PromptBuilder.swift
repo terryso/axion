@@ -1,7 +1,5 @@
 import Foundation
 
-import AxionCore
-
 /// Prompt 加载与模板变量注入 (AC1)
 struct PromptBuilder {
 

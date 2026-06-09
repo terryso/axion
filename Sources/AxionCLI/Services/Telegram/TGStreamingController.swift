@@ -34,125 +34,6 @@ actor TGStreamingController {
     private var toolMessageIds: [String: Int64] = [:]
     private var toolInputs: [String: String] = [:]
 
-    // MARK: - Tool Preview Helpers
-
-    private static func toolEmoji(_ toolName: String) -> String {
-        let lower = toolName.lowercased()
-        if lower.contains("search") || lower.contains("websearch") { return "🔍" }
-        if lower.contains("bash") || lower.contains("terminal") || lower.contains("shell") { return "💻" }
-        if lower.contains("reader") || lower.contains("fetch") { return "🌐" }
-        if lower.contains("read") { return "📖" }
-        if lower.contains("write") { return "✍️" }
-        if lower.contains("vision") || lower.contains("image") { return "👁️" }
-        if lower.contains("edit") { return "📝" }
-        if lower.contains("screenshot") || lower.contains("screen") { return "📸" }
-        return "⚙️"
-    }
-
-    private static func extractToolPreview(toolName: String, input: String?) -> String? {
-        guard let input, !input.isEmpty else { return nil }
-
-        guard let data = input.data(using: .utf8),
-              let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else {
-            return String(input.prefix(40))
-        }
-
-        let lower = toolName.lowercased()
-
-        if lower.contains("search") || lower.contains("websearch") {
-            if let query = json["query"] as? String { return query }
-            if let q = json["q"] as? String { return q }
-        }
-        if lower.contains("bash") || lower.contains("terminal") || lower.contains("shell") {
-            if let cmd = json["command"] as? String { return cmd }
-        }
-        if lower.contains("read") || lower.contains("write") || lower.contains("file")
-            || lower.contains("edit") || lower.contains("glob") || lower.contains("grep") {
-            if let path = json["file_path"] as? String { return path }
-            if let path = json["path"] as? String { return path }
-            if let pattern = json["pattern"] as? String, let path = json["path"] as? String {
-                return "\(path) — \(pattern)"
-            }
-        }
-        if lower.contains("reader") || lower.contains("url") || lower.contains("fetch") {
-            if let url = json["url"] as? String { return url }
-        }
-        if lower.contains("vision") || lower.contains("image") || lower.contains("analyze") {
-            if let prompt = json["prompt"] as? String { return String(prompt.prefix(40)) }
-        }
-
-        for (_, value) in json.sorted(by: { $0.key < $1.key }) {
-            if let str = value as? String, !str.isEmpty {
-                return String(str.prefix(80))
-            }
-        }
-
-        return nil
-    }
-
-    private static func formatToolArgument(toolName: String, input: String?) -> String? {
-        guard let preview = extractToolPreview(toolName: toolName, input: input)?
-            .trimmingCharacters(in: .whitespacesAndNewlines),
-              !preview.isEmpty else {
-            return nil
-        }
-
-        let lower = toolName.lowercased()
-        if lower.contains("bash") || lower.contains("terminal") || lower.contains("shell") {
-            return "`\(preview)`"
-        }
-        if lower.contains("search") || lower.contains("websearch") {
-            return "query: \(preview)"
-        }
-        if lower.contains("reader") || lower.contains("fetch") || lower.contains("url") {
-            return "url: \(preview)"
-        }
-        if lower.contains("read") || lower.contains("write") || lower.contains("file")
-            || lower.contains("edit") || lower.contains("glob") || lower.contains("grep") {
-            return "path: \(preview)"
-        }
-        return preview
-    }
-
-    private static func formatToolStepMessage(toolName: String, input: String?) -> String {
-        let emoji = toolEmoji(toolName)
-        if let argument = formatToolArgument(toolName: toolName, input: input) {
-            return "\(emoji) \(toolName): \(argument)"
-        }
-        return "\(emoji) \(toolName)"
-    }
-
-    private static func normalizeQuotedTask(_ task: String?) -> String? {
-        guard let task else { return nil }
-
-        let filtered = task
-            .components(separatedBy: "\n")
-            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
-            .filter { line in
-                !line.isEmpty
-                    && !line.hasPrefix("[附件图片:")
-                    && !line.hasPrefix("[用户发送了一张图片")
-            }
-
-        guard !filtered.isEmpty else { return nil }
-
-        let joined = filtered.joined(separator: "\n")
-        return String(joined.prefix(280))
-    }
-
-    private static func formatQuotedFinalAnswer(task: String?, answer: String) -> String {
-        guard let normalizedTask = normalizeQuotedTask(task) else {
-            return answer
-        }
-
-        let quotedTask = normalizedTask
-            .components(separatedBy: "\n")
-            .map { "> \($0)" }
-            .joined(separator: "\n")
-
-        return "\(quotedTask)\n\n\(answer)"
-    }
-
     // MARK: - Init
 
     init(
@@ -197,12 +78,6 @@ actor TGStreamingController {
         default:
             break
         }
-    }
-
-    // MARK: - LLM Token Stream (typing-only, no preview)
-
-    private func handleLLMTokenStream(_ event: LLMTokenStreamEvent) {
-        // Typing indicator is already running from init — nothing to do.
     }
 
     // MARK: - Tool Started
@@ -252,31 +127,6 @@ actor TGStreamingController {
         } else {
             _ = await sendMessage("\(emoji) \(event.toolName)\(resultSuffix)", chatId)
         }
-    }
-
-    /// Summarize tool output for TG display: basic cleanup, truncate to maxLines.
-    private static func summarizeOutput(_ output: String, maxLines: Int = 4) -> String {
-        // Tool output is raw data, not agent prose — do NOT apply stripMCPRawIO
-        // (which would strip everything inside MCP I/O blocks).
-        // Strip ANSI escape codes and clean up box-drawing table noise.
-        let cleaned = output
-            .replacingOccurrences(of: "\u{001B}\\[[0-9;]*[A-Za-z]", with: "", options: .regularExpression)
-            .replacingOccurrences(of: "\n{3,}", with: "\n\n", options: .regularExpression)
-            .trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !cleaned.isEmpty else { return "" }
-
-        let lines = cleaned.components(separatedBy: "\n")
-            .map { $0.trimmingCharacters(in: .whitespaces) }
-            .filter { !$0.isEmpty && !isBoxDrawingBorderLine($0) }
-        let truncated = lines.prefix(maxLines)
-        let suffix = lines.count > maxLines ? "\n… (\(lines.count - maxLines) 行省略)" : ""
-        return truncated.joined(separator: "\n") + suffix
-    }
-
-    private static func isBoxDrawingBorderLine(_ line: String) -> Bool {
-        let borderChars = CharacterSet(charactersIn: "─━┌┐└┘├┤┬┴┼╋┠┨┯┷╂╀╁╃╅╔╗╚╝║═╠╣╦╩╬")
-        let stripped = line.unicodeScalars.filter { !borderChars.contains($0) && !CharacterSet.whitespaces.contains($0) }
-        return line.unicodeScalars.contains(where: { borderChars.contains($0) }) && stripped.count <= 2
     }
 
     // MARK: - Agent Completed

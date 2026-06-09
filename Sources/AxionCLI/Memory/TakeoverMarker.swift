@@ -85,8 +85,6 @@ struct TakeoverMarker: Codable, Equatable {
         appName: String? = nil,
         task: String? = nil
     ) -> TakeoverMarker {
-        let formatter = ISO8601DateFormatter()
-        formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
         return TakeoverMarker(
             schemaVersion: 1,
             runId: runId,
@@ -99,27 +97,8 @@ struct TakeoverMarker: Codable, Equatable {
             bundleId: bundleId,
             appName: appName,
             task: task,
-            createdAt: formatter.string(from: Date())
+            createdAt: axionISO8601Formatter.string(from: Date())
         )
-    }
-
-    /// Converts to a flat dictionary representation.
-    func toDictionary() -> [String: Any] {
-        var result: [String: Any] = [
-            "schema_version": schemaVersion,
-            "run_id": runId,
-            "outcome": outcome.rawValue,
-            "issue": issue,
-            "summary": summary,
-            "reason_type": reasonType.rawValue,
-            "created_at": createdAt
-        ]
-        if let feedback { result["feedback"] = feedback }
-        if let duration { result["duration"] = duration }
-        if let bundleId { result["bundle_id"] = bundleId }
-        if let appName { result["app_name"] = appName }
-        if let task { result["task"] = task }
-        return result
     }
 
     /// Converts a `ContinuousClock.Duration` to seconds (TimeInterval).

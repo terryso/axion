@@ -1,5 +1,4 @@
 import ArgumentParser
-import Foundation
 
 /// Parent command group for `axion memory` subcommands.
 ///

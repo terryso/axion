@@ -1,4 +1,3 @@
-import Foundation
 import MCP
 import MCPTool
 
@@ -30,9 +29,6 @@ struct LaunchAppTool {
 
             let blocker = detectBlockingDialog(windows: windows, appPid: appInfo.pid)
 
-            let encoder = JSONEncoder()
-            encoder.outputFormatting = [.sortedKeys]
-
             if let blocker {
                 struct LaunchResult: Codable {
                     let pid: Int32
@@ -53,22 +49,12 @@ struct LaunchAppTool {
                     bundleId: appInfo.bundleId,
                     blockingDialog: blocker
                 )
-                let data = try encoder.encode(result)
-                return String(data: data, encoding: .utf8) ?? "{}"
+                return encodeToolResult(result)
             } else {
-                let data = try encoder.encode(appInfo)
-                return String(data: data, encoding: .utf8) ?? "{}"
+                return encodeToolResult(appInfo)
             }
         } catch let error as AppLauncherError {
-            let payload = ToolErrorPayload(
-                error: error.errorCode,
-                message: error.localizedDescription,
-                suggestion: error.suggestion
-            )
-            let encoder = JSONEncoder()
-            encoder.outputFormatting = [.sortedKeys]
-            let data = try encoder.encode(payload)
-            return String(data: data, encoding: .utf8) ?? "{}"
+            return encodeToolError(error)
         }
     }
 }
@@ -80,9 +66,6 @@ struct ListAppsTool {
 
     func perform() async throws -> String {
         let apps = ServiceContainer.shared.appLauncher.listRunningApps()
-        let encoder = JSONEncoder()
-        encoder.outputFormatting = [.sortedKeys]
-        let data = try encoder.encode(apps)
-        return String(data: data, encoding: .utf8) ?? "[]"
+        return encodeToolResult(apps, fallback: "[]")
     }
 }

@@ -55,7 +55,7 @@ struct SkillDeleteCommandTests {
 
     @Test("sanitizeFileName used for skill name safety")
     func test_sanitizeFileName_integration() {
-        let malicious = RecordCommand.sanitizeFileName("../../secret")
+        let malicious = sanitizeFileName("../../secret")
         #expect(!malicious.contains(".."))
         #expect(malicious == "____secret")
     }
@@ -64,8 +64,8 @@ struct SkillDeleteCommandTests {
 
     @Test("path traversal name is sanitized before file access")
     func test_pathTraversal_sanitized() {
-        let safeName = RecordCommand.sanitizeFileName("../../../etc/passwd")
-        let skillsDir = SkillCompileCommand.skillsDirectory()
+        let safeName = sanitizeFileName("../../../etc/passwd")
+        let skillsDir = ConfigManager.skillsDirectory
         let skillPath = (skillsDir as NSString).appendingPathComponent("\(safeName).json")
 
         // Path should be within skills directory
@@ -79,8 +79,8 @@ struct SkillDeleteCommandTests {
     @Test("delete constructs correct file path from sanitized name")
     func test_delete_constructsCorrectPath() {
         let name = "my_skill"
-        let safeName = RecordCommand.sanitizeFileName(name)
-        let skillsDir = SkillCompileCommand.skillsDirectory()
+        let safeName = sanitizeFileName(name)
+        let skillsDir = ConfigManager.skillsDirectory
         let expectedPath = (skillsDir as NSString).appendingPathComponent("\(safeName).json")
 
         #expect(expectedPath.hasSuffix("my_skill.json"))

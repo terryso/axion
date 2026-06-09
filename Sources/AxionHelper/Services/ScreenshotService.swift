@@ -3,7 +3,7 @@ import Foundation
 import ImageIO
 
 /// Errors thrown by `ScreenshotService`.
-enum ScreenshotError: Error, LocalizedError {
+enum ScreenshotError: Error, LocalizedError, ToolErrorProtocol {
     case windowCaptureFailed(windowId: Int)
     case fullScreenCaptureFailed
     case imageConversionFailed

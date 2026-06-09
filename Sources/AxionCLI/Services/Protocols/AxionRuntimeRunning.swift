@@ -1,11 +1,8 @@
 import AxionCore
 import OpenAgentSDK
 
-protocol AxionRuntimeRunning: Sendable {
-    func registerHandler(_ handler: any EventHandler) async
+protocol AxionRuntimeRunning: AxionRuntimeLifecycle, Sendable {
     func setContextOverrides(chatId: Int64?, shouldReviewMemory: Bool, shouldReviewSkills: Bool) async
-    func startEventLoop() async
-    func stopEventLoop() async
     func execute(
         buildConfig: AgentBuilder.BuildConfig,
         runOverrides: AxionRuntime.RunOverrides,

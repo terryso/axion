@@ -1,5 +1,4 @@
 import CoreGraphics
-import Foundation
 
 protocol InputSimulating: Sendable {
     func click(x: Int, y: Int) throws

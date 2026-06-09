@@ -22,14 +22,14 @@ protocol TaskSerialQueueProtocol: Sendable, Actor {
 // MARK: - TaskSerialQueue
 
 actor TaskSerialQueue: TaskSerialQueueProtocol {
-    private struct ActiveSession: Sendable {
+    struct ActiveSession: Sendable {
         let sessionId: String
         let chatId: Int64
         let lastActivityAt: ContinuousClock.Instant
         let createdAt: Date
     }
 
-    private struct PendingTask: Sendable {
+    struct PendingTask: Sendable {
         let task: String
         let chatId: Int64
         let userId: Int64
@@ -38,30 +38,29 @@ actor TaskSerialQueue: TaskSerialQueueProtocol {
         let shouldReviewMemory: Bool
     }
 
-    private struct TaskTimeoutError: Error {}
-
     private static let sessionTimeout: Duration = .seconds(30 * 60)
 
     private var queue: [PendingTask] = []
     private var isExecuting = false
     private var isShuttingDown = false
-    private var currentChatId: Int64?
     private var newTaskContinuation: CheckedContinuation<Void, Never>?
-    private var chatSessions: [Int64: ActiveSession] = [:]
-    private var activeResumeHandles: [String: @Sendable (String) async -> Void] = [:]
-    private var currentExecutionTask: _Concurrency.Task<Void, Never>?
 
-    private let runtimeManager: any DaemonRuntimeManaging
-    private let config: AxionConfig
-    private let runner: GatewayRunner
-    private let extraHandlers: [any EventHandler]
-    private let handlerProfile: HandlerProfile
-    private var replyHandler: @Sendable (Int64, String) async -> Int64?
-    private var editHandler: @Sendable (Int64, Int64, String) async -> Bool
-    private var chatActionHandler: @Sendable (Int64, String) async -> Void
-    private let sessionStore: TGInteractiveSessionStore?
-    private var sendMessageWithMarkupHandler: @Sendable (Int64, String, TGInlineKeyboardMarkup?) async -> Int64?
-    private let gatewaySessionStore: GatewaySessionStore?
+    var currentChatId: Int64?
+    var chatSessions: [Int64: ActiveSession] = [:]
+    var activeResumeHandles: [String: @Sendable (String) async -> Void] = [:]
+    var currentExecutionTask: _Concurrency.Task<Void, Never>?
+
+    let runtimeManager: any DaemonRuntimeManaging
+    let config: AxionConfig
+    let runner: GatewayRunner
+    let extraHandlers: [any EventHandler]
+    let handlerProfile: HandlerProfile
+    var replyHandler: @Sendable (Int64, String) async -> Int64?
+    var editHandler: @Sendable (Int64, Int64, String) async -> Bool
+    var chatActionHandler: @Sendable (Int64, String) async -> Void
+    let sessionStore: TGInteractiveSessionStore?
+    var sendMessageWithMarkupHandler: @Sendable (Int64, String, TGInlineKeyboardMarkup?) async -> Int64?
+    let gatewaySessionStore: GatewaySessionStore?
 
     init(
         runtimeManager: any DaemonRuntimeManaging,
@@ -88,6 +87,8 @@ actor TaskSerialQueue: TaskSerialQueueProtocol {
         self.sessionStore = sessionStore
         self.sendMessageWithMarkupHandler = sendMessageWithMarkupHandler
     }
+
+    // MARK: - Enqueue
 
     func enqueue(task: String, chatId: Int64, userId: Int64) async {
         guard !isShuttingDown else {
@@ -143,6 +144,8 @@ actor TaskSerialQueue: TaskSerialQueueProtocol {
         newTaskContinuation = nil
     }
 
+    // MARK: - Processing Loop
+
     func startProcessing() async {
         while !isShuttingDown {
             if queue.isEmpty {
@@ -179,37 +182,7 @@ actor TaskSerialQueue: TaskSerialQueueProtocol {
         }
     }
 
-    private func executeAndFinalize(pending: PendingTask, timeoutMinutes: Double) async {
-        do {
-            let result: AxionRunResult
-            if pending.shouldResume, let sessionId = pending.existingSessionId {
-                result = try await executeWithTimeout(
-                    timeoutMinutes: timeoutMinutes,
-                    pending: pending,
-                    sessionId: sessionId
-                )
-            } else {
-                result = try await executeNewWithTimeout(
-                    timeoutMinutes: timeoutMinutes,
-                    pending: pending
-                )
-            }
-            updateSession(from: result, chatId: pending.chatId)
-            if let store = gatewaySessionStore {
-                await store.recordSessionId(chatId: pending.chatId, sessionId: result.sessionId)
-            }
-        } catch is TaskTimeoutError {
-            _ = await replyHandler(pending.chatId, "任务超时已取消 (\(Int(timeoutMinutes)) 分钟)")
-        } catch is CancellationError {
-            _ = await replyHandler(pending.chatId, "⏹ 任务已停止")
-        } catch {
-            _ = await replyHandler(pending.chatId, "任务执行失败: \(error.localizedDescription)")
-        }
-        activeResumeHandles.removeAll()
-        currentChatId = nil
-        currentExecutionTask = nil
-        await runner.taskFinished()
-    }
+    // MARK: - Cancellation
 
     func cancelCurrentTask(chatId: Int64) -> Bool {
         // Can only cancel if currently executing for this chat
@@ -235,6 +208,8 @@ actor TaskSerialQueue: TaskSerialQueueProtocol {
         newTaskContinuation?.resume()
         newTaskContinuation = nil
     }
+
+    // MARK: - Session Management
 
     func clearSession(chatId: Int64) async {
         chatSessions.removeValue(forKey: chatId)
@@ -269,6 +244,8 @@ actor TaskSerialQueue: TaskSerialQueueProtocol {
         return true
     }
 
+    // MARK: - Queries
+
     var pendingCount: Int { queue.count }
     var isProcessing: Bool { isExecuting }
 
@@ -284,182 +261,9 @@ actor TaskSerialQueue: TaskSerialQueueProtocol {
         chatSessions[chatId] != nil
     }
 
-    // MARK: - Private Execution Helpers
+    // MARK: - Session Update
 
-    private func makeStreamingConfig() -> TGStreamingConfig {
-        TGStreamingConfig(
-            typingEnabled: config.tgTypingEnabled,
-            typingInterval: config.tgTypingInterval
-        )
-    }
-
-    private func makeGatewayRunOverrides() -> AxionRuntime.RunOverrides {
-        AxionRuntime.RunOverrides(
-            json: false,
-            noVisualDelta: false,
-            noReview: handlerProfile.noReview,
-            onReviewCompleted: nil,
-            reviewDataContext: handlerProfile.reviewDataContext,
-            nonInteractivePause: true,
-            registerResumeHandle: { [weak self] pendingId, handle in
-                await self?.registerResumeHandle(pendingId: pendingId, handle: handle)
-            }
-        )
-    }
-
-    private func executeNewWithTimeout(
-        timeoutMinutes: Double,
-        pending: PendingTask
-    ) async throws -> AxionRunResult {
-        let streamingConfig = makeStreamingConfig()
-        return try await withThrowingTaskGroup(of: AxionRunResult.self) { group in
-            group.addTask {
-                let request = OpenAgentSDK.CreateRunRequest(task: pending.task)
-                let buildConfig = AgentBuilder.BuildConfig(
-                    config: self.config,
-                    task: pending.task,
-                    noMemory: false,
-                    noSkills: false,
-                    includePlaywright: false,
-                    allowForeground: request.allowForeground ?? false,
-                    maxSteps: request.maxSteps,
-                    maxTokens: nil,
-                    verbose: false,
-                    dryrun: false,
-                    fast: false,
-                    runId: nil,
-                    sessionId: nil,
-                    sessionStore: nil,
-                    emitTokenStream: true
-                )
-                let eventBus = EventBus()
-                let tgHandler = TGEventHandler(
-                    chatId: pending.chatId,
-                    allowedUserId: pending.userId,
-                    sendMessage: { [weak self] message, chatId in
-                        await self?.replyHandler(chatId, message) ?? nil
-                    },
-                    editMessage: { [weak self] chatId, messageId, text in
-                        await self?.editHandler(chatId, messageId, text) ?? false
-                    },
-                    sendChatAction: { [weak self] chatId, action in
-                        await self?.chatActionHandler(chatId, action)
-                    },
-                    originalTask: pending.task,
-                    deferFinalDelivery: true,
-                    streamingConfig: streamingConfig,
-                    sessionStore: self.sessionStore,
-                    sendMessageWithMarkup: { [weak self] chatId, text, markup in
-                        await self?.sendMessageWithMarkupHandler(chatId, text, markup) ?? nil
-                    }
-                )
-                let allHandlers: [any EventHandler] = [tgHandler] + self.extraHandlers
-                let result = try await self.runtimeManager.executeRun(
-                    task: pending.task,
-                    buildConfig: buildConfig,
-                    eventBus: eventBus,
-                    runOverrides: self.makeGatewayRunOverrides(),
-                    handlerProfile: self.handlerProfile,
-                    extraHandlers: allHandlers,
-                    sessionId: nil,
-                    chatId: pending.chatId,
-                    shouldReviewMemory: pending.shouldReviewMemory,
-                    shouldReviewSkills: false
-                )
-                await tgHandler.finishRun(responseText: result.responseText)
-                return result
-            }
-            group.addTask {
-                try await _Concurrency.Task.sleep(nanoseconds: UInt64(timeoutMinutes * 60 * 1_000_000_000))
-                throw TaskTimeoutError()
-            }
-            let result = try await group.next()!
-            group.cancelAll()
-            return result
-        }
-    }
-
-    private func executeWithTimeout(
-        timeoutMinutes: Double,
-        pending: PendingTask,
-        sessionId: String
-    ) async throws -> AxionRunResult {
-        let streamingConfig = makeStreamingConfig()
-        do {
-            return try await withThrowingTaskGroup(of: AxionRunResult.self) { group in
-                group.addTask {
-                    let request = OpenAgentSDK.CreateRunRequest(task: pending.task)
-                    let buildConfig = AgentBuilder.BuildConfig(
-                        config: self.config,
-                        task: pending.task,
-                        noMemory: false,
-                        noSkills: false,
-                        includePlaywright: false,
-                        allowForeground: request.allowForeground ?? false,
-                        maxSteps: request.maxSteps,
-                        maxTokens: nil,
-                        verbose: false,
-                        dryrun: false,
-                        fast: false,
-                        runId: nil,
-                        sessionId: nil,
-                        sessionStore: nil,
-                        emitTokenStream: true
-                    )
-                    let eventBus = EventBus()
-                    let tgHandler = TGEventHandler(
-                        chatId: pending.chatId,
-                        allowedUserId: pending.userId,
-                        sendMessage: { [weak self] message, chatId in
-                            await self?.replyHandler(chatId, message)
-                        },
-                        editMessage: { [weak self] chatId, messageId, text in
-                            await self?.editHandler(chatId, messageId, text) ?? false
-                        },
-                        sendChatAction: { [weak self] chatId, action in
-                            await self?.chatActionHandler(chatId, action)
-                        },
-                        originalTask: pending.task,
-                        deferFinalDelivery: true,
-                        streamingConfig: streamingConfig,
-                        sessionStore: self.sessionStore,
-                        sendMessageWithMarkup: { [weak self] chatId, text, markup in
-                            await self?.sendMessageWithMarkupHandler(chatId, text, markup) ?? nil
-                        }
-                    )
-                    let allHandlers: [any EventHandler] = [tgHandler] + self.extraHandlers
-                    let result = try await self.runtimeManager.resumeRun(
-                        sessionId: sessionId,
-                        task: pending.task,
-                        buildConfig: buildConfig,
-                        eventBus: eventBus,
-                        runOverrides: self.makeGatewayRunOverrides(),
-                        handlerProfile: self.handlerProfile,
-                        extraHandlers: allHandlers,
-                        chatId: pending.chatId,
-                        shouldReviewMemory: pending.shouldReviewMemory,
-                        shouldReviewSkills: false
-                    )
-                    await tgHandler.finishRun(responseText: result.responseText)
-                    return result
-                }
-                group.addTask {
-                    try await _Concurrency.Task.sleep(nanoseconds: UInt64(timeoutMinutes * 60 * 1_000_000_000))
-                    throw TaskTimeoutError()
-                }
-                let result = try await group.next()!
-                group.cancelAll()
-                return result
-            }
-        } catch {
-            if error is TaskTimeoutError { throw error }
-            fputs("[axion] resumeSession failed for \(sessionId), degrading to new session: \(error.localizedDescription)\n", stderr)
-            chatSessions.removeValue(forKey: pending.chatId)
-            return try await executeNewWithTimeout(timeoutMinutes: timeoutMinutes, pending: pending)
-        }
-    }
-
-    private func updateSession(from result: AxionRunResult, chatId: Int64) {
+    func updateSession(from result: AxionRunResult, chatId: Int64) {
         chatSessions[chatId] = ActiveSession(
             sessionId: result.sessionId,
             chatId: chatId,
@@ -468,15 +272,4 @@ actor TaskSerialQueue: TaskSerialQueueProtocol {
         )
     }
 
-    static func summarize(_ result: AxionRunResult) -> String {
-        let maxLen = 500
-        var summary: String
-        if let error = result.errorMessage {
-            summary = "❌ 任务失败: \(error)"
-        } else {
-            summary = "✅ 任务完成 (\(result.totalSteps) 步, \(result.durationMs / 1000)s)"
-        }
-        guard summary.count > maxLen else { return summary }
-        return "\(summary.prefix(maxLen))...(完整结果 \(summary.count) 字符)"
-    }
 }

@@ -2,7 +2,6 @@ import Foundation
 import os
 import OpenAgentSDK
 
-import AxionCore
 
 /// Curator result info for optional TG push callback.
 struct CuratorResultInfo: Sendable {
@@ -91,29 +90,6 @@ actor CuratorScheduler: EventHandler {
         return true
     }
 
-    /// Entry point for periodic idle checks (external timer).
-    func checkIdle() async {
-        let now = Date()
-        guard shouldCurate(now: now) else { return }
-        guard let agent = agentProvider() else { return }
-
-        _lastCuratorAt = now
-        let curator = self.curator
-        let traceDir = self.traceDir
-        let lastCuratorAtBox = self._lastCuratorAtBox
-        let onCuratorResult = self._onCuratorResult
-
-        launchTask { [curator, agent, traceDir, lastCuratorAtBox, onCuratorResult] in
-            await Self.executeCurator(
-                curator: curator,
-                agent: agent,
-                traceDir: traceDir,
-                lastCuratorAtBox: lastCuratorAtBox,
-                onCuratorResult: onCuratorResult
-            )
-        }
-    }
-
     func handle(_ event: any AgentEvent, context: EventHandlerContext) async {
         let now = Date()
         // Check idle condition with the OLD _lastTaskAt BEFORE updating it.
@@ -123,18 +99,20 @@ actor CuratorScheduler: EventHandler {
 
         guard shouldCurate(now: now, referenceLastTaskAt: previousLastTaskAt) else { return }
         guard let agent = agentProvider() else {
-            let logger = Logger(subsystem: "com.axion.cli", category: "CuratorScheduler")
-            logger.warning("Curator scheduled but agent not available — skipping")
+            axionCuratorSchedulerLogger.warning("Curator scheduled but agent not available — skipping")
             return
         }
 
         _lastCuratorAt = now
+        launchCuratorTask(agent: agent, sessionId: context.sessionId ?? "unknown")
+    }
 
+    /// Resolve actor-isolated dependencies and launch a detached curator task.
+    private func launchCuratorTask(agent: Agent, sessionId: String = "curator-bg") {
         let curator = self.curator
         let traceDir = self.traceDir
         let lastCuratorAtBox = self._lastCuratorAtBox
         let onCuratorResult = self._onCuratorResult
-        let sessionId = context.sessionId ?? "unknown"
 
         launchTask { [curator, agent, traceDir, lastCuratorAtBox, onCuratorResult, sessionId] in
             await Self.executeCurator(
@@ -156,12 +134,11 @@ actor CuratorScheduler: EventHandler {
         onCuratorResult: (@Sendable (CuratorResultInfo) async -> Void)?,
         sessionId: String = "curator-bg"
     ) async {
-        let logger = Logger(subsystem: "com.axion.cli", category: "CuratorScheduler")
         do {
             let result = try await curator.execute(parentAgent: agent, dryRun: false)
 
             let report = CuratorRunReport(from: result)
-            logger.debug("Curator report:\n\(report.renderMarkdown())")
+            axionCuratorSchedulerLogger.debug("Curator report:\n\(report.renderMarkdown())")
 
             TraceRecorder.recordCuratorCompleted(
                 runId: sessionId,
@@ -184,9 +161,7 @@ actor CuratorScheduler: EventHandler {
                 fputs("[axion] Curator: 无变更，技能库已整洁\n", stderr)
             }
 
-            let formatter = ISO8601DateFormatter()
-            formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
-            lastCuratorAtBox.set(formatter.string(from: Date()))
+            lastCuratorAtBox.set(axionISO8601Formatter.string(from: Date()))
 
             let info = CuratorResultInfo(
                 consolidations: result.consolidations.count,
@@ -198,7 +173,7 @@ actor CuratorScheduler: EventHandler {
             )
             await onCuratorResult?(info)
         } catch {
-            logger.warning("Curator execution failed: \(error.localizedDescription)")
+            axionCuratorSchedulerLogger.warning("Curator execution failed: \(error.localizedDescription)")
             TraceRecorder.recordCuratorFailed(
                 runId: sessionId,
                 error: error.localizedDescription,

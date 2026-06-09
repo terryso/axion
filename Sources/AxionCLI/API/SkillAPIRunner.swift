@@ -1,6 +1,4 @@
 import AxionCore
-import Foundation
-import os
 import OpenAgentSDK
 
 /// Runs a skill through the RunTracker + EventBroadcaster pipeline.
@@ -29,14 +27,7 @@ enum SkillAPIRunner {
         do {
             try await helperManager.start()
         } catch {
-            let event = AgentSSEEvent.runCompleted(RunCompletedData(
-                runId: runId,
-                finalStatus: "failed",
-                totalSteps: 0,
-                durationMs: nil
-            ))
-            await eventBroadcaster.emit(runId: runId, event: event)
-            await eventBroadcaster.complete(runId: runId)
+            await emitRunCompleted(runId: runId, status: "failed", totalSteps: 0, durationMs: nil, broadcaster: eventBroadcaster)
             return RunResult(finalStatus: .failed, stepSummaries: [], durationMs: nil, replanCount: 0)
         }
 
@@ -73,28 +64,11 @@ enum SkillAPIRunner {
 
             if !stepSuccess {
                 // Emit step_completed (failed) and stop
-                let completedEvent = AgentSSEEvent.stepCompleted(StepCompletedData(
-                    stepIndex: index,
-                    tool: step.tool,
-                    success: false,
-                    durationMs: nil
-                ))
-                await eventBroadcaster.emit(runId: runId, event: completedEvent)
+                await emitStepCompleted(index: index, tool: step.tool, success: false, runId: runId, broadcaster: eventBroadcaster)
 
                 // Run completed (failed)
-                let elapsed = ContinuousClock.now - startTime
-                let durationMs = Int(
-                    elapsed.components.seconds * 1000 +
-                    elapsed.components.attoseconds / 1_000_000_000_000_000
-                )
-                let runCompletedEvent = AgentSSEEvent.runCompleted(RunCompletedData(
-                    runId: runId,
-                    finalStatus: "failed",
-                    totalSteps: skill.steps.count,
-                    durationMs: durationMs
-                ))
-                await eventBroadcaster.emit(runId: runId, event: runCompletedEvent)
-                await eventBroadcaster.complete(runId: runId)
+                let durationMs = durationToMs(ContinuousClock.now - startTime)
+                await emitRunCompleted(runId: runId, status: "failed", totalSteps: skill.steps.count, durationMs: durationMs, broadcaster: eventBroadcaster)
                 await helperManager.stop()
 
                 return RunResult(
@@ -106,13 +80,7 @@ enum SkillAPIRunner {
             }
 
             // Emit step_completed (success)
-            let completedEvent = AgentSSEEvent.stepCompleted(StepCompletedData(
-                stepIndex: index,
-                tool: step.tool,
-                success: true,
-                durationMs: nil
-            ))
-            await eventBroadcaster.emit(runId: runId, event: completedEvent)
+            await emitStepCompleted(index: index, tool: step.tool, success: true, runId: runId, broadcaster: eventBroadcaster)
 
             // Wait if specified
             if step.waitAfterSeconds > 0 {
@@ -122,30 +90,11 @@ enum SkillAPIRunner {
 
         await helperManager.stop()
 
-        let elapsed = ContinuousClock.now - startTime
-        let durationMs = Int(
-            elapsed.components.seconds * 1000 +
-            elapsed.components.attoseconds / 1_000_000_000_000_000
-        )
-
-        let runCompletedEvent = AgentSSEEvent.runCompleted(RunCompletedData(
-            runId: runId,
-            finalStatus: "completed",
-            totalSteps: skill.steps.count,
-            durationMs: durationMs
-        ))
-        await eventBroadcaster.emit(runId: runId, event: runCompletedEvent)
-        await eventBroadcaster.complete(runId: runId)
+        let durationMs = durationToMs(ContinuousClock.now - startTime)
+        await emitRunCompleted(runId: runId, status: "completed", totalSteps: skill.steps.count, durationMs: durationMs, broadcaster: eventBroadcaster)
 
         // Track skill usage
-        let skillsDir = (ConfigManager.defaultConfigDirectory as NSString).appendingPathComponent("skills")
-        let usageStore = SkillUsageStore(skillsDir: skillsDir)
-        do {
-            try await usageStore.bumpView(skillName: skill.name)
-        } catch {
-            let logger = Logger(subsystem: "com.axion.cli", category: "SkillUsage")
-            logger.warning("Skill usage tracking failed for '\(skill.name)': \(error.localizedDescription)")
-        }
+        await trackSkillUsage(skillName: skill.name)
 
         return RunResult(
             finalStatus: .completed,
@@ -155,6 +104,26 @@ enum SkillAPIRunner {
         )
     }
 
+    // MARK: - Step Execution
+
+    /// Attempts to resolve params and call a tool. Returns true on success.
+    private static func tryCallTool(
+        step: SkillStep,
+        executor: SkillExecutor,
+        client: HelperMCPClientAdapter,
+        paramValues: [String: String],
+        skillParameters: [SkillParameter]
+    ) async throws {
+        let resolvedArgs = try executor.resolveParams(
+            step.arguments,
+            paramValues: paramValues,
+            parameters: skillParameters
+        )
+        let mcpArgs = executor.toStringValueDict(resolvedArgs)
+        _ = try await client.callTool(name: step.tool, arguments: mcpArgs)
+    }
+
+    /// Executes a single step with one retry on failure.
     private static func executeStep(
         step: SkillStep,
         executor: SkillExecutor,
@@ -163,28 +132,53 @@ enum SkillAPIRunner {
         skillParameters: [SkillParameter]
     ) async -> Bool {
         do {
-            let resolvedArgs = try executor.resolveParams(
-                step.arguments,
-                paramValues: paramValues,
-                parameters: skillParameters
-            )
-            let mcpArgs = executor.toStringValueDict(resolvedArgs)
-            _ = try await client.callTool(name: step.tool, arguments: mcpArgs)
+            try await tryCallTool(step: step, executor: executor, client: client, paramValues: paramValues, skillParameters: skillParameters)
             return true
         } catch {
             // Retry once
             do {
-                let resolvedArgs = try executor.resolveParams(
-                    step.arguments,
-                    paramValues: paramValues,
-                    parameters: skillParameters
-                )
-                let mcpArgs = executor.toStringValueDict(resolvedArgs)
-                _ = try await client.callTool(name: step.tool, arguments: mcpArgs)
+                try await tryCallTool(step: step, executor: executor, client: client, paramValues: paramValues, skillParameters: skillParameters)
                 return true
             } catch {
                 return false
             }
         }
+    }
+
+    // MARK: - SSE Emission Helpers
+
+    /// Emits a step_completed SSE event for the given step index.
+    private static func emitStepCompleted(
+        index: Int,
+        tool: String,
+        success: Bool,
+        runId: String,
+        broadcaster: OpenAgentSDK.EventBroadcaster
+    ) async {
+        let event = AgentSSEEvent.stepCompleted(StepCompletedData(
+            stepIndex: index,
+            tool: tool,
+            success: success,
+            durationMs: nil
+        ))
+        await broadcaster.emit(runId: runId, event: event)
+    }
+
+    /// Emits a runCompleted SSE event and signals completion.
+    private static func emitRunCompleted(
+        runId: String,
+        status: String,
+        totalSteps: Int,
+        durationMs: Int?,
+        broadcaster: OpenAgentSDK.EventBroadcaster
+    ) async {
+        let event = AgentSSEEvent.runCompleted(RunCompletedData(
+            runId: runId,
+            finalStatus: status,
+            totalSteps: totalSteps,
+            durationMs: durationMs
+        ))
+        await broadcaster.emit(runId: runId, event: event)
+        await broadcaster.complete(runId: runId)
     }
 }

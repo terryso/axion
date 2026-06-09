@@ -1,4 +1,3 @@
-import Foundation
 import MCP
 import MCPTool
 
@@ -30,20 +29,9 @@ struct ScreenshotTool {
                 base64 = try ServiceContainer.shared.screenshotCapture.captureFullScreen()
             }
             let result = ScreenshotActionResult(success: true, action: "screenshot", imageData: base64)
-            let encoder = JSONEncoder()
-            encoder.outputFormatting = [.sortedKeys]
-            let data = try encoder.encode(result)
-            return String(data: data, encoding: .utf8) ?? "{}"
+            return encodeToolResult(result)
         } catch let error as ScreenshotError {
-            let payload = ToolErrorPayload(
-                error: error.errorCode,
-                message: error.localizedDescription,
-                suggestion: error.suggestion
-            )
-            let encoder = JSONEncoder()
-            encoder.outputFormatting = [.sortedKeys]
-            let data = try encoder.encode(payload)
-            return String(data: data, encoding: .utf8) ?? "{}"
+            return encodeToolError(error)
         }
     }
 }
@@ -63,20 +51,9 @@ struct GetAccessibilityTreeTool {
         do {
             let nodes = maxNodes ?? 500
             let axTree = try ServiceContainer.shared.accessibilityEngine.getAXTree(windowId: windowId, maxNodes: nodes)
-            let encoder = JSONEncoder()
-            encoder.outputFormatting = [.sortedKeys]
-            let data = try encoder.encode(axTree)
-            return String(data: data, encoding: .utf8) ?? "{}"
+            return encodeToolResult(axTree)
         } catch let error as AccessibilityEngineError {
-            let payload = ToolErrorPayload(
-                error: error.errorCode,
-                message: error.localizedDescription,
-                suggestion: error.suggestion
-            )
-            let encoder = JSONEncoder()
-            encoder.outputFormatting = [.sortedKeys]
-            let data = try encoder.encode(payload)
-            return String(data: data, encoding: .utf8) ?? "{}"
+            return encodeToolError(error)
         }
     }
 }

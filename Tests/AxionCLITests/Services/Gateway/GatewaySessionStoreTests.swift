@@ -1,6 +1,5 @@
 import Testing
 import Foundation
-import OpenAgentSDK
 @testable import AxionCLI
 
 @Suite("GatewaySessionStore")
@@ -115,63 +114,6 @@ struct GatewaySessionStoreTests {
         try await store.load()
 
         #expect(await store.state(for: 999) == nil)
-    }
-
-    @Test("hydrateFromTranscripts applies modulo recovery")
-    func hydrateFromTranscriptsModulo() async throws {
-        let dir = makeTempDir()
-        defer { cleanup(dir) }
-        let path = (dir as NSString).appendingPathComponent("sessions.json")
-        let store = GatewaySessionStore(filePath: path)
-
-        // Create a mock session store with a transcript containing 7 user messages
-        let sessionsDir = (dir as NSString).appendingPathComponent("sdk-sessions")
-        let sessionDir = (sessionsDir as NSString).appendingPathComponent("test-sess")
-        try FileManager.default.createDirectory(atPath: sessionDir, withIntermediateDirectories: true)
-
-        var messages: [[String: Any]] = []
-        for i in 0..<7 {
-            messages.append(["role": "user", "message": "user message \(i)"])
-        }
-        for i in 0..<3 {
-            messages.append(["role": "assistant", "message": "assistant reply \(i)"])
-        }
-        let sessionDict: [String: Any] = [
-            "metadata": [
-                "id": "test-sess",
-                "cwd": "/tmp",
-                "model": "test",
-                "createdAt": "2026-01-01T00:00:00.000Z",
-                "updatedAt": "2026-01-01T00:00:00.000Z",
-                "messageCount": messages.count
-            ],
-            "messages": messages
-        ]
-        let data = try JSONSerialization.data(withJSONObject: sessionDict, options: .sortedKeys)
-        let transcriptPath = (sessionDir as NSString).appendingPathComponent("transcript.json")
-        FileManager.default.createFile(atPath: transcriptPath, contents: data)
-
-        let sdkStore = SessionStore(sessionsDir: sessionsDir)
-        await store.hydrateFromTranscripts(chatId: 600, sessionIds: ["test-sess"], sessionStore: sdkStore, nudgeInterval: 4)
-
-        let state = await store.state(for: 600)
-        #expect(state?.userTurnCount == 7)
-        // 7 % 4 = 3 — cadence preserved, not immediately triggered
-        #expect(state?.turnsSinceMemory == 3)
-    }
-
-    @Test("hydrateFromTranscripts with no transcripts does nothing")
-    func hydrateNoTranscripts() async {
-        let dir = makeTempDir()
-        defer { cleanup(dir) }
-        let path = (dir as NSString).appendingPathComponent("sessions.json")
-        let store = GatewaySessionStore(filePath: path)
-
-        let sessionsDir = (dir as NSString).appendingPathComponent("empty-sessions")
-        let sdkStore = SessionStore(sessionsDir: sessionsDir)
-        await store.hydrateFromTranscripts(chatId: 700, sessionIds: ["no-such-session"], sessionStore: sdkStore, nudgeInterval: 4)
-
-        #expect(await store.state(for: 700) == nil)
     }
 
     @Test("independent turn counting for multiple chatIds")

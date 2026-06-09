@@ -1,5 +1,4 @@
 import ArgumentParser
-import Foundation
 
 /// `axion memory show <memory|user>` — display universal memory content.
 struct MemoryShowCommand: AsyncParsableCommand {
@@ -12,8 +11,7 @@ struct MemoryShowCommand: AsyncParsableCommand {
     var target: String
 
     func run() async throws {
-        let memoryDir = resolveMemoryDir()
-        let output = try await Self.showContent(target: target, memoryDir: memoryDir)
+        let output = try await Self.showContent(target: target, memoryDir: ConfigManager.memoryDirectory)
         print(output)
     }
 
@@ -41,8 +39,4 @@ struct MemoryShowCommand: AsyncParsableCommand {
         }
     }
 
-    private func resolveMemoryDir() -> String {
-        let configDir = ConfigManager.defaultConfigDirectory
-        return (configDir as NSString).appendingPathComponent("memory")
-    }
 }

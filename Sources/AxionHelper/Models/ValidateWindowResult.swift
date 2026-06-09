@@ -1,4 +1,3 @@
-import Foundation
 
 struct ValidateWindowResult: Codable, Equatable {
     let windowId: Int

@@ -216,53 +216,10 @@ struct TakeoverMarkerTests {
         #expect(json["bundle_id"] == nil)
     }
 
-    // MARK: - toDictionary() (Task 5.5 supplementary)
-
-    @Test("toDictionary() produces flat dictionary with snake_case keys")
-    func toDictionarySnakeCase() {
-        let marker = TakeoverMarker.create(
-            runId: "run-dict",
-            outcome: .success,
-            issue: "test",
-            summary: "test",
-            feedback: "user feedback",
-            duration: 5.0,
-            bundleId: "com.test"
-        )
-        let dict = marker.toDictionary()
-
-        #expect(dict["schema_version"] as? Int == 1)
-        #expect(dict["run_id"] as? String == "run-dict")
-        #expect(dict["outcome"] as? String == "success")
-        #expect(dict["reason_type"] as? String == "unknown")
-        #expect(dict["feedback"] as? String == "user feedback")
-        #expect(dict["duration"] as? Double == 5.0)
-        #expect(dict["bundle_id"] as? String == "com.test")
-        #expect(dict["created_at"] != nil)
-    }
-
-    @Test("toDictionary() omits nil optional fields")
-    func toDictionaryOmitsNil() {
-        let marker = TakeoverMarker.create(
-            runId: "run-minimal",
-            outcome: .success,
-            issue: "issue",
-            summary: "summary"
-        )
-        let dict = marker.toDictionary()
-
-        #expect(dict["feedback"] == nil)
-        #expect(dict["duration"] == nil)
-        #expect(dict["bundle_id"] == nil)
-        #expect(dict["app_name"] == nil)
-        #expect(dict["task"] == nil)
-    }
-
     // MARK: - Duration conversion (Task 5.8)
 
     @Test("durationToSeconds converts ContinuousClock.Duration correctly")
     func durationToSecondsConversion() {
-        let start = ContinuousClock.now
         // Simulate a known duration by creating one directly
         let duration = ContinuousClock.Duration(secondsComponent: 5, attosecondsComponent: 500_000_000_000_000_000)
         let seconds = TakeoverMarker.durationToSeconds(duration)

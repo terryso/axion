@@ -23,17 +23,13 @@ struct SetupCommand: ParsableCommand {
         configDirectory: String? = nil
     ) throws {
         let dir = configDirectory ?? ConfigManager.defaultConfigDirectory
-        let configFilePath = (dir as NSString).appendingPathComponent("config.json")
+        let configFilePath = ConfigManager.configFilePath(in: dir)
 
         io.write("🛠  Axion Setup")
         io.write("")
 
         // 加载已有配置
-        var existingConfig: AxionConfig?
-        if let fileData = FileManager.default.contents(atPath: configFilePath),
-           let decoded = try? JSONDecoder().decode(AxionConfig.self, from: fileData) {
-            existingConfig = decoded
-        }
+        let existingConfig = ConfigManager.loadRawConfig(from: dir)
 
         // 步骤 1: 选择 Provider
         let currentProvider = existingConfig?.provider ?? .anthropic
@@ -70,7 +66,7 @@ struct SetupCommand: ParsableCommand {
         }
         io.write("")
         let baseURLInput = io.prompt("Base URL (留空使用 \(defaultBaseURLHint)): ").trimmingCharacters(in: .whitespacesAndNewlines)
-        let baseURL = baseURLInput.isEmpty ? (existingConfig?.baseURL ?? nil) : baseURLInput
+        let baseURL = baseURLInput.isEmpty ? existingConfig?.baseURL : baseURLInput
 
         // 步骤 4: 保存配置
         var config = existingConfig ?? AxionConfig.default

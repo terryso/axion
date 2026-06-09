@@ -1,4 +1,3 @@
-import Foundation
 
 /// Lightweight window information returned by `list_windows`.
 struct WindowInfo: Codable, Equatable {

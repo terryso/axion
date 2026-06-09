@@ -1,0 +1,437 @@
+import ArgumentParser
+import Foundation
+import OpenAgentSDK
+
+import AxionCore
+
+/// Interactive multi-turn chat mode — `axion` with no arguments.
+///
+/// Uses `agent.stream()` per turn for full streaming events (partial messages,
+/// tool use, tool results) with session-persisted conversation history.
+/// MCP connections are reused across turns via cached MCPClientManager.
+struct ChatCommand: AsyncParsableCommand {
+    static let configuration = CommandConfiguration(
+        commandName: "chat",
+        abstract: "交互模式：多轮对话"
+    )
+
+    @Flag(name: .long, help: "详细输出")
+    var verbose: Bool = false
+
+    @Flag(name: .long, help: "禁用 Memory 上下文注入")
+    var noMemory: Bool = false
+
+    @Flag(name: .long, help: "禁用技能系统")
+    var noSkills: Bool = false
+
+    @Option(name: .long, help: "单次运行最大步骤数")
+    var maxSteps: Int?
+
+    @Flag(name: .long, help: "自动允许文件编辑")
+    var acceptEdits: Bool = false
+
+    @Flag(name: .long, help: "跳过所有权限确认")
+    var dangerouslySkipPermissions: Bool = false
+
+    mutating func run() async throws {
+        let cliOverrides = CLIOverrides(maxSteps: maxSteps)
+        let config = try await ConfigManager.loadConfig(cliOverrides: cliOverrides)
+
+        let sessionsDir = ConfigManager.sessionsDirectory
+        let sessionId = "chat-\(UUID().uuidString.prefix(8))"
+
+        // Compute permission mode from CLI flags
+        let permissionMode = PermissionHandler.resolveMode(
+            acceptEdits: acceptEdits,
+            dangerouslySkipPermissions: dangerouslySkipPermissions
+        )
+
+        // AC3: Session allow list — shared across all canUseTool callbacks in this REPL session
+        let sessionAllowList = SessionAllowListRef()
+
+        // Create canUseTool callback (controls tool-level permissions)
+        // AC3/AC5: v2 overload injects sessionAllowList for dynamic approval options
+        let canUseTool = PermissionHandler.createCanUseTool(
+            mode: permissionMode,
+            sessionAllowList: sessionAllowList
+        )
+
+        let buildParams = ChatREPLState.BuildParams(
+            config: config,
+            noMemory: noMemory,
+            noSkills: noSkills,
+            maxSteps: maxSteps,
+            verbose: verbose,
+            permissionMode: permissionMode,
+            canUseTool: canUseTool
+        )
+
+        let buildConfig = AgentBuilder.BuildConfig.forChat(
+            config: config,
+            noMemory: noMemory,
+            noSkills: noSkills,
+            maxSteps: maxSteps,
+            verbose: verbose,
+            sessionId: sessionId,
+            sessionStore: SessionStore(sessionsDir: sessionsDir),
+            permissionMode: permissionMode,
+            canUseTool: canUseTool
+        )
+
+        var buildResult: AgentBuildResult
+        let buildMs: Int
+        do {
+            let buildStart = ContinuousClock.now
+            buildResult = try await AgentBuilder.build(buildConfig)
+            let buildElapsed = ContinuousClock.now - buildStart
+            buildMs = durationToMs(buildElapsed)
+        } catch {
+            fputs("[axion] 初始化失败: \(error.localizedDescription)\n", stderr)
+            throw ExitCode(1)
+        }
+
+        // AC1: 启动横幅 — 显示版本、模型、CWD、session ID、上下文窗口、构建耗时
+        let contextWindow = getContextWindowSize(model: buildResult.agent.model)
+        fputs(
+            BannerRenderer.renderBanner(
+                version: AxionVersion.current,
+                model: buildResult.agent.model,
+                cwd: FileManager.default.currentDirectoryPath,
+                sessionId: sessionId,
+                contextWindow: contextWindow,
+                buildTimeMs: buildMs
+            ),
+            stderr
+        )
+
+        // Initialize REPL state
+        var state = ChatREPLState(
+            buildResult: buildResult,
+            buildConfig: buildConfig,
+            sessionId: sessionId,
+            sessionUsage: TokenUsage(inputTokens: 0, outputTokens: 0),
+            contextTokens: 0,
+            contextWindow: contextWindow,
+            sessionUserMessages: [],
+            resumedMessageBaseCount: 0,
+            lastInterruptTime: nil,
+            lastResumeList: [],
+            consecutiveCompactFailures: 0
+        )
+
+        // Agent reference for SIGINT handler — uses nonisolated(unsafe) to satisfy
+        // Sendable closure requirement. Agent.interrupt() is thread-safe.
+        nonisolated(unsafe) var currentAgent = state.buildResult.agent
+        SignalHandler.install {
+            currentAgent.interrupt()
+        }
+
+        // AC9: ChatComposer replaces MultiLineInputReader as the REPL input component.
+        var composer = ChatComposer()
+        composer.enableBracketPaste()
+        defer { composer.disableBracketPaste() }
+
+        // Story 38.5: InputQueue — 忙时输入排队
+        var inputQueue = InputQueue()
+
+        // REPL loop: each turn calls agent.stream() for full streaming events.
+        var skipNextRead = false
+
+        while true {
+            SignalHandler.reset()
+
+            // Story 38.5: 同步 inputQueue 到 composer
+            composer.inputQueue = inputQueue
+
+            // AC2: 动态提示符
+            let prompt = BannerRenderer.renderPrompt(
+                usedTokens: state.contextTokens,
+                contextWindow: state.contextWindow
+            )
+
+            // Story 38.5 AC6: 排队预览
+            if let preview = composer.renderQueuePreview() {
+                fputs("\(preview)\n", stderr)
+            }
+
+            // AC1/AC2: 注入会话历史到 composer
+            composer.history = state.sessionUserMessages
+
+            // Story 38.5 AC2: 优先消费队列
+            let trimmed: String
+            if skipNextRead, let queued = inputQueue.dequeue() {
+                trimmed = queued.text
+                fputs("📤 自动发送排队消息: \"\(String(trimmed.prefix(40)))\"\n", stderr)
+                composer.inputQueue = inputQueue
+            } else {
+                skipNextRead = false
+                let line = composer.readInput(
+                    prompt: prompt,
+                    continuationPrompt: "...> "
+                )
+                if SignalHandler.fireCount() > 0 {
+                    state.lastInterruptTime = ContinuousClock.now
+                    continue
+                }
+                guard let line else { break }
+                let lineTrimmed = line.trimmingCharacters(in: .whitespaces)
+                if lineTrimmed.isEmpty { continue }
+                if lineTrimmed == "^C" { continue }
+
+                if let updatedQueue = composer.inputQueue {
+                    inputQueue = updatedQueue
+                }
+
+                trimmed = lineTrimmed
+            }
+
+            state.sessionUserMessages.append(trimmed)
+
+            // ── Slash command handling ──────────────────────────────────
+
+            if let cmd = SlashCommand.parse(trimmed) {
+                let argument = SlashCommand.parseArgument(trimmed)
+
+                // AC1 (/resume 无参数): 在 REPL 中直接列出会话
+                if cmd == .resume && (argument == nil || argument!.isEmpty) {
+                    state.lastResumeList = await handleResumeList(
+                        buildConfig: state.buildConfig,
+                        sessionsDir: sessionsDir,
+                        includeArchived: false
+                    )
+                    continue
+                }
+
+                // 38.7 AC4: /resume --all
+                if cmd == .resume && argument == "--all" {
+                    state.lastResumeList = await handleResumeList(
+                        buildConfig: state.buildConfig,
+                        sessionsDir: sessionsDir,
+                        includeArchived: true
+                    )
+                    continue
+                }
+
+                // /compact
+                if cmd == .compact {
+                    fputs(
+                        await SlashCommandHandler.handleCompactNow(
+                            agent: state.buildResult.agent,
+                            contextTokens: state.contextTokens,
+                            contextWindow: state.contextWindow
+                        ),
+                        stderr
+                    )
+                    continue
+                }
+
+                // 38.7: /new — 创建新会话
+                if cmd == .newSession {
+                    let newSessionId = "chat-\(UUID().uuidString.prefix(8))"
+                    do {
+                        let result = try await state.switchToSession(
+                            newSessionId,
+                            params: buildParams
+                        )
+                        currentAgent = result.newAgent
+                        SignalHandler.install { currentAgent.interrupt() }
+                        fputs(SessionWorkflowHandler.formatNewSuccess(sessionId: newSessionId), stderr)
+                    } catch {
+                        fputs("[axion] ❌ 创建新会话失败: \(error.localizedDescription)\n", stderr)
+                    }
+                    continue
+                }
+
+                // 38.7: /fork — 分叉当前会话
+                if cmd == .fork {
+                    guard let store = state.buildConfig.sessionStore else {
+                        fputs("[axion] 无法访问会话存储\n", stderr)
+                        continue
+                    }
+                    let messageCount = state.resumedMessageBaseCount + state.sessionUserMessages.count
+                    let action = await SessionWorkflowHandler.handleFork(
+                        sessionId: state.sessionId,
+                        sessionStore: store,
+                        messageCount: messageCount
+                    )
+                    if case .forkSession(let newId, let sourceId) = action {
+                        do {
+                            let oldBaseCount = state.resumedMessageBaseCount + state.sessionUserMessages.count
+                            let result = try await state.switchToSession(
+                                newId,
+                                params: buildParams,
+                                resetBaseCount: false
+                            )
+                            state.resumedMessageBaseCount = oldBaseCount
+                            currentAgent = result.newAgent
+                            SignalHandler.install { currentAgent.interrupt() }
+                            fputs(SessionWorkflowHandler.formatForkSuccess(newId: newId, sourceId: sourceId), stderr)
+                        } catch {
+                            fputs("[axion] ❌ 分叉会话恢复失败: \(error.localizedDescription)\n", stderr)
+                        }
+                    }
+                    continue
+                }
+
+                // 38.7: /archive — 归档当前会话
+                if cmd == .archive {
+                    guard let store = state.buildConfig.sessionStore else {
+                        fputs("[axion] 无法访问会话存储\n", stderr)
+                        continue
+                    }
+                    let messageCount = state.resumedMessageBaseCount + state.sessionUserMessages.count
+                    let action = await SessionWorkflowHandler.handleArchive(
+                        sessionId: state.sessionId,
+                        sessionStore: store,
+                        messageCount: messageCount
+                    )
+                    if case .archiveSession = action {
+                        // AC3: 归档完成 — 继续当前会话（不退出）
+                    }
+                    continue
+                }
+
+                let action = SlashCommandHandler.handle(
+                    cmd,
+                    argument: argument,
+                    agent: state.buildResult.agent,
+                    config: config,
+                    sessionUsage: state.sessionUsage,
+                    buildConfig: state.buildConfig,
+                    contextWindow: state.contextWindow,
+                    contextTokens: state.contextTokens
+                )
+
+                switch action {
+                case .none:
+                    continue
+                case .exit:
+                    break
+                case .resumeSession(let rawArg):
+                    let targetSessionId = await resolveResumeTarget(
+                        rawArg: rawArg,
+                        state: &state,
+                        sessionsDir: sessionsDir
+                    )
+                    if let result = await state.resumeSession(
+                        targetSessionId: targetSessionId,
+                        params: buildParams
+                    ) {
+                        currentAgent = result.newAgent
+                        SignalHandler.install { currentAgent.interrupt() }
+                    }
+                    continue
+                case .newSession, .forkSession, .archiveSession:
+                    continue
+                }
+
+                if action == .exit { break }
+                continue
+            } else if !state.lastResumeList.isEmpty, let index = Int(trimmed), index > 0, index <= state.lastResumeList.count {
+                // Direct number input after /resume list — resume session by index
+                let targetSessionId = state.lastResumeList[index - 1].sessionId
+                state.lastResumeList = []
+                if let result = await state.resumeSession(
+                    targetSessionId: targetSessionId,
+                    params: buildParams
+                ) {
+                    currentAgent = result.newAgent
+                    SignalHandler.install { currentAgent.interrupt() }
+                }
+                continue
+            } else if trimmed.hasPrefix("/") {
+                fputs(SlashCommandHandler.handleUnknown(trimmed), stderr)
+                continue
+            }
+
+            // ── Execute agent stream ────────────────────────────────────
+
+            let colorProfile = TerminalColorProfile.detect()
+            let chatTheme = ChatTheme(profile: colorProfile, isTTY: isatty(STDERR_FILENO) != 0)
+            let transcriptRenderer = TranscriptRenderer(theme: chatTheme)
+
+            fputs(transcriptRenderer.renderUserMessage(text: trimmed), stderr)
+
+            composer.slashContext = SlashCommandContext(isAgentBusy: true, isSideSession: false)
+
+            let outputHandler = ChatOutputFormatter(theme: chatTheme)
+            outputHandler.startLLMWaiting()
+            let messageStream = state.buildResult.agent.stream(trimmed)
+            for await message in messageStream {
+                outputHandler.handle(message)
+                switch message {
+                case .result(let data):
+                    if let usage = data.usage {
+                        state.sessionUsage = state.sessionUsage + usage
+                        state.contextTokens = usage.inputTokens
+                    }
+                case .system(let data):
+                    if data.subtype == .compactBoundary {
+                        if data.compactResult == "failed" {
+                            state.consecutiveCompactFailures += 1
+                            fputs(
+                                ContextManager.formatCompactFailureMessage(
+                                    failureCount: state.consecutiveCompactFailures
+                                ),
+                                stderr
+                            )
+                        } else if let metadata = data.compactMetadata,
+                                  let postTokens = metadata.postTokens,
+                                  let preTokens = metadata.preTokens
+                        {
+                            state.contextTokens = postTokens
+                            state.consecutiveCompactFailures = 0
+                            fputs(
+                                ContextManager.formatCompactMessage(
+                                    beforeTokens: preTokens,
+                                    afterTokens: postTokens
+                                ),
+                                stderr
+                            )
+                        } else {
+                            let messages = state.buildResult.agent.getMessages()
+                            state.contextTokens = ContextManager.estimateContextTokens(
+                                messages: messages
+                            )
+                            fputs(
+                                ContextManager.formatCompactMessage(
+                                    beforeTokens: state.contextTokens * 3,
+                                    afterTokens: state.contextTokens
+                                ),
+                                stderr
+                            )
+                        }
+                    }
+                default:
+                    break
+                }
+            }
+
+            composer.slashContext = SlashCommandContext(isAgentBusy: false, isSideSession: false)
+
+            if !inputQueue.isEmpty {
+                skipNextRead = true
+            }
+
+            let interruptCount = SignalHandler.fireCount()
+            if interruptCount > 0 {
+                let now = ContinuousClock.now
+                if let last = state.lastInterruptTime,
+                   chatShouldExit(lastInterrupt: last, now: now)
+                {
+                    break
+                }
+                state.lastInterruptTime = now
+                fputs("[axion] 已中断\n", stderr)
+            } else {
+                state.lastInterruptTime = nil
+                outputHandler.displayCompletion()
+                fputs("\n", stdout)
+            }
+        }
+
+        SignalHandler.uninstall()
+        try? await state.buildResult.agent.close()
+        fputs(BannerRenderer.renderExit(sessionId: state.sessionId), stderr)
+    }
+}

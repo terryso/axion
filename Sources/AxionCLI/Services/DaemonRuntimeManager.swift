@@ -1,4 +1,3 @@
-import Foundation
 import OpenAgentSDK
 
 import AxionCore
@@ -33,40 +32,17 @@ actor DaemonRuntimeManager: DaemonRuntimeManaging {
         shouldReviewMemory: Bool = false,
         shouldReviewSkills: Bool = false
     ) async throws -> AxionRunResult {
-        let runtime = runtimeFactory(eventBus)
-
-        for handler in handlerProfile.buildHandlers() + extraHandlers {
-            await runtime.registerHandler(handler)
-        }
-
-        await runtime.setContextOverrides(chatId: chatId, shouldReviewMemory: shouldReviewMemory, shouldReviewSkills: shouldReviewSkills)
-
-        let eventLoopTask = _Concurrency.Task { await runtime.startEventLoop() }
-
-        let result: AxionRunResult
-        do {
-            result = try await runtime.execute(buildConfig: buildConfig, runOverrides: runOverrides, sessionId: sessionId)
-        } catch {
-            eventLoopTask.cancel()
-            await runtime.stopEventLoop()
-            throw error
-        }
-
-        // Stop the event loop gracefully: finish() on the AsyncStream lets
-        // in-flight handler calls (e.g. TGEventHandler sending completion)
-        // complete before the `for await` loop exits.
-        await runtime.stopEventLoop()
-        _ = await eventLoopTask.result
-
-        sessionHistory[result.sessionId] = DaemonSessionInfo(
-            sessionId: result.sessionId,
+        let handlers = handlerProfile.buildHandlers() + extraHandlers
+        return try await withRuntime(
             task: task,
-            startedAt: result.createdAt
-        )
-
-        evictOldestIfNeeded()
-
-        return result
+            eventBus: eventBus,
+            handlers: handlers,
+            chatId: chatId,
+            shouldReviewMemory: shouldReviewMemory,
+            shouldReviewSkills: shouldReviewSkills
+        ) { runtime in
+            try await runtime.execute(buildConfig: buildConfig, runOverrides: runOverrides, sessionId: sessionId)
+        }
     }
 
     func resumeRun(
@@ -81,37 +57,17 @@ actor DaemonRuntimeManager: DaemonRuntimeManaging {
         shouldReviewMemory: Bool = false,
         shouldReviewSkills: Bool = false
     ) async throws -> AxionRunResult {
-        let runtime = runtimeFactory(eventBus)
-
-        for handler in handlerProfile.buildHandlers() + extraHandlers {
-            await runtime.registerHandler(handler)
-        }
-
-        await runtime.setContextOverrides(chatId: chatId, shouldReviewMemory: shouldReviewMemory, shouldReviewSkills: shouldReviewSkills)
-
-        let eventLoopTask = _Concurrency.Task { await runtime.startEventLoop() }
-
-        let result: AxionRunResult
-        do {
-            result = try await runtime.resumeSession(sessionId, buildConfig: buildConfig, runOverrides: runOverrides)
-        } catch {
-            eventLoopTask.cancel()
-            await runtime.stopEventLoop()
-            throw error
-        }
-
-        await runtime.stopEventLoop()
-        _ = await eventLoopTask.result
-
-        sessionHistory[result.sessionId] = DaemonSessionInfo(
-            sessionId: result.sessionId,
+        let handlers = handlerProfile.buildHandlers() + extraHandlers
+        return try await withRuntime(
             task: task,
-            startedAt: result.createdAt
-        )
-
-        evictOldestIfNeeded()
-
-        return result
+            eventBus: eventBus,
+            handlers: handlers,
+            chatId: chatId,
+            shouldReviewMemory: shouldReviewMemory,
+            shouldReviewSkills: shouldReviewSkills
+        ) { runtime in
+            try await runtime.resumeSession(sessionId, buildConfig: buildConfig, runOverrides: runOverrides)
+        }
     }
 
     func executeSkill(
@@ -122,39 +78,70 @@ actor DaemonRuntimeManager: DaemonRuntimeManaging {
         eventBus: EventBus,
         runOverrides: AxionRuntime.RunOverrides = .default
     ) async throws -> AxionRunResult {
-        let runtime = runtimeFactory(eventBus)
-
         let profile = HandlerProfile(
             context: .api,
             config: config,
-            memoryDir: (ConfigManager.defaultConfigDirectory as NSString).appendingPathComponent("memory"),
+            memoryDir: ConfigManager.memoryDirectory,
             traceDir: traceDir,
             noMemory: true,
             noReview: true,
             noVisualDelta: true,
             reviewDataContext: nil
         )
-        for handler in profile.buildHandlers() {
-            await runtime.registerHandler(handler)
-        }
-
-        let eventLoopTask = _Concurrency.Task { await runtime.startEventLoop() }
-
-        let result: AxionRunResult
-        do {
-            result = try await runtime.executeSkill(
+        return try await withRuntime(
+            task: task,
+            eventBus: eventBus,
+            handlers: profile.buildHandlers()
+        ) { runtime in
+            try await runtime.executeSkill(
                 skill: skill,
                 task: task,
                 config: config,
                 buildConfig: buildConfig,
                 runOverrides: runOverrides
             )
+        }
+    }
+
+    // MARK: - Shared Runtime Lifecycle
+
+    /// Creates a runtime, registers handlers, runs the event loop, executes the
+    /// given body, then tears down gracefully.  All three public methods delegate
+    /// here so the runtime lifecycle (create → register → start loop → execute →
+    /// stop loop → record session) lives in one place.
+    private func withRuntime(
+        task: String,
+        eventBus: EventBus,
+        handlers: [any EventHandler],
+        chatId: Int64? = nil,
+        shouldReviewMemory: Bool = false,
+        shouldReviewSkills: Bool = false,
+        execute: @Sendable @escaping (any AxionRuntimeRunning) async throws -> AxionRunResult
+    ) async throws -> AxionRunResult {
+        let runtime = runtimeFactory(eventBus)
+
+        for handler in handlers {
+            await runtime.registerHandler(handler)
+        }
+
+        if chatId != nil || shouldReviewMemory || shouldReviewSkills {
+            await runtime.setContextOverrides(chatId: chatId, shouldReviewMemory: shouldReviewMemory, shouldReviewSkills: shouldReviewSkills)
+        }
+
+        let eventLoopTask = _Concurrency.Task { await runtime.startEventLoop() }
+
+        let result: AxionRunResult
+        do {
+            result = try await execute(runtime)
         } catch {
             eventLoopTask.cancel()
             await runtime.stopEventLoop()
             throw error
         }
 
+        // Stop the event loop gracefully: finish() on the AsyncStream lets
+        // in-flight handler calls (e.g. TGEventHandler sending completion)
+        // complete before the `for await` loop exits.
         await runtime.stopEventLoop()
         _ = await eventLoopTask.result
 

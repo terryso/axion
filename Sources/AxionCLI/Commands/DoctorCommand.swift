@@ -45,7 +45,6 @@ struct DoctorCommand: ParsableCommand {
         isServerRunningOverride: (@Sendable () -> Bool)? = nil
     ) -> DoctorReport {
         let dir = configDirectory ?? ConfigManager.defaultConfigDirectory
-        let configFilePath = (dir as NSString).appendingPathComponent("config.json")
 
         io.write("Axion Doctor — 环境检查")
         io.write("")
@@ -53,7 +52,7 @@ struct DoctorCommand: ParsableCommand {
         var results: [CheckResult] = []
 
         // Check 1: 配置文件存在性和解析性
-        let (configCheck, fileConfig) = checkConfigFile(at: configFilePath)
+        let (configCheck, fileConfig) = checkConfigFile(in: dir)
         results.append(configCheck)
 
         // Apply env overrides (e.g., AXION_API_KEY) so doctor reflects actual runtime config
@@ -126,7 +125,8 @@ struct DoctorCommand: ParsableCommand {
         return report
     }
 
-    private static func checkConfigFile(at path: String) -> (result: CheckResult, config: AxionConfig?) {
+    static func checkConfigFile(in directory: String) -> (result: CheckResult, config: AxionConfig?) {
+        let path = ConfigManager.configFilePath(in: directory)
         let fm = FileManager.default
         if !fm.fileExists(atPath: path) {
             return (
@@ -139,8 +139,7 @@ struct DoctorCommand: ParsableCommand {
                 nil
             )
         }
-        guard let data = fm.contents(atPath: path),
-              let config = try? JSONDecoder().decode(AxionConfig.self, from: data) else {
+        guard let config = ConfigManager.loadRawConfig(from: directory) else {
             return (
                 CheckResult(
                     name: "配置文件",
@@ -162,7 +161,7 @@ struct DoctorCommand: ParsableCommand {
         )
     }
 
-    private static func checkApiKey(from config: AxionConfig?) -> CheckResult {
+    static func checkApiKey(from config: AxionConfig?) -> CheckResult {
         guard let config = config, let key = config.apiKey, !key.isEmpty else {
             return CheckResult(
                 name: "API Key",
@@ -179,248 +178,7 @@ struct DoctorCommand: ParsableCommand {
         )
     }
 
-    private static func checkMacOSVersion() -> CheckResult {
-        let version = SystemChecker.macOSVersion()
-        let supported = SystemChecker.isMacOSVersionSupported()
-        return CheckResult(
-            name: "macOS 版本",
-            status: supported ? .ok : .fail,
-            detail: version,
-            fixHint: supported ? nil : "Axion 需要 macOS 14 (Sonoma) 或更高版本"
-        )
-    }
-
-    private static func checkAccessibility() -> CheckResult {
-        let status = PermissionChecker.checkAccessibility()
-        switch status {
-        case .granted:
-            return CheckResult(
-                name: "Accessibility",
-                status: .ok,
-                detail: "已授权",
-                fixHint: nil
-            )
-        case .notGranted:
-            return CheckResult(
-                name: "Accessibility",
-                status: .fail,
-                detail: "未授权",
-                fixHint: "打开 系统设置 > 隐私与安全 > 辅助功能，添加 AxionHelper.app"
-            )
-        case .unknown:
-            return CheckResult(
-                name: "Accessibility",
-                status: .fail,
-                detail: "未知状态",
-                fixHint: "打开 系统设置 > 隐私与安全 > 辅助功能，添加 AxionHelper.app"
-            )
-        }
-    }
-
-    private static func checkScreenRecording() -> CheckResult {
-        let status = PermissionChecker.checkScreenRecording()
-        switch status {
-        case .granted:
-            return CheckResult(
-                name: "屏幕录制",
-                status: .ok,
-                detail: "已授权",
-                fixHint: nil
-            )
-        case .notGranted:
-            return CheckResult(
-                name: "屏幕录制",
-                status: .fail,
-                detail: "未授权",
-                fixHint: "打开 系统设置 > 隐私与安全 > 屏幕录制，添加 AxionHelper.app"
-            )
-        case .unknown:
-            return CheckResult(
-                name: "屏幕录制",
-                status: .fail,
-                detail: "未知状态",
-                fixHint: "打开 系统设置 > 隐私与安全 > 屏幕录制，添加 AxionHelper.app"
-            )
-        }
-    }
-
-    private static func checkRunLock(at axionDir: String) -> CheckResult {
-        let lockPath = (axionDir as NSString).appendingPathComponent("run.lock")
-        let fm = FileManager.default
-
-        guard fm.fileExists(atPath: lockPath) else {
-            return CheckResult(
-                name: "Run Lock",
-                status: .ok,
-                detail: "No run lock",
-                fixHint: nil
-            )
-        }
-
-        guard let data = fm.contents(atPath: lockPath),
-              let lock = try? JSONDecoder().decode(RunLockData.self, from: data) else {
-            return CheckResult(
-                name: "Run Lock",
-                status: .fail,
-                detail: "Stale run.lock（文件格式损坏）",
-                fixHint: "删除 ~/.axion/run.lock: rm ~/.axion/run.lock"
-            )
-        }
-
-        // Check if the process holding the lock is still alive
-        let isAlive = Darwin.kill(lock.pid, 0) == 0
-        if isAlive {
-            return CheckResult(
-                name: "Run Lock",
-                status: .ok,
-                detail: "Active run.lock (run_id: \(lock.runId), pid: \(lock.pid))",
-                fixHint: nil
-            )
-        } else {
-            return CheckResult(
-                name: "Run Lock",
-                status: .fail,
-                detail: "Stale run.lock (进程已退出, run_id: \(lock.runId), pid: \(lock.pid))",
-                fixHint: "删除 stale lock: rm ~/.axion/run.lock"
-            )
-        }
-    }
-
-    // Intentionally reads raw files instead of using MemoryStoreProtocol —
-    // doctor is a diagnostic tool that should work without initializing the SDK store.
-    private static func checkMemory(at memoryDir: String) -> CheckResult {
-        let fm = FileManager.default
-
-        guard fm.fileExists(atPath: memoryDir) else {
-            return CheckResult(
-                name: "Memory",
-                status: .ok,
-                detail: "未使用（首次运行后自动创建）",
-                fixHint: nil
-            )
-        }
-
-        // Count domain files and total entries
-        var domainCount = 0
-        var totalEntries = 0
-
-        guard let files = try? fm.contentsOfDirectory(atPath: memoryDir) else {
-            return CheckResult(
-                name: "Memory",
-                status: .ok,
-                detail: "未使用（首次运行后自动创建）",
-                fixHint: nil
-            )
-        }
-
-        for file in files where file.hasSuffix(".json") {
-            domainCount += 1
-            let filePath = (memoryDir as NSString).appendingPathComponent(file)
-            if let data = fm.contents(atPath: filePath),
-               let jsonArray = try? JSONSerialization.jsonObject(with: data) as? [[String: Any]] {
-                totalEntries += jsonArray.count
-            }
-        }
-
-        if domainCount == 0 {
-            return CheckResult(
-                name: "Memory",
-                status: .ok,
-                detail: "未使用（首次运行后自动创建）",
-                fixHint: nil
-            )
-        }
-
-        return CheckResult(
-            name: "Memory",
-            status: .ok,
-            detail: "\(domainCount) domains, \(totalEntries) entries",
-            fixHint: nil
-        )
-    }
-
-    private static func checkSettingsAPI(isServerRunning: (@Sendable () -> Bool)?) -> CheckResult {
-        // Use injected check or default pgrep-based detection
-        let serverRunning: Bool
-        if let isServerRunning {
-            serverRunning = isServerRunning()
-        } else {
-            let pipe = Pipe()
-            let pgrep = Process()
-            pgrep.executableURL = URL(fileURLWithPath: "/usr/bin/pgrep")
-            pgrep.arguments = ["-f", "axion server"]
-            pgrep.standardOutput = pipe
-            do {
-                try pgrep.run()
-                pgrep.waitUntilExit()
-                serverRunning = pgrep.terminationStatus == 0
-            } catch {
-                serverRunning = false
-            }
-        }
-
-        guard serverRunning else {
-            return CheckResult(
-                name: "Settings API",
-                status: .ok,
-                detail: "跳过（server 未运行）",
-                fixHint: nil
-            )
-        }
-
-        // Try to connect to the Settings API
-        let defaultPort = 4242
-        guard let url = URL(string: "http://localhost:\(defaultPort)/v1/settings/api-key") else {
-            return CheckResult(
-                name: "Settings API",
-                status: .ok,
-                detail: "跳过（URL 构造失败）",
-                fixHint: nil
-            )
-        }
-        var request = URLRequest(url: url)
-        request.httpMethod = "GET"
-        request.timeoutInterval = 3
-
-        let sem = DispatchSemaphore(value: 0)
-        var checkResult: CheckResult?
-
-        URLSession.shared.dataTask(with: request) { _, response, error in
-            if error != nil {
-                checkResult = CheckResult(
-                    name: "Settings API",
-                    status: .ok,
-                    detail: "跳过（连接失败）",
-                    fixHint: nil
-                )
-            } else if let httpResponse = response as? HTTPURLResponse, httpResponse.statusCode == 200 {
-                checkResult = CheckResult(
-                    name: "Settings API",
-                    status: .ok,
-                    detail: "可达 (port \(defaultPort))",
-                    fixHint: nil
-                )
-            } else {
-                checkResult = CheckResult(
-                    name: "Settings API",
-                    status: .ok,
-                    detail: "跳过（非预期响应）",
-                    fixHint: nil
-                )
-            }
-            sem.signal()
-        }.resume()
-
-        _ = sem.wait(timeout: .now() + 5)
-        return checkResult ?? CheckResult(
-            name: "Settings API",
-            status: .ok,
-            detail: "跳过（超时）",
-            fixHint: nil
-        )
-    }
-
-    private static func checkReviewConfig(from config: AxionConfig?) -> CheckResult {
+    static func checkReviewConfig(from config: AxionConfig?) -> CheckResult {
         guard let config = config else {
             return CheckResult(
                 name: "Review/Curator",

@@ -25,7 +25,7 @@ struct SkillCompileE2ETests {
     }
 
     private func writeRecording(_ recording: Recording, to dir: URL, name: String) throws -> URL {
-        let safeName = RecordCommand.sanitizeFileName(name)
+        let safeName = sanitizeFileName(name)
         let fileURL = dir.appendingPathComponent("\(safeName).json")
         let encoder = JSONEncoder()
         encoder.outputFormatting = [.sortedKeys, .prettyPrinted]
@@ -41,7 +41,7 @@ struct SkillCompileE2ETests {
         name: String,
         paramNames: [String] = []
     ) throws -> (skill: Skill, skillData: Data, result: RecordingCompiler.CompileResult) {
-        let safeName = RecordCommand.sanitizeFileName(name)
+        let safeName = sanitizeFileName(name)
 
         // Write recording file
         let encoder = JSONEncoder()
@@ -499,7 +499,7 @@ struct SkillCompileE2ETests {
     @Test("Path traversal in recording name is sanitized")
     func test_error_pathTraversalSanitized() async throws {
         try await withTempDirs { recordingsDir, skillsDir in
-            let safeName = RecordCommand.sanitizeFileName("../../etc/passwd")
+            let safeName = sanitizeFileName("../../etc/passwd")
             #expect(!safeName.contains(".."))
             #expect(safeName == "____etc_passwd")
 

@@ -67,31 +67,11 @@ struct TakeoverLearningService {
                 evidence: evidence
             )
 
-            let existing = try await factStore.query(domain: bundleId)
-            let sdkExisting = existing.map { $0.toSDKFact() }
-            let sdkResult = lifecycleService.addFact(newFact.toSDKFact(), mergingWith: sdkExisting)
-
-            // Preserve Axion-specific fields (scope, cause, evidence) lost in SDK round-trip
-            let existingMatch = existing.first(where: { $0.id == newFact.id })
-            let mergedFact: AppMemoryFact
-            if let existingFact = existingMatch {
-                var updated = existingFact
-                updated.status = MemoryFactStatus(rawValue: sdkResult.status.rawValue) ?? existingFact.status
-                updated.confidence = sdkResult.confidence
-                updated.evidenceCount = sdkResult.evidenceCount
-                updated.updatedAt = sdkResult.lastVerifiedAt
-                let newEvidenceItems = newFact.evidence.filter { !existingFact.evidence.contains($0) }
-                updated.evidence = existingFact.evidence + newEvidenceItems
-                mergedFact = updated
-            } else {
-                mergedFact = AppMemoryFact.fromSDKFact(
-                    sdkResult,
-                    scope: newFact.scope,
-                    cause: newFact.cause,
-                    evidence: newFact.evidence
-                )
-            }
-            try await factStore.save(domain: bundleId, fact: AppMemoryFact.normalizeFact(mergedFact))
+            try await AppMemoryFact.mergeAndPersist(
+                fact: newFact,
+                into: factStore,
+                lifecycleService: lifecycleService
+            )
         } catch {
             fputs("[axion] warning: takeover learning record failed: \(error.localizedDescription)\n", stderr)
         }

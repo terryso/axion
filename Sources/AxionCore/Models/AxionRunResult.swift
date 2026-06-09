@@ -35,4 +35,23 @@ public struct AxionRunResult: Codable, Equatable, Sendable {
         self.responseText = responseText
         self.createdAt = createdAt
     }
+
+    /// Convenience factory for a failed run result with zero steps and duration.
+    public static func failedRun(
+        sessionId: String,
+        task: String,
+        error: String,
+        createdAt: Date
+    ) -> AxionRunResult {
+        AxionRunResult(
+            sessionId: sessionId,
+            task: task,
+            state: .failed,
+            totalSteps: 0,
+            durationMs: 0,
+            runSucceeded: false,
+            errorMessage: error,
+            createdAt: createdAt
+        )
+    }
 }

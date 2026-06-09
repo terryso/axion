@@ -1,7 +1,6 @@
 import Foundation
 import OpenAgentSDK
 
-import AxionCore
 
 actor MemoryProcessingHandler: EventHandler {
     let identifier = "memory-processing"

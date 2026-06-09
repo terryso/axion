@@ -1,4 +1,3 @@
-import Foundation
 
 public struct RunCompleteContextWrapper: Codable, Equatable, Sendable {
     public let task: String

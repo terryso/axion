@@ -1,6 +1,5 @@
 import ArgumentParser
 import Foundation
-import OpenAgentSDK
 
 /// `axion memory list` — display accumulated Memory for all known Apps
 /// and universal memory (MEMORY.md / USER.md) summary.
@@ -11,8 +10,7 @@ struct MemoryListCommand: AsyncParsableCommand {
     )
 
     func run() async throws {
-        let memoryDir = resolveMemoryDir()
-        let output = await Self.listMemory(in: memoryDir)
+        let output = await Self.listMemory(in: ConfigManager.memoryDirectory)
         print(output)
     }
 
@@ -102,11 +100,4 @@ struct MemoryListCommand: AsyncParsableCommand {
         return lines.joined(separator: "\n")
     }
 
-    // MARK: - Private Helpers
-
-    /// Resolve the default Memory directory path.
-    private func resolveMemoryDir() -> String {
-        let configDir = ConfigManager.defaultConfigDirectory
-        return (configDir as NSString).appendingPathComponent("memory")
-    }
 }

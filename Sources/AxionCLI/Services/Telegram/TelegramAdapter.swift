@@ -2,21 +2,21 @@ import Foundation
 import OpenAgentSDK
 
 actor TelegramAdapter {
-    private struct TGFormattedPayload {
+    struct TGFormattedPayload {
         let formattedText: String
         let parseMode: TGParseMode
         let chunks: [String]
     }
 
-    private let apiClient: any TGAPIClientProtocol
+    let apiClient: any TGAPIClientProtocol
     private let allowedUsers: Set<String>
     private let commandRouter: TGCommandRouter?
-    private var taskQueue: (any TaskSerialQueueProtocol)?
-    private let skillsProvider: (@Sendable () -> [Skill])?
+    var taskQueue: (any TaskSerialQueueProtocol)?
+    let skillsProvider: (@Sendable () -> [Skill])?
     private var lastUpdateId: Int64 = 0
     private var isRunning = false
-    private let log: @Sendable (String) -> Void
-    private let sessionStore: TGInteractiveSessionStore?
+    let log: @Sendable (String) -> Void
+    let sessionStore: TGInteractiveSessionStore?
 
     nonisolated(unsafe) private(set) var statusValue: String = "disabled"
 
@@ -43,10 +43,6 @@ actor TelegramAdapter {
         statusValue = "disabled"
     }
 
-    func statusInfo() -> String? {
-        return statusValue
-    }
-
     // MARK: - Direct Update Processing
 
     func processUpdates(_ updates: [TGUpdate]) async {
@@ -69,14 +65,7 @@ actor TelegramAdapter {
                 let updates = try await apiClient.getUpdates(offset: lastUpdateId + 1, timeout: 30)
                 statusValue = "connected"
                 consecutiveErrors = 0
-                for update in updates {
-                    lastUpdateId = update.updateId
-                    if let callbackQuery = update.callbackQuery {
-                        await processCallback(callbackQuery)
-                    } else if let message = update.message {
-                        await processMessage(message)
-                    }
-                }
+                await processUpdates(updates)
             } catch {
                 statusValue = "error:\(error.localizedDescription)"
                 log("[axion] Telegram getUpdates failed: \(error.localizedDescription)")
@@ -174,155 +163,6 @@ actor TelegramAdapter {
         }
     }
 
-    // MARK: - Callback Query Processing
-
-    private func processCallback(_ query: TGCallbackQuery) async {
-        let userId = query.from.id
-        guard isAuthorized(userId: userId) else {
-            _ = try? await apiClient.answerCallbackQuery(callbackQueryId: query.id, text: "未授权")
-            return
-        }
-
-        guard let rawData = query.data,
-              let callbackData = TGCallbackData(rawValue: rawData),
-              let store = sessionStore
-        else {
-            _ = try? await apiClient.answerCallbackQuery(callbackQueryId: query.id, text: "无效操作")
-            return
-        }
-
-        let pendingId = callbackData.pendingId
-
-        switch callbackData.action {
-        case .approve, .confirm:
-            let context = callbackData.action == .approve ? "approved" : "confirmed"
-            let resumed = try? await store.resume(pendingId: pendingId, response: context)
-            if resumed == true {
-                try? await apiClient.answerCallbackQuery(callbackQueryId: query.id, text: "已批准")
-                if let queue = taskQueue {
-                    _ = await queue.resumeInteraction(pendingId: pendingId, context: context)
-                }
-                if let messageId = query.message?.messageId, let chatId = query.message?.chat.id {
-                    _ = await editMessage(chatId: chatId, messageId: messageId, text: "✅ 已批准")
-                }
-            } else {
-                try? await apiClient.answerCallbackQuery(callbackQueryId: query.id, text: "已过期")
-            }
-
-        case .deny, .cancel:
-            let context = callbackData.action == .deny ? "denied" : "cancelled"
-            let resumed = try? await store.resume(pendingId: pendingId, response: context)
-            if resumed == true {
-                try? await apiClient.answerCallbackQuery(callbackQueryId: query.id, text: "已拒绝")
-                if let queue = taskQueue {
-                    _ = await queue.resumeInteraction(pendingId: pendingId, context: context)
-                }
-                if let messageId = query.message?.messageId, let chatId = query.message?.chat.id {
-                    _ = await editMessage(chatId: chatId, messageId: messageId, text: "❌ 已拒绝")
-                }
-            } else {
-                try? await apiClient.answerCallbackQuery(callbackQueryId: query.id, text: "已过期")
-            }
-
-        case .skillsPage:
-            guard let provider = skillsProvider else {
-                _ = try? await apiClient.answerCallbackQuery(callbackQueryId: query.id, text: "不可用")
-                return
-            }
-            let page = Int(callbackData.detail) ?? 0
-            let skills = provider().sorted { $0.name < $1.name }
-            let pageSize = 20
-            let totalPages = max(1, (skills.count + pageSize - 1) / pageSize)
-            let safePage = max(0, min(page, totalPages - 1))
-
-            let keyboard = Self.buildSkillsKeyboard(skills: skills, page: safePage, pageSize: pageSize)
-            let text = "📋 技能列表 (\(safePage + 1)/\(totalPages))"
-
-            if let messageId = query.message?.messageId, let chatId = query.message?.chat.id {
-                let (formatted, mode) = TGMessageFormatter.format(text)
-                _ = try? await apiClient.editMessageText(chatId: chatId, messageId: messageId, text: formatted, parseMode: mode, replyMarkup: keyboard)
-            }
-            _ = try? await apiClient.answerCallbackQuery(callbackQueryId: query.id, text: nil)
-
-        case .triggerSkill:
-            let skillName = callbackData.detail
-            guard !skillName.isEmpty else {
-                _ = try? await apiClient.answerCallbackQuery(callbackQueryId: query.id, text: "无效技能")
-                return
-            }
-            _ = try? await apiClient.answerCallbackQuery(callbackQueryId: query.id, text: nil)
-
-            if let messageId = query.message?.messageId, let chatId = query.message?.chat.id {
-                _ = await editMessage(chatId: chatId, messageId: messageId, text: "▶ /\(skillName)")
-            }
-
-            let taskText = "/\(skillName)"
-            log("[axion] Telegram skill triggered: \"\(taskText)\"")
-            if let queue = taskQueue, let chatId = query.message?.chat.id {
-                await queue.enqueue(task: taskText, chatId: chatId, userId: query.from.id)
-            }
-
-        case .skip:
-            let resumed = try? await store.resume(pendingId: pendingId, response: "skip")
-            if resumed == true {
-                try? await apiClient.answerCallbackQuery(callbackQueryId: query.id, text: "已跳过")
-                if let queue = taskQueue {
-                    _ = await queue.resumeInteraction(pendingId: pendingId, context: "skip")
-                }
-                if let messageId = query.message?.messageId, let chatId = query.message?.chat.id {
-                    _ = await editMessage(chatId: chatId, messageId: messageId, text: "⏭️ 已跳过")
-                }
-            } else {
-                try? await apiClient.answerCallbackQuery(callbackQueryId: query.id, text: "已过期")
-            }
-
-        case .respond, .clarify:
-            // Switch to text capture mode (for respond) or resolve clarify option
-            let session = await store.get(pendingId: pendingId)
-            if let session, !session.isExpired {
-                if callbackData.action == .clarify {
-                    let optionIndex = Int(callbackData.detail) ?? -1
-                    let options = session.clarifyOptions
-                    let selectedText: String
-                    if optionIndex >= 0 && optionIndex < options.count {
-                        selectedText = options[optionIndex]
-                    } else {
-                        selectedText = callbackData.detail
-                    }
-                    let resumed = try? await store.resume(pendingId: pendingId, response: selectedText)
-                    if resumed == true {
-                        try? await apiClient.answerCallbackQuery(callbackQueryId: query.id, text: "已选择: \(selectedText)")
-                        if let queue = taskQueue {
-                            _ = await queue.resumeInteraction(pendingId: pendingId, context: selectedText)
-                        }
-                        if let messageId = query.message?.messageId, let chatId = query.message?.chat.id {
-                            _ = await editMessage(chatId: chatId, messageId: messageId, text: "✅ 已选择: \(selectedText)")
-                        }
-                    } else {
-                        try? await apiClient.answerCallbackQuery(callbackQueryId: query.id, text: "已过期")
-                    }
-                } else {
-                    // respond → text capture mode
-                    _ = await store.remove(pendingId: pendingId)
-                    await store.register(
-                        pendingId: pendingId,
-                        chatId: session.chatId,
-                        messageId: session.messageId,
-                        mode: .textCapture,
-                        allowedUserId: session.allowedUserId,
-                        onResume: { _ in }
-                    )
-                    try? await apiClient.answerCallbackQuery(callbackQueryId: query.id, text: "请输入您的回复")
-                    if let messageId = query.message?.messageId, let chatId = query.message?.chat.id {
-                        _ = await editMessage(chatId: chatId, messageId: messageId, text: "⌨️ 等待文本输入...")
-                    }
-                }
-            } else {
-                try? await apiClient.answerCallbackQuery(callbackQueryId: query.id, text: "已过期")
-            }
-        }
-    }
-
     func setTaskQueue(_ queue: any TaskSerialQueueProtocol) {
         self.taskQueue = queue
     }
@@ -405,116 +245,9 @@ actor TelegramAdapter {
         }
     }
 
-    @discardableResult
-    func sendFormatted(_ text: String, to chatId: Int64, replyToMessageId: Int64? = nil) async -> Int64? {
-        let preferredPayload = preferredFormattedPayload(for: text)
-        let formatted = preferredPayload.formattedText
-        let mode = preferredPayload.parseMode
-        let chunks = preferredPayload.chunks
-
-        var sentCount = 0
-        var firstMessageId: Int64?
-        for (index, chunk) in chunks.enumerated() {
-            let replyId = index == 0 ? replyToMessageId : nil
-
-            do {
-                let msg = try await apiClient.sendMessage(chatId: chatId, text: chunk, parseMode: mode, replyToMessageId: replyId)
-                if firstMessageId == nil { firstMessageId = msg.messageId }
-                sentCount += 1
-            } catch let error as TGAPIError {
-                switch error {
-                case .formatRejected:
-                    await sendFallbackChunks(
-                        text: text,
-                        to: chatId,
-                        replyToMessageId: replyToMessageId,
-                        startIndex: sentCount,
-                        failedMode: mode
-                    )
-                    return firstMessageId
-                default:
-                    log("[axion] Telegram sendFormatted failed: \(error.localizedDescription)")
-                }
-            } catch {
-                log("[axion] Telegram sendFormatted failed: \(error.localizedDescription)")
-            }
-        }
-        return firstMessageId
-    }
-
-    private func preferredFormattedPayload(for text: String) -> TGFormattedPayload {
-        let (markdownText, markdownMode) = TGMessageFormatter.format(text)
-        let markdownChunks = TGMessageFormatter.split(formattedText: markdownText, parseMode: markdownMode)
-        let markdownPayload = TGFormattedPayload(
-            formattedText: markdownText,
-            parseMode: markdownMode,
-            chunks: markdownChunks
-        )
-
-        let (htmlText, htmlMode) = TGMessageFormatter.formatAsHTML(text)
-        let htmlChunks = TGMessageFormatter.split(formattedText: htmlText, parseMode: htmlMode)
-        let htmlPayload = TGFormattedPayload(
-            formattedText: htmlText,
-            parseMode: htmlMode,
-            chunks: htmlChunks
-        )
-
-        if htmlPayload.chunks.count < markdownPayload.chunks.count {
-            return htmlPayload
-        }
-
-        return markdownPayload
-    }
-
-    private func sendFallbackChunks(
-        text: String,
-        to chatId: Int64,
-        replyToMessageId: Int64?,
-        startIndex: Int,
-        failedMode: TGParseMode
-    ) async {
-        if failedMode == .markdownV2 {
-            await sendHTMLFallbackChunks(text: text, to: chatId, replyToMessageId: replyToMessageId, startIndex: startIndex)
-            return
-        }
-
-        await sendPlainFallbackChunks(text: text, to: chatId, replyToMessageId: replyToMessageId, startIndex: startIndex)
-    }
-
-    private func sendHTMLFallbackChunks(text: String, to chatId: Int64, replyToMessageId: Int64?, startIndex: Int) async {
-        let (htmlFormatted, htmlMode) = TGMessageFormatter.formatAsHTML(text)
-        let htmlChunks = TGMessageFormatter.split(formattedText: htmlFormatted, parseMode: htmlMode)
-
-        for (hIndex, htmlChunk) in htmlChunks.enumerated() {
-            guard hIndex >= startIndex else { continue }
-            let hReplyId = hIndex == 0 ? replyToMessageId : nil
-            do {
-                _ = try await apiClient.sendMessage(chatId: chatId, text: htmlChunk, parseMode: htmlMode, replyToMessageId: hReplyId)
-            } catch {
-                await sendPlainFallbackChunks(text: text, to: chatId, replyToMessageId: replyToMessageId, startIndex: startIndex)
-                return
-            }
-        }
-    }
-
-    private func sendPlainFallbackChunks(text: String, to chatId: Int64, replyToMessageId: Int64?, startIndex: Int) async {
-        let (plainFormatted, plainMode) = TGMessageFormatter.formatAsPlain(text)
-        let plainChunks = TGMessageFormatter.split(formattedText: plainFormatted, parseMode: plainMode)
-
-        for (pIndex, plainChunk) in plainChunks.enumerated() {
-            guard pIndex >= startIndex else { continue }
-            let pReplyId = pIndex == 0 ? replyToMessageId : nil
-            do {
-                _ = try await apiClient.sendMessage(chatId: chatId, text: plainChunk, parseMode: plainMode, replyToMessageId: pReplyId)
-            } catch {
-                log("[axion] Telegram sendFormatted plain fallback failed: \(error.localizedDescription)")
-            }
-        }
-    }
-
     // MARK: - Authorization
 
-    private func isAuthorized(userId: Int64) -> Bool {
+    func isAuthorized(userId: Int64) -> Bool {
         allowedUsers.contains(String(userId))
     }
 

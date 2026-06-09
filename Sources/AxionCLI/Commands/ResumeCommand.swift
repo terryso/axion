@@ -45,12 +45,6 @@ struct ResumeCommand: AsyncParsableCommand {
         )
         let effectiveMaxTokens = RunOrchestrator.computeEffectiveMaxTokens(fast: fast)
 
-        let eventBus = EventBus()
-        let runtime = Self.createRuntime(eventBus)
-        let reviewDC = await registerHandlers(into: runtime, config: config)
-
-        let eventLoopTask = _Concurrency.Task { await runtime.startEventLoop() }
-
         let buildConfig = AgentBuilder.BuildConfig.forCLI(
             config: config,
             task: "Continue the previous task.",
@@ -61,65 +55,39 @@ struct ResumeCommand: AsyncParsableCommand {
             fast: fast
         )
 
-        let overrides = AxionRuntime.RunOverrides(
-            json: json,
-            noVisualDelta: noVisualDelta,
-            noReview: noReview,
-            onReviewCompleted: nil,
-            reviewDataContext: reviewDC,
-            nonInteractivePause: false, registerResumeHandle: nil
-        )
-
-        let result: AxionRunResult
-        do {
-            result = try await runtime.resumeSession(sessionId, buildConfig: buildConfig, runOverrides: overrides)
-        } catch {
-            eventLoopTask.cancel()
-            await runtime.stopEventLoop()
-            throw error
+        let result = try await executeWithRuntime(config: config) { runtime, overrides in
+            try await runtime.resumeSession(sessionId, buildConfig: buildConfig, runOverrides: overrides)
         }
-        eventLoopTask.cancel()
-        await runtime.stopEventLoop()
+        try handleResult(result)
+    }
 
-        if !json {
-            let elapsedSec = result.durationMs / 1000
-            let numTurns = result.runCompleteContext?.numTurns ?? result.totalSteps
-            let title = result.state == .completed ? "Axion 完成" : "Axion 失败"
-            var subtitle = "耗时 \(elapsedSec)s · \(numTurns) 次调用"
-            if let cost = result.runCompleteContext?.totalCostUsd, cost > 0 {
-                subtitle += " · $\(String(format: "%.4f", cost))"
-            }
-            Self.notify(
-                title,
-                subtitle,
-                "Session \(sessionId) 已恢复"
-            )
-        }
+    // MARK: - Runtime Lifecycle
 
-        if result.state == .failed {
-            throw ExitCode(1)
+    private func executeWithRuntime(
+        config: AxionConfig,
+        execute: (any AxionRuntimeResuming, AxionRuntime.RunOverrides) async throws -> AxionRunResult
+    ) async throws -> AxionRunResult {
+        let eventBus = EventBus()
+        let runtime = Self.createRuntime(eventBus)
+        return try await executeCLIWithRuntime(
+            config: config, json: json,
+            noMemory: noMemory, noReview: noReview, noVisualDelta: noVisualDelta,
+            runtime: runtime
+        ) { overrides in
+            try await execute(runtime, overrides)
         }
     }
 
-    @discardableResult
-    private func registerHandlers(into runtime: any AxionRuntimeResuming, config: AxionConfig) async -> ReviewDataContext {
-        let memoryDir = (ConfigManager.defaultConfigDirectory as NSString).appendingPathComponent("memory")
-        let traceDir = (ConfigManager.defaultConfigDirectory as NSString).appendingPathComponent("runs")
-        let reviewDataContext = ReviewDataContext()
-
-        let profile = HandlerProfile(
-            context: .cli,
-            config: config,
-            memoryDir: memoryDir,
-            traceDir: traceDir,
-            noMemory: noMemory,
-            noReview: noReview,
-            noVisualDelta: noVisualDelta,
-            reviewDataContext: reviewDataContext
-        )
-        for handler in profile.buildHandlers() {
-            await runtime.registerHandler(handler)
+    private func handleResult(_ result: AxionRunResult) throws {
+        if !json {
+            sendRunCompletionNotification(
+                result: result,
+                message: "Session \(sessionId) 已恢复",
+                notify: Self.notify
+            )
         }
-        return reviewDataContext
+        if outputCLIError(result, json: json) {
+            throw ExitCode(1)
+        }
     }
 }

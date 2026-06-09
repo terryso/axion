@@ -2,7 +2,7 @@ import AppKit
 import Foundation
 
 /// Errors thrown by `AppLauncherService`.
-enum AppLauncherError: Error, LocalizedError {
+enum AppLauncherError: Error, LocalizedError, ToolErrorProtocol {
     case appNotFound(name: String)
     case launchFailed(name: String, reason: String)
 

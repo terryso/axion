@@ -1,4 +1,3 @@
-import Foundation
 
 public enum AxionRunState: String, Codable, Sendable, Equatable {
     case created

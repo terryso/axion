@@ -11,18 +11,18 @@ struct RecordCommandTests {
 
     @Test("recordingsDirectory returns path under ~/.axion/recordings")
     func test_recordingsDirectory_underAxionDir() {
-        let dir = RecordCommand.recordingsDirectory()
+        let dir = ConfigManager.recordingsDirectory
         #expect(dir.hasSuffix(".axion/recordings"))
         #expect(dir.contains(".axion"))
     }
 
     @Test("sanitizeFileName strips path separators and traversal")
     func test_sanitizeFileName_stripsPathChars() {
-        #expect(RecordCommand.sanitizeFileName("../../../etc/passwd") == "______etc_passwd")
-        #expect(RecordCommand.sanitizeFileName("my/recording") == "my_recording")
-        #expect(RecordCommand.sanitizeFileName("normal name") == "normal name")
-        #expect(RecordCommand.sanitizeFileName("") == "untitled")
-        #expect(RecordCommand.sanitizeFileName("test:file") == "test_file")
+        #expect(sanitizeFileName("../../../etc/passwd") == "______etc_passwd")
+        #expect(sanitizeFileName("my/recording") == "my_recording")
+        #expect(sanitizeFileName("normal name") == "normal name")
+        #expect(sanitizeFileName("") == "untitled")
+        #expect(sanitizeFileName("test:file") == "test_file")
     }
 
     @Test("parseRecordingEvents returns empty array for invalid JSON")

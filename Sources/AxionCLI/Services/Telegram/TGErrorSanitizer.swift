@@ -61,8 +61,7 @@ enum TGErrorSanitizer {
         result = filtered.joined(separator: "\n")
 
         // Extract error message from HTTP JSON body
-        if let jsonData = result.data(using: .utf8),
-           let json = try? JSONSerialization.jsonObject(with: jsonData) as? [String: Any] {
+        if let json = parseJSONDict(from: result) {
             if let errorMsg = json["error"] as? [String: Any], let message = errorMsg["message"] as? String {
                 result = message
             } else if let description = json["description"] as? String {

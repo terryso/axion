@@ -6,33 +6,27 @@ stepsCompleted:
   - step-04-analyze-gaps
   - step-05-gate-decision
 lastStep: step-05-gate-decision
-lastSaved: '2026-05-08'
-storyId: '1.1-1.4'
-storyKey: 1-4-stories
+lastSaved: '2026-06-07'
 coverageBasis: acceptance_criteria
 oracleConfidence: high
 oracleResolutionMode: formal_requirements
 oracleSources:
-  - _bmad-output/implementation-artifacts/1-1-spm-scaffolding-axioncore-models.md
-  - _bmad-output/implementation-artifacts/1-2-helper-mcp-server-foundation.md
-  - _bmad-output/implementation-artifacts/1-3-app-launch-window-management.md
-  - _bmad-output/implementation-artifacts/1-4-mouse-keyboard-operations.md
-  - _bmad-output/test-artifacts/atdd-checklist-1-1-spm-scaffolding-axioncore-models.md
-  - _bmad-output/test-artifacts/atdd-checklist-1-2-helper-mcp-server-foundation.md
-  - _bmad-output/test-artifacts/atdd-checklist-1-3-app-launch-window-management.md
-  - _bmad-output/test-artifacts/atdd-checklist-1-4-mouse-keyboard-operations.md
+  - _bmad-output/implementation-artifacts/38-1-conversation-visual-semantic-layer.md
+  - _bmad-output/test-artifacts/atdd-checklist-38-1-conversation-visual-semantic-layer.md
+  - Sources/AxionCLI/Chat/Theme/TerminalColorProfile.swift
+  - Sources/AxionCLI/Chat/Theme/ChatTheme.swift
+  - Sources/AxionCLI/Chat/Theme/TranscriptRenderer.swift
+  - Sources/AxionCLI/Chat/ChatOutputFormatter.swift
+  - Sources/AxionCLI/Commands/ChatCommand.swift
 externalPointerStatus: not_used
-tempCoverageMatrixPath: _bmad-output/test-artifacts/traceability/coverage-matrix.json
-gateDecision: PASS
+tempCoverageMatrixPath: /tmp/tea-trace-coverage-matrix-38-1.json
 ---
 
-# Traceability Report: Stories 1.1 - 1.4
-
-**Scope:** SPM Scaffolding & AxionCore Models (1.1) + Helper MCP Server Foundation (1.2) + App Launch & Window Management (1.3) + Mouse & Keyboard Operations (1.4)
+# Story 38.1: 对话视觉语义层 — Traceability Report
 
 ## Gate Decision: PASS
 
-**Rationale:** P0 coverage is 100%, P1 coverage is 100% (target: 90%), and overall coverage is 100% (minimum: 80%). All 23 acceptance criteria across Stories 1.1-1.4 are fully covered by 138 passing tests (0 skipped, 0 failures). No critical, high, medium, or low gaps detected.
+**Rationale:** P0 coverage is 100%, P1 coverage is 100% (target: 90%), and overall coverage is 100% (minimum: 80%). All 8 acceptance criteria have full test coverage with 66 passing tests across 4 test suites. Source code wiring verified with AC annotations in ChatOutputFormatter and ChatCommand.
 
 ---
 
@@ -40,418 +34,222 @@ gateDecision: PASS
 
 | Metric | Value |
 |--------|-------|
-| Total Acceptance Criteria | 23 |
-| Fully Covered | 23 (100%) |
-| Partially Covered | 0 |
-| Uncovered | 0 |
-| Total Test Files | 16 |
-| Total Test Cases | 138 |
-| Active (Passing) | 138 |
-| Skipped / Fixme / Pending | 0 |
-| Test Execution Time | ~2.2 seconds |
+| Total Acceptance Criteria | 8 |
+| Fully Covered | 8 |
+| Overall Coverage | 100% |
+| P0 Coverage | 100% (5/5) |
+| P1 Coverage | 100% (3/3) |
+| Total Test Files | 4 |
+| Total Test Cases | 66 (all passing) |
+| Source Files (new) | 3 |
+| Source Files (modified) | 2 |
 
-## Priority Coverage
-
-| Priority | Total | Covered | Percentage |
-|----------|-------|---------|------------|
-| P0 | 23 | 23 | 100% |
-| P1 | 0 | 0 | N/A (100%) |
-| P2 | 0 | 0 | N/A (100%) |
-| P3 | 0 | 0 | N/A (100%) |
+---
 
 ## Traceability Matrix
 
-### Story 1.1: SPM 项目脚手架与 AxionCore 共享模型
+### AC1: 用户消息角色标识 (P0) — FULL
 
-| AC | Description | Priority | Test File | Test Count | Coverage | Status |
-|----|-------------|----------|-----------|------------|----------|--------|
-| 1.1-AC1 | SPM 编译成功，三目标构建 | P0 | SPMScaffoldTests, HelperScaffoldTests | 3 | FULL | PASS |
-| 1.1-AC2 | Plan 模型 Codable round-trip | P0 | PlanTests | 7 | FULL | PASS |
-| 1.1-AC3 | RunState 枚举 9 种状态 | P0 | RunStateTests | 5 | FULL | PASS |
-| 1.1-AC4 | AxionConfig camelCase + apiKey 排除 | P0 | AxionConfigTests | 4 | FULL | PASS |
-| 1.1-AC5 | AxionError MCP ToolResult 三字段格式 | P0 | AxionErrorTests | 8 | FULL | PASS |
-| 1.1-AC6 | Protocol/Constants/辅助类型位置 | P0 | SPMScaffoldTests | 10 | FULL | PASS |
+**Requirement:** 用户发送消息后，终端左侧显示用户角色蓝色圆点，该轮消息主体与后续 assistant/tool block 明确分层。
 
-### Story 1.2: Helper MCP Server 基础
+| Test File | Test Name | Level |
+|-----------|-----------|-------|
+| TranscriptRendererTests.swift | renderUserMessage: TrueColor TTY 包含蓝色圆点和消息文本 | Unit |
+| TranscriptRendererTests.swift | renderUserMessage: 非 TTY 使用纯文本 [user] 前缀 | Unit |
+| TranscriptRendererTests.swift | renderUserMessage: ansi16 包含标准蓝色码 34 | Unit |
+| TranscriptIntegrationTests.swift | toolUse/toolResult/result integration | Unit |
 
-| AC | Description | Priority | Test File | Test Count | Coverage | Status |
-|----|-------------|----------|-----------|------------|----------|--------|
-| 1.2-AC1 | MCP initialize 响应 | P0 | HelperMCPServerTests, HelperProcessSmokeTests, HelperScaffoldTests | 7 | FULL | PASS |
-| 1.2-AC2 | tools/list 返回 15+ 工具 | P0 | HelperMCPServerTests | 7 | FULL | PASS |
-| 1.2-AC3 | 未知工具调用错误 | P0 | HelperMCPServerTests | 2 | FULL | PASS |
-| 1.2-AC4 | EOF 优雅退出 | P0 | HelperMCPServerTests, HelperProcessSmokeTests | 2 | FULL | PASS |
-
-### Story 1.3: 应用启动与窗口管理
-
-| AC | Description | Priority | Test File | Test Count | Coverage | Status |
-|----|-------------|----------|-----------|------------|----------|--------|
-| 1.3-AC1 | launch_app 启动 Calculator 返回 pid | P0 | LaunchAppToolTests | 3 | FULL | PASS |
-| 1.3-AC2 | list_apps 返回应用列表 | P0 | LaunchAppToolTests | 3 | FULL | PASS |
-| 1.3-AC3 | list_windows 返回窗口列表 | P0 | WindowManagementToolTests | 3 | FULL | PASS |
-| 1.3-AC4 | get_window_state 返回完整状态 | P0 | WindowManagementToolTests | 4 | FULL | PASS |
-| 1.3-AC5 | app_not_found 错误处理 | P0 | LaunchAppToolTests | 2 | FULL | PASS |
-
-### Story 1.4: 鼠标与键盘操作
-
-| AC | Description | Priority | Test File | Test Count | Coverage | Status |
-|----|-------------|----------|-----------|------------|----------|--------|
-| 1.4-AC1 | click 单击操作 | P0 | MouseKeyboardToolTests | 3 | FULL | PASS |
-| 1.4-AC2 | double_click 双击操作 | P0 | MouseKeyboardToolTests | 1 | FULL | PASS |
-| 1.4-AC3 | right_click 右键点击 | P0 | MouseKeyboardToolTests | 1 | FULL | PASS |
-| 1.4-AC4 | type_text 文本输入 | P0 | MouseKeyboardToolTests | 2 | FULL | PASS |
-| 1.4-AC5 | press_key 按键 | P0 | InputSimulationServiceTests + MouseKeyboardToolTests | 12 | FULL | PASS |
-| 1.4-AC6 | hotkey 组合键 | P0 | InputSimulationServiceTests + MouseKeyboardToolTests | 9 | FULL | PASS |
-| 1.4-AC7 | scroll 滚动 | P0 | InputSimulationServiceTests + MouseKeyboardToolTests | 5 | FULL | PASS |
-| 1.4-AC8 | drag 拖拽 | P0 | MouseKeyboardToolTests | 2 | FULL | PASS |
+**Wiring Verification:**
+- `ChatCommand.swift:352-358` — ChatTheme + TranscriptRenderer created, renderUserMessage(text:) called before agent.stream(trimmed), output to stderr
+- `ChatOutputFormatter.swift:19` — theme + transcriptRenderer properties injected
 
 ---
 
-## Detailed Requirement-to-Test Mapping
+### AC2: AI 回复角色标识 (P0) — FULL
 
-### Story 1.1 Tests
+**Requirement:** assistant 流式输出时以 AI 角色绿色圆点样式输出，与工具调用、错误、审批请求有可区分视觉语义。同一轮 assistant 输出在视觉上组成一个 block。
 
-#### 1.1-AC1: SPM 编译成功 (P0)
+| Test File | Test Name | Level |
+|-----------|-----------|-------|
+| TranscriptRendererTests.swift | renderAssistantBlockStart: TrueColor TTY 包含绿色圆点 | Unit |
+| TranscriptRendererTests.swift | renderAssistantBlockStart: 非 TTY 使用 [ai] 前缀 | Unit |
 
-| Test | Level | Status |
-|------|-------|--------|
-| test_axionCore_module_compiles | Unit | PASS |
-| test_axionHelper_target_compiles | Unit | PASS |
-| test_mcpModule_importsSuccessfully | Unit | PASS |
-
-#### 1.1-AC2: Plan 模型 Codable round-trip (P0)
-
-| Test | Level | Status |
-|------|-------|--------|
-| test_plan_codable_roundTrip_preservesAllFields | Unit | PASS |
-| test_value_string_roundTrip | Unit | PASS |
-| test_value_int_roundTrip | Unit | PASS |
-| test_value_bool_roundTrip | Unit | PASS |
-| test_value_placeholder_roundTrip | Unit | PASS |
-| test_value_placeholder_preservesDollarSign | Unit | PASS |
-| test_step_codable_roundTrip | Unit | PASS |
-
-#### 1.1-AC3: RunState 枚举完整性 (P0)
-
-| Test | Level | Status |
-|------|-------|--------|
-| test_runState_containsAllNineCases | Unit | PASS |
-| test_runState_allExpectedCasesExist | Unit | PASS |
-| test_runState_rawValues_matchCamelCase | Unit | PASS |
-| test_runState_codable_roundTrip | Unit | PASS |
-| test_runState_jsonEncoding_producesStringValue | Unit | PASS |
-
-#### 1.1-AC4: AxionConfig Codable (P0)
-
-| Test | Level | Status |
-|------|-------|--------|
-| test_config_codable_outputIsCamelCase | Unit | PASS |
-| test_config_codable_roundTrip | Unit | PASS |
-| test_config_defaultValues | Unit | PASS |
-| test_config_apiKeyNil_notEncoded | Unit | PASS |
-
-#### 1.1-AC5: AxionError MCP ToolResult 格式 (P0)
-
-| Test | Level | Status |
-|------|-------|--------|
-| test_error_toToolResultJSON_containsRequiredFields | Unit | PASS |
-| test_error_toToolResultJSON_validJSON | Unit | PASS |
-| test_error_equality | Unit | PASS |
-| test_error_planningFailed_format | Unit | PASS |
-| test_error_executionFailed_format | Unit | PASS |
-| test_error_helperNotRunning_format | Unit | PASS |
-| test_error_maxRetriesExceeded_format | Unit | PASS |
-| test_error_mcpError_format | Unit | PASS |
-
-#### 1.1-AC6: Protocol/Constants/辅助类型 (P0)
-
-| Test | Level | Status |
-|------|-------|--------|
-| test_plannerProtocol_existsInAxionCore | Unit | PASS |
-| test_executorProtocol_existsInAxionCore | Unit | PASS |
-| test_verifierProtocol_existsInAxionCore | Unit | PASS |
-| test_mcpClientProtocol_existsInAxionCore | Unit | PASS |
-| test_outputProtocol_existsInAxionCore | Unit | PASS |
-| test_toolNamesConstant_existsInAxionCore | Unit | PASS |
-| test_axionError_conformsToError | Unit | PASS |
-| test_runContext_existsInAxionCore | Unit | PASS |
-| test_executedStep_existsInAxionCore | Unit | PASS |
-| test_axionCore_module_compiles | Unit | PASS |
-
-### Story 1.2 Tests
-
-#### 1.2-AC1: MCP initialize 响应 (P0)
-
-| Test | Level | Status |
-|------|-------|--------|
-| test_mcpServer_creation_hasCorrectNameAndVersion | Unit | PASS |
-| test_mcpServer_initialize_includesToolsCapability | Unit | PASS |
-| test_helperProcess_initializeResponds | Integration | PASS |
-| test_mcpModule_importsSuccessfully | Unit | PASS |
-| test_mcpToolModule_importsSuccessfully | Unit | PASS |
-| test_axionHelper_target_compiles | Unit | PASS |
-| test_toolRegistrar_existsInAxionHelper | Unit | PASS |
-
-#### 1.2-AC2: tools/list 响应 (P0)
-
-| Test | Level | Status |
-|------|-------|--------|
-| test_toolsList_returnsAllRegisteredTools | Unit | PASS |
-| test_toolsList_eachToolHasNameDescriptionAndSchema | Unit | PASS |
-| test_toolsList_containsAllExpectedToolNames | Unit | PASS |
-| test_toolsList_matchesToolNamesConstants | Unit | PASS |
-| test_toolRegistrar_registerAll_isCallable | Unit | PASS |
-| test_toolRegistrar_noDuplicateToolNames | Unit | PASS |
-| test_toolRegistrar_allToolsUseSnakeCase | Unit | PASS |
-
-#### 1.2-AC3: 未知工具调用错误 (P0)
-
-| Test | Level | Status |
-|------|-------|--------|
-| test_unknownTool_returnsError | Unit | PASS |
-| test_unknownTool_variousNames_returnErrors | Unit | PASS |
-
-#### 1.2-AC4: EOF 优雅退出 (P0)
-
-| Test | Level | Status |
-|------|-------|--------|
-| test_mcpServer_runStdio_exitsOnEOF | Unit | PASS |
-| test_helperProcess_gracefulExitOnEOF | Integration | PASS |
-
-### Story 1.3 Tests
-
-#### 1.3-AC1: launch_app 启动应用 (P0)
-
-| Test | Level | Status |
-|------|-------|--------|
-| test_launchApp_success_returnsJsonWithPid | Unit | PASS |
-| test_launchApp_alreadyRunning_returnsExistingPid | Unit | PASS |
-
-#### 1.3-AC2: list_apps 列出应用 (P0)
-
-| Test | Level | Status |
-|------|-------|--------|
-| test_listApps_returnsJsonArray | Unit | PASS |
-| test_listApps_eachAppHasPidAndName | Unit | PASS |
-
-#### 1.3-AC3: list_windows 列出窗口 (P0)
-
-| Test | Level | Status |
-|------|-------|--------|
-| test_listWindows_returnsJsonArray | Unit | PASS |
-| test_listWindows_filterByPid | Unit | PASS |
-| test_listWindows_eachWindowHasRequiredFields | Unit | PASS |
-
-#### 1.3-AC4: get_window_state 获取窗口状态 (P0)
-
-| Test | Level | Status |
-|------|-------|--------|
-| test_getWindowState_returnsCompleteState | Unit | PASS |
-| test_getWindowState_invalidWindowId_returnsErrorJson | Unit | PASS |
-| test_getWindowState_boundsContainsPositionAndSize | Unit | PASS |
-
-#### 1.3-AC5: 应用未找到错误 (P0)
-
-| Test | Level | Status |
-|------|-------|--------|
-| test_launchApp_appNotFound_returnsErrorJson | Unit | PASS |
-
-### Story 1.4 Tests
-
-#### 1.4-AC1: click 单击操作 (P0)
-
-| Test | Level | Status |
-|------|-------|--------|
-| test_click_validCoordinates_returnsSuccessJson | Unit | PASS |
-| test_click_outOfBounds_returnsErrorJson | Unit | PASS |
-| test_click_doesNotReturnStubText | Unit | PASS |
-
-#### 1.4-AC2: double_click 双击操作 (P0)
-
-| Test | Level | Status |
-|------|-------|--------|
-| test_doubleClick_validCoordinates_returnsSuccessJson | Unit | PASS |
-
-#### 1.4-AC3: right_click 右键点击 (P0)
-
-| Test | Level | Status |
-|------|-------|--------|
-| test_rightClick_validCoordinates_returnsSuccessJson | Unit | PASS |
-
-#### 1.4-AC4: type_text 文本输入 (P0)
-
-| Test | Level | Status |
-|------|-------|--------|
-| test_typeText_validText_returnsSuccessJson | Unit | PASS |
-| test_typeText_unicodeCharacters_returnsSuccessJson | Unit | PASS |
-
-#### 1.4-AC5: press_key 按键 (P0)
-
-| Test | Level | Status |
-|------|-------|--------|
-| test_keyNameMapping_return_mapsToCorrectKeyCode | Unit | PASS |
-| test_keyNameMapping_enter_mapsToReturnKeyCode | Unit | PASS |
-| test_keyNameMapping_tab_mapsToCorrectKeyCode | Unit | PASS |
-| test_keyNameMapping_escape_mapsToCorrectKeyCode | Unit | PASS |
-| test_keyNameMapping_space_mapsToCorrectKeyCode | Unit | PASS |
-| test_keyNameMapping_delete_mapsToCorrectKeyCode | Unit | PASS |
-| test_keyNameMapping_functionKeys_mapCorrectly | Unit | PASS |
-| test_keyNameMapping_arrowKeys_mapCorrectly | Unit | PASS |
-| test_keyNameMapping_singleLetter_a_mapsToZero | Unit | PASS |
-| test_keyNameMapping_invalidKey_returnsNil | Unit | PASS |
-| test_pressKey_validKey_returnsSuccessJson | Unit | PASS |
-| test_pressKey_invalidKeyName_returnsErrorJson | Unit | PASS |
-
-#### 1.4-AC6: hotkey 组合键 (P0)
-
-| Test | Level | Status |
-|------|-------|--------|
-| test_hotkeyParsing_cmdC_returnsCommandFlagAndCKeyCode | Unit | PASS |
-| test_hotkeyParsing_cmdShiftS_returnsCombinedFlags | Unit | PASS |
-| test_hotkeyParsing_ctrlAltDelete_returnsCombinedFlags | Unit | PASS |
-| test_hotkeyParsing_singleKeyNoModifier_throwsInvalidHotkeyFormat | Unit | PASS |
-| test_hotkeyParsing_unknownModifier_throwsInvalidHotkeyFormat | Unit | PASS |
-| test_hotkeyParsing_commandAlias_worksAsCmd | Unit | PASS |
-| test_hotkeyParsing_optionAlias_worksAsAlt | Unit | PASS |
-| test_hotkey_validCombination_returnsSuccessJson | Unit | PASS |
-| test_hotkey_invalidFormat_returnsErrorJson | Unit | PASS |
-
-#### 1.4-AC7: scroll 滚动 (P0)
-
-| Test | Level | Status |
-|------|-------|--------|
-| test_scrollDirection_up_returnsPositiveValue | Unit | PASS |
-| test_scrollDirection_down_returnsNegativeValue | Unit | PASS |
-| test_scrollDirection_invalidDirection_throwsError | Unit | PASS |
-| test_scrollDirection_isCaseInsensitive | Unit | PASS |
-| test_scroll_validDirection_returnsSuccessJson | Unit | PASS |
-
-#### 1.4-AC8: drag 拖拽 (P0)
-
-| Test | Level | Status |
-|------|-------|--------|
-| test_drag_validCoordinates_returnsSuccessJson | Unit | PASS |
-| test_drag_outOfBounds_returnsErrorJson | Unit | PASS |
-
-#### 1.4 Cross-cutting: Error Format & Stub Verification (P0)
-
-| Test | Level | Status |
-|------|-------|--------|
-| test_inputSimulationError_coordinatesOutOfBounds_hasRequiredFields | Unit | PASS |
-| test_inputSimulationError_invalidKeyName_hasRequiredFields | Unit | PASS |
-| test_inputSimulationError_invalidHotkeyFormat_hasRequiredFields | Unit | PASS |
-| test_inputSimulationError_invalidDirection_hasRequiredFields | Unit | PASS |
-| test_typeText_doesNotReturnStubText | Unit | PASS |
+**Wiring Verification:**
+- `ChatOutputFormatter.swift:52-56` — First .partialMessage triggers renderAssistantBlockStart(), assistantBlockStarted flag prevents repeated dots
+- `ChatOutputFormatter.swift:73` — .assistant message resets assistantBlockStarted = false
 
 ---
 
-## Additional Tests (Model Round-Trip, supporting Stories 1.3/1.4)
+### AC3: 工具/审批角色标识 (P0) — FULL
 
-These 12 tests verify Codable round-trip for data models. They support all 1.3/1.4 ACs by ensuring serialization integrity but are not directly tied to a single AC.
+**Requirement:** tool call / tool result / approval request 输出时左侧有固定语义标识（黄色圆点标记工具，红色圆点标记 warning/approval）。
 
-| Test | File | Level | Status |
-|------|------|-------|--------|
-| testCodableRoundTrip | AppInfoTests.swift | Unit | PASS |
-| testCodableRoundTrip_nilBundleId | AppInfoTests.swift | Unit | PASS |
-| testJSONKeys | AppInfoTests.swift | Unit | PASS |
-| testCodableRoundTrip_leaf | AXElementTests.swift | Unit | PASS |
-| testCodableRoundTrip_withChildren | AXElementTests.swift | Unit | PASS |
-| testEquality | AXElementTests.swift | Unit | PASS |
-| testCodableRoundTrip | WindowInfoTests.swift | Unit | PASS |
-| testCodableRoundTrip_nils | WindowInfoTests.swift | Unit | PASS |
-| testWindowBoundsCodableRoundTrip | WindowInfoTests.swift | Unit | PASS |
-| testCodableRoundTrip_withAXTree | WindowStateTests.swift | Unit | PASS |
-| testCodableRoundTrip_nilAXTree | WindowStateTests.swift | Unit | PASS |
-| testAXTreeAlwaysEncoded | WindowStateTests.swift | Unit | PASS |
+| Test File | Test Name | Level |
+|-----------|-----------|-------|
+| TranscriptRendererTests.swift | renderToolEvent: TrueColor TTY 包含黄色圆点和工具名 | Unit |
+| TranscriptRendererTests.swift | renderToolEvent: 包含耗时信息 | Unit |
+| TranscriptRendererTests.swift | renderToolEvent: 错误结果使用红色圆点 | Unit |
+| TranscriptRendererTests.swift | renderToolEvent: 非 TTY 使用 [tool] 前缀 | Unit |
+| TranscriptRendererTests.swift | renderWarning: TrueColor TTY 包含红色圆点 | Unit |
+| TranscriptRendererTests.swift | renderWarning: 非 TTY 使用 [warn] 前缀 | Unit |
+| TranscriptRendererTests.swift | renderWarning: ansi16 包含标准红色码 31 | Unit |
+| TranscriptRendererTests.swift | renderResult: success 不包含红色圆点 | Unit |
+| TranscriptRendererTests.swift | renderResult: errorMaxTurns 使用红色圆点 | Unit |
+| TranscriptRendererTests.swift | renderResult: cancelled 使用红色圆点 | Unit |
+| TranscriptIntegrationTests.swift | toolUse: TTY 模式输出包含黄色圆点角色标识 | Unit |
+| TranscriptIntegrationTests.swift | toolUse: 非 TTY 模式输出 [tool] 纯文本前缀 | Unit |
+| TranscriptIntegrationTests.swift | toolResult success: TTY 模式输出包含黄色圆点 | Unit |
+| TranscriptIntegrationTests.swift | toolResult error: TTY 模式输出包含红色圆点 | Unit |
+| TranscriptIntegrationTests.swift | result errorMaxTurns: TTY 模式输出包含红色圆点 | Unit |
+| TranscriptIntegrationTests.swift | result errorMaxTurns: 非 TTY 使用 [warn] 纯文本 | Unit |
+| TranscriptIntegrationTests.swift | system paused: TTY 模式输出包含红色圆点 | Unit |
+| TranscriptIntegrationTests.swift | toolUse: 集成后仍保留 hourglass 图标 | Unit |
+| TranscriptIntegrationTests.swift | toolResult success: 集成后仍保留 check 图标 | Unit |
+| TranscriptIntegrationTests.swift | toolResult error: 集成后仍保留 cross 图标 | Unit |
+| TranscriptIntegrationTests.swift | 无 ChatTheme 时 formatter 仍正常工作（向后兼容） | Unit |
+
+**Wiring Verification:**
+- `ChatOutputFormatter.swift:86-93` — .toolUse handler uses formatRoleDot(role: .tool) + preserves hourglass icon
+- `ChatOutputFormatter.swift:109-127` — .toolResult error uses formatRoleDot(role: .warning), success uses formatRoleDot(role: .tool)
+- `ChatOutputFormatter.swift:140-186` — .result error subtypes use renderWarning(message:)
+- `ChatOutputFormatter.swift:193-214` — .system .paused / .pausedTimeout use renderWarning(message:)
 
 ---
 
-## Test Level Distribution
+### AC4: 非 TTY 回退 (P0) — FULL
 
-| Level | Count | Percentage |
-|-------|-------|------------|
-| Unit | 129 | 93% |
-| Integration | 9 | 7% |
-| E2E | 0 | 0% |
+**Requirement:** 终端不支持 ANSI 颜色（pipe 模式、isatty() 返回 false）时，回退为纯文本前缀标识。
 
-Note: This is a backend Swift/SPM project. E2E and component tests are not applicable. Integration tests include process-level smoke tests (HelperProcessSmokeTests) and AX-permission-dependent tests (LaunchAppIntegrationTests, WindowManagementIntegrationTests).
+| Test File | Test Name | Level |
+|-----------|-----------|-------|
+| TerminalColorProfileTests.swift | detect: 非 TTY (isatty=false) 返回 .unknown | Unit |
+| TerminalColorProfileTests.swift | unknown: 所有角色返回空字符串（无颜色输出） | Unit |
+| ChatThemeTests.swift | 非 TTY: formatRoleDot 使用纯文本前缀而非 ANSI 码 | Unit |
+| ChatThemeTests.swift | 非 TTY: formatRoleDot AI 使用纯文本前缀 | Unit |
+| ChatThemeTests.swift | formatBlock: 非 TTY 时使用纯文本前缀 | Unit |
+| ChatThemeTests.swift | separatorLine: 非 TTY 返回空字符串 | Unit |
+| TranscriptRendererTests.swift | renderUserMessage: 非 TTY 使用纯文本 [user] 前缀 | Unit |
+| TranscriptRendererTests.swift | renderAssistantBlockStart: 非 TTY 使用 [ai] 前缀 | Unit |
+| TranscriptRendererTests.swift | renderToolEvent: 非 TTY 使用 [tool] 前缀 | Unit |
+| TranscriptRendererTests.swift | renderWarning: 非 TTY 使用 [warn] 前缀 | Unit |
+| TranscriptIntegrationTests.swift | toolUse: 非 TTY 模式输出 [tool] 纯文本前缀 | Unit |
+| TranscriptIntegrationTests.swift | result errorMaxTurns: 非 TTY 使用 [warn] 纯文本 | Unit |
 
-## NFR Coverage
+**Wiring Verification:**
+- `TerminalColorProfile.swift:31` — guard isTTY else { return .unknown }
+- `ChatTheme.swift:20` — formatRoleDot falls back to formatPlainText when not TTY
 
-| NFR | Description | Test | Status |
-|-----|-------------|------|--------|
-| NFR2 | Helper 启动到 MCP 就绪 < 500ms | test_helperProcess_startupTime_meetsNFR2 | PASS |
+---
+
+### AC5: tmux/screen 兼容 (P1) — FULL
+
+**Requirement:** tmux / screen 会话中运行时圆点正常渲染，不依赖 OSC 背景色查询，不出现背景色相关乱码。
+
+| Test File | Test Name | Level |
+|-----------|-----------|-------|
+| TerminalColorProfileTests.swift | detect: TERM=screen-256color 返回 .ansi256 | Unit |
+| TerminalColorProfileTests.swift | detect: TERM=tmux-256color 返回 .ansi256 | Unit |
+| TranscriptRendererTests.swift | tmux 环境下 ansi256 渲染不包含 OSC 转义序列 | Unit |
+
+**Wiring Verification:**
+- `TerminalColorProfile.swift:40-44` — tmux/screen TERM prefixes detected as .ansi256
+- No OSC query sequences anywhere in codebase (environment variable detection only)
+
+---
+
+### AC6: 窄终端兼容 (P1) — FULL
+
+**Requirement:** 终端宽度 < 40 列时，圆点仍正常显示，消息正文正常换行，不出现圆点与文字重叠或行错位。
+
+| Test File | Test Name | Level |
+|-----------|-----------|-------|
+| ChatThemeTests.swift | formatBlock: 短消息在窄终端不崩溃 | Unit |
+| ChatThemeTests.swift | formatBlock: 长消息在窄终端正常换行 | Unit |
+| TranscriptRendererTests.swift | renderUserMessage: 短消息不崩溃（< 40 列终端） | Unit |
+| TranscriptRendererTests.swift | renderToolEvent: 短工具名不崩溃（窄终端） | Unit |
+
+**Wiring Verification:**
+- Dot is single character U+25CF BLACK CIRCLE + space = 2 chars, no terminal-width-dependent logic
+
+---
+
+### AC7: 颜色降级链 (P0) — FULL
+
+**Requirement:** 终端颜色探测缓存为 TerminalColorProfile，所有视觉输出通过 ChatTheme 统一适配。
+
+| Test File | Test Name | Level |
+|-----------|-----------|-------|
+| TerminalColorProfileTests.swift | detect: COLORTERM=truecolor 返回 .trueColor | Unit |
+| TerminalColorProfileTests.swift | detect: COLORTERM=24bit 返回 .trueColor | Unit |
+| TerminalColorProfileTests.swift | detect: TERM=xterm-256color 返回 .ansi256 | Unit |
+| TerminalColorProfileTests.swift | detect: TERM=xterm 返回 .ansi16 | Unit |
+| TerminalColorProfileTests.swift | detect: TERM=vt100 返回 .ansi16 | Unit |
+| TerminalColorProfileTests.swift | trueColor: 4 roles return 24-bit RGB ANSI codes (4 tests) | Unit |
+| TerminalColorProfileTests.swift | ansi256: 蓝色角色返回 256 色 ANSI 码 | Unit |
+| TerminalColorProfileTests.swift | ansi256: 各角色返回不同的 ANSI 码 | Unit |
+| TerminalColorProfileTests.swift | ansi16: blue=34, green=32, yellow=33, red=31 (4 tests) | Unit |
+| ChatThemeTests.swift | trueColor: 4 roles dot tests (4 tests) | Unit |
+| ChatThemeTests.swift | ansi16: user role dot uses standard blue code 34 | Unit |
+
+**Wiring Verification:**
+- `TerminalColorProfile.swift` — 4-level enum with detect() and ansiColor(for:)
+- `ChatTheme.swift` — Uses profile.ansiColor(for:) via formatRoleDot
+- `ChatCommand.swift:353-354` — TerminalColorProfile.detect() called at REPL startup
+
+---
+
+### AC8: NFR 渲染性能 (P1) — FULL
+
+**Requirement:** 角色圆点渲染不增加可感知的输出延迟（单字符 ANSI 输出，< 1ms 额外开销）。
+
+| Test File | Test Name | Level |
+|-----------|-----------|-------|
+| TranscriptRendererTests.swift | formatRoleDot 渲染性能 < 1ms | Unit |
+
+**Wiring Verification:**
+- ChatTheme.formatRoleDot is pure string concatenation (no I/O, no allocation beyond string)
+- Performance test: 1000 calls measured with ContinuousClock, threshold 1000ms total
+
+---
+
+## Test Inventory
+
+| Test File | Tests | Level | Status |
+|-----------|-------|-------|--------|
+| TerminalColorProfileTests.swift | 21 | Unit | All PASS |
+| ChatThemeTests.swift | 16 | Unit | All PASS |
+| TranscriptRendererTests.swift | 16 | Unit | All PASS |
+| TranscriptIntegrationTests.swift | 13 | Unit | All PASS |
+| **Total** | **66** | | **66 PASS** |
 
 ## Coverage Heuristics
 
-| Heuristic | Status | Count |
-|-----------|--------|-------|
-| Endpoints without tests | N/A | 0 |
-| Auth negative-path gaps | N/A | 0 |
-| Happy-path-only criteria | None | 0 |
-| Error-path coverage | Complete | All ACs have error-path tests |
-| UI journey gaps | N/A | 0 |
+| Heuristic | Status |
+|-----------|--------|
+| Endpoint gaps | N/A (CLI/terminal feature, no HTTP endpoints) |
+| Auth negative-path gaps | N/A (no auth in this story) |
+| Happy-path-only criteria | None — error paths tested (AC3 error/warning, AC4 non-TTY fallback, AC7 unknown profile) |
+| UI journey E2E gaps | N/A (terminal output, no UI) |
+| UI state coverage gaps | N/A (terminal output, no UI) |
 
-Note: Backend Swift/SPM project -- no API endpoints, no auth flows, no UI. All heuristics either N/A or verified present. Every tool AC has both success-path and error-path tests.
+## Risk Summary
 
-## Test File Inventory
-
-| Test Suite | File | Tests | Stories Covered |
-|------------|------|-------|-----------------|
-| AxionCoreTests | PlanTests.swift | 7 | 1.1 |
-| AxionCoreTests | RunStateTests.swift | 5 | 1.1 |
-| AxionCoreTests | AxionConfigTests.swift | 4 | 1.1 |
-| AxionCoreTests | AxionErrorTests.swift | 8 | 1.1 |
-| AxionCoreTests | SPMScaffoldTests.swift | 10 | 1.1 |
-| AxionHelperTests | HelperMCPServerTests.swift | 13 | 1.2 |
-| AxionHelperTests | HelperProcessSmokeTests.swift | 3 | 1.2 |
-| AxionHelperTests | HelperScaffoldTests.swift | 4 | 1.2 |
-| AxionHelperTests | LaunchAppToolTests.swift | 5 | 1.3 |
-| AxionHelperTests | WindowManagementToolTests.swift | 6 | 1.3 |
-| AxionHelperTests | AppInfoTests.swift | 3 | 1.3 (models) |
-| AxionHelperTests | AXElementTests.swift | 3 | 1.3 (models) |
-| AxionHelperTests | WindowInfoTests.swift | 3 | 1.3 (models) |
-| AxionHelperTests | WindowStateTests.swift | 3 | 1.3 (models) |
-| AxionHelperTests | InputSimulationServiceTests.swift | 29 | 1.4 |
-| AxionHelperTests | MouseKeyboardToolTests.swift | 16 | 1.4 |
-| Integration | LaunchAppIntegrationTests.swift | 4 | 1.3 |
-| Integration | WindowManagementIntegrationTests.swift | 8 | 1.3 |
-| **Total** | **18 files** | **138** | |
-
-## Gaps & Recommendations
-
-### Gaps Identified
-
-**None.** All 23 acceptance criteria are fully covered by 138 passing tests (0 skipped, 0 failures). No critical, high, medium, or low gaps detected. Every tool has both success-path and error-path coverage. NFR2 (Helper startup time) is covered by a dedicated integration test.
-
-### Recommendations
-
-1. **[LOW]** Run `/bmad:tea:test-review` to assess test quality against the Definition of Done checklist (deterministic, isolated, explicit assertions, <300 lines).
-2. **[INFO]** Story 1.4 includes comprehensive two-layer testing (service-layer pure logic + tool-layer MCP wiring with mocks). This is a strong pattern to replicate for future stories.
+| Category | Count |
+|----------|-------|
+| Critical open (P0) | 0 |
+| High open (P1) | 0 |
+| Medium open (P2) | 0 |
+| Low open (P3) | 0 |
 
 ## Gate Criteria
 
 | Criterion | Required | Actual | Status |
 |-----------|----------|--------|--------|
 | P0 Coverage | 100% | 100% | MET |
-| P1 Coverage Target | 90% | 100% (no P1 ACs) | MET |
-| P1 Coverage Minimum | 80% | 100% (no P1 ACs) | MET |
-| Overall Coverage | 80% | 100% | MET |
-| Critical Gaps | 0 | 0 | MET |
-| Test Pass Rate | 100% | 100% (138/138) | MET |
+| P1 Coverage (target) | 90% | 100% | MET |
+| P1 Coverage (minimum) | 80% | 100% | MET |
+| Overall Coverage (minimum) | 80% | 100% | MET |
 
 ---
 
-## Gate Decision: PASS
-
-All 23 acceptance criteria across Stories 1.1-1.4 have 100% coverage with 138 passing tests (0 failures, 0 skipped). P0 coverage is 100%, exceeding all gate thresholds. Every tool operation has both success-path and error-path tests. The two-layer testing approach (service-layer pure logic + tool-layer MCP wiring) provides defense in depth. No gaps detected at any priority level.
-
-**Generated by BMad TEA Agent** - 2026-05-08
-
-## Artifacts Generated
-
-| File | Path |
-|------|------|
-| Coverage Matrix (JSON) | `_bmad-output/test-artifacts/traceability/coverage-matrix.json` |
-| E2E Trace Summary (JSON) | `_bmad-output/test-artifacts/traceability/e2e-trace-summary.json` |
-| Gate Decision (JSON) | `_bmad-output/test-artifacts/traceability/gate-decision.json` |
-| Traceability Report (MD) | `_bmad-output/test-artifacts/traceability-matrix.md` |
+*Generated: 2026-06-07 | Story: 38.1 | Evaluator: Murat (Test Architect) | Mode: yolo*

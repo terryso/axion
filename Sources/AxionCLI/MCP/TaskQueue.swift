@@ -1,4 +1,3 @@
-import Foundation
 
 /// Actor that serializes concurrent `run_task` requests.
 /// Ensures only one agent.prompt() call executes at a time,

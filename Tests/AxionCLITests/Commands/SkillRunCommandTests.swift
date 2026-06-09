@@ -11,7 +11,7 @@ struct SkillRunCommandTests {
 
     @Test("uses same skills directory as SkillCompileCommand")
     func test_skillsDirectory_shared() {
-        let dir = SkillCompileCommand.skillsDirectory()
+        let dir = ConfigManager.skillsDirectory
         let homeDir = FileManager.default.homeDirectoryForCurrentUser.path
         let expected = (homeDir as NSString).appendingPathComponent(".axion/skills")
         #expect(dir == expected)
@@ -21,19 +21,19 @@ struct SkillRunCommandTests {
 
     @Test("sanitizeFileName prevents path traversal")
     func test_sanitizeFileName_preventsTraversal() {
-        let result = RecordCommand.sanitizeFileName("../../etc/passwd")
+        let result = sanitizeFileName("../../etc/passwd")
         #expect(!result.contains(".."))
     }
 
     @Test("sanitizeFileName preserves valid skill names")
     func test_sanitizeFileName_validSkillName() {
-        let result = RecordCommand.sanitizeFileName("open_calculator")
+        let result = sanitizeFileName("open_calculator")
         #expect(result == "open_calculator")
     }
 
     @Test("sanitizeFileName handles special characters")
     func test_sanitizeFileName_specialChars() {
-        let result = RecordCommand.sanitizeFileName("my/skill:name")
+        let result = sanitizeFileName("my/skill:name")
         #expect(!result.contains("/"))
         #expect(!result.contains(":"))
     }

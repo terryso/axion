@@ -13,8 +13,7 @@ struct MemoryImportCommand: AsyncParsableCommand {
     var inputFile: String
 
     func run() async throws {
-        let memoryDir = resolveMemoryDir()
-        let output = try await Self.performImport(memoryDir: memoryDir, inputFile: inputFile)
+        let output = try await Self.performImport(memoryDir: ConfigManager.memoryDirectory, inputFile: inputFile)
         print(output)
     }
 
@@ -27,11 +26,9 @@ struct MemoryImportCommand: AsyncParsableCommand {
         let inputURL = URL(fileURLWithPath: inputFile)
         let data = try Data(contentsOf: inputURL)
 
-        let decoder = JSONDecoder()
-        decoder.dateDecodingStrategy = .iso8601
         let bundle: OpenAgentSDK.MemoryBundle
         do {
-            bundle = try decoder.decode(OpenAgentSDK.MemoryBundle.self, from: data)
+            bundle = try axionPersistentDecoder.decode(OpenAgentSDK.MemoryBundle.self, from: data)
         } catch {
             throw OpenAgentSDK.MemoryBundleError.invalidBundle(reason: "Invalid JSON: \(error.localizedDescription)")
         }
@@ -88,10 +85,4 @@ struct MemoryImportCommand: AsyncParsableCommand {
         return lines.joined(separator: "\n")
     }
 
-    // MARK: - Private
-
-    private func resolveMemoryDir() -> String {
-        let configDir = ConfigManager.defaultConfigDirectory
-        return (configDir as NSString).appendingPathComponent("memory")
-    }
 }

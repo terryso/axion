@@ -1,7 +1,6 @@
 import Foundation
 import OpenAgentSDK
 
-import AxionCore
 
 actor TraceEventHandler: EventHandler {
     let identifier = "trace"
@@ -27,7 +26,7 @@ actor TraceEventHandler: EventHandler {
 
     private func mapEvent(_ event: any AgentEvent) -> [String: Any] {
         var record: [String: Any] = [
-            "ts": ISO8601DateFormatter().string(from: event.timestamp),
+            "ts": axionISO8601BasicFormatter.string(from: event.timestamp),
             "event_type": String(describing: type(of: event)),
         ]
 
@@ -58,20 +57,9 @@ actor TraceEventHandler: EventHandler {
     }
 
     private func appendRecord(_ record: [String: Any], traceDir: String) {
-        guard let rid = runId,
-              let data = try? JSONSerialization.data(withJSONObject: record, options: [.sortedKeys]),
-              let line = String(data: data, encoding: .utf8) else { return }
-
+        guard let rid = runId else { return }
         let dir = (traceDir as NSString).appendingPathComponent(rid)
         let filePath = (dir as NSString).appendingPathComponent("events.jsonl")
-
-        try? FileManager.default.createDirectory(atPath: dir, withIntermediateDirectories: true)
-        guard let handle = try? FileHandle(forWritingTo: URL(fileURLWithPath: filePath)) else {
-            try? line.appending("\n").write(toFile: filePath, atomically: true, encoding: .utf8)
-            return
-        }
-        handle.seekToEndOfFile()
-        handle.write((line + "\n").data(using: .utf8)!)
-        handle.closeFile()
+        appendJSONLRecord(record, to: filePath)
     }
 }

@@ -18,7 +18,7 @@ struct MemoryClearCommand: AsyncParsableCommand {
     var type: String?
 
     func run() async throws {
-        let memoryDir = resolveMemoryDir()
+        let memoryDir = ConfigManager.memoryDirectory
 
         try Self.validateOptions(app: app, type: type)
 
@@ -109,12 +109,6 @@ struct MemoryClearCommand: AsyncParsableCommand {
         case "user": return .user
         default: return nil
         }
-    }
-
-    /// Resolve the default Memory directory path.
-    private func resolveMemoryDir() -> String {
-        let configDir = ConfigManager.defaultConfigDirectory
-        return (configDir as NSString).appendingPathComponent("memory")
     }
 
     /// Validate that a domain string is safe to use as a filename component.

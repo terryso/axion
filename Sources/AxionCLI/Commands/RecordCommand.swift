@@ -60,14 +60,11 @@ struct RecordCommand: AsyncParsableCommand {
                 windowSnapshots: snapshots
             )
 
-            let recordingsDir = Self.recordingsDirectory()
+            let recordingsDir = ConfigManager.recordingsDirectory
             try FileManager.default.createDirectory(atPath: recordingsDir, withIntermediateDirectories: true)
 
-            let filePath = (recordingsDir as NSString).appendingPathComponent("\(Self.sanitizeFileName(recordingName)).json")
-            let encoder = JSONEncoder()
-            encoder.outputFormatting = [.sortedKeys, .prettyPrinted]
-            encoder.dateEncodingStrategy = .iso8601
-            let data = try encoder.encode(recording)
+            let filePath = (recordingsDir as NSString).appendingPathComponent("\(sanitizeFileName(recordingName)).json")
+            let data = try axionPersistentEncoder.encode(recording)
             try data.write(to: URL(fileURLWithPath: filePath))
 
             write("[axion] 录制已保存: \(filePath)")
@@ -81,47 +78,11 @@ struct RecordCommand: AsyncParsableCommand {
 
     // MARK: - Internal Helpers (testable)
 
-    static func sanitizeFileName(_ name: String) -> String {
-        let invalid = CharacterSet(charactersIn: "/\\:*?\"<>|")
-            .union(.controlCharacters)
-        let filtered = name.components(separatedBy: invalid).joined(separator: "_")
-        let trimmed = filtered.trimmingCharacters(in: .whitespacesAndNewlines)
-        let safe = trimmed.isEmpty ? "untitled" : trimmed
-        // Collapse ".." and "." segments to prevent traversal
-        return safe.replacingOccurrences(of: "..", with: "_")
-            .replacingOccurrences(of: "./", with: "_/")
-    }
-
-    static func recordingsDirectory() -> String {
-        let homeDir = FileManager.default.homeDirectoryForCurrentUser.path
-        return (homeDir as NSString).appendingPathComponent(".axion/recordings")
-    }
-
     static func parseRecordingEvents(from result: String) -> [RecordedEvent] {
-        guard let data = result.data(using: .utf8),
-              let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
-              let eventStrings = json["events"] as? [String] else {
-            return []
-        }
-
-        let decoder = JSONDecoder()
-        return eventStrings.compactMap { eventString in
-            guard let eventData = eventString.data(using: .utf8) else { return nil }
-            return try? decoder.decode(RecordedEvent.self, from: eventData)
-        }
+        parseJSONEncodedArray(from: result, key: "events")
     }
 
     static func parseWindowSnapshots(from result: String) -> [WindowSnapshot] {
-        guard let data = result.data(using: .utf8),
-              let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
-              let snapshotStrings = json["window_snapshots"] as? [String] else {
-            return []
-        }
-
-        let decoder = JSONDecoder()
-        return snapshotStrings.compactMap { snapshotString in
-            guard let snapshotData = snapshotString.data(using: .utf8) else { return nil }
-            return try? decoder.decode(WindowSnapshot.self, from: snapshotData)
-        }
+        parseJSONEncodedArray(from: result, key: "window_snapshots")
     }
 }

@@ -32,20 +32,6 @@ actor SeatActivityMonitor {
         return SeatActivityMonitor(baselineCursor: cursor, baselineFrontmost: frontmost)
     }
 
-    // MARK: - Baseline Description
-
-    /// Returns a human-readable description of the baseline state for trace recording.
-    func describeBaseline() -> String {
-        var parts: [String] = []
-        if let cursor = baselineCursor {
-            parts.append("cursor=(\(Int(cursor.x)),\(Int(cursor.y)))")
-        }
-        if let frontmost = baselineFrontmost {
-            parts.append("frontmost=\(frontmost)")
-        }
-        return parts.joined(separator: " ")
-    }
-
     // MARK: - Activity Check
 
     /// Samples current cursor position and frontmost app, compares against baseline.

@@ -1,5 +1,3 @@
-import Foundation
-
 public struct AxionStateOverlay: Codable, Sendable {
     public let status: String
     public let totalSteps: Int

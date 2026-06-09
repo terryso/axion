@@ -125,29 +125,6 @@ struct ReviewSummaryTests {
         #expect(output == nil)
     }
 
-    // MARK: - Task 5.5: RunCoordinator.updateRunReviewSummary persists the summary
-
-    @Test("RunCoordinator.updateRunReviewSummary persists the summary")
-    func runCoordinatorUpdateReviewSummary() async {
-        let coordinator = RunCoordinator()
-        let runId = await coordinator.submitRun(task: "test task")
-
-        await coordinator.updateRunReviewSummary(runId: runId, reviewSummary: "Review: 保存了 3 条记忆")
-
-        let run = await coordinator.getRun(runId: runId)
-        #expect(run?.reviewSummary == "Review: 保存了 3 条记忆")
-    }
-
-    @Test("RunCoordinator.updateRunReviewSummary ignores unknown runId")
-    func runCoordinatorUpdateReviewSummaryUnknownRun() async {
-        let coordinator = RunCoordinator()
-
-        await coordinator.updateRunReviewSummary(runId: "nonexistent", reviewSummary: "test")
-
-        let run = await coordinator.getRun(runId: "nonexistent")
-        #expect(run == nil)
-    }
-
     // MARK: - Legacy camelCase backward compatibility
 
     @Test("TrackedRun decodes legacy camelCase JSON format")

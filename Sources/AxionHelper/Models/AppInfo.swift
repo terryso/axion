@@ -1,4 +1,3 @@
-import Foundation
 
 /// Information about a running macOS application.
 struct AppInfo: Codable, Equatable {

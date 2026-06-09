@@ -46,13 +46,6 @@ func detectBlockingDialog(windows: [WindowInfo], appPid: Int32) -> BlockingDialo
 
 // MARK: - Action Result Types
 
-struct CoordinateActionResult: Codable {
-    let success: Bool
-    let action: String
-    let x: Int
-    let y: Int
-}
-
 struct DragActionResult: Codable {
     let success: Bool
     let action: String
@@ -183,28 +176,55 @@ func resolveClickCoordinates(
     return (x, y)
 }
 
+// MARK: - Shared Encoding Helpers
+
+/// Protocol for errors that can be encoded as ToolErrorPayload.
+/// All tool-domain errors in AxionHelper conform to this pattern.
+protocol ToolErrorProtocol {
+    var errorCode: String { get }
+    var localizedDescription: String { get }
+    var suggestion: String { get }
+}
+
+/// Shared JSONEncoder pre-configured with sorted keys.
+let axionToolEncoder: JSONEncoder = {
+    let encoder = JSONEncoder()
+    encoder.outputFormatting = [.sortedKeys]
+    return encoder
+}()
+
+/// Encodes any Codable value to a JSON string, returning `fallback` on failure.
+func encodeToolResult<T: Encodable>(_ value: T, fallback: String = "{}") -> String {
+    guard let data = try? axionToolEncoder.encode(value),
+          let string = String(data: data, encoding: .utf8) else {
+        return fallback
+    }
+    return string
+}
+
+/// Encodes any ToolErrorProtocol-conforming error as a ToolErrorPayload JSON string.
+func encodeToolError(_ error: some ToolErrorProtocol) -> String {
+    let payload = ToolErrorPayload(error: error.errorCode, message: error.localizedDescription, suggestion: error.suggestion)
+    return encodeToolResult(payload)
+}
+
+/// Convenience for encoding inline error payloads (not from a typed error).
+func encodeToolError(error: String, message: String, suggestion: String) -> String {
+    let payload = ToolErrorPayload(error: error, message: message, suggestion: suggestion)
+    return encodeToolResult(payload)
+}
+
 // MARK: - Click Helper Encoding
 
 func encodeClickResult(action: String, x: Int, y: Int) -> String {
     let result = SelectorActionResult(success: true, action: action, x: x, y: y, matchedRole: nil, matchedTitle: nil)
-    let encoder = JSONEncoder()
-    encoder.outputFormatting = [.sortedKeys]
-    let data = (try? encoder.encode(result)) ?? Data()
-    return String(data: data, encoding: .utf8) ?? "{}"
+    return encodeToolResult(result)
 }
 
 func encodeError(_ error: InputSimulationError) -> String {
-    let payload = ToolErrorPayload(error: error.errorCode, message: error.localizedDescription, suggestion: error.suggestion)
-    let encoder = JSONEncoder()
-    encoder.outputFormatting = [.sortedKeys]
-    let data = (try? encoder.encode(payload)) ?? Data()
-    return String(data: data, encoding: .utf8) ?? "{}"
+    return encodeToolError(error)
 }
 
 func encodeSelectorError(_ error: AccessibilityEngineService.SelectorError) -> String {
-    let payload = ToolErrorPayload(error: error.errorCode, message: error.localizedDescription, suggestion: error.suggestion)
-    let encoder = JSONEncoder()
-    encoder.outputFormatting = [.sortedKeys]
-    let data = (try? encoder.encode(payload)) ?? Data()
-    return String(data: data, encoding: .utf8) ?? "{}"
+    return encodeToolError(error)
 }

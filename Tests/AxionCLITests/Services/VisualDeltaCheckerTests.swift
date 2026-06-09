@@ -343,43 +343,4 @@ struct VisualDeltaCheckerTests {
             Issue.record("Expected .changed for gradient vs solid, got \(result)")
         }
     }
-
-    // MARK: - Base64 extraction from tool result content
-
-    @Test("extractBase64FromToolResult parses JSON image_data format")
-    func extractBase64JsonImageData() {
-        let rawBase64 = makeTestJPEG(r: 100, g: 100, b: 100)
-        let jsonContent = "{\"image_data\": \"\(rawBase64)\", \"action\": \"screenshot\"}"
-        let extracted = RunOrchestrator.extractBase64FromToolResultForTest(jsonContent)
-        #expect(extracted == rawBase64)
-    }
-
-    @Test("extractBase64FromToolResult parses JSON base64 format")
-    func extractBase64JsonBase64() {
-        let rawBase64 = makeTestJPEG(r: 100, g: 100, b: 100)
-        let jsonContent = "{\"base64\": \"\(rawBase64)\"}"
-        let extracted = RunOrchestrator.extractBase64FromToolResultForTest(jsonContent)
-        #expect(extracted == rawBase64)
-    }
-
-    @Test("extractBase64FromToolResult parses plain base64 string")
-    func extractBase64Plain() {
-        let rawBase64 = makeTestJPEG(r: 100, g: 100, b: 100)
-        let extracted = RunOrchestrator.extractBase64FromToolResultForTest(rawBase64)
-        #expect(extracted == rawBase64)
-    }
-
-    @Test("extractBase64FromToolResult returns nil for short non-base64 content")
-    func extractBase64ShortContent() {
-        let extracted = RunOrchestrator.extractBase64FromToolResultForTest("short text")
-        #expect(extracted == nil)
-    }
-
-    @Test("extractBase64FromToolResult parses JSON image format")
-    func extractBase64JsonImage() {
-        let rawBase64 = makeTestJPEG(r: 50, g: 50, b: 50)
-        let jsonContent = "{\"image\": \"\(rawBase64)\"}"
-        let extracted = RunOrchestrator.extractBase64FromToolResultForTest(jsonContent)
-        #expect(extracted == rawBase64)
-    }
 }

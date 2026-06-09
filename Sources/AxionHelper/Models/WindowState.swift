@@ -1,4 +1,3 @@
-import Foundation
 
 /// Complete window state returned by `get_window_state`.
 struct WindowState: Codable, Equatable {
@@ -33,19 +32,8 @@ struct WindowState: Codable, Equatable {
         self.appName = appName
     }
 
-    init(from decoder: Decoder) throws {
-        let container = try decoder.container(keyedBy: CodingKeys.self)
-        windowId = try container.decode(Int.self, forKey: .windowId)
-        pid = try container.decode(Int32.self, forKey: .pid)
-        title = try container.decodeIfPresent(String.self, forKey: .title)
-        bounds = try container.decode(WindowBounds.self, forKey: .bounds)
-        isMinimized = try container.decode(Bool.self, forKey: .isMinimized)
-        isFocused = try container.decode(Bool.self, forKey: .isFocused)
-        axTree = try container.decodeIfPresent(AXElement.self, forKey: .axTree)
-        appName = try container.decodeIfPresent(String.self, forKey: .appName)
-    }
-
-    /// Custom encode to ensure `ax_tree` is always present (null instead of omitted).
+    // Custom encode to ensure nil `ax_tree` is encoded as JSON null rather than omitted.
+    // encodeIfPresent omits nil keys entirely, so we use encodeNullIfNil for explicit null output.
     func encode(to encoder: Encoder) throws {
         var container = encoder.container(keyedBy: CodingKeys.self)
         try container.encode(windowId, forKey: .windowId)
@@ -54,12 +42,7 @@ struct WindowState: Codable, Equatable {
         try container.encode(bounds, forKey: .bounds)
         try container.encode(isMinimized, forKey: .isMinimized)
         try container.encode(isFocused, forKey: .isFocused)
-        // Always include ax_tree: encode the value or explicit null
-        if let axTree {
-            try container.encode(axTree, forKey: .axTree)
-        } else {
-            try container.encodeNil(forKey: .axTree)
-        }
+        try container.encodeNullIfNil(axTree, forKey: .axTree)
         try container.encodeIfPresent(appName, forKey: .appName)
     }
 }

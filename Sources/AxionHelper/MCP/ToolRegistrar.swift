@@ -1,4 +1,3 @@
-import Foundation
 import MCP
 import MCPTool
 

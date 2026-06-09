@@ -1,6 +1,5 @@
 import ArgumentParser
 import AxionCore
-import Foundation
 import OpenAgentSDK
 
 struct SkillListCommand: AsyncParsableCommand {
@@ -11,7 +10,7 @@ struct SkillListCommand: AsyncParsableCommand {
 
     func run() async throws {
         // Recorded skills (from JSON files)
-        let recordedOutput = Self.listSkills(in: SkillCompileCommand.skillsDirectory())
+        let recordedOutput = Self.listSkills(in: ConfigManager.skillsDirectory)
 
         // Prompt skills (from SkillRegistry including built-in)
         let registry = SkillRegistry()
@@ -34,31 +33,7 @@ struct SkillListCommand: AsyncParsableCommand {
     // MARK: - Recorded Skills (JSON files)
 
     static func listSkills(in directory: String) -> String {
-        let fm = FileManager.default
-
-        var fileNames: [String]
-        do {
-            fileNames = try fm.contentsOfDirectory(atPath: directory)
-        } catch {
-            return "无已保存的技能。使用 axion skill compile <name> 创建技能。"
-        }
-
-        let jsonFiles = fileNames.filter { $0.hasSuffix(".json") }
-
-        guard !jsonFiles.isEmpty else {
-            return "无已保存的技能。使用 axion skill compile <name> 创建技能。"
-        }
-
-        let decoder = JSONDecoder()
-        decoder.dateDecodingStrategy = .iso8601
-
-        var skills: [(name: String, skill: AxionCore.Skill)] = []
-        for fileName in jsonFiles {
-            let filePath = (directory as NSString).appendingPathComponent(fileName)
-            guard let data = fm.contents(atPath: filePath) else { continue }
-            guard let skill = try? decoder.decode(AxionCore.Skill.self, from: data) else { continue }
-            skills.append((name: String(fileName.dropLast(5)), skill: skill))
-        }
+        let skills = loadAllRecordedSkills(in: directory)
 
         guard !skills.isEmpty else {
             return "无已保存的技能。使用 axion skill compile <name> 创建技能。"
@@ -66,10 +41,7 @@ struct SkillListCommand: AsyncParsableCommand {
 
         var lines: [String] = ["已保存的技能:"]
 
-        let dateFormatter = DateFormatter()
-        dateFormatter.dateFormat = "yyyy-MM-dd HH:mm"
-
-        for (name, skill) in skills.sorted(by: { $0.name < $1.name }) {
+        for (name, skill) in skills {
             lines.append("  \(name)")
             lines.append("    描述: \(skill.description)")
             lines.append("    类型: recorded")
@@ -80,7 +52,7 @@ struct SkillListCommand: AsyncParsableCommand {
                 }
                 lines.append("    参数: \(paramDescs.joined(separator: ", "))")
             }
-            let lastUsedStr = skill.lastUsedAt.map { dateFormatter.string(from: $0) } ?? "从未使用"
+            let lastUsedStr = skill.lastUsedAt.map { axionDateTimeFormatter.string(from: $0) } ?? "从未使用"
             lines.append("    执行次数: \(skill.executionCount), 上次使用: \(lastUsedStr)")
         }
 

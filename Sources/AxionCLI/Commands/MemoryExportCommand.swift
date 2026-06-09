@@ -16,8 +16,7 @@ struct MemoryExportCommand: AsyncParsableCommand {
     var app: String?
 
     func run() async throws {
-        let memoryDir = resolveMemoryDir()
-        let output = try await Self.performExport(memoryDir: memoryDir, outputFile: outputFile, app: app)
+        let output = try await Self.performExport(memoryDir: ConfigManager.memoryDirectory, outputFile: outputFile, app: app)
         print(output)
     }
 
@@ -54,10 +53,4 @@ struct MemoryExportCommand: AsyncParsableCommand {
         return "Exported \(factCount) facts from \(exported.count) domain(s) to \(outputFile)"
     }
 
-    // MARK: - Private
-
-    private func resolveMemoryDir() -> String {
-        let configDir = ConfigManager.defaultConfigDirectory
-        return (configDir as NSString).appendingPathComponent("memory")
-    }
 }

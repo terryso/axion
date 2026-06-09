@@ -14,7 +14,7 @@ struct RecordCommandE2ETests {
 
     @Test("Recordings directory is under home .axion folder")
     func test_recordingsDirectory_location() {
-        let dir = RecordCommand.recordingsDirectory()
+        let dir = ConfigManager.recordingsDirectory
         let homeDir = FileManager.default.homeDirectoryForCurrentUser.path
         #expect(dir.hasPrefix(homeDir))
         #expect(dir.hasSuffix(".axion/recordings"))
@@ -96,7 +96,7 @@ struct RecordCommandE2ETests {
 
     @Test("Recording file path uses recordings directory")
     func test_recordingFilePath_correctLocation() {
-        let dir = RecordCommand.recordingsDirectory()
+        let dir = ConfigManager.recordingsDirectory
         let name = "test_recording"
         let filePath = (dir as NSString).appendingPathComponent("\(name).json")
         #expect(filePath.hasSuffix(".axion/recordings/test_recording.json"))

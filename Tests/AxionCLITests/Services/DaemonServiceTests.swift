@@ -108,28 +108,6 @@ struct DaemonServiceTests {
         #expect(escaped == "a&amp;b&lt;c&gt;d&quot;e&apos;f")
     }
 
-    // MARK: - 4.6: plist path resolution
-
-    @Test("resolvePlistPath returns correct path")
-    func resolvePlistPath() {
-        let path = DaemonService.resolvePlistPath()
-        #expect(path.hasSuffix("Library/LaunchAgents/dev.axion.server.plist"))
-    }
-
-    // MARK: - 4.7: log path resolution
-
-    @Test("resolveLogPath returns correct path")
-    func resolveLogPath() {
-        let path = DaemonService.resolveLogPath()
-        #expect(path.hasSuffix(".axion/server.log"))
-    }
-
-    @Test("resolveErrorLogPath returns correct path")
-    func resolveErrorLogPath() {
-        let path = DaemonService.resolveErrorLogPath()
-        #expect(path.hasSuffix(".axion/server.err.log"))
-    }
-
     // MARK: - 4.8: DaemonStatus Codable round-trip
 
     @Test("DaemonStatus Codable round-trip")

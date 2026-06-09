@@ -1,5 +1,3 @@
-import Foundation
-import os
 import OpenAgentSDK
 
 import AxionCore
@@ -39,8 +37,8 @@ enum ApiRunner {
         let eventBus = EventBus()
         let runtime = AxionRuntime(eventBus: eventBus)
 
-        let traceDir = (ConfigManager.defaultConfigDirectory as NSString).appendingPathComponent("runs")
-        let memoryDir = (ConfigManager.defaultConfigDirectory as NSString).appendingPathComponent("memory")
+        let traceDir = ConfigManager.traceDirectory
+        let memoryDir = ConfigManager.memoryDirectory
         let profile = HandlerProfile(
             context: .api,
             config: config,
@@ -96,18 +94,4 @@ enum ApiRunner {
         return (runResult.totalSteps, runResult.durationMs, 0, finalStatus, [], nil, false)
     }
 
-    /// Heuristic to classify task result as answer (informational) or confirmation (action performed).
-    static func inferResultKind(task: String) -> TaskResultKind {
-        let answerKeywords = ["读取", "查询", "获取", "列出", "搜索", "告诉我", "显示", "查看", "是什么", "有哪些", "read", "query", "get", "list", "search", "show", "tell", "what", "find"]
-        let confirmationKeywords = ["打开", "关闭", "移动", "删除", "创建", "复制", "粘贴", "输入", "填写", "安装", "卸载", "open", "close", "move", "delete", "create", "copy", "paste", "type", "install", "uninstall"]
-
-        let lowerTask = task.lowercased()
-        for keyword in answerKeywords {
-            if lowerTask.contains(keyword) { return .answer }
-        }
-        for keyword in confirmationKeywords {
-            if lowerTask.contains(keyword) { return .confirmation }
-        }
-        return .confirmation
-    }
 }

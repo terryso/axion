@@ -1,5 +1,3 @@
-import Foundation
-
 public enum LLMProvider: String, Sendable, Equatable, Codable {
     case anthropic
     case openai

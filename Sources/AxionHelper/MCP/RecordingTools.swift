@@ -1,4 +1,3 @@
-import Foundation
 import MCP
 import MCPTool
 
@@ -25,20 +24,9 @@ struct StartRecordingTool {
                 success: true, action: "start_recording",
                 message: "Recording started. Events are being captured in listen-only mode."
             )
-            let encoder = JSONEncoder()
-            encoder.outputFormatting = [.sortedKeys]
-            let data = try encoder.encode(result)
-            return String(data: data, encoding: .utf8) ?? "{}"
+            return encodeToolResult(result)
         } catch let error as EventRecorderError {
-            let payload = ToolErrorPayload(
-                error: error.errorCode,
-                message: error.localizedDescription,
-                suggestion: error.suggestion
-            )
-            let encoder = JSONEncoder()
-            encoder.outputFormatting = [.sortedKeys]
-            let data = try encoder.encode(payload)
-            return String(data: data, encoding: .utf8) ?? "{}"
+            return encodeToolError(error)
         }
     }
 }
@@ -50,17 +38,13 @@ struct StopRecordingTool {
 
     func perform() async throws -> String {
         let recordingResult = ServiceContainer.shared.eventRecorder.stopRecording()
-        let encoder = JSONEncoder()
-        encoder.outputFormatting = [.sortedKeys]
 
         let eventStrings = recordingResult.events.compactMap { event -> String? in
-            guard let data = try? encoder.encode(event) else { return nil }
-            return String(data: data, encoding: .utf8)
+            encodeToolResult(event).nilIfEmpty
         }
 
         let snapshotStrings = recordingResult.windowSnapshots.compactMap { snapshot -> String? in
-            guard let data = try? encoder.encode(snapshot) else { return nil }
-            return String(data: data, encoding: .utf8)
+            encodeToolResult(snapshot).nilIfEmpty
         }
 
         let result = StopRecordingResult(
@@ -68,7 +52,11 @@ struct StopRecordingTool {
             eventCount: recordingResult.events.count, events: eventStrings,
             windowSnapshots: snapshotStrings
         )
-        let data = try encoder.encode(result)
-        return String(data: data, encoding: .utf8) ?? "{}"
+        return encodeToolResult(result)
     }
+}
+
+// Small helper to filter out empty "{}" results from compactMap
+extension String {
+    var nilIfEmpty: String? { self == "{}" ? nil : self }
 }

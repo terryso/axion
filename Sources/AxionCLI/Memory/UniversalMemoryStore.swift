@@ -4,6 +4,11 @@ import Foundation
 enum MemoryTarget: String, Sendable {
     case memory = "MEMORY.md"
     case user = "USER.md"
+
+    /// Resolve a CLI string like "memory" or "user" to a MemoryTarget.
+    static func fromCLIString(_ raw: String) -> MemoryTarget? {
+        MemoryTarget(rawValue: raw.uppercased() + ".md")
+    }
 }
 
 /// Actor managing the two universal memory files: MEMORY.md and USER.md.
@@ -100,30 +105,6 @@ actor UniversalMemoryStore {
         }
         write(target: target, content: serialized)
         return true
-    }
-
-    // MARK: - Char Count
-
-    func charCount(target: MemoryTarget) -> Int {
-        read(target: target).count
-    }
-
-    // MARK: - Entry Count
-
-    /// Number of §-delimited entries in the target file.
-    func entryCount(target: MemoryTarget) -> Int {
-        let content = read(target: target)
-        return parseEntries(from: content).count
-    }
-
-    /// Last modification date of the target file, or nil if not found.
-    func lastModifiedDate(target: MemoryTarget) -> Date? {
-        let url = fileURL(for: target)
-        guard let attrs = try? fileManager.attributesOfItem(atPath: url.path),
-              let date = attrs[.modificationDate] as? Date else {
-            return nil
-        }
-        return date
     }
 
     /// Summary info for a target: entry count and last modified date in one call.

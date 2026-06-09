@@ -4,97 +4,6 @@ import OpenAgentSDK
 
 import AxionCore
 
-// MARK: - HelperTransportProtocol
-
-/// Protocol abstracting MCPStdioTransport for testability.
-///
-/// Production uses ``RealHelperTransport`` wrapping ``MCPStdioTransport``.
-/// Tests inject ``MockHelperTransport`` to isolate from real Process management.
-protocol HelperTransportProtocol: Sendable {
-    func connect() async throws
-    func disconnect() async
-    func getIsRunning() async -> Bool
-    /// Returns the underlying Transport for MCPClient.connect's transport factory.
-    func getTransport() async -> (any Transport)?
-}
-
-// MARK: - RealHelperTransport
-
-/// Production transport wrapping SDK's ``MCPStdioTransport``.
-actor RealHelperTransport: HelperTransportProtocol {
-    private let transport: MCPStdioTransport
-
-    init(config: McpStdioConfig) {
-        self.transport = MCPStdioTransport(config: config)
-    }
-
-    func connect() async throws {
-        try await transport.connect()
-    }
-
-    func disconnect() async {
-        await transport.disconnect()
-    }
-
-    func getIsRunning() async -> Bool {
-        await transport.isRunning
-    }
-
-    func getTransport() async -> (any Transport)? {
-        transport as any Transport
-    }
-}
-
-// MARK: - HelperMCPClientProtocol
-
-/// Protocol abstracting MCPClient for testability.
-///
-/// Production uses ``RealHelperMCPClient`` wrapping ``MCPClient``.
-/// Tests inject ``MockHelperMCPClient`` to control tool call results.
-protocol HelperMCPClientProtocol: Sendable {
-    func connect(transport: @escaping @Sendable () async throws -> any Transport) async throws
-    func disconnect() async
-    func callTool(name: String, arguments: [String: MCP.Value]?) async throws -> CallTool.Result
-    func listTools() async throws -> ListTools.Result
-}
-
-// MARK: - RealHelperMCPClient
-
-/// Production MCP client wrapping SDK's ``MCPClient``.
-actor RealHelperMCPClient: HelperMCPClientProtocol {
-    private let client: MCPClient
-
-    init() {
-        self.client = MCPClient(
-            name: "AxionCLI",
-            version: "1.0.0",
-            reconnectionOptions: MCPClient.ReconnectionOptions(
-                maxRetries: 0,
-                initialDelay: .seconds(1),
-                maxDelay: .seconds(1),
-                delayGrowFactor: 1.0,
-                healthCheckInterval: nil
-            )
-        )
-    }
-
-    func connect(transport: @escaping @Sendable () async throws -> any Transport) async throws {
-        try await client.connect(transport: transport)
-    }
-
-    func disconnect() async {
-        await client.disconnect()
-    }
-
-    func callTool(name: String, arguments: [String: MCP.Value]?) async throws -> CallTool.Result {
-        try await client.callTool(name: name, arguments: arguments)
-    }
-
-    func listTools() async throws -> ListTools.Result {
-        try await client.listTools()
-    }
-}
-
 // MARK: - HelperProcessManager
 
 /// Manages the AxionHelper process lifecycle and MCP connection.
@@ -273,16 +182,6 @@ actor HelperProcessManager {
         }
 
         return result.tools.map(\.name)
-    }
-
-    /// Sets up SIGINT (Ctrl-C) signal handling to clean up Helper process (AC5).
-    ///
-    /// Signal handling is implemented via ``withTaskCancellationHandler``
-    /// in the RunCommand layer. This method exists as a hook for
-    /// future extension and to satisfy AC5 interface requirements.
-    func setupSignalHandling() {
-        // No-op: actual signal handling is done via withTaskCancellationHandler
-        // in RunCommand. This method is retained for interface compatibility.
     }
 
     // MARK: - Private Helpers

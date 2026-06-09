@@ -1,8 +1,5 @@
 import Foundation
 
-import AxionCore
-import OpenAgentSDK
-
 /// Persisted state for a single chatId, tracking session history and review turn counting.
 struct ChatSessionState: Codable, Sendable, Equatable {
     var sessionIds: [String]
@@ -44,9 +41,7 @@ actor GatewaySessionStore {
         for (chatId, state) in states {
             payload.chatSessions[String(chatId)] = state
         }
-        let encoder = JSONEncoder()
-        encoder.outputFormatting = [.sortedKeys, .prettyPrinted]
-        let data = try encoder.encode(payload)
+        let data = try axionPrettyEncoder.encode(payload)
         let url = URL(fileURLWithPath: filePath)
         let dir = url.deletingLastPathComponent()
         try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
@@ -71,7 +66,7 @@ actor GatewaySessionStore {
 
     /// Record a new user turn for the given chatId. Called at enqueue time for non-resume tasks.
     func recordTurn(chatId: Int64, sessionId: String) {
-        let now = ISO8601DateFormatter().string(from: Date())
+        let now = axionISO8601BasicFormatter.string(from: Date())
         if var existing = states[chatId] {
             existing.userTurnCount += 1
             existing.turnsSinceMemory += 1
@@ -116,35 +111,6 @@ actor GatewaySessionStore {
     /// Clear all state for a chatId (e.g. /new command).
     func clearSession(chatId: Int64) {
         states.removeValue(forKey: chatId)
-        saveSafely()
-    }
-
-    /// Recover counts from SessionStore transcripts when gateway-sessions.json has no entry for a chatId.
-    /// Counts user role messages across all known sessions, applies `% nudgeInterval` to preserve cadence.
-    func hydrateFromTranscripts(
-        chatId: Int64,
-        sessionIds: [String],
-        sessionStore: SessionStore,
-        nudgeInterval: Int
-    ) async {
-        var totalUserTurns = 0
-        for sid in sessionIds {
-            guard let data = try? await sessionStore.load(sessionId: sid) else { continue }
-            for msg in data.messages {
-                if let role = msg["role"] as? String, role == "user" {
-                    totalUserTurns += 1
-                }
-            }
-        }
-        guard totalUserTurns > 0 else { return }
-
-        let now = ISO8601DateFormatter().string(from: Date())
-        states[chatId] = ChatSessionState(
-            sessionIds: sessionIds,
-            userTurnCount: totalUserTurns,
-            turnsSinceMemory: totalUserTurns % nudgeInterval,
-            lastActivityAt: now
-        )
         saveSafely()
     }
 }

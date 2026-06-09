@@ -49,10 +49,7 @@ struct RecordedSkillRunner {
                 var updatedSkill = skill
                 updatedSkill.lastUsedAt = Date()
                 updatedSkill.executionCount += 1
-                let encoder = JSONEncoder()
-                encoder.outputFormatting = [.sortedKeys, .prettyPrinted]
-                encoder.dateEncodingStrategy = .iso8601
-                let updatedData = try encoder.encode(updatedSkill)
+                let updatedData = try axionPersistentEncoder.encode(updatedSkill)
                 try updatedData.write(to: URL(fileURLWithPath: skillPath))
             } catch {
                 fputs("[axion] warning: skill metadata update failed: \(error.localizedDescription)\n", stderr)
@@ -89,8 +86,7 @@ struct RecordedSkillRunner {
     ) {
         _Concurrency.Task {
             do {
-                let memoryDir = (ConfigManager.defaultConfigDirectory as NSString).appendingPathComponent("memory")
-                let factStore = AxionFactStore(memoryDir: memoryDir)
+                let factStore = AxionFactStore(memoryDir: ConfigManager.memoryDirectory)
                 let lifecycleService = OpenAgentSDK.MemoryLifecycleService()
 
                 let fact = AppMemoryFact.create(
@@ -100,30 +96,11 @@ struct RecordedSkillRunner {
                     confidence: confidence,
                     scope: "skill:\(skillName)"
                 )
-                let sdkFact = fact.toSDKFact()
-                let existing = try await factStore.query(domain: fact.domain)
-                let sdkExisting = existing.map { $0.toSDKFact() }
-                let sdkResult = lifecycleService.addFact(sdkFact, mergingWith: sdkExisting)
-
-                // Preserve Axion-specific fields lost in SDK round-trip
-                let existingMatch = existing.first(where: { $0.id == fact.id })
-                let mergedFact: AppMemoryFact
-                if let existingFact = existingMatch {
-                    var updated = existingFact
-                    updated.status = MemoryFactStatus(rawValue: sdkResult.status.rawValue) ?? existingFact.status
-                    updated.confidence = sdkResult.confidence
-                    updated.evidenceCount = sdkResult.evidenceCount
-                    updated.updatedAt = sdkResult.lastVerifiedAt
-                    mergedFact = updated
-                } else {
-                    mergedFact = AppMemoryFact.fromSDKFact(
-                        sdkResult,
-                        scope: fact.scope,
-                        cause: fact.cause,
-                        evidence: fact.evidence
-                    )
-                }
-                try await factStore.save(domain: fact.domain, fact: AppMemoryFact.normalizeFact(mergedFact))
+                try await AppMemoryFact.mergeAndPersist(
+                    fact: fact,
+                    into: factStore,
+                    lifecycleService: lifecycleService
+                )
             } catch {
                 fputs("[axion] warning: skill memory record failed: \(error.localizedDescription)\n", stderr)
             }

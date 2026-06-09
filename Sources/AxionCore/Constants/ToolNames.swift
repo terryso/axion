@@ -1,4 +1,3 @@
-import Foundation
 
 public enum ToolNames {
     public static let launchApp = "launch_app"

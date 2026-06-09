@@ -1,6 +1,5 @@
 import ArgumentParser
 import Foundation
-import Hummingbird
 import OpenAgentSDK
 
 import AxionCore
@@ -13,7 +12,7 @@ struct ServerCommand: AsyncParsableCommand {
 
     // Test seams — overridden in unit tests to inject mocks.
     nonisolated(unsafe) static var createRuntime: @Sendable (EventBus) -> any AxionRuntimeRunning = { AxionRuntime(eventBus: $0) }
-    nonisolated(unsafe) static var createBridge: (@Sendable (EventBus, EventBroadcaster, String) -> EventBusBridge)? = nil
+    nonisolated(unsafe) static var createBridge: (@Sendable (EventBus, EventBroadcaster, String) -> EventBusBridge)?
     nonisolated(unsafe) static var createRuntimeManager: @Sendable (String) -> any DaemonRuntimeManaging = { DaemonRuntimeManager(traceDir: $0) }
 
     @Option(name: .long, help: "监听端口")
@@ -42,27 +41,12 @@ struct ServerCommand: AsyncParsableCommand {
 
         let config = try await ConfigManager.loadConfig()
 
-        let sdkPersistence = RunPersistenceService(baseDirectory: nil)
-        let eventBroadcaster = OpenAgentSDK.EventBroadcaster(persistenceService: sdkPersistence)
-        let runCoordinator = RunCoordinator(
-            eventBroadcaster: eventBroadcaster,
-            persistenceService: sdkPersistence
-        )
-
-        let skillRegistry = SkillRegistry()
-        AxionBuiltInSkills.registerAll(into: skillRegistry)
-        skillRegistry.registerDiscoveredSkills(from: ConfigManager.skillDiscoveryDirectories)
-
-        await AxionRunRecovery.recover(
-            from: runCoordinator,
-            persistenceService: sdkPersistence,
-            eventBroadcaster: eventBroadcaster
-        )
+        let infra = await createServerInfrastructure()
 
         let placeholderAgent = Agent(options: AgentOptions(model: "placeholder"))
 
-        let traceDir = (ConfigManager.defaultConfigDirectory as NSString).appendingPathComponent("runs")
-        let memoryDir = (ConfigManager.defaultConfigDirectory as NSString).appendingPathComponent("memory")
+        let traceDir = ConfigManager.traceDirectory
+        let memoryDir = ConfigManager.memoryDirectory
         let runtimeManager = Self.createRuntimeManager(traceDir)
 
         let apiProfile = HandlerProfile(
@@ -85,29 +69,14 @@ struct ServerCommand: AsyncParsableCommand {
             dataDir: nil
         )
 
-        server.runHandler = { [runCoordinator, config, runtimeManager, apiProfile] task, request, tracker, broadcaster, persistence, limiter in
-            // SDK boundary limitation: the runHandler callback does not expose the runId
-            // it created, so we find it by matching task text + .queued status. This is
-            // ambiguous when identical tasks are queued concurrently — a fix requires an
-            // SDK API change to pass runId into the callback.
-            let runs = await tracker.listRuns()
-            let sdkRunId = runs.first(where: { $0.task == task && $0.status == .queued })?.runId
-            guard let runId = sdkRunId else {
-                return
-            }
+        server.runHandler = { [infra, config, runtimeManager, apiProfile] task, request, tracker, broadcaster, persistence, limiter in
+            guard let runId = await resolveSDKRunId(from: tracker, task: task) else { return }
 
             await limiter.acquire()
-
-            // Mark as running in SDK tracker
             await tracker.updateRun(runId: runId, status: .running)
+            await infra.runCoordinator.submitRunWithId(runId, task: task, request: request)
 
-            // Track in Axion's RunCoordinator using the SDK's runId
-            await runCoordinator.submitRunWithId(runId, task: task, request: request)
-
-            // Create per-request EventBus
             let eventBus = EventBus()
-
-            // Create EventBusBridge to forward events → SSE
             let bridge: EventBusBridge
             if let factory = Self.createBridge {
                 bridge = factory(eventBus, broadcaster, runId)
@@ -116,15 +85,12 @@ struct ServerCommand: AsyncParsableCommand {
             }
             await bridge.start(onComplete: { })
 
-            // Build config from request
             let buildConfig = AgentBuilder.BuildConfig.forAPI(
                 config: config,
                 task: task,
                 request: request
             )
 
-            // Execute via DaemonRuntimeManager — pass sdkRunId so AxionRuntime
-            // uses the same ID for session transcript instead of generating a second one.
             let result: AxionRunResult
             do {
                 result = try await runtimeManager.executeRun(
@@ -140,59 +106,38 @@ struct ServerCommand: AsyncParsableCommand {
                     shouldReviewSkills: false
                 )
             } catch {
-                await bridge.stop()
-
-                await runCoordinator.updateRun(runId: runId, status: .failed, steps: [], durationMs: 0, replanCount: 0, costTelemetry: nil)
-                await tracker.updateRun(runId: runId, status: .failed)
-                await broadcaster.complete(runId: runId)
-                await limiter.release()
+                await handleRunFailure(
+                    bridge: bridge, runCoordinator: infra.runCoordinator,
+                    tracker: tracker, broadcaster: broadcaster,
+                    limiter: limiter, runId: runId
+                )
                 return
             }
             await bridge.stop()
-
-            // Map result state to API status
-            let apiStatus: APIRunStatus = result.state == .completed ? .completed : .failed
-
-            // Update RunCoordinator (also emits runCompleted SSE and completes stream)
-            await runCoordinator.updateRun(
-                runId: runId,
-                status: apiStatus,
-                steps: [],
-                totalSteps: result.totalSteps,
-                durationMs: result.durationMs,
-                replanCount: 0,
-                costTelemetry: nil
+            await handleRunSuccess(
+                result: result, runCoordinator: infra.runCoordinator,
+                tracker: tracker, limiter: limiter, runId: runId
             )
-
-            // Update SDK tracker
-            let sdkStatus = OpenAgentSDK.APIRunStatus(rawValue: apiStatus.rawValue) ?? .failed
-            await tracker.updateRun(
-                runId: runId,
-                status: sdkStatus,
-                totalSteps: result.totalSteps,
-                durationMs: result.durationMs
-            )
-
-            await limiter.release()
         }
 
-        server.customRouteBuilder = { [runCoordinator, eventBroadcaster, config, skillRegistry] router, _, _, _, _ in
+        server.customRouteBuilder = { [infra, config] router, _, _, _, _ in
             AxionAPI.registerCustomRoutes(
                 on: router,
-                runCoordinator: runCoordinator,
-                eventBroadcaster: eventBroadcaster,
+                runCoordinator: infra.runCoordinator,
+                eventBroadcaster: infra.eventBroadcaster,
                 config: config,
                 maxConcurrentRuns: maxConcurrent,
-                skillRegistry: skillRegistry
+                skillRegistry: infra.skillRegistry
             )
         }
 
-        print("Axion API server running on port \(port)")
-        print("  Listening on \(host):\(port)")
-        print("  Auth: \(resolvedAuthKey != nil ? "enabled" : "disabled")")
-        print("  Max concurrent tasks: \(maxConcurrent)")
-        print("  Press Ctrl+C to stop")
-        fflush(stdout)
+        printServerBanner(
+            name: "Axion API server",
+            host: host,
+            port: port,
+            authEnabled: resolvedAuthKey != nil,
+            extraLines: ["Max concurrent tasks: \(maxConcurrent)"]
+        )
 
         try await server.start()
     }

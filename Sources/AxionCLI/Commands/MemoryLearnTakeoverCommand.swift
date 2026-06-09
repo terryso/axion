@@ -1,5 +1,4 @@
 import ArgumentParser
-import Foundation
 import OpenAgentSDK
 
 /// `axion memory learn-takeover` — manually record a takeover experience as Memory.
@@ -31,8 +30,7 @@ struct MemoryLearnTakeoverCommand: AsyncParsableCommand {
     var outcome: TakeoverOutcome = .success
 
     func run() async throws {
-        let memoryDir = resolveMemoryDir()
-        let factStore = AxionFactStore(memoryDir: memoryDir)
+        let factStore = AxionFactStore(memoryDir: ConfigManager.memoryDirectory)
         let lifecycleService = OpenAgentSDK.MemoryLifecycleService()
         let service = TakeoverLearningService(
             factStore: factStore,
@@ -51,10 +49,4 @@ struct MemoryLearnTakeoverCommand: AsyncParsableCommand {
         print("[axion] 已保存 takeover 学习到 \(bundleId)")
     }
 
-    // MARK: - Private Helpers
-
-    private func resolveMemoryDir() -> String {
-        let configDir = ConfigManager.defaultConfigDirectory
-        return (configDir as NSString).appendingPathComponent("memory")
-    }
 }

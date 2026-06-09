@@ -6,45 +6,6 @@ import Testing
 @Suite("SeatActivityMonitor Tests")
 struct SeatActivityMonitorTests {
 
-    // MARK: - describeBaseline
-
-    @Test("describeBaseline returns both cursor and frontmost when both present")
-    func test_describeBaseline_bothPresent() async {
-        let monitor = SeatActivityMonitor(
-            baselineCursor: CGPoint(x: 100, y: 200),
-            baselineFrontmost: "com.apple.Safari"
-        )
-        let desc = await monitor.describeBaseline()
-        #expect(desc == "cursor=(100,200) frontmost=com.apple.Safari")
-    }
-
-    @Test("describeBaseline returns only cursor when frontmost is nil")
-    func test_describeBaseline_cursorOnly() async {
-        let monitor = SeatActivityMonitor(
-            baselineCursor: CGPoint(x: 50, y: 75),
-            baselineFrontmost: nil
-        )
-        let desc = await monitor.describeBaseline()
-        #expect(desc == "cursor=(50,75)")
-    }
-
-    @Test("describeBaseline returns only frontmost when cursor is nil")
-    func test_describeBaseline_frontmostOnly() async {
-        let monitor = SeatActivityMonitor(
-            baselineCursor: nil,
-            baselineFrontmost: "com.apple.Terminal"
-        )
-        let desc = await monitor.describeBaseline()
-        #expect(desc == "frontmost=com.apple.Terminal")
-    }
-
-    @Test("describeBaseline returns empty string when both nil")
-    func test_describeBaseline_bothNil() async {
-        let monitor = SeatActivityMonitor(baselineCursor: nil, baselineFrontmost: nil)
-        let desc = await monitor.describeBaseline()
-        #expect(desc == "")
-    }
-
     // MARK: - check: cursor movement detection
 
     @Test("check detects cursor movement >= 8px")
@@ -234,10 +195,5 @@ struct SeatActivityMonitorTests {
     func test_create_returnsNonNil() async {
         let monitor = await SeatActivityMonitor.create()
         #expect(monitor != nil)
-        if let monitor {
-            let desc = await monitor.describeBaseline()
-            // Should contain cursor info at minimum (NSEvent.mouseLocation always returns a value)
-            #expect(desc.contains("cursor="))
-        }
     }
 }

@@ -1,4 +1,3 @@
-import Foundation
 import OpenAgentSDK
 
 /// Tool for the review agent to save discovered knowledge into universal memory files.
@@ -45,25 +44,18 @@ final class ReviewSaveUniversalMemoryTool: ToolProtocol, Sendable {
     }
 
     func call(input: Any, context: ToolContext) async -> ToolResult {
-        guard let params = input as? [String: Any] else {
-            return ToolResultHelper.errorResult(toolUseId: context.toolUseId, error: "invalid_input", message: "Input must be a JSON object", suggestion: "Pass a valid JSON object with 'action', 'target', and 'content'")
+        let params: [String: Any]
+        let action: String
+        let target: MemoryTarget
+        switch ToolResultHelper.validateMemoryInput(input: input, toolUseId: context.toolUseId, validActions: "add, replace") {
+        case .valid(let p, let a, let t): (params, action, target) = (p, a, t)
+        case .error(let err): return err
         }
 
-        guard let action = params["action"] as? String, !action.isEmpty else {
-            return ToolResultHelper.errorResult(toolUseId: context.toolUseId, error: "missing_action", message: "Missing required 'action' parameter", suggestion: "Provide 'action' as one of: add, replace")
+        if let err = ToolResultHelper.requireStringParam(params: params, key: "content", toolUseId: context.toolUseId, error: "missing_content", message: "Missing required 'content' parameter", suggestion: "Provide the content to save") {
+            return err
         }
-
-        guard let targetRaw = params["target"] as? String, !targetRaw.isEmpty else {
-            return ToolResultHelper.errorResult(toolUseId: context.toolUseId, error: "missing_target", message: "Missing required 'target' parameter", suggestion: "Provide 'target' as 'memory' or 'user'")
-        }
-
-        guard let target = MemoryTarget(rawValue: targetRaw.uppercased() + ".md") else {
-            return ToolResultHelper.errorResult(toolUseId: context.toolUseId, error: "invalid_target", message: "Invalid target '\(targetRaw)'", suggestion: "Use 'memory' or 'user'")
-        }
-
-        guard let content = params["content"] as? String, !content.isEmpty else {
-            return ToolResultHelper.errorResult(toolUseId: context.toolUseId, error: "missing_content", message: "Missing required 'content' parameter", suggestion: "Provide the content to save")
-        }
+        let content = params["content"] as! String
 
         switch action {
         case "add":
@@ -78,9 +70,8 @@ final class ReviewSaveUniversalMemoryTool: ToolProtocol, Sendable {
     // MARK: - Action Handlers
 
     private func handleAdd(content: String, target: MemoryTarget, toolUseId: String) async -> ToolResult {
-        let scanResult = scanner.scan(content: content)
-        if case .rejected(let reason) = scanResult {
-            return ToolResultHelper.errorResult(toolUseId: toolUseId, error: "security_rejection", message: "Content blocked by security scanner: \(reason)", suggestion: "Modify the content to remove the problematic pattern")
+        if let rejection = ToolResultHelper.rejectIfUnsafe(content: content, scanner: scanner, toolUseId: toolUseId) {
+            return rejection
         }
 
         let ok = await store.add(target: target, content: content)
@@ -92,13 +83,13 @@ final class ReviewSaveUniversalMemoryTool: ToolProtocol, Sendable {
     }
 
     private func handleReplace(params: [String: Any], content: String, target: MemoryTarget, toolUseId: String) async -> ToolResult {
-        guard let old = params["old"] as? String, !old.isEmpty else {
-            return ToolResultHelper.errorResult(toolUseId: toolUseId, error: "missing_old", message: "Missing required 'old' parameter for 'replace' action", suggestion: "Provide the keyword to match the existing entry")
+        if let err = ToolResultHelper.requireStringParam(params: params, key: "old", toolUseId: toolUseId, error: "missing_old", message: "Missing required 'old' parameter for 'replace' action", suggestion: "Provide the keyword to match the existing entry") {
+            return err
         }
+        let old = params["old"] as! String
 
-        let scanResult = scanner.scan(content: content)
-        if case .rejected(let reason) = scanResult {
-            return ToolResultHelper.errorResult(toolUseId: toolUseId, error: "security_rejection", message: "Content blocked by security scanner: \(reason)", suggestion: "Modify the content to remove the problematic pattern")
+        if let rejection = ToolResultHelper.rejectIfUnsafe(content: content, scanner: scanner, toolUseId: toolUseId) {
+            return rejection
         }
 
         let ok = await store.replace(target: target, keyword: old, newContent: content)

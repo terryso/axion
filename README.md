@@ -22,6 +22,7 @@ Axion is a Swift-based AI agent for macOS that takes natural language task descr
 
 **Key highlights:**
 
+- **Interactive Coding Agent** — Run `axion` with no arguments for a Claude Code–like REPL with slash commands, permission approvals, multiline input, session resume, and CJK support
 - **Versatile Tool Selection** — Automatically picks the right tool: Bash for CLI tasks, MCP for GUI interactions, Playwright for browser automation, or Skills for specialized workflows
 - **SDK Skill System** — Prompt skills, recorded skills, and built-in desktop skills with dual-track lookup and skill-scoped memory
 - **Record & Replay Skills** — Record a workflow once, replay it instantly without LLM calls
@@ -38,12 +39,13 @@ Axion is a Swift-based AI agent for macOS that takes natural language task descr
 ```
 ┌───────────────────────────────────────────────────────────┐
 │                          AxionCLI                          │
-│  run / setup / doctor / server / mcp / record / skill     │
-│  daemon / resume / sessions / gateway                     │
+│  Interactive Chat · run / setup / doctor / server / mcp   │
+│  record / skill / daemon / resume / sessions / gateway    │
 │  Agent Stream Loop · Memory · Takeover                    │
 │  Skill System · Built-in Skills · Skill + Memory Context  │
 │  Runtime Event Layer · EventBus · EventHandlers (7)       │
 │  Gateway: Telegram · Streaming · Interactive Approval     │
+│  Interactive Chat: Slash Commands · Permissions · CJK     │
 ├──────────────────────┬────────────────────────────────────┤
 │      AxionCore       │           AxionHelper              │
 │  Models, Protocols,  │  MCP Server                        │
@@ -51,7 +53,7 @@ Axion is a Swift-based AI agent for macOS that takes natural language task descr
 └──────────────────────┴────────────────────────────────────┘
 ```
 
-- **AxionCLI** — CLI entry point with agent stream loop, memory, skill system (prompt + recorded + built-in), daemon management, server modes, Telegram gateway with streaming and interactive approval, and completion notifications
+- **AxionCLI** — CLI entry point with interactive coding agent (chat mode), desktop automation (run mode), memory, skill system (prompt + recorded + built-in), daemon management, server modes, Telegram gateway with streaming and interactive approval, and completion notifications
 - **AxionCore** — Shared model layer (RunConfig, AxionConfig) and protocol definitions
 - **AxionHelper** — MCP server process providing 21 native macOS automation tools via stdio
 
@@ -143,7 +145,10 @@ axion doctor
 ### Usage
 
 ```bash
-# Execute a task (default — runs live)
+# Interactive coding agent (Claude Code-like REPL)
+axion
+
+# Execute a single desktop automation task
 axion run "Open Calculator and compute 123 + 456"
 
 # CLI tasks use Bash directly — no GUI needed

@@ -4,7 +4,7 @@ import CoreGraphics
 import Foundation
 
 /// Errors thrown by `AccessibilityEngineService`.
-enum AccessibilityEngineError: Error, LocalizedError {
+enum AccessibilityEngineError: Error, LocalizedError, ToolErrorProtocol {
     case windowNotFound(windowId: Int)
     case axPermissionDenied
     case axTreeBuildFailed(reason: String)
@@ -105,11 +105,7 @@ struct AccessibilityEngineService: WindowManaging {
     }
 
     func getWindowState(windowId: Int) throws -> WindowState {
-        let windowList = CGWindowListCopyWindowInfo(.optionAll, kCGNullWindowID) as? [[String: Any]] ?? []
-
-        guard let cgWindow = windowList.first(where: {
-            $0[kCGWindowNumber as String] as? Int == windowId
-        }) else {
+        guard let cgWindow = findCGWindow(windowId: windowId) else {
             throw AccessibilityEngineError.windowNotFound(windowId: windowId)
         }
 
@@ -147,11 +143,7 @@ struct AccessibilityEngineService: WindowManaging {
     }
 
     func setWindowBounds(windowId: Int, x: Int? = nil, y: Int? = nil, width: Int? = nil, height: Int? = nil) throws {
-        let windowList = CGWindowListCopyWindowInfo(.optionAll, kCGNullWindowID) as? [[String: Any]] ?? []
-
-        guard let cgWindow = windowList.first(where: {
-            $0[kCGWindowNumber as String] as? Int == windowId
-        }) else {
+        guard let cgWindow = findCGWindow(windowId: windowId) else {
             throw AccessibilityEngineError.windowNotFound(windowId: windowId)
         }
 
@@ -165,12 +157,8 @@ struct AccessibilityEngineService: WindowManaging {
         let newWidth = width ?? currentBounds.width
         let newHeight = height ?? currentBounds.height
 
-        let axApp = AXUIElementCreateApplication(ownerPID)
         let title = cgWindow[kCGWindowName as String] as? String
-        var windowsRef: AnyObject?
-        let axResult = AXUIElementCopyAttributeValue(axApp, kAXWindowsAttribute as CFString, &windowsRef)
-
-        guard axResult == .success, let axWindows = windowsRef as? [AXUIElement] else {
+        guard let axWindows = fetchAXWindows(pid: ownerPID) else {
             throw AccessibilityEngineError.axTreeBuildFailed(reason: "No AX windows found for pid \(ownerPID)")
         }
 
@@ -205,106 +193,8 @@ struct AccessibilityEngineService: WindowManaging {
         }
     }
 
-    struct SelectorMatchResult: Codable {
-        let x: Int
-        let y: Int
-        let role: String
-        let title: String?
-    }
-
-    enum SelectorError: Error, LocalizedError {
-        case noMatch(query: SelectorQuery)
-        case ordinalOutOfRange(ordinal: Int, matchCount: Int)
-
-        var errorDescription: String? {
-            switch self {
-            case .noMatch(let query):
-                return "No AX element matches selector: role=\(query.role ?? "*"), title=\(query.title ?? "*"), title_contains=\(query.titleContains ?? "*"), ax_id=\(query.axId ?? "*")"
-            case .ordinalOutOfRange(let ordinal, let count):
-                return "Ordinal \(ordinal) out of range (found \(count) matching elements)"
-            }
-        }
-
-        var errorCode: String {
-            switch self {
-            case .noMatch: return "selector_no_match"
-            case .ordinalOutOfRange: return "selector_ordinal_out_of_range"
-            }
-        }
-
-        var suggestion: String {
-            switch self {
-            case .noMatch:
-                return "Use get_accessibility_tree to inspect the current AX tree and find the correct selector values."
-            case .ordinalOutOfRange:
-                return "Use a lower ordinal value or inspect the AX tree to count matching elements."
-            }
-        }
-    }
-
-    func resolveSelector(windowId: Int, query: SelectorQuery) throws -> SelectorMatchResult {
-        let ordinal = query.ordinal ?? 0
-        guard ordinal >= 0 else {
-            throw SelectorError.ordinalOutOfRange(ordinal: ordinal, matchCount: 0)
-        }
-
-        let tree = try getAXTree(windowId: windowId, maxNodes: 500)
-        let matches = collectMatches(element: tree, query: query)
-
-        guard !matches.isEmpty else {
-            throw SelectorError.noMatch(query: query)
-        }
-
-        guard ordinal < matches.count else {
-            throw SelectorError.ordinalOutOfRange(ordinal: ordinal, matchCount: matches.count)
-        }
-
-        let match = matches[ordinal]
-        return match
-    }
-
-    func collectMatches(element: AXElement, query: SelectorQuery) -> [SelectorMatchResult] {
-        var results: [SelectorMatchResult] = []
-
-        if matchesQuery(element: element, query: query),
-           let bounds = element.bounds, bounds.width > 0, bounds.height > 0 {
-            let centerX = bounds.x + bounds.width / 2
-            let centerY = bounds.y + bounds.height / 2
-            results.append(SelectorMatchResult(
-                x: centerX,
-                y: centerY,
-                role: element.role,
-                title: element.title
-            ))
-        }
-
-        for child in element.children {
-            results.append(contentsOf: collectMatches(element: child, query: query))
-        }
-
-        return results
-    }
-
-    private func matchesQuery(element: AXElement, query: SelectorQuery) -> Bool {
-        guard query.title != nil || query.titleContains != nil || query.axId != nil || query.role != nil else {
-            return false
-        }
-        if let role = query.role, element.role != role { return false }
-        if let title = query.title, element.title != title { return false }
-        if let titleContains = query.titleContains {
-            guard let elementTitle = element.title,
-                  elementTitle.localizedCaseInsensitiveContains(titleContains) else { return false }
-        }
-        if let axId = query.axId, element.identifier != axId { return false }
-        return true
-    }
-
     func validateWindow(windowId: Int) -> ValidateWindowResult {
-        let windowList = CGWindowListCopyWindowInfo(.optionAll, kCGNullWindowID) as? [[String: Any]] ?? []
-
-        guard let cgWindow = windowList.first(where: {
-            $0[kCGWindowNumber as String] as? Int == windowId
-        }) else {
+        guard let cgWindow = findCGWindow(windowId: windowId) else {
             return ValidateWindowResult(
                 windowId: windowId,
                 exists: false,
@@ -341,42 +231,28 @@ struct AccessibilityEngineService: WindowManaging {
         )
     }
 
-    // MARK: - Private Helpers
+    // MARK: - Internal Helpers
 
-    func getAXTree(windowId: Int, maxNodes: Int = 500) throws -> AXElement {
+    /// Finds a CG window dictionary by window ID from the full window list.
+    /// Returns the raw CG window info dict, or nil if not found.
+    func findCGWindow(windowId: Int) -> [String: Any]? {
         let windowList = CGWindowListCopyWindowInfo(.optionAll, kCGNullWindowID) as? [[String: Any]] ?? []
-
-        guard let cgWindow = windowList.first(where: {
-            $0[kCGWindowNumber as String] as? Int == windowId
-        }) else {
-            throw AccessibilityEngineError.windowNotFound(windowId: windowId)
-        }
-
-        guard let ownerPID = cgWindow[kCGWindowOwnerPID as String] as? Int32 else {
-            throw AccessibilityEngineError.windowNotFound(windowId: windowId)
-        }
-
-        let title = cgWindow[kCGWindowName as String] as? String
-
-        let axApp = AXUIElementCreateApplication(ownerPID)
-
-        var windowsRef: AnyObject?
-        let axResult = AXUIElementCopyAttributeValue(axApp, kAXWindowsAttribute as CFString, &windowsRef)
-
-        guard axResult == .success, let axWindows = windowsRef as? [AXUIElement], !axWindows.isEmpty else {
-            throw AccessibilityEngineError.axTreeBuildFailed(reason: "No AX windows found for pid \(ownerPID)")
-        }
-
-        let matchedWindow = matchAXWindow(axWindows: axWindows, title: title)
-
-        guard let matchedWindow else {
-            throw AccessibilityEngineError.axTreeBuildFailed(reason: "Cannot match AX window for window_id \(windowId)")
-        }
-
-        return buildAXTree(element: matchedWindow, maxDepth: 8, maxNodes: maxNodes)
+        return windowList.first { $0[kCGWindowNumber as String] as? Int == windowId }
     }
 
-    private func parseCGBounds(_ dict: [String: Any]?) -> WindowBounds {
+    /// Fetches the list of AX windows for a given process ID.
+    /// Returns nil if AX is unavailable or the process has no windows.
+    func fetchAXWindows(pid: Int32) -> [AXUIElement]? {
+        let axApp = AXUIElementCreateApplication(pid)
+        var windowsRef: AnyObject?
+        let axResult = AXUIElementCopyAttributeValue(axApp, kAXWindowsAttribute as CFString, &windowsRef)
+        guard axResult == .success, let axWindows = windowsRef as? [AXUIElement], !axWindows.isEmpty else {
+            return nil
+        }
+        return axWindows
+    }
+
+    func parseCGBounds(_ dict: [String: Any]?) -> WindowBounds {
         guard let dict else {
             return WindowBounds(x: 0, y: 0, width: 0, height: 0)
         }
@@ -388,6 +264,12 @@ struct AccessibilityEngineService: WindowManaging {
         )
     }
 
+    func extractAppName(from bundleId: String) -> String? {
+        let parts = bundleId.split(separator: ".")
+        guard let last = parts.last, !last.isEmpty else { return nil }
+        return String(last)
+    }
+
     private struct AXWindowState {
         let isFocused: Bool
         let isMinimized: Bool?
@@ -395,16 +277,8 @@ struct AccessibilityEngineService: WindowManaging {
     }
 
     private func getAXWindowState(pid: Int32, title: String?, bounds: WindowBounds) -> AXWindowState? {
-        let axApp = AXUIElementCreateApplication(pid)
-
-        var windowsRef: AnyObject?
-        let axResult = AXUIElementCopyAttributeValue(axApp, kAXWindowsAttribute as CFString, &windowsRef)
-
-        guard axResult == .success, let axWindows = windowsRef as? [AXUIElement], !axWindows.isEmpty else {
-            return nil
-        }
-
-        guard let matchedWindow = matchAXWindow(axWindows: axWindows, title: title) else {
+        guard let axWindows = fetchAXWindows(pid: pid),
+              let matchedWindow = matchAXWindow(axWindows: axWindows, title: title) else {
             return nil
         }
 
@@ -419,149 +293,5 @@ struct AccessibilityEngineService: WindowManaging {
         let axTree = buildAXTree(element: matchedWindow, maxDepth: 8, maxNodes: 300)
 
         return AXWindowState(isFocused: isFocused, isMinimized: isMinimized, axTree: axTree)
-    }
-
-    /// Matches an AXUIElement window from a list of AX windows by title.
-    /// Uses exact match, then fuzzy match, then first-window fallback.
-    private func matchAXWindow(axWindows: [AXUIElement], title: String?) -> AXUIElement? {
-        // Exact title match
-        for axWindow in axWindows {
-            var axTitleRef: AnyObject?
-            AXUIElementCopyAttributeValue(axWindow, kAXTitleAttribute as CFString, &axTitleRef)
-            let axTitle = axTitleRef as? String
-
-            if let title, let axTitle, axTitle == title {
-                return axWindow
-            }
-        }
-
-        // Fuzzy title match
-        for axWindow in axWindows {
-            var axTitleRef: AnyObject?
-            AXUIElementCopyAttributeValue(axWindow, kAXTitleAttribute as CFString, &axTitleRef)
-            let axTitle = axTitleRef as? String
-
-            if let title, let axTitle,
-               axTitle.lowercased().contains(title.lowercased()) || title.lowercased().contains(axTitle.lowercased()) {
-                return axWindow
-            }
-        }
-
-        // Fallback: first window
-        return axWindows.first
-    }
-
-    private func raiseAXWindow(pid: Int32, windowId: Int) {
-        let axApp = AXUIElementCreateApplication(pid)
-        var windowsRef: AnyObject?
-        let axResult = AXUIElementCopyAttributeValue(axApp, kAXWindowsAttribute as CFString, &windowsRef)
-
-        guard axResult == .success, let axWindows = windowsRef as? [AXUIElement] else { return }
-
-        // Find the matching window by looking up the CG window title
-        let windowList = CGWindowListCopyWindowInfo(.optionAll, kCGNullWindowID) as? [[String: Any]] ?? []
-        guard let cgWindow = windowList.first(where: {
-            $0[kCGWindowNumber as String] as? Int == windowId
-        }) else { return }
-
-        let title = cgWindow[kCGWindowName as String] as? String
-        guard let matched = matchAXWindow(axWindows: axWindows, title: title) else { return }
-
-        // Raise the window
-        let main = true as CFTypeRef
-        AXUIElementSetAttributeValue(matched, kAXMainAttribute as CFString, main)
-        let focused = true as CFTypeRef
-        AXUIElementSetAttributeValue(matched, kAXFocusedAttribute as CFString, focused)
-    }
-
-    func buildAXTree(element: AXUIElement, maxDepth: Int = 8, maxNodes: Int = 300) -> AXElement {
-        let budget = NodeBudget(maxNodes)
-        return buildAXTreeInternal(element: element, depth: maxDepth, budget: budget)
-    }
-
-    private class NodeBudget {
-        var remaining: Int
-        init(_ count: Int) { remaining = count }
-    }
-
-    private func buildAXTreeInternal(element: AXUIElement, depth: Int, budget: NodeBudget) -> AXElement {
-        var role: String = ""
-        var ref: AnyObject?
-
-        AXUIElementCopyAttributeValue(element, kAXRoleAttribute as CFString, &ref)
-        role = (ref as? String) ?? "Unknown"
-
-        ref = nil
-        AXUIElementCopyAttributeValue(element, kAXTitleAttribute as CFString, &ref)
-        let title = ref as? String
-
-        ref = nil
-        AXUIElementCopyAttributeValue(element, kAXValueAttribute as CFString, &ref)
-        let value: String?
-        if let stringValue = ref as? String {
-            value = stringValue
-        } else {
-            value = nil
-        }
-
-        ref = nil
-        AXUIElementCopyAttributeValue(element, kAXIdentifierAttribute as CFString, &ref)
-        let identifier = ref as? String
-
-        ref = nil
-        AXUIElementCopyAttributeValue(element, kAXPositionAttribute as CFString, &ref)
-        var position = CGPoint.zero
-        if let axVal = ref, CFGetTypeID(axVal) == AXValueGetTypeID() {
-            var cgPoint = CGPoint.zero
-            if AXValueGetValue(axVal as! AXValue, .cgPoint, &cgPoint) {
-                position = cgPoint
-            }
-        }
-
-        ref = nil
-        AXUIElementCopyAttributeValue(element, kAXSizeAttribute as CFString, &ref)
-        var size = CGSize.zero
-        if let axVal = ref, CFGetTypeID(axVal) == AXValueGetTypeID() {
-            var cgSize = CGSize.zero
-            if AXValueGetValue(axVal as! AXValue, .cgSize, &cgSize) {
-                size = cgSize
-            }
-        }
-
-        let bounds = WindowBounds(
-            x: position.x.isFinite ? Int(position.x) : 0,
-            y: position.y.isFinite ? Int(position.y) : 0,
-            width: size.width.isFinite ? Int(size.width) : 0,
-            height: size.height.isFinite ? Int(size.height) : 0
-        )
-
-        let center: ElementCenter? = (bounds.width > 0 && bounds.height > 0)
-            ? ElementCenter(x: bounds.x + bounds.width / 2, y: bounds.y + bounds.height / 2)
-            : nil
-
-        var children: [AXElement] = []
-        if depth > 0, budget.remaining > 0 {
-            ref = nil
-            AXUIElementCopyAttributeValue(element, kAXChildrenAttribute as CFString, &ref)
-            if let axChildren = ref as? [AXUIElement] {
-                for child in axChildren {
-                    guard budget.remaining > 0 else { break }
-                    budget.remaining -= 1
-                    children.append(buildAXTreeInternal(
-                        element: child,
-                        depth: depth - 1,
-                        budget: budget
-                    ))
-                }
-            }
-        }
-
-        return AXElement(role: role, title: title, value: value, identifier: identifier, bounds: bounds, center: center, children: children)
-    }
-
-    private func extractAppName(from bundleId: String) -> String? {
-        let parts = bundleId.split(separator: ".")
-        guard let last = parts.last, !last.isEmpty else { return nil }
-        return String(last)
     }
 }

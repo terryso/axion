@@ -415,15 +415,6 @@ struct AxionRuntimeTests {
         #expect(type(of: sessions) == [SessionInfo].self)
     }
 
-    // MARK: - getSession()
-
-    @Test("getSession() returns nil for non-existent session")
-    func getSessionNil() async throws {
-        let runtime = Self.makeRuntime()
-        let result = try await runtime.getSession("nonexistent-session-\(UUID().uuidString)")
-        #expect(result == nil)
-    }
-
     // MARK: - State persistence
 
     @Test("run() writes axion-state.json with completed status")

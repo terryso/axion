@@ -1,4 +1,3 @@
-import Foundation
 
 /// Pre-computed center point of an AX element.
 struct ElementCenter: Codable, Equatable {

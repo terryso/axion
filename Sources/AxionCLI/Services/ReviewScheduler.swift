@@ -2,7 +2,6 @@ import Foundation
 import os
 import OpenAgentSDK
 
-import AxionCore
 
 /// Thread-safe box for a single optional String value, readable without actor isolation.
 final class LockedStringBox: @unchecked Sendable {
@@ -59,7 +58,7 @@ actor ReviewScheduler: EventHandler {
         noMemory: Bool,
         reviewDataContext: ReviewDataContext,
         traceDir: String,
-        memoryDir: String = (ConfigManager.defaultConfigDirectory as NSString).appendingPathComponent("memory"),
+        memoryDir: String = ConfigManager.memoryDirectory,
         gatewaySessionStore: GatewaySessionStore? = nil,
         onReviewResult: (@Sendable (ReviewResultEvent) async -> Void)? = nil
     ) {
@@ -84,15 +83,13 @@ actor ReviewScheduler: EventHandler {
         guard context.shouldReviewMemory else { return }
 
         guard let agent = reviewDataContext.agent else {
-            let logger = Logger(subsystem: "com.axion.cli", category: "ReviewScheduler")
-            logger.warning("Review scheduled but agent not available — skipping")
+            axionReviewSchedulerLogger.warning("Review scheduled but agent not available — skipping")
             return
         }
         guard let orchestrator = reviewDataContext.reviewOrchestrator else { return }
         guard let chatId = context.chatId else { return }
 
         let sessionStore = context.sessionStore
-        let currentSessionId = context.sessionId
 
         var tunedConfig = ReviewAgentConfig(reviewMemory: true, reviewSkills: false)
         tunedConfig.allowedTools.append("review_save_universal_memory")
@@ -153,8 +150,7 @@ actor ReviewScheduler: EventHandler {
                 memoryDir: memoryDir
             )
 
-            let elapsed = ContinuousClock.now - reviewStartTime
-            let durationMs = Int(Double(elapsed.components.seconds) * 1000 + Double(elapsed.components.attoseconds) / 1e15)
+            let durationMs = durationToMs(ContinuousClock.now - reviewStartTime)
 
             if let result {
                 TraceRecorder.recordReviewCompleted(
@@ -165,34 +161,13 @@ actor ReviewScheduler: EventHandler {
                     traceDir: traceDir
                 )
 
-                if !result.memoryChanges.isEmpty || !result.skillChanges.isEmpty {
-                    var parts: [String] = []
-                    if !result.memoryChanges.isEmpty {
-                        parts.append("新增 \(result.memoryChanges.count) 条记忆")
-                    }
-                    if !result.skillChanges.isEmpty {
-                        parts.append("更新 \(result.skillChanges.count) 个技能")
-                    }
-                    fputs("[axion] Review: \(parts.joined(separator: ", "))\n", stderr)
+                if let changeSummary = Self.formatChangeSummary(memoryChanges: result.memoryChanges, skillChanges: result.skillChanges) {
+                    fputs("[axion] Review: \(changeSummary)\n", stderr)
                 }
 
-                let formatter = ISO8601DateFormatter()
-                formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
-                lastReviewAtBox.set(formatter.string(from: Date()))
+                lastReviewAtBox.set(axionISO8601Formatter.string(from: Date()))
 
-                let summaryText: String
-                if !result.memoryChanges.isEmpty || !result.skillChanges.isEmpty {
-                    var parts: [String] = []
-                    if !result.memoryChanges.isEmpty {
-                        parts.append("新增 \(result.memoryChanges.count) 条记忆")
-                    }
-                    if !result.skillChanges.isEmpty {
-                        parts.append("更新 \(result.skillChanges.count) 个技能")
-                    }
-                    summaryText = parts.joined(separator: ", ")
-                } else {
-                    summaryText = result.summary
-                }
+                let summaryText = Self.formatChangeSummary(memoryChanges: result.memoryChanges, skillChanges: result.skillChanges) ?? result.summary
                 lastReviewSummaryBox.set(summaryText)
 
                 let event = ReviewResultEvent(
@@ -208,8 +183,7 @@ actor ReviewScheduler: EventHandler {
                 }
                 await onReviewResult?(event)
             } else {
-                let logger = Logger(subsystem: "com.axion.cli", category: "ReviewScheduler")
-                logger.warning("Review agent returned nil for session \(sessionId)")
+                axionReviewSchedulerLogger.warning("Review agent returned nil for session \(sessionId)")
                 TraceRecorder.recordReviewFailed(
                     runId: sessionId,
                     error: "review agent returned nil",
@@ -232,111 +206,20 @@ actor ReviewScheduler: EventHandler {
         }
     }
 
-    /// Convert transcript `[[String: Any]]` dicts (from SessionStore) to `[SDKMessage]`.
-    private static func convertTranscriptMessages(_ rawMessages: [[String: Any]]) -> [SDKMessage] {
-        rawMessages.compactMap { dict -> SDKMessage? in
-            let role = dict["type"] as? String ?? dict["role"] as? String ?? ""
-            switch role {
-            case "user":
-                let content = dict["message"] as? String ?? dict["content"] as? String ?? ""
-                guard !content.isEmpty else { return nil }
-                return .userMessage(SDKMessage.UserMessageData(
-                    uuid: dict["uuid"] as? String,
-                    sessionId: dict["session_id"] as? String ?? dict["sessionId"] as? String,
-                    message: content,
-                    parentToolUseId: dict["parent_tool_use_id"] as? String ?? dict["parentToolUseId"] as? String
-                ))
-            case "assistant":
-                let text = dict["message"] as? String ?? dict["content"] as? String ?? ""
-                guard !text.isEmpty else { return nil }
-                return .assistant(SDKMessage.AssistantData(
-                    text: text,
-                    model: dict["model"] as? String ?? "unknown",
-                    stopReason: dict["stop_reason"] as? String ?? "end_turn",
-                    uuid: dict["uuid"] as? String,
-                    sessionId: dict["session_id"] as? String ?? dict["sessionId"] as? String
-                ))
-            default:
-                return nil
-            }
+    // MARK: - Shared Helpers
+
+    /// Format a human-readable summary of memory and skill changes.
+    /// Returns nil if there are no changes.
+    static func formatChangeSummary(memoryChanges: [String], skillChanges: [String]) -> String? {
+        guard !memoryChanges.isEmpty || !skillChanges.isEmpty else { return nil }
+        var parts: [String] = []
+        if !memoryChanges.isEmpty {
+            parts.append("新增 \(memoryChanges.count) 条记忆")
         }
+        if !skillChanges.isEmpty {
+            parts.append("更新 \(skillChanges.count) 个技能")
+        }
+        return parts.joined(separator: ", ")
     }
 
-    private static func applyUniversalMemoryFallbackIfNeeded(
-        reviewResult: ReviewAgentResult?,
-        messages: [SDKMessage],
-        config: ReviewAgentConfig,
-        memoryDir: String
-    ) async -> ReviewAgentResult? {
-        guard config.reviewMemory else { return reviewResult }
-        if let reviewResult, !reviewResult.memoryChanges.isEmpty { return reviewResult }
-
-        var fallbackMemoryChanges: [String] = []
-
-        if let preference = extractExplicitUserPreference(from: messages) {
-            let store = UniversalMemoryStore(memoryDir: memoryDir)
-            let existing = await store.read(target: .user)
-            if !existing.contains(preference) {
-                let scanner = MemorySecurityScanner()
-                if case .safe = scanner.scan(content: preference) {
-                    let saved = await store.add(target: .user, content: preference)
-                    if saved {
-                        fallbackMemoryChanges.append("Saved entry to USER.md")
-                    }
-                }
-            }
-        }
-
-        guard !fallbackMemoryChanges.isEmpty else { return reviewResult }
-
-        let skillChanges = reviewResult?.skillChanges ?? []
-        let reviewMessages = reviewResult?.reviewMessages ?? []
-        return ReviewAgentResult(
-            memoryChanges: fallbackMemoryChanges,
-            skillChanges: skillChanges,
-            summary: "Review completed: " + fallbackMemoryChanges.joined(separator: "; "),
-            reviewMessages: reviewMessages
-        )
-    }
-
-    // Fallback: catches explicit Chinese-language preference patterns that the review agent
-    // may miss. The primary path is now the review agent using review_save_universal_memory
-    // (guided by promptSuffix in ReviewAgentConfig).
-    private static func extractExplicitUserPreference(from messages: [SDKMessage]) -> String? {
-        let styleKeywords = ["回答", "回复", "emoji", "表情", "简洁", "详细", "中文", "英文", "格式", "语气", "解释", "markdown"]
-        let futureMarkers = ["以后", "今后", "之后", "后续", "下次"]
-        let directPrefixes = ["别", "不要", "请", "用中文", "用英文", "回答", "回复"]
-
-        for message in messages.reversed() {
-            guard case .userMessage(let data) = message else { continue }
-            let trimmed = data.message.trimmingCharacters(in: .whitespacesAndNewlines)
-            guard !trimmed.isEmpty else { continue }
-
-            let clause = splitPreferenceClause(from: trimmed)
-            let hasStyleKeyword = styleKeywords.contains(where: { clause.localizedCaseInsensitiveContains($0) })
-            let hasFutureMarker = futureMarkers.contains(where: { clause.contains($0) })
-            let hasDirectPrefix = directPrefixes.contains(where: { clause.hasPrefix($0) })
-
-            if hasStyleKeyword && (hasFutureMarker || hasDirectPrefix) {
-                return clause
-            }
-        }
-
-        return nil
-    }
-
-    private static func splitPreferenceClause(from message: String) -> String {
-        let separators = ["，并", "，然后", "，再", ", and", " and then ", " then "]
-        for separator in separators {
-            if let range = message.range(of: separator, options: [.caseInsensitive]) {
-                return String(message[..<range.lowerBound]).trimmingCharacters(in: .whitespacesAndNewlines)
-            }
-        }
-
-        if let range = message.range(of: "，") {
-            return String(message[..<range.lowerBound]).trimmingCharacters(in: .whitespacesAndNewlines)
-        }
-
-        return message.trimmingCharacters(in: .whitespacesAndNewlines)
-    }
 }

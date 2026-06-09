@@ -191,7 +191,7 @@ struct VisualDeltaChecker {
 /// against the stored one and updates the stored hash.
 actor VisualDeltaTracker {
 
-    private var lastScreenshotBase64: String? = nil
+    private var lastScreenshotBase64: String?
 
     /// Compare the current screenshot against the stored previous one,
     /// then update the stored value. Returns the delta result.

@@ -11,12 +11,10 @@ struct SkillDeleteCommand: AsyncParsableCommand {
     var name: String
 
     func run() throws {
-        let safeName = RecordCommand.sanitizeFileName(name)
-        let skillsDir = SkillCompileCommand.skillsDirectory()
-        let skillPath = (skillsDir as NSString).appendingPathComponent("\(safeName).json")
+        let skillPath = resolveFilePath(name: name, in: ConfigManager.skillsDirectory)
 
         guard FileManager.default.fileExists(atPath: skillPath) else {
-            throw ValidationError("技能不存在: \(safeName)")
+            throw ValidationError("技能不存在: \(name)")
         }
 
         do {
@@ -25,6 +23,6 @@ struct SkillDeleteCommand: AsyncParsableCommand {
             throw ValidationError("删除技能失败: \(error.localizedDescription)")
         }
 
-        print("技能 '\(safeName)' 已删除。")
+        print("技能 '\(name)' 已删除。")
     }
 }

@@ -6,6 +6,7 @@ typealias SDKMemoryFact = OpenAgentSDK.MemoryFact
 typealias SDKMemoryFactSource = OpenAgentSDK.MemoryFactSource
 typealias SDKMemoryKind = OpenAgentSDK.MemoryKind
 typealias SDKMemoryFactStatus = OpenAgentSDK.MemoryFactStatus
+typealias SDKMemoryLifecycleService = OpenAgentSDK.MemoryLifecycleService
 
 /// Lifecycle status of a memory fact.
 enum MemoryFactStatus: String, Codable, Sendable, Equatable {
@@ -115,6 +116,51 @@ struct AppMemoryFact: Codable, Equatable, Sendable {
         return "\(kind.rawValue)-\(h)"
     }
 
+    // MARK: - SDK Lifecycle Merge
+
+    /// Merge a new fact with any existing matching fact via the SDK lifecycle service,
+    /// preserving Axion-specific fields (scope, cause, evidence) that are lost in the
+    /// SDK round-trip, then persist the merged result.
+    ///
+    /// This consolidates the duplicated query→merge→save pattern shared by
+    /// `RunMemoryProcessor+PostRunProcessing`, `RecordedSkillRunner`, and
+    /// `TakeoverLearningService`.
+    ///
+    /// - Parameters:
+    ///   - fact: The new fact to merge.
+    ///   - factStore: The store to query for existing facts and save the merged result.
+    ///   - lifecycleService: The SDK lifecycle service for fact merging logic.
+    static func mergeAndPersist(
+        fact: AppMemoryFact,
+        into factStore: AxionFactStore,
+        lifecycleService: OpenAgentSDK.MemoryLifecycleService
+    ) async throws {
+        let existing = try await factStore.query(domain: fact.domain)
+        let sdkExisting = existing.map { $0.toSDKFact() }
+        let sdkResult = lifecycleService.addFact(fact.toSDKFact(), mergingWith: sdkExisting)
+
+        let existingMatch = existing.first(where: { $0.id == fact.id })
+        let mergedFact: AppMemoryFact
+        if let existingFact = existingMatch {
+            var updated = existingFact
+            updated.status = MemoryFactStatus(rawValue: sdkResult.status.rawValue) ?? existingFact.status
+            updated.confidence = sdkResult.confidence
+            updated.evidenceCount = sdkResult.evidenceCount
+            updated.updatedAt = sdkResult.lastVerifiedAt
+            let newEvidenceItems = fact.evidence.filter { !existingFact.evidence.contains($0) }
+            updated.evidence = existingFact.evidence + newEvidenceItems
+            mergedFact = updated
+        } else {
+            mergedFact = AppMemoryFact.fromSDKFact(
+                sdkResult,
+                scope: fact.scope,
+                cause: fact.cause,
+                evidence: fact.evidence
+            )
+        }
+        try await factStore.save(domain: fact.domain, fact: AppMemoryFact.normalizeFact(mergedFact))
+    }
+
     // MARK: - SDK Conversion
 
     /// Convert to SDK's ``OpenAgentSDK.MemoryFact`` for storage via SDK's ``FactStore``.
@@ -177,108 +223,3 @@ struct AppMemoryFact: Codable, Equatable, Sendable {
     }
 }
 
-// MARK: - AxionFactStore
-
-/// Axion-specific persistence layer that serializes ``AppMemoryFact`` with all fields.
-///
-/// API-compatible with SDK's `FactStore` but preserves Axion-specific fields
-/// (`scope`, `cause`, `evidence`) that SDK's `MemoryFact` doesn't have.
-/// Uses the same file convention: `{domain}-facts.json`.
-actor AxionFactStore {
-
-    private let memoryDir: URL
-    private let fileManager = FileManager.default
-    private static let factsSuffix = "-facts.json"
-
-    init(memoryDir: String) {
-        self.memoryDir = URL(fileURLWithPath: (memoryDir as NSString).expandingTildeInPath)
-    }
-
-    init(memoryDir: URL) {
-        self.memoryDir = memoryDir
-    }
-
-    /// Save (upsert) a single fact for the given domain.
-    func save(domain: String, fact: AppMemoryFact) throws {
-        var facts = (try? loadFacts(domain: domain)) ?? []
-        if let idx = facts.firstIndex(where: { $0.id == fact.id }) {
-            facts[idx] = fact
-        } else {
-            facts.append(fact)
-        }
-        try writeFacts(domain: domain, facts: facts)
-    }
-
-    /// Save (upsert) multiple facts for a domain in a single write.
-    func saveAll(domain: String, facts: [AppMemoryFact]) throws {
-        var existing = (try? loadFacts(domain: domain)) ?? []
-        for fact in facts {
-            if let idx = existing.firstIndex(where: { $0.id == fact.id }) {
-                existing[idx] = fact
-            } else {
-                existing.append(fact)
-            }
-        }
-        try writeFacts(domain: domain, facts: existing)
-    }
-
-    /// Query facts for a domain, optionally filtering by status and kind.
-    func query(domain: String, filter: OpenAgentSDK.FactFilter? = nil) throws -> [AppMemoryFact] {
-        var facts = (try? loadFacts(domain: domain)) ?? []
-        if let filter {
-            if let status = filter.status {
-                facts = facts.filter { $0.status.rawValue == status.rawValue }
-            }
-            if let kind = filter.kind {
-                facts = facts.filter { $0.kind.rawValue == kind.rawValue }
-            }
-        }
-        return facts
-    }
-
-    /// List all domains that have fact files.
-    func listDomains() throws -> [String] {
-        guard fileManager.fileExists(atPath: memoryDir.path) else { return [] }
-        let files = try fileManager.contentsOfDirectory(at: memoryDir, includingPropertiesForKeys: nil)
-        var domains = Set<String>()
-        for file in files where file.pathExtension == "json" {
-            if file.lastPathComponent.hasSuffix(Self.factsSuffix) {
-                let name = file.deletingPathExtension().lastPathComponent
-                domains.insert(String(name.dropLast(6)))
-            }
-        }
-        return domains.sorted()
-    }
-
-    /// Delete all facts for a domain.
-    func delete(domain: String) throws {
-        let url = factsURL(domain: domain)
-        if fileManager.fileExists(atPath: url.path) {
-            try fileManager.removeItem(at: url)
-        }
-    }
-
-    // MARK: - Private
-
-    private func factsURL(domain: String) -> URL {
-        memoryDir.appendingPathComponent("\(domain)\(Self.factsSuffix)")
-    }
-
-    private func loadFacts(domain: String) throws -> [AppMemoryFact] {
-        let url = factsURL(domain: domain)
-        guard fileManager.fileExists(atPath: url.path) else { return [] }
-        let data = try Data(contentsOf: url)
-        let decoder = JSONDecoder()
-        decoder.dateDecodingStrategy = .iso8601
-        return try decoder.decode([AppMemoryFact].self, from: data)
-    }
-
-    private func writeFacts(domain: String, facts: [AppMemoryFact]) throws {
-        try fileManager.createDirectory(at: memoryDir, withIntermediateDirectories: true)
-        let encoder = JSONEncoder()
-        encoder.outputFormatting = [.sortedKeys, .prettyPrinted]
-        encoder.dateEncodingStrategy = .iso8601
-        let data = try encoder.encode(facts)
-        try data.write(to: factsURL(domain: domain), options: .atomic)
-    }
-}

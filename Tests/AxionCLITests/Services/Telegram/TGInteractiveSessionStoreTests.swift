@@ -112,99 +112,6 @@ struct TGInteractiveSessionStoreTests {
         #expect(result == false)
     }
 
-    // MARK: - resolveCallback
-
-    @Test("resolveCallback resumes for authorized user")
-    func resolveCallbackAuthorized() async throws {
-        let store = TGInteractiveSessionStore()
-        let capture = ResumeCapture()
-        let handler: @Sendable (String) async throws -> Void = { response in
-            await capture.record(response)
-        }
-
-        await store.register(
-            pendingId: "p1",
-            chatId: 100,
-            messageId: 1,
-            mode: .approval,
-            allowedUserId: 100,
-            onResume: handler
-        )
-
-        let result = try await store.resolveCallback(pendingId: "p1", fromUser: 100)
-        switch result {
-        case .resumed:
-            break
-        default:
-            Issue.record("Expected resumed, got \(result)")
-        }
-    }
-
-    @Test("resolveCallback returns unauthorized for wrong user")
-    func resolveCallbackUnauthorized() async throws {
-        let store = TGInteractiveSessionStore()
-        let handler: @Sendable (String) async throws -> Void = { _ in }
-
-        await store.register(
-            pendingId: "p1",
-            chatId: 100,
-            messageId: 1,
-            mode: .approval,
-            allowedUserId: 100,
-            onResume: handler
-        )
-
-        let result = try await store.resolveCallback(pendingId: "p1", fromUser: 999)
-        switch result {
-        case .unauthorized:
-            break
-        default:
-            Issue.record("Expected unauthorized, got \(result)")
-        }
-
-        // Session should still exist (not removed on unauthorized)
-        let session = await store.get(pendingId: "p1")
-        #expect(session != nil)
-    }
-
-    @Test("resolveCallback returns notFound for unknown pendingId")
-    func resolveCallbackNotFound() async throws {
-        let store = TGInteractiveSessionStore()
-        let result = try await store.resolveCallback(pendingId: "ghost", fromUser: 100)
-        switch result {
-        case .notFound:
-            break
-        default:
-            Issue.record("Expected notFound, got \(result)")
-        }
-    }
-
-    @Test("resolveCallback returns expired for stale session")
-    func resolveCallbackExpired() async throws {
-        let store = TGInteractiveSessionStore()
-        let handler: @Sendable (String) async throws -> Void = { _ in }
-
-        await store.register(
-            pendingId: "p1",
-            chatId: 100,
-            messageId: 1,
-            mode: .approval,
-            allowedUserId: 100,
-            ttlSeconds: 0,
-            onResume: handler
-        )
-
-        try await _Concurrency.Task.sleep(nanoseconds: 10_000_000)
-
-        let result = try await store.resolveCallback(pendingId: "p1", fromUser: 100)
-        switch result {
-        case .expired:
-            break
-        default:
-            Issue.record("Expected expired, got \(result)")
-        }
-    }
-
     // MARK: - Remove
 
     @Test("Remove returns session and deletes it")
@@ -257,27 +164,6 @@ struct TGInteractiveSessionStoreTests {
 
         _ = await store.remove(pendingId: "a")
         #expect(await store.activeSessionCount == 1)
-    }
-
-    // MARK: - Purge Expired
-
-    @Test("purgeExpired removes only expired sessions")
-    func purgeExpired() async throws {
-        let store = TGInteractiveSessionStore()
-        let handler: @Sendable (String) async throws -> Void = { _ in }
-
-        await store.register(pendingId: "expired", chatId: 1, messageId: 1, mode: .approval, allowedUserId: 1, ttlSeconds: 0, onResume: handler)
-        await store.register(pendingId: "alive", chatId: 2, messageId: 1, mode: .approval, allowedUserId: 2, ttlSeconds: 300, onResume: handler)
-
-        try await _Concurrency.Task.sleep(nanoseconds: 10_000_000)
-
-        let purged = await store.purgeExpired()
-        #expect(purged.count == 1)
-        #expect(purged[0].pendingId == "expired")
-        #expect(await store.activeSessionCount == 1)
-
-        let alive = await store.get(pendingId: "alive")
-        #expect(alive != nil)
     }
 
     // MARK: - Keyboard Building

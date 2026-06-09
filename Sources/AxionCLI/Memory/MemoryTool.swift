@@ -1,4 +1,3 @@
-import Foundation
 import OpenAgentSDK
 
 /// Tool that lets the Agent actively read and write persistent memory (MEMORY.md / USER.md).
@@ -44,20 +43,12 @@ final class MemoryTool: ToolProtocol, Sendable {
     }
 
     func call(input: Any, context: ToolContext) async -> ToolResult {
-        guard let params = input as? [String: Any] else {
-            return ToolResultHelper.errorResult(toolUseId: context.toolUseId, error: "invalid_input", message: "Input must be a JSON object", suggestion: "Pass a valid JSON object with 'action' and 'target'")
-        }
-
-        guard let action = params["action"] as? String, !action.isEmpty else {
-            return ToolResultHelper.errorResult(toolUseId: context.toolUseId, error: "missing_action", message: "Missing required 'action' parameter", suggestion: "Provide 'action' as one of: add, replace, remove, read")
-        }
-
-        guard let targetRaw = params["target"] as? String, !targetRaw.isEmpty else {
-            return ToolResultHelper.errorResult(toolUseId: context.toolUseId, error: "missing_target", message: "Missing required 'target' parameter", suggestion: "Provide 'target' as 'memory' or 'user'")
-        }
-
-        guard let target = MemoryTarget(rawValue: targetRaw.uppercased() + ".md") else {
-            return ToolResultHelper.errorResult(toolUseId: context.toolUseId, error: "invalid_target", message: "Invalid target '\(targetRaw)'", suggestion: "Use 'memory' or 'user'")
+        let params: [String: Any]
+        let action: String
+        let target: MemoryTarget
+        switch ToolResultHelper.validateMemoryInput(input: input, toolUseId: context.toolUseId, validActions: "add, replace, remove, read") {
+        case .valid(let p, let a, let t): (params, action, target) = (p, a, t)
+        case .error(let err): return err
         }
 
         switch action {
@@ -77,13 +68,13 @@ final class MemoryTool: ToolProtocol, Sendable {
     // MARK: - Action Handlers
 
     private func handleAdd(params: [String: Any], target: MemoryTarget, toolUseId: String) async -> ToolResult {
-        guard let content = params["content"] as? String, !content.isEmpty else {
-            return ToolResultHelper.errorResult(toolUseId: toolUseId, error: "missing_content", message: "Missing required 'content' parameter for 'add' action", suggestion: "Provide the content to add")
+        if let err = ToolResultHelper.requireStringParam(params: params, key: "content", toolUseId: toolUseId, error: "missing_content", message: "Missing required 'content' parameter for 'add' action", suggestion: "Provide the content to add") {
+            return err
         }
+        let content = params["content"] as! String
 
-        let scanResult = scanner.scan(content: content)
-        if case .rejected(let reason) = scanResult {
-            return ToolResultHelper.errorResult(toolUseId: toolUseId, error: "security_rejection", message: "Content blocked by security scanner: \(reason)", suggestion: "Modify the content to remove the problematic pattern")
+        if let rejection = ToolResultHelper.rejectIfUnsafe(content: content, scanner: scanner, toolUseId: toolUseId) {
+            return rejection
         }
 
         let ok = await store.add(target: target, content: content)
@@ -95,17 +86,18 @@ final class MemoryTool: ToolProtocol, Sendable {
     }
 
     private func handleReplace(params: [String: Any], target: MemoryTarget, toolUseId: String) async -> ToolResult {
-        guard let old = params["old"] as? String, !old.isEmpty else {
-            return ToolResultHelper.errorResult(toolUseId: toolUseId, error: "missing_old", message: "Missing required 'old' parameter for 'replace' action", suggestion: "Provide the keyword to match the existing entry")
+        if let err = ToolResultHelper.requireStringParam(params: params, key: "old", toolUseId: toolUseId, error: "missing_old", message: "Missing required 'old' parameter for 'replace' action", suggestion: "Provide the keyword to match the existing entry") {
+            return err
         }
+        let old = params["old"] as! String
 
-        guard let newContent = params["newContent"] as? String, !newContent.isEmpty else {
-            return ToolResultHelper.errorResult(toolUseId: toolUseId, error: "missing_new_content", message: "Missing required 'newContent' parameter for 'replace' action", suggestion: "Provide the replacement content")
+        if let err = ToolResultHelper.requireStringParam(params: params, key: "newContent", toolUseId: toolUseId, error: "missing_new_content", message: "Missing required 'newContent' parameter for 'replace' action", suggestion: "Provide the replacement content") {
+            return err
         }
+        let newContent = params["newContent"] as! String
 
-        let scanResult = scanner.scan(content: newContent)
-        if case .rejected(let reason) = scanResult {
-            return ToolResultHelper.errorResult(toolUseId: toolUseId, error: "security_rejection", message: "Content blocked by security scanner: \(reason)", suggestion: "Modify the content to remove the problematic pattern")
+        if let rejection = ToolResultHelper.rejectIfUnsafe(content: newContent, scanner: scanner, toolUseId: toolUseId) {
+            return rejection
         }
 
         let ok = await store.replace(target: target, keyword: old, newContent: newContent)
@@ -117,9 +109,10 @@ final class MemoryTool: ToolProtocol, Sendable {
     }
 
     private func handleRemove(params: [String: Any], target: MemoryTarget, toolUseId: String) async -> ToolResult {
-        guard let old = params["old"] as? String, !old.isEmpty else {
-            return ToolResultHelper.errorResult(toolUseId: toolUseId, error: "missing_old", message: "Missing required 'old' parameter for 'remove' action", suggestion: "Provide the keyword to match the entry to remove")
+        if let err = ToolResultHelper.requireStringParam(params: params, key: "old", toolUseId: toolUseId, error: "missing_old", message: "Missing required 'old' parameter for 'remove' action", suggestion: "Provide the keyword to match the entry to remove") {
+            return err
         }
+        let old = params["old"] as! String
 
         let ok = await store.remove(target: target, keyword: old)
         if !ok {

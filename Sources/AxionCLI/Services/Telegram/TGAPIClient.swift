@@ -56,41 +56,15 @@ struct TGAPIClient: TGAPIClientProtocol {
     }
 
     func sendMessage(chatId: Int64, text: String) async throws -> TGMessage {
-        guard let url = URL(string: "https://api.telegram.org/bot\(token)/sendMessage") else {
-            throw TGAPIError.permanentTelegramError("Invalid URL for sendMessage")
-        }
-        var request = URLRequest(url: url)
-        request.httpMethod = "POST"
-        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-        request.timeoutInterval = 30
-
-        let body = TGSendMessageRequest(chatId: chatId, text: text, parseMode: nil)
-        request.httpBody = try JSONEncoder().encode(body)
-
-        let response: TGResponse<TGMessage> = try await performRequest(request, retries: maxRetries)
-        guard response.ok, let message = response.result else {
-            throw TGAPIError.permanentTelegramError(response.description ?? "sendMessage failed")
-        }
-        return message
+        return try await sendMessageRequest(chatId: chatId, text: text, parseMode: nil, replyToMessageId: nil, replyMarkup: nil)
     }
 
     func sendMessage(chatId: Int64, text: String, parseMode: TGParseMode, replyToMessageId: Int64? = nil) async throws -> TGMessage {
-        guard let url = URL(string: "https://api.telegram.org/bot\(token)/sendMessage") else {
-            throw TGAPIError.permanentTelegramError("Invalid URL for sendMessage")
-        }
-        var request = URLRequest(url: url)
-        request.httpMethod = "POST"
-        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-        request.timeoutInterval = 30
+        return try await sendMessageRequest(chatId: chatId, text: text, parseMode: parseMode, replyToMessageId: replyToMessageId, replyMarkup: nil)
+    }
 
-        let body = TGSendMessageRequest(chatId: chatId, text: text, parseMode: parseMode, replyToMessageId: replyToMessageId)
-        request.httpBody = try JSONEncoder().encode(body)
-
-        let response: TGResponse<TGMessage> = try await performRequest(request, retries: maxRetries)
-        guard response.ok, let message = response.result else {
-            throw TGAPIError.permanentTelegramError(response.description ?? "sendMessage failed")
-        }
-        return message
+    func sendMessage(chatId: Int64, text: String, parseMode: TGParseMode, replyMarkup: TGInlineKeyboardMarkup? = nil) async throws -> TGMessage {
+        return try await sendMessageRequest(chatId: chatId, text: text, parseMode: parseMode, replyToMessageId: nil, replyMarkup: replyMarkup)
     }
 
     func editMessageText(chatId: Int64, messageId: Int64, text: String, parseMode: TGParseMode) async throws -> TGMessage {
@@ -98,77 +72,17 @@ struct TGAPIClient: TGAPIClientProtocol {
     }
 
     func editMessageText(chatId: Int64, messageId: Int64, text: String, parseMode: TGParseMode, replyMarkup: TGInlineKeyboardMarkup? = nil) async throws -> TGMessage {
-        guard let url = URL(string: "https://api.telegram.org/bot\(token)/editMessageText") else {
-            throw TGAPIError.permanentTelegramError("Invalid URL for editMessageText")
-        }
-        var request = URLRequest(url: url)
-        request.httpMethod = "POST"
-        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-        request.timeoutInterval = 30
-
-        let body = TGEditMessageTextRequest(
-            chatId: chatId,
-            messageId: messageId,
-            text: text,
-            parseMode: parseMode,
-            replyMarkup: replyMarkup
-        )
-        request.httpBody = try JSONEncoder().encode(body)
-
-        let response: TGResponse<TGMessage> = try await performRequest(request, retries: maxRetries)
-        guard response.ok, let message = response.result else {
-            throw TGAPIError.permanentTelegramError(response.description ?? "editMessageText failed")
-        }
-        return message
-    }
-
-    func sendMessage(chatId: Int64, text: String, parseMode: TGParseMode, replyMarkup: TGInlineKeyboardMarkup? = nil) async throws -> TGMessage {
-        guard let url = URL(string: "https://api.telegram.org/bot\(token)/sendMessage") else {
-            throw TGAPIError.permanentTelegramError("Invalid URL for sendMessage")
-        }
-        var request = URLRequest(url: url)
-        request.httpMethod = "POST"
-        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-        request.timeoutInterval = 30
-
-        let body = TGSendMessageRequest(chatId: chatId, text: text, parseMode: parseMode, replyMarkup: replyMarkup)
-        request.httpBody = try JSONEncoder().encode(body)
-
-        let response: TGResponse<TGMessage> = try await performRequest(request, retries: maxRetries)
-        guard response.ok, let message = response.result else {
-            throw TGAPIError.permanentTelegramError(response.description ?? "sendMessage failed")
-        }
-        return message
+        let body = TGEditMessageTextRequest(chatId: chatId, messageId: messageId, text: text, parseMode: parseMode, replyMarkup: replyMarkup)
+        return try await postForMessage(endpoint: "editMessageText", body: body)
     }
 
     func answerCallbackQuery(callbackQueryId: String, text: String? = nil) async throws {
-        guard let url = URL(string: "https://api.telegram.org/bot\(token)/answerCallbackQuery") else {
-            throw TGAPIError.permanentTelegramError("Invalid URL for answerCallbackQuery")
-        }
-        var request = URLRequest(url: url)
-        request.httpMethod = "POST"
-        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-        request.timeoutInterval = 10
-
         let body = TGAnswerCallbackQueryRequest(callbackQueryId: callbackQueryId, text: text)
-        request.httpBody = try JSONEncoder().encode(body)
-
-        let response: TGResponse<Bool> = try await performRequest(request, retries: maxRetries)
-        guard response.ok else {
-            throw TGAPIError.permanentTelegramError(response.description ?? "answerCallbackQuery failed")
-        }
+        try await postVoid(endpoint: "answerCallbackQuery", body: body, timeout: 10)
     }
 
     func getFile(fileId: String) async throws -> TGFile {
-        guard let url = URL(string: "https://api.telegram.org/bot\(token)/getFile?file_id=\(fileId)") else {
-            throw TGAPIError.permanentTelegramError("Invalid URL for getFile")
-        }
-        let request = URLRequest(url: url, timeoutInterval: 30)
-        let response: TGResponse<TGFile> = try await performRequest(request, retries: maxRetries)
-        guard response.ok, let file = response.result else {
-            throw TGAPIError.permanentTelegramError(response.description ?? "getFile failed")
-        }
-        return file
+        return try await get(endpoint: "getFile?file_id=\(fileId)")
     }
 
     func downloadFile(filePath: String) async throws -> Data {
@@ -184,14 +98,6 @@ struct TGAPIClient: TGAPIClientProtocol {
     }
 
     func sendChatAction(chatId: Int64, action: String) async throws {
-        guard let url = URL(string: "https://api.telegram.org/bot\(token)/sendChatAction") else {
-            throw TGAPIError.permanentTelegramError("Invalid URL for sendChatAction")
-        }
-        var request = URLRequest(url: url)
-        request.httpMethod = "POST"
-        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-        request.timeoutInterval = 10
-
         struct ChatActionRequest: Codable {
             let chatId: Int64
             let action: String
@@ -200,23 +106,11 @@ struct TGAPIClient: TGAPIClientProtocol {
                 case action
             }
         }
-        request.httpBody = try JSONEncoder().encode(ChatActionRequest(chatId: chatId, action: action))
-
-        let response: TGResponse<Bool> = try await performRequest(request, retries: 1)
-        guard response.ok else {
-            throw TGAPIError.permanentTelegramError(response.description ?? "sendChatAction failed")
-        }
+        let body = ChatActionRequest(chatId: chatId, action: action)
+        try await postVoid(endpoint: "sendChatAction", body: body, timeout: 10, retries: 1)
     }
 
     func setMyCommands(commands: [(name: String, description: String)]) async throws {
-        guard let url = URL(string: "https://api.telegram.org/bot\(token)/setMyCommands") else {
-            throw TGAPIError.permanentTelegramError("Invalid URL for setMyCommands")
-        }
-        var request = URLRequest(url: url)
-        request.httpMethod = "POST"
-        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-        request.timeoutInterval = 30
-
         struct BotCommand: Codable {
             let command: String
             let description: String
@@ -225,12 +119,61 @@ struct TGAPIClient: TGAPIClientProtocol {
             let commands: [BotCommand]
         }
         let body = SetMyCommandsRequest(commands: commands.map { BotCommand(command: $0.name, description: $0.description) })
-        request.httpBody = try JSONEncoder().encode(body)
+        try await postVoid(endpoint: "setMyCommands", body: body)
+    }
 
-        let response: TGResponse<Bool> = try await performRequest(request, retries: maxRetries)
-        guard response.ok else {
-            throw TGAPIError.permanentTelegramError(response.description ?? "setMyCommands failed")
+    // MARK: - Request Helpers
+
+    private func sendMessageRequest(
+        chatId: Int64,
+        text: String,
+        parseMode: TGParseMode?,
+        replyToMessageId: Int64?,
+        replyMarkup: TGInlineKeyboardMarkup?
+    ) async throws -> TGMessage {
+        let body = TGSendMessageRequest(chatId: chatId, text: text, parseMode: parseMode, replyToMessageId: replyToMessageId, replyMarkup: replyMarkup)
+        return try await postForMessage(endpoint: "sendMessage", body: body)
+    }
+
+    private func postForMessage<T: Codable & Sendable>(endpoint: String, body: T) async throws -> TGMessage {
+        let request = try buildPostRequest(endpoint: endpoint, body: body)
+        let response: TGResponse<TGMessage> = try await performRequest(request, retries: maxRetries)
+        guard response.ok, let message = response.result else {
+            throw TGAPIError.permanentTelegramError(response.description ?? "\(endpoint) failed")
         }
+        return message
+    }
+
+    private func postVoid<T: Codable & Sendable>(endpoint: String, body: T, timeout: TimeInterval = 30, retries: Int? = nil) async throws {
+        let request = try buildPostRequest(endpoint: endpoint, body: body, timeout: timeout)
+        let response: TGResponse<Bool> = try await performRequest(request, retries: retries ?? maxRetries)
+        guard response.ok else {
+            throw TGAPIError.permanentTelegramError(response.description ?? "\(endpoint) failed")
+        }
+    }
+
+    private func get<T: Codable & Sendable>(endpoint: String, timeout: TimeInterval = 30) async throws -> T {
+        guard let url = URL(string: "https://api.telegram.org/bot\(token)/\(endpoint)") else {
+            throw TGAPIError.permanentTelegramError("Invalid URL for \(endpoint)")
+        }
+        let request = URLRequest(url: url, timeoutInterval: timeout)
+        let response: TGResponse<T> = try await performRequest(request, retries: maxRetries)
+        guard response.ok, let result = response.result else {
+            throw TGAPIError.permanentTelegramError(response.description ?? "\(endpoint) failed")
+        }
+        return result
+    }
+
+    private func buildPostRequest<T: Codable & Sendable>(endpoint: String, body: T, timeout: TimeInterval = 30) throws -> URLRequest {
+        guard let url = URL(string: "https://api.telegram.org/bot\(token)/\(endpoint)") else {
+            throw TGAPIError.permanentTelegramError("Invalid URL for \(endpoint)")
+        }
+        var request = URLRequest(url: url)
+        request.httpMethod = "POST"
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.timeoutInterval = timeout
+        request.httpBody = try axionSortedEncoder.encode(body)
+        return request
     }
 
     // MARK: - Retry Logic
