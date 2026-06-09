@@ -236,6 +236,11 @@ struct ChatCommand: AsyncParsableCommand {
 
             // ── Slash command handling ──────────────────────────────────
 
+            // taskText: 实际发给 agent 的文本
+            // matchedSkillExec: SkillRegistry 匹配时使用 executeSkillStream
+            let taskText = trimmed
+            var matchedSkillExec: (name: String, args: String?)?
+
             if let cmd = SlashCommand.parse(trimmed) {
                 let argument = SlashCommand.parseArgument(trimmed)
 
@@ -416,159 +421,22 @@ struct ChatCommand: AsyncParsableCommand {
                 }
                 continue
             } else if trimmed.hasPrefix("/") {
-                // 检查是否匹配 skill 名称（参考 TG 的 skillNameChecker 模式）
+                // /xxx 不是内置命令 — 参考 TG 模式：直接发给 agent 执行
+                // 如果 SkillRegistry 中匹配到 skill，使用 promptTemplate（优化路径）
                 let rawSkillName = String(trimmed.split(separator: " ", maxSplits: 1)[0].dropFirst())
+                let skillArg = trimmed.split(separator: " ", maxSplits: 1).count > 1
+                    ? String(trimmed.split(separator: " ", maxSplits: 1)[1])
+                    : nil
+
                 if let registry = skillRegistry,
                    let matchedSkill = registry.find(rawSkillName),
                    matchedSkill.userInvocable
                 {
-                    // 匹配到 skill — 解析 promptTemplate 并执行 agent stream
-                    let skillArg = trimmed.split(separator: " ", maxSplits: 1).count > 1
-                        ? String(trimmed.split(separator: " ", maxSplits: 1)[1])
-                        : nil
-                    let skillTaskText: String
-                    if let arg = skillArg, !arg.isEmpty {
-                        skillTaskText = matchedSkill.promptTemplate.replacingOccurrences(of: "{args}", with: arg)
-                    } else {
-                        skillTaskText = matchedSkill.promptTemplate
-                    }
-                    // Fall through to agent execution with the resolved task text
-                    let displayText = "/\(matchedSkill.name)" + (skillArg.map { " \($0)" } ?? "")
-                    state.sessionUserMessages[state.sessionUserMessages.count - 1] = displayText
-                    // 执行 agent stream（使用 skill prompt template）
-                    let chatTheme = ChatTheme(profile: colorProfile, isTTY: isatty(STDERR_FILENO) != 0)
-                    let transcriptRenderer = TranscriptRenderer(theme: chatTheme)
-                    fputs(transcriptRenderer.renderUserMessage(text: displayText), stderr)
-                    composer.slashContext = SlashCommandContext(isAgentBusy: true, isSideSession: false)
-                    let turnStartTime = ContinuousClock.now
-                    let preTurnUsage = state.sessionUsage
-                    var turnToolCount = 0
-                    var lastAssistantText = ""
-                    var turnFileTracker = TurnFileChangeTracker()
-                    sessionTurnCount += 1
-                    let outputHandler = ChatOutputFormatter(theme: chatTheme)
-                    outputHandler.startLLMWaiting()
-                    terminalTitle.setThinking()
-                    let escListener = EscapeInterruptListener {
-                        SignalHandler.simulateFire()
-                        currentAgent.interrupt()
-                    }
-                    let messageStream = state.buildResult.agent.stream(skillTaskText)
-                    for await message in messageStream {
-                        if SignalHandler.fireCount() > 0 {
-                            outputHandler.suppressInterruptError = true
-                        }
-                        outputHandler.handle(message)
-                        switch message {
-                        case .toolUse(let data):
-                            turnToolCount += 1
-                            terminalTitle.setToolExecuting(data.toolName)
-                            turnFileTracker.recordToolUse(toolName: data.toolName, input: data.input)
-                        case .assistant(let data):
-                            if !data.text.isEmpty {
-                                lastAssistantText = data.text
-                            }
-                        case .result(let data):
-                            if let usage = data.usage {
-                                state.sessionUsage = state.sessionUsage + usage
-                            }
-                            if let lastTokens = data.lastTurnInputTokens {
-                                state.contextTokens = lastTokens
-                            } else {
-                                let messages = state.buildResult.agent.getMessages()
-                                state.contextTokens = ContextManager.estimateContextTokens(messages: messages)
-                            }
-                        case .system(let data):
-                            if data.subtype == .compactBoundary {
-                                if data.compactResult == "failed" {
-                                    state.consecutiveCompactFailures += 1
-                                    fputs(
-                                        ContextManager.formatCompactFailureMessage(
-                                            failureCount: state.consecutiveCompactFailures
-                                        ),
-                                        stderr
-                                    )
-                                } else if let metadata = data.compactMetadata,
-                                          let postTokens = metadata.postTokens,
-                                          let preTokens = metadata.preTokens
-                                {
-                                    state.contextTokens = postTokens
-                                    state.consecutiveCompactFailures = 0
-                                    fputs(
-                                        ContextManager.formatCompactMessage(
-                                            beforeTokens: preTokens,
-                                            afterTokens: postTokens
-                                        ),
-                                        stderr
-                                    )
-                                } else {
-                                    let messages = state.buildResult.agent.getMessages()
-                                    state.contextTokens = ContextManager.estimateContextTokens(
-                                        messages: messages
-                                    )
-                                    fputs(
-                                        ContextManager.formatCompactMessage(
-                                            beforeTokens: state.contextTokens * 3,
-                                            afterTokens: state.contextTokens
-                                        ),
-                                        stderr
-                                    )
-                                }
-                            }
-                        default:
-                            break
-                        }
-                    }
-                    escListener.cancel()
-                    composer.slashContext = SlashCommandContext(isAgentBusy: false, isSideSession: false)
-                    if contextPct > 80 {
-                        terminalTitle.setContextWarning(pct: contextPct)
-                    } else {
-                        terminalTitle.setIdle()
-                    }
-                    let interruptCount = SignalHandler.fireCount()
-                    if interruptCount > 0 {
-                        let now = ContinuousClock.now
-                        if let last = state.lastInterruptTime,
-                           chatShouldExit(lastInterrupt: last, now: now)
-                        {
-                            break
-                        }
-                        state.lastInterruptTime = now
-                        composer.prefill = displayText
-                    } else {
-                        let turnElapsed = ContinuousClock.now - turnStartTime
-                        let turnDuration = formatDuration(turnElapsed)
-                        let turnInputDelta = state.sessionUsage.inputTokens - preTurnUsage.inputTokens
-                        let turnOutputDelta = state.sessionUsage.outputTokens - preTurnUsage.outputTokens
-                        sessionTotalTools += turnToolCount
-                        fputs(
-                            transcriptRenderer.renderTurnSummary(
-                                duration: turnDuration,
-                                toolCount: turnToolCount,
-                                inputTokens: BannerRenderer.formatTokenCount(turnInputDelta),
-                                outputTokens: BannerRenderer.formatTokenCount(turnOutputDelta)
-                            ),
-                            stderr
-                        )
-                        if let fileSummary = turnFileTracker.renderSummary(
-                            isTTY: isatty(STDERR_FILENO) != 0,
-                            profile: colorProfile
-                        ) {
-                            fputs(fileSummary, stderr)
-                        }
-                        desktopNotifier.notify(.agentTurnComplete(preview: lastAssistantText))
-                        if !inputQueue.isEmpty {
-                            skipNextRead = true
-                        }
-                        state.lastInterruptTime = nil
-                        outputHandler.displayCompletion()
-                        fputs("\n", stdout)
-                    }
-                    continue
+                    // SkillRegistry 匹配到 — 使用 executeSkillStream（SDK 专用 skill 执行路径）
+                    matchedSkillExec = (name: matchedSkill.name, args: skillArg)
                 }
-                fputs(SlashCommandHandler.handleUnknown(trimmed), stderr)
-                continue
+                // 无论是否匹配 SkillRegistry，都落入 agent stream 执行
+                // agent 会通过 SkillTool 处理未知的 /xxx 输入
             }
 
             // ── Execute agent stream ────────────────────────────────────
@@ -598,7 +466,14 @@ struct ChatCommand: AsyncParsableCommand {
                 currentAgent.interrupt()
             }
 
-            let messageStream = state.buildResult.agent.stream(trimmed)
+            let messageStream: AsyncStream<SDKMessage>
+            if let skillExec = matchedSkillExec {
+                // SkillRegistry 匹配 — 使用 SDK 专用 skill 执行路径
+                messageStream = state.buildResult.agent.executeSkillStream(skillExec.name, args: skillExec.args)
+            } else {
+                // 普通对话 或 未知 /xxx（agent 通过 SkillTool 自行处理）
+                messageStream = state.buildResult.agent.stream(taskText)
+            }
             for await message in messageStream {
                 // Ctrl+C 中断时：抑制 "执行错误" 显示
                 if SignalHandler.fireCount() > 0 {

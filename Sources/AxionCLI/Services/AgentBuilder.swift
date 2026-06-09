@@ -206,6 +206,7 @@ enum AgentBuilder {
             logLevel: buildConfig.verbose ? .debug : .info,
             pauseTimeoutMs: 300_000
         )
+        agentOptions.todoStore = TodoStore()
         agentOptions.maxModelCalls = config.maxModelCalls
         agentOptions.env = config.env
         agentOptions.runId = buildConfig.runId

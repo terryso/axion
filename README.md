@@ -8,7 +8,7 @@
 [![DeepWiki](https://img.shields.io/badge/DeepWiki-_.svg?style=flat&color=00b0aa&labelColor=000000&logo=data:image/svg%2Bxml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIxNiIgaGVpZ2h0PSIxNiIgdmlld0JveD0iMCAwIDI0IDI0IiBmaWxsPSJub25lIiBzdHJva2U9IiNmZmYiIHN0cm9rZS13aWR0aD0iMiIgc3Ryb2tlLWxpbmVjYXA9InJvdW5kIiBzdHJva2UtbGluZWpvaW49InJvdW5kIj48cGF0aCBkPSJNMiAzaDZhMTAgMTAgMCAwIDEgMTAgMTB2MiIvPjxwYXRoIGQ9Ik0yIDEzaDYxMCAxMCAwIDAgMSAxMCAxMHYyIi8+PC9zdmc+)](https://deepwiki.com/terryso/axion)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue)](./LICENSE)
 
-macOS AI agent powered by an LLM-driven Plan-Execute-Verify loop, with native desktop automation, cross-run memory, and record-and-replay skills.
+A full-spectrum AI agent for macOS — interactive coding, file editing, web search, shell commands, and 21 native desktop automation tools. All in one terminal.
 
 [English](#english) | [中文](./README.zh-CN.md)
 
@@ -18,94 +18,49 @@ macOS AI agent powered by an LLM-driven Plan-Execute-Verify loop, with native de
 
 ## Overview
 
-Axion is a Swift-based AI agent for macOS that takes natural language task descriptions and autonomously plans and executes actions. It combines core tools (Bash, file operations, web search) with 21 native desktop automation tools via MCP (Model Context Protocol), plus browser automation via Playwright. Use the built-in CLI directly, or integrate via HTTP API / MCP Server mode.
+Axion is a Swift-based AI agent that lives in your terminal. Type `axion` and start a conversation — it writes code, edits files, runs shell commands, searches the web, reads documentation, and when needed, takes control of macOS desktop apps via native accessibility APIs. Think of it as Claude Code with superpowers for GUI automation.
 
 **Key highlights:**
 
-- **Interactive Coding Agent** — Run `axion` with no arguments for a Claude Code–like REPL with slash commands, permission approvals, multiline input, session resume, and CJK support
-- **Versatile Tool Selection** — Automatically picks the right tool: Bash for CLI tasks, MCP for GUI interactions, Playwright for browser automation, or Skills for specialized workflows
+- **Interactive Coding Agent** — `axion` launches a Claude Code–like REPL with streaming output, slash commands (`/help`, `/clear`, `/diff`, `/model`, `/cost`, …), file edit approval diffs, multiline input with CJK support, and session resume
+- **Full Tool Spectrum** — Bash execution, file read/write/edit, code search (Grep/Glob), web search & fetch, LSP code intelligence — plus 21 native macOS desktop tools via MCP when you need GUI
+- **Context-Aware File Editing** — Diff-based approval flow shows exactly what changes before applying. Tracks file modifications per turn with `/diff` summary
+- **Cross-run Memory** — Two complementary memory systems: App operation facts (auto-extracted from tool calls) and Universal Memory (environment knowledge + user profile)
 - **SDK Skill System** — Prompt skills, recorded skills, and built-in desktop skills with dual-track lookup and skill-scoped memory
-- **Record & Replay Skills** — Record a workflow once, replay it instantly without LLM calls
-- **HTTP API Server** — Integrate with CI/CD and external systems via REST + SSE
-- **MCP Server Mode** — Act as a desktop plugin for external agents (Claude Code, Cursor, etc.), while also supporting CLI, file, and web tasks standalone
-- **Telegram Gateway** — Always-on remote control via Telegram bot with streaming responses, interactive approval keyboards, and extensible command system
-- **User Takeover** — Pause and resume when automation gets stuck
-- **Completion Notifications** — macOS desktop notification with AI-generated summary when tasks finish
+- **Record & Replay** — Record a workflow once, replay it instantly without LLM calls
+- **HTTP API & MCP Server** — Integrate with CI/CD or let external agents (Claude Code, Cursor) use Axion's tools
+- **Telegram Gateway** — Always-on remote control with streaming responses, interactive approval keyboards, and extensible command system
 - **Self-Evolution** — Background review agent and intelligent curator automatically extract memory, evolve skills, and manage skill lifecycle after each run
-- **Runtime Event Layer** — 18 typed events via EventBus with 7 built-in handlers (cost tracking, notifications, visual delta, seat monitoring, tracing, memory, review)
+- **Completion Notifications** — macOS desktop notification with AI-generated summary when tasks finish
 
 ## Architecture
 
 ```
-┌───────────────────────────────────────────────────────────┐
-│                          AxionCLI                          │
-│  Interactive Chat · run / setup / doctor / server / mcp   │
-│  record / skill / daemon / resume / sessions / gateway    │
-│  Agent Stream Loop · Memory · Takeover                    │
-│  Skill System · Built-in Skills · Skill + Memory Context  │
-│  Runtime Event Layer · EventBus · EventHandlers (7)       │
-│  Gateway: Telegram · Streaming · Interactive Approval     │
-│  Interactive Chat: Slash Commands · Permissions · CJK     │
-├──────────────────────┬────────────────────────────────────┤
-│      AxionCore       │           AxionHelper              │
-│  Models, Protocols,  │  MCP Server                        │
-│  Config, Errors      │  21 Native macOS Automation Tools  │
-└──────────────────────┴────────────────────────────────────┘
+┌───────────────────────────────────────────────────────────────┐
+│                            AxionCLI                            │
+│                                                                │
+│   Interactive Chat (default)         Desktop Automation       │
+│   ├── Streaming Markdown             ├── axion run "task"      │
+│   ├── Slash Commands (14)            ├── MCP Tools (21)        │
+│   ├── File Edit Approval             ├── Record & Replay       │
+│   ├── Session Resume                 └── User Takeover         │
+│   └── CJK Input                                                │
+│                                                                │
+│   Core Tools: Bash · File R/W · Grep/Glob · Web · LSP         │
+│   Skill System: Prompt + Recorded + Built-in Skills            │
+│   Memory: App Facts + Universal (MEMORY.md / USER.md)         │
+│   Runtime: EventBus · 7 EventHandlers · Trace · Self-Evolve   │
+│   Server: HTTP API (REST+SSE) · MCP Server · Telegram Gateway │
+├──────────────────────┬────────────────────────────────────────┤
+│      AxionCore       │            AxionHelper                  │
+│  Models, Protocols,  │   MCP Server (stdio)                   │
+│  Config, Errors      │   21 Native macOS Automation Tools     │
+└──────────────────────┴────────────────────────────────────────┘
 ```
 
-- **AxionCLI** — CLI entry point with interactive coding agent (chat mode), desktop automation (run mode), memory, skill system (prompt + recorded + built-in), daemon management, server modes, Telegram gateway with streaming and interactive approval, and completion notifications
-- **AxionCore** — Shared model layer (RunConfig, AxionConfig) and protocol definitions
-- **AxionHelper** — MCP server process providing 21 native macOS automation tools via stdio
-
-## MCP Tools (21)
-
-### App Management
-| Tool | Description |
-|------|-------------|
-| `launch_app` | Launch a macOS app by name (detects blocking dialogs) |
-| `list_apps` | List all running applications |
-| `quit_app` | Quit a running application |
-| `activate_window` | Activate (bring to front) a specific window |
-
-### Window Management
-| Tool | Description |
-|------|-------------|
-| `list_windows` | List windows (filterable by process ID) |
-| `get_window_state` | Get the state of a specific window |
-| `move_window` | Move a window to a new position |
-| `resize_window` | Move and/or resize a window |
-| `validate_window` | Check if a window exists and is actionable |
-| `arrange_windows` | Arrange multiple windows (tile, cascade) |
-
-### Mouse Operations
-| Tool | Description |
-|------|-------------|
-| `click` | Click at coordinates or by AX selector |
-| `click_element` | Click an element by title/role — no coordinate lookup needed |
-| `double_click` | Double-click at coordinates or by AX selector |
-| `right_click` | Right-click at coordinates or by AX selector |
-| `drag` | Drag from one point to another |
-| `scroll` | Scroll by direction and amount |
-
-### Keyboard Operations
-| Tool | Description |
-|------|-------------|
-| `type_text` | Type text at the current cursor position |
-| `press_key` | Press a single key |
-| `hotkey` | Press a keyboard shortcut combination |
-
-### Screen & Accessibility
-| Tool | Description |
-|------|-------------|
-| `screenshot` | Take a screenshot (full screen or specific window) |
-| `get_accessibility_tree` | Get the accessibility tree of a window |
-| `get_file_info` | Get file metadata (size, dates, permissions) |
-
-### Recording
-| Tool | Description |
-|------|-------------|
-| `start_recording` | Start capturing user input events in listen-only mode |
-| `stop_recording` | Stop recording and return captured events |
+- **AxionCLI** — The agent you interact with. Default mode is an interactive REPL; `axion run` for single-shot tasks. Includes the full tool suite, memory, skills, event handlers, and server modes
+- **AxionCore** — Shared model layer (RunConfig, AxionConfig, Skill) and protocol definitions
+- **AxionHelper** — Separate MCP server process providing 21 native macOS automation tools via stdio
 
 ## Quick Start
 
@@ -113,7 +68,6 @@ Axion is a Swift-based AI agent for macOS that takes natural language task descr
 
 - macOS 14+
 - Xcode 16+ (Swift 6.1)
-- Accessibility and Screen Recording permissions
 
 ### Install
 
@@ -145,60 +99,135 @@ axion doctor
 ### Usage
 
 ```bash
-# Interactive coding agent (Claude Code-like REPL)
+# Start interactive chat (default command — just type axion)
 axion
 
-# Execute a single desktop automation task
-axion run "Open Calculator and compute 123 + 456"
+# Ask it anything
+> analyze the error logs in ~/Logs/app.log
+> refactor the UserService to use async/await
+> search the web for Swift 6.2 concurrency changes
 
-# CLI tasks use Bash directly — no GUI needed
-axion run "Compress ~/Downloads/video.mp4 using ffmpeg"
-axion run "Check disk usage of ~/Documents"
-axion run "Search the web for Guangzhou weather today"
+# It edits files with approval
+> fix the memory leak in Sources/App/Cache.swift
+# → shows diff, asks for approval before applying
 
-# Dry-run mode (generates a plan without executing)
-axion run --dryrun "Open Calculator and compute 123 + 456"
+# Need desktop automation? It can do that too
+> open Safari and check the weather for tomorrow
+> arrange Finder and Terminal side by side
 
-# Fast mode — fewer LLM calls for simple tasks
-axion run --fast "Open Calculator"
-
-# Limit maximum steps
-axion run --max-steps 10 "Create a new note in Notes"
-
-# Disable post-run review and curator
-axion run --no-review "Open Calculator"
+# Check what changed
+> /diff          # git diff summary for this session
+> /cost          # token usage and cost breakdown
+> /status        # session state card
 ```
 
-## Core Features
-
-### Completion Notifications
-
-When a task finishes, Axion sends a macOS desktop notification with three lines:
-
-1. **Status** — completed / failed / cancelled
-2. **AI Summary** — auto-generated one-line result summary (max 100 chars)
-3. **Stats** — elapsed time, LLM calls, estimated cost
-
-If the task involved UI operations (desktop automation), Axion automatically brings the terminal window back to the foreground so you can immediately see the results.
-
-Notifications are skipped in JSON mode for programmatic use.
-
-### User Takeover
-
-When automation gets stuck, Axion pauses and lets you take over manually. Complete the action yourself, then press Enter to resume. Imperfect automation beats no automation.
-
-Available options when paused:
-- Press **Enter** — resume after manual fix
-- Type **skip** — skip the current step
-- Type **abort** — cancel the task
-- Type a description — describe what you did (e.g., "used Cmd+Shift+G to enter path")
-
-Takeover experiences are automatically recorded as Memory, helping the Planner avoid similar blocks in the future. You can also manually record experiences:
+**Single-shot mode** for scripts and CI:
 
 ```bash
-axion memory learn-takeover --bundle-id com.apple.finder \
-  --issue "file dialog not accessible via AX" \
-  --summary "used Cmd+Shift+G to enter path directly"
+# Run one task and exit
+axion run "Compress ~/Downloads/video.mp4 using ffmpeg"
+axion run "Search the web for Guangzhou weather today"
+axion run "Open Calculator and compute 123 + 456"
+
+# Flags
+axion run --dryrun "Open Calculator"            # plan only, no execution
+axion run --fast "Open Calculator"               # fewer LLM calls for simple tasks
+axion run --max-steps 10 "Create a new note"     # limit max steps
+axion run --no-review "Open Calculator"          # skip post-run review
+```
+
+## Core Capabilities
+
+### Built-in Tools
+
+| Category | Tools | Description |
+|----------|-------|-------------|
+| **Shell** | `Bash` | Execute any shell command |
+| **File** | `Read`, `Write`, `Edit` | Read, create, and make targeted edits to files |
+| **Search** | `Grep`, `Glob` | Search file contents (regex) and find files by name patterns |
+| **Web** | `WebSearch`, `WebFetch` | Search the web and fetch/read web pages |
+| **Code Intelligence** | `LSP` | Go-to-definition, find-references, hover info |
+| **Memory** | `memory` | Persist and recall knowledge across sessions |
+| **Skills** | `Skill` | Invoke specialized workflow skills |
+| **Desktop** | 21 MCP tools | Native macOS automation (see below) |
+
+### Desktop Automation (21 MCP Tools)
+
+Axion's unique advantage — when CLI tools aren't enough, it controls macOS GUI apps natively.
+
+#### App Management
+| Tool | Description |
+|------|-------------|
+| `launch_app` | Launch a macOS app by name (detects blocking dialogs) |
+| `list_apps` | List all running applications |
+| `quit_app` | Quit a running application |
+| `activate_window` | Activate (bring to front) a specific window |
+
+#### Window Management
+| Tool | Description |
+|------|-------------|
+| `list_windows` | List windows (filterable by process ID) |
+| `get_window_state` | Get the state of a specific window |
+| `move_window` | Move a window to a new position |
+| `resize_window` | Move and/or resize a window |
+| `validate_window` | Check if a window exists and is actionable |
+| `arrange_windows` | Arrange multiple windows (tile, cascade) |
+
+#### Mouse Operations
+| Tool | Description |
+|------|-------------|
+| `click` | Click at coordinates or by AX selector |
+| `click_element` | Click an element by title/role — no coordinate lookup needed |
+| `double_click` | Double-click at coordinates or by AX selector |
+| `right_click` | Right-click at coordinates or by AX selector |
+| `drag` | Drag from one point to another |
+| `scroll` | Scroll by direction and amount |
+
+#### Keyboard Operations
+| Tool | Description |
+|------|-------------|
+| `type_text` | Type text at the current cursor position |
+| `press_key` | Press a single key |
+| `hotkey` | Press a keyboard shortcut combination |
+
+#### Screen & Accessibility
+| Tool | Description |
+|------|-------------|
+| `screenshot` | Take a screenshot (full screen or specific window) |
+| `get_accessibility_tree` | Get the accessibility tree of a window |
+| `get_file_info` | Get file metadata (size, dates, permissions) |
+
+#### Recording
+| Tool | Description |
+|------|-------------|
+| `start_recording` | Start capturing user input events in listen-only mode |
+| `stop_recording` | Stop recording and return captured events |
+
+### Interactive Chat
+
+The default `axion` command opens a REPL with rich terminal UX:
+
+- **Streaming output** — Markdown, code blocks, and tool results rendered in real time
+- **File edit approval** — Shows a diff preview before applying changes; approve, reject, or edit
+- **14 slash commands** — `/help`, `/clear`, `/compact`, `/model`, `/cost`, `/diff`, `/status`, `/resume`, `/config`, `/new`, `/fork`, `/archive`, `/skills`, `/exit`
+- **Multiline input** — Paste or compose multi-line prompts naturally
+- **CJK support** — Full Chinese/Japanese/Korean input handling
+- **Session persistence** — Conversations auto-saved; resume with `/resume` or `axion resume`
+- **Context management** — `/compact` when context gets long, `/clear` to start fresh
+- **Permission modes** — `--accept-edits` for auto-approve file edits, `--dangerously-skip-permissions` for full auto
+
+```bash
+# Standard interactive mode
+axion
+
+# Auto-approve file edits (still confirms destructive operations)
+axion --accept-edits
+
+# Resume a previous session
+axion resume
+
+# List all sessions
+axion sessions
 ```
 
 ### Cross-run Memory
@@ -220,10 +249,6 @@ axion memory show user      # User profile/preferences (USER.md)
 # Clear memory for a specific app
 axion memory clear --app com.apple.calculator
 
-# Clear universal memory
-axion memory clear --type memory
-axion memory clear --type user
-
 # Disable memory for a single run
 axion run --no-memory "Open Calculator"
 ```
@@ -234,9 +259,9 @@ Memory files are stored in `~/.axion/memory/` and scanned for security threats (
 
 After each run, Axion automatically triggers a **background review** that analyzes the conversation, extracts memory, and evolves skills — no user action required.
 
-**Review Agent** — Automatically runs after `axion run` completes:
+**Review Agent** — Automatically runs after task completion:
 - Checks if review is needed based on message count and scheduling interval
-- Forks a lightweight review agent (Haiku model) that inspects the conversation
+- Forks a lightweight review agent that inspects the conversation
 - Extracts new memory facts and evolves skill definitions
 - Runs in a detached task — does not block the terminal
 
@@ -254,36 +279,54 @@ axion run --review-model claude-haiku-4-5-20251001 "Open Calculator"
 - Runs automatically when the configured interval elapses
 
 ```bash
-# View curator status and next run time
-axion curator status
-
-# Force-run curator immediately
-axion curator run
-
-# Dry-run (see what would change without modifying)
-axion curator run --dry-run
+axion curator status     # View status and next run time
+axion curator run        # Force-run immediately
+axion curator run --dry-run  # Preview changes without modifying
 ```
 
-**Skill usage tracking** — Every skill invocation via the `Skill` tool is automatically counted, providing data for curator decisions.
+### Skill System
 
-Review and curator results appear as trace events in `~/.axion/runs/<run-id>/review-trace.jsonl`.
+Axion integrates with [OpenAgentSDK](https://github.com/terryso/open-agent-sdk-swift)'s Skill system, supporting three types:
+
+| Type | Source | Description |
+|------|--------|-------------|
+| **Prompt Skills** | `~/.claude/skills/*/SKILL.md` | Markdown-defined prompt templates with optional tool restrictions |
+| **Recorded Skills** | `~/.axion/skills/` | JSON workflows compiled from user recordings — no LLM needed for replay |
+| **Built-in Skills** | Registered in code | `screenshot-analyze`, `data-extract`, `form-fill` — always available |
+
+**Triggering skills:**
+
+```bash
+# Explicit — prefix with /
+axion run "/screenshot-analyze analyze the current screen layout"
+
+# Implicit — the LLM automatically picks the right skill based on intent
+axion run "fill out the form on screen"
+
+# Dedicated command
+axion skill run open-calculator
+```
+
+**Recording workflows:**
+
+```bash
+axion record "open_calculator"    # Start recording
+# ... perform desktop operations ...
+# Ctrl-C to stop
+
+axion skill compile open_calculator  # Compile into reusable skill
+axion skill run open_calculator      # Replay (no LLM — fast & deterministic)
+axion skill list                     # List all skills
+```
 
 ### HTTP API Server
 
 Run Axion as a service for external integrations:
 
 ```bash
-# Start API server
-axion server --port 4242
-
-# With authentication
-axion server --port 4242 --auth-key mysecret
-
-# Limit concurrent tasks
-axion server --port 4242 --max-concurrent 3
+axion server --port 4242                # Start API server
+axion server --port 4242 --auth-key secret  # With authentication
 ```
-
-API endpoints:
 
 | Method | Path | Description |
 |--------|------|-------------|
@@ -300,11 +343,8 @@ API endpoints:
 Axion can act as an MCP server for external agents:
 
 ```bash
-# Start as MCP stdio server
-axion mcp
+axion mcp    # Start MCP stdio server
 ```
-
-Add to your Claude Code MCP configuration:
 
 ```json
 {
@@ -319,226 +359,55 @@ Add to your Claude Code MCP configuration:
 
 ### Telegram Gateway
 
-Always-on remote control via Telegram bot. Chat with Axion from your phone, receive streaming responses with typing indicators, and interact with inline keyboards for approval and skill browsing.
-
-**Setup:**
+Always-on remote control via Telegram bot with streaming responses, interactive approval keyboards, and skill browsing.
 
 ```bash
-# Configure Telegram bot token and allowed users
-axion setup
-
-# Start gateway (standalone)
-axion gateway start
-
-# Start as launchd daemon (auto-start on login)
-axion daemon install --port 4242 --gateway
+axion setup                              # Configure bot token & allowed users
+axion gateway start                      # Start gateway
+axion daemon install --port 4242 --gateway  # Auto-start on login
 ```
-
-**Built-in commands:**
 
 | Command | Description |
 |---------|-------------|
 | `/help` | Getting started guide |
-| `/commands` | List all commands |
 | `/status` | Gateway status |
 | `/skills` | Browse available skills (paginated inline keyboard) |
 | `/new` | Start a new session |
-| `/queue` | View task queue |
 | `/stop` | Stop current task |
 
-**Interactive features:**
-- **Streaming responses** — Real-time typing indicators and incremental message updates during task execution
-- **Interactive approval** — Inline keyboard buttons for approve/reject/clarify when the agent needs user confirmation
-- **Skill browsing** — Paginated inline keyboard for browsing and triggering skills with one tap
-- **Rich text rendering** — Markdown formatting converted to Telegram-compatible HTML
-- **Task queuing** — Serial execution with queue management for concurrent requests
+### User Takeover
 
-### Record and Replay Skills
+When automation gets stuck, Axion pauses and lets you take over manually. Complete the action yourself, then press Enter to resume.
 
-Record a workflow once, replay it anytime without LLM planning:
+- Press **Enter** — resume after manual fix
+- Type **skip** — skip the current step
+- Type **abort** — cancel the task
+- Type a description — describe what you did (recorded as Memory)
 
-```bash
-# Record your actions
-axion record "open_calculator"
-# ... perform desktop operations ...
-# Press Ctrl-C to stop recording
+### Completion Notifications
 
-# Compile recording into a reusable skill
-axion skill compile open_calculator
-
-# Run the skill (no LLM needed — fast and deterministic)
-axion skill run open_calculator
-
-# List all saved skills
-axion skill list
-
-# Delete a skill
-axion skill delete open_calculator
-```
-
-Skills are stored as JSON in `~/.axion/skills/` and can be parameterized with `--param`.
-
-### Multi-window Workflows
-
-Coordinate operations across multiple applications — copy data from browser to spreadsheet, extract attachments from mail to Finder, and chain end-to-end workflows across apps.
-
-```bash
-axion run "Copy the page title from Safari and paste it into TextEdit"
-axion run "Put Safari and TextEdit side by side, Safari on the left"
-```
-
-The `arrange_windows` tool supports layouts: `tile-left-right`, `tile-top-bottom`, `cascade`.
-
-### Third-party SDK Ecosystem
-
-Axion serves as the flagship reference implementation of [OpenAgentSDK](https://github.com/terryso/open-agent-sdk-swift). Third-party developers can:
-
-- Use the project template to scaffold new Agent apps
-- Register custom tools via the `@Tool` macro
-- Integrate with Axion's desktop capabilities via `axion mcp`
-- Build on the same MCP + Agent Loop architecture
-
-### SDK Skill System
-
-Axion integrates with [OpenAgentSDK](https://github.com/terryso/open-agent-sdk-swift)'s Skill system, supporting two types of skills:
-
-- **Prompt Skills** — Discovered from `~/.claude/skills/*/SKILL.md` files, each defining a `promptTemplate`, optional `toolRestrictions`, and `modelOverride`
-- **Recorded Skills** — JSON files in `~/.axion/skills/` compiled from user recordings
-
-**Dual-track lookup** — When a skill name is referenced, Axion checks prompt skills first, then falls back to recorded skills. Same-name skills always resolve to the prompt version.
-
-**Explicit triggering** — Type `/skill-name` as the task prefix to invoke a specific skill directly:
-
-```bash
-# Trigger a prompt skill directly
-axion run "/screenshot-analyze analyze the current screen layout"
-
-# Trigger a recorded skill directly
-axion run "/open-calculator"
-
-# Or use the dedicated command
-axion skill run open-calculator
-```
-
-**Implicit triggering** — Axion injects a curated list of available skills into the system prompt. The LLM can automatically invoke the right skill based on the user's intent without explicit mention.
-
-**Built-in desktop skills** — Three skills are registered in code (no filesystem files needed):
-
-| Skill | Aliases | Description |
-|-------|---------|-------------|
-| `screenshot-analyze` | `sa`, `analyze`, `screen` | Capture and analyze the current screen |
-| `data-extract` | `extract`, `de` | Extract structured data from visible content |
-| `form-fill` | `fill`, `ff` | Fill form fields automatically |
-
-```bash
-# List all available skills (prompt + recorded + built-in)
-axion skill list
-
-# Disable skill system for a single run
-axion run --no-skills "Open Calculator"
-```
-
-**Skill + Memory integration** — Skills interact with the cross-run memory system:
-
-- Successful skill execution records an `affordance` fact scoped to `skill:{name}`
-- Failed execution records an `avoid` fact so the Planner learns from errors
-- Before execution, up to 3 relevant skill-scoped memories are injected into the prompt
-- Use `--no-memory` to skip both injection and recording
-
-**HTTP API skill endpoints:**
-
-| Method | Path | Description |
-|--------|------|-------------|
-| `GET` | `/v1/skills` | List all skills (merged prompt + recorded, with `type` field) |
-| `GET` | `/v1/skills/{name}` | Get skill detail (type, step_count, parameter_count) |
-| `POST` | `/v1/skills/{name}/run` | Execute a skill via API (`{"task": "..."}`) |
-
-### Runtime Event Layer
-
-Axion integrates with [OpenAgentSDK](https://github.com/terryso/open-agent-sdk-swift)'s Runtime Event Layer — an `EventBus`-based pub/sub system that decouples agent lifecycle concerns from the core execution loop. 18 typed events across 4 categories are emitted automatically during agent execution.
-
-**Event categories:**
-
-| Category | Events |
-|----------|--------|
-| **Session** | `SessionCreatedEvent`, `SessionRestoredEvent`, `SessionClosedEvent`, `SessionAutoSavedEvent` |
-| **Agent** | `AgentStartedEvent`, `AgentCompletedEvent`, `AgentFailedEvent`, `AgentInterruptedEvent`, `AgentResumedEvent` |
-| **Tool** | `ToolStartedEvent`, `ToolStreamingEvent`, `ToolCompletedEvent`, `ToolFailedEvent` |
-| **LLM** | `LLMRequestStartedEvent`, `LLMResponseReceivedEvent`, `LLMCostEvent`, `LLMTokenStreamEvent` |
-
-**Built-in event handlers:**
-
-| Handler | Description |
-|---------|-------------|
-| `CostEventHandler` | Prints LLM usage summary (turns, tokens, cost) to stderr on agent completion/failure/interrupt |
-| `NotificationHandler` | Sends macOS desktop notification with AI-generated summary when a task finishes |
-| `VisualDeltaHandler` | Detects visual changes via screenshot comparison after tool execution |
-| `SeatMonitorHandler` | Monitors for external user activity during long-running tool calls (shared-seat mode) |
-| `TraceEventHandler` | Appends structured JSONL event traces to `~/.axion/runs/<run-id>/events.jsonl` |
-| `MemoryProcessingHandler` | Triggers post-run memory extraction and skill evolution after agent completion |
-| `ReviewHandler` | Launches background review agent after successful task completion |
-
-**Event flow:**
-
-```
-Agent SDK  →  EventBus.publish(event)  →  AsyncStream  →  AxionRuntime.dispatchToHandlers()
-                                                                   ↓
-                                                          EventHandler.handle(event, context)
-```
-
-The `AxionRuntime` actor manages the event loop lifecycle:
-1. `registerHandler()` — registers event handlers with optional type filtering
-2. `startEventLoop()` — subscribes to the EventBus and begins dispatching events
-3. `stopEventLoop()` — gracefully unsubscribes and stops dispatching
-
-Handlers are actors — AxionRuntime dispatches events in independent Tasks, and actor isolation guarantees thread-safe mutable state.
-
-**SSE bridge for HTTP API:** `EventBusBridge` forwards all events to SSE clients via `EventBroadcaster`, enabling real-time monitoring of agent execution through the `/v1/runs/{id}/events` endpoint.
-
-**Session resume:** `AxionRuntime` supports resuming interrupted sessions via `resumeSession()`, restoring agent state and reconnecting the event loop. The `SessionListing` protocol exposes `listSessions()` for querying persisted session history.
+When a task finishes, Axion sends a macOS desktop notification with:
+1. **Status** — completed / failed / cancelled
+2. **AI Summary** — auto-generated one-line result summary
+3. **Stats** — elapsed time, LLM calls, estimated cost
 
 ### Daemon Mode & Crash Recovery
 
-Run Axion as a persistent launchd daemon that survives reboots and auto-restarts on crashes. All running task state is persisted to disk, so in-flight tasks are automatically recovered after an unexpected server termination.
-
-**Daemon management:**
+Run Axion as a persistent launchd daemon that survives reboots and auto-restarts on crashes:
 
 ```bash
-# Install as a launchd agent (auto-start on login)
-axion daemon install --port 4242
-
-# With authentication
-axion daemon install --port 4242 --auth-key mysecret
-
-# Check daemon status
-axion daemon status
-
-# Uninstall (stops service and removes plist)
-axion daemon uninstall
-
-# Uninstall but keep log files
-axion daemon uninstall --keep-logs
+axion daemon install --port 4242         # Install (auto-start on login)
+axion daemon status                      # Check status
+axion daemon uninstall                   # Uninstall
 ```
 
-**Key daemon properties:**
-- **Auto-start** — `RunAtLoad: true` starts on login
-- **Crash recovery** — `KeepAlive: true` restarts on any exit
-- **Log files** — stdout → `~/.axion/server.log`, stderr → `~/.axion/server.err.log`
-- **ThrottleInterval** — 10s minimum between restart attempts
+All running task state is persisted to disk — in-flight tasks are automatically recovered after unexpected termination.
 
-**Task state persistence:**
-- All task state (`api-output.json`) and SSE events (`api-events.jsonl`) are written to `~/.axion/api-runs/` in real-time
-- On server restart, `RunRecoveryService` loads all persisted runs and:
-  - Marks `running`/`queued`/`resuming`/`userTakeover` tasks as `failed` with error `"server interrupted"`
-  - Preserves `intervention_needed`, `completed`, `failed`, and `cancelled` states unchanged
-  - Restores SSE event history so late subscribers can replay past events
-
-## Use as an MCP Server (Standalone Helper)
+## Use as Standalone MCP Server
 
 AxionHelper can run as a standalone MCP server for any MCP client:
 
 ```bash
-# Start MCP stdio server
 .build/release/AxionHelper
 ```
 
@@ -595,35 +464,30 @@ swift test --filter AxionHelperIntegrationTests
 
 ```
 Sources/
-├── AxionCLI/              # CLI entry point and commands
-│   ├── Commands/          # run, setup, doctor, server, mcp, record, skill, daemon, curator subcommands
-│   ├── Config/            # Configuration management
-│   ├── Checks/            # Environment and permission checks
-│   ├── Constants/         # CLI-specific constants
-│   ├── IO/                # Output handlers and takeover I/O
-│   ├── MCP/               # MCPServerRunner (Agent-as-MCP-Server)
-│   ├── API/               # HTTP API server, SSE events
-│   ├── Memory/            # MemoryContextProvider, RunMemoryProcessor
-│   ├── Planner/           # PromptBuilder
-│   ├── Skills/            # SkillRegistry, AxionBuiltInSkills
-│   ├── Helper/            # HelperProcessManager (stdio lifecycle)
-│   ├── Runtime/           # EventHandlers (Cost, Notification, VisualDelta, SeatMonitor, Trace, Memory, Review)
-│   ├── Trace/              # TraceRecorder (review/curator trace events)
-│   └── Services/          # RunOrchestrator, AgentBuilder, AxionRuntime, EventBus, shared services
+├── AxionCLI/              # Agent entry point
+│   ├── Chat/              # Interactive REPL (streaming, approval, composer, CJK)
+│   ├── Commands/          # CLI subcommands (chat, run, setup, server, mcp, …)
+│   ├── Tools/             # Built-in tool implementations
+│   ├── Memory/            # Memory context, extraction, security scanner
+│   ├── Skills/            # Skill registry and built-in skills
+│   ├── Permissions/       # Tool permission system
+│   ├── Helper/            # Helper process lifecycle (stdio)
+│   ├── Runtime/           # Event handlers (cost, notification, visual delta, …)
+│   ├── Services/          # AxionRuntime, AgentBuilder, RunOrchestrator, Gateway
+│   └── API/               # HTTP API server, SSE bridge
 ├── AxionCore/             # Shared core layer
-│   ├── Models/            # RunConfig, AxionConfig, AppProfile
+│   ├── Models/            # RunConfig, AxionConfig, Skill
 │   ├── Protocols/         # Service protocols
-│   ├── Errors/            # Error types
-│   └── Constants/         # ToolNames and shared constants
+│   ├── Errors/            # Unified AxionError
+│   └── Constants/         # ToolNames, Version
 ├── AxionHelper/           # MCP server (Helper process)
-│   ├── MCP/               # MCPServer and ToolRegistrar (21 tools)
-│   ├── Services/          # AccessibilityEngine, Screenshot, InputSimulation, EventRecorder
-│   ├── Models/            # AppInfo, WindowInfo, AXElement, SelectorQuery
-│   └── Protocols/         # Service protocol definitions
+│   ├── MCP/               # MCPServer, ToolRegistrar (21 tools)
+│   ├── Services/          # AccessibilityEngine, Screenshot, InputSimulation
+│   └── Models/            # AppInfo, WindowInfo, AXElement
 
 Tests/
 ├── AxionCoreTests/        # Core model unit tests
-├── AxionCLITests/         # CLI command tests
+├── AxionCLITests/         # CLI command and service tests
 ├── AxionHelperTests/      # Helper tool and service tests
 │   ├── Tools/             # Tool unit tests
 │   ├── Models/            # Model tests

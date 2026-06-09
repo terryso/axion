@@ -47,3 +47,7 @@
 ## Deferred from: TG Message UX Simplification review (2026-06-01)
 
 - Group-chat session isolation — `TaskSerialQueue` resumes Telegram sessions by `chatId` only, so different users in the same group chat could inherit each other’s resumed context. Out of scope for this UX cleanup; address in a focused session-keying follow-up.
+
+## Deferred from: /skills 命令 + /skill-name 直接执行 (2026-06-10)
+
+- SlashPopup skill 补全 — 输入 `/` 时 popup 只显示内置 slash 命令，不显示 skill 名称。需要重构 `SlashPopupItem` 数据模型（当前强绑定 `SlashCommand` 枚举），引入 `SlashPopupItemKind`（`.command(SlashCommand)` | `.skill(name:description:)`）以支持 skill 名称出现在补全列表中。工作量较大（涉及 SlashPopup、ComposerSlashPopupHandling、ChatComposer 多处），建议独立 story 处理。核心功能（`/skills` 列表 + `/skill-name` 直接执行）已完成。
