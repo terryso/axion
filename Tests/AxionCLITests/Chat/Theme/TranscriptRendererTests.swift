@@ -111,6 +111,58 @@ struct TranscriptRendererTests {
         #expect(!result.contains("\u{1B}]"))
     }
 
+    // MARK: - renderTurnSummary
+
+    @Test("renderTurnSummary: TrueColor TTY 包含 dim 分隔线和统计信息")
+    func renderTurnSummary_trueColor() {
+        let theme = ChatTheme(profile: .trueColor, isTTY: true)
+        let renderer = TranscriptRenderer(theme: theme)
+        let result = renderer.renderTurnSummary(
+            duration: "3.2s",
+            toolCount: 2,
+            inputTokens: "1.2k",
+            outputTokens: "856"
+        )
+        #expect(result.contains("3.2s"))
+        #expect(result.contains("2 tools"))
+        #expect(result.contains("↑1.2k"))
+        #expect(result.contains("↓856"))
+        #expect(result.contains("──"))
+        #expect(result.contains("\u{1B}[38;2;"))  // TrueColor dim gray
+    }
+
+    @Test("renderTurnSummary: 非 TTY 使用 [turn: ...] 纯文本格式")
+    func renderTurnSummary_nonTTY() {
+        let theme = ChatTheme(profile: .unknown, isTTY: false)
+        let renderer = TranscriptRenderer(theme: theme)
+        let result = renderer.renderTurnSummary(
+            duration: "350ms",
+            toolCount: 0,
+            inputTokens: "500",
+            outputTokens: "120"
+        )
+        #expect(result.contains("[turn:"))
+        #expect(result.contains("350ms"))
+        #expect(result.contains("0 tools"))
+        #expect(result.contains("↑500"))
+        #expect(result.contains("↓120"))
+        #expect(!result.contains("\u{1B}"))
+    }
+
+    @Test("renderTurnSummary: 1 tool 使用单数形式")
+    func renderTurnSummary_singularTool() {
+        let theme = ChatTheme(profile: .ansi16, isTTY: true)
+        let renderer = TranscriptRenderer(theme: theme)
+        let result = renderer.renderTurnSummary(
+            duration: "1.0s",
+            toolCount: 1,
+            inputTokens: "2k",
+            outputTokens: "300"
+        )
+        #expect(result.contains("1 tool"))
+        #expect(!result.contains("1 tools"))
+    }
+
     // MARK: - 渲染性能 (AC8)
 
     @Test("formatRoleDot 渲染性能 < 1ms")

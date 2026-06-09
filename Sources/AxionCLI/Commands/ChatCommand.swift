@@ -354,12 +354,19 @@ struct ChatCommand: AsyncParsableCommand {
 
             composer.slashContext = SlashCommandContext(isAgentBusy: true, isSideSession: false)
 
+            // Turn metrics tracking
+            let turnStartTime = ContinuousClock.now
+            let preTurnUsage = state.sessionUsage
+            var turnToolCount = 0
+
             let outputHandler = ChatOutputFormatter(theme: chatTheme)
             outputHandler.startLLMWaiting()
             let messageStream = state.buildResult.agent.stream(trimmed)
             for await message in messageStream {
                 outputHandler.handle(message)
                 switch message {
+                case .toolUse:
+                    turnToolCount += 1
                 case .result(let data):
                     if let usage = data.usage {
                         state.sessionUsage = state.sessionUsage + usage
@@ -408,6 +415,21 @@ struct ChatCommand: AsyncParsableCommand {
             }
 
             composer.slashContext = SlashCommandContext(isAgentBusy: false, isSideSession: false)
+
+            // Turn completion summary — Codex-inspired "worked for Xs" pattern
+            let turnElapsed = ContinuousClock.now - turnStartTime
+            let turnDuration = formatDuration(turnElapsed)
+            let turnInputDelta = state.sessionUsage.inputTokens - preTurnUsage.inputTokens
+            let turnOutputDelta = state.sessionUsage.outputTokens - preTurnUsage.outputTokens
+            fputs(
+                transcriptRenderer.renderTurnSummary(
+                    duration: turnDuration,
+                    toolCount: turnToolCount,
+                    inputTokens: BannerRenderer.formatTokenCount(turnInputDelta),
+                    outputTokens: BannerRenderer.formatTokenCount(turnOutputDelta)
+                ),
+                stderr
+            )
 
             // Story 38.5 AC2: Turn 结束后检查队列 — 仅正常完成时自动消费，中断时不消费
             // （避免 Ctrl+C 中断后排队消息被自动发送，用户被迫多次 Ctrl+C）

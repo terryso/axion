@@ -47,4 +47,38 @@ struct TranscriptRenderer: Sendable {
         let dot = theme.formatRoleDot(role: .warning)
         return "\(dot) \(message)\n"
     }
+
+    // MARK: - 回合摘要
+
+    /// 渲染回合完成摘要 — dim/灰色分隔线，显示 turn 统计信息。
+    ///
+    /// 格式：`── 3.2s · 2 tools · ↑1.2k ↓856 ──`
+    /// 非 TTY：`[turn: 3.2s · 2 tools · ↑1.2k ↓856]`
+    func renderTurnSummary(
+        duration: String,
+        toolCount: Int,
+        inputTokens: String,
+        outputTokens: String
+    ) -> String {
+        let toolStr = toolCount == 1 ? "1 tool" : "\(toolCount) tools"
+        let stats = "\(duration) · \(toolStr) · ↑\(inputTokens) ↓\(outputTokens)"
+
+        guard theme.isTTY else {
+            return "[turn: \(stats)]\n"
+        }
+
+        let dimCode: String
+        switch theme.profile {
+        case .trueColor:
+            dimCode = "\u{1B}[38;2;120;120;120m"
+        case .ansi256:
+            dimCode = "\u{1B}[38;5;244m"
+        case .ansi16:
+            dimCode = "\u{1B}[2m"  // dim/faint attribute
+        case .unknown:
+            return "[turn: \(stats)]\n"
+        }
+        let reset = "\u{1B}[0m"
+        return "\(dimCode)── \(stats) ──\(reset)\n"
+    }
 }
