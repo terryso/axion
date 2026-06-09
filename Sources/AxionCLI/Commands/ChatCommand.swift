@@ -578,12 +578,33 @@ struct ChatCommand: AsyncParsableCommand {
                 let turnInputDelta = state.sessionUsage.inputTokens - preTurnUsage.inputTokens
                 let turnOutputDelta = state.sessionUsage.outputTokens - preTurnUsage.outputTokens
                 sessionTotalTools += turnToolCount
+
+                // 计算上下文使用百分比（Codex-inspired: 在 turn summary 中显示上下文进度）
+                let contextPct: Int? = state.contextWindow > 0
+                    ? min(Int(Double(state.contextTokens) / Double(state.contextWindow) * 100), 200)
+                    : nil
+
+                // 估算本 turn 成本
+                let turnCost: String? = {
+                    let turnUsage = TokenUsage(
+                        inputTokens: turnInputDelta,
+                        outputTokens: turnOutputDelta
+                    )
+                    let costStr = BannerRenderer.estimateCostString(
+                        model: state.buildResult.agent.model,
+                        usage: turnUsage
+                    )
+                    return costStr
+                }()
+
                 fputs(
                     transcriptRenderer.renderTurnSummary(
                         duration: turnDuration,
                         toolCount: turnToolCount,
                         inputTokens: BannerRenderer.formatTokenCount(turnInputDelta),
-                        outputTokens: BannerRenderer.formatTokenCount(turnOutputDelta)
+                        outputTokens: BannerRenderer.formatTokenCount(turnOutputDelta),
+                        contextPct: contextPct,
+                        estimatedCost: turnCost
                     ),
                     stderr
                 )

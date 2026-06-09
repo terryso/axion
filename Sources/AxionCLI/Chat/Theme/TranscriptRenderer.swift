@@ -52,16 +52,40 @@ struct TranscriptRenderer: Sendable {
 
     /// 渲染回合完成摘要 — dim/灰色分隔线，显示 turn 统计信息。
     ///
-    /// 格式：`── 3.2s · 2 tools · ↑1.2k ↓856 ──`
-    /// 非 TTY：`[turn: 3.2s · 2 tools · ↑1.2k ↓856]`
+    /// 基础格式：`── 3.2s · 2 tools · ↑1.2k ↓856 ──`
+    /// 含上下文：`── 3.2s · 2 tools · ↑1.2k ↓856 · [████░░░░░░] 45% ──`
+    /// 含成本：  `── 3.2s · 2 tools · ↑1.2k ↓856 · $0.01 ──`
+    /// 全部：    `── 3.2s · 2 tools · ↑1.2k ↓856 · [████░░░░░░] 45% · $0.01 ──`
+    ///
+    /// 非 TTY：`[turn: 3.2s · 2 tools · ↑1.2k ↓856 · ctx 45% · $0.01]`
+    ///
+    /// - Parameters:
+    ///   - duration: 格式化的时长字符串（如 "3.2s"）
+    ///   - toolCount: 本轮工具调用次数
+    ///   - inputTokens: 格式化的输入 token 数
+    ///   - outputTokens: 格式化的输出 token 数
+    ///   - contextPct: 可选的上下文窗口使用百分比（0-100）
+    ///   - estimatedCost: 可选的预估成本字符串（如 "$0.01"）
     func renderTurnSummary(
         duration: String,
         toolCount: Int,
         inputTokens: String,
-        outputTokens: String
+        outputTokens: String,
+        contextPct: Int? = nil,
+        estimatedCost: String? = nil
     ) -> String {
         let toolStr = toolCount == 1 ? "1 tool" : "\(toolCount) tools"
-        let stats = "\(duration) · \(toolStr) · ↑\(inputTokens) ↓\(outputTokens)"
+        var stats = "\(duration) · \(toolStr) · ↑\(inputTokens) ↓\(outputTokens)"
+
+        // 添加上下文窗口使用率
+        if let pct = contextPct {
+            stats += " · \(formatContextSegment(pct: pct))"
+        }
+
+        // 添加预估成本
+        if let cost = estimatedCost {
+            stats += " · \(cost)"
+        }
 
         guard theme.isTTY else {
             return "[turn: \(stats)]\n"
@@ -80,5 +104,27 @@ struct TranscriptRenderer: Sendable {
         }
         let reset = "\u{1B}[0m"
         return "\(dimCode)── \(stats) ──\(reset)\n"
+    }
+
+    // MARK: - 上下文进度条
+
+    /// 渲染上下文窗口使用率的微型进度条段。
+    ///
+    /// TTY 模式：颜色编码进度条 `[████░░░░░░] 45%`
+    /// 上下文颜色：绿(<50%) → 黄(50-80%) → 红(>80%)
+    ///
+    /// - Parameter pct: 使用百分比 (0-100)
+    /// - Returns: 格式化的上下文段
+    private func formatContextSegment(pct: Int) -> String {
+        let clampedPct = max(0, min(pct, 200))
+        let bar = BannerRenderer.renderContextBar(pct: clampedPct, width: 8)
+
+        guard theme.isTTY else {
+            return "ctx \(clampedPct)%"
+        }
+
+        let colorCode = BannerRenderer.contextBarColor(pct: clampedPct, profile: theme.profile)
+        let reset = "\u{1B}[0m"
+        return "\(colorCode)[\(bar)]\(reset) \(clampedPct)%"
     }
 }

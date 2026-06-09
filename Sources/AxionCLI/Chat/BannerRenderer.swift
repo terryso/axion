@@ -187,8 +187,9 @@ struct BannerRenderer {
 
         // Estimated cost line
         if let u = usage, u.totalTokens > 0, !model.isEmpty {
-            let cost = estimateCost(usage: u, model: model)
-            lines.append("[axion] 预估成本: \(cost)")
+            if let cost = estimateCostString(model: model, usage: u) {
+                lines.append("[axion] 预估成本: \(cost)")
+            }
         }
 
         return lines.joined(separator: "\n") + "\n"
@@ -244,9 +245,15 @@ struct BannerRenderer {
         return String(format: "%dm %02ds", minutes, seconds)
     }
 
-    /// 估算 token 使用成本（美元）。
+    /// 估算 token 使用成本（美元），返回格式化字符串。
     /// 简化估算：基于 Anthropic 公开定价，sonnet 默认，opus 检测。
-    private static func estimateCost(usage: TokenUsage, model: String) -> String {
+    ///
+    /// 用于 turn summary 和 exit summary 中的成本展示。
+    /// - Parameters:
+    ///   - usage: Token 使用量
+    ///   - model: 当前模型名（用于选择定价）
+    /// - Returns: 格式化的成本字符串（如 "$0.0123"），零成本时返回 nil
+    static func estimateCostString(model: String, usage: TokenUsage) -> String? {
         let inputCostPer1M: Double
         let outputCostPer1M: Double
         let cacheReadCostPer1M: Double
@@ -263,6 +270,7 @@ struct BannerRenderer {
         let cost = Double(usage.inputTokens) / 1_000_000 * inputCostPer1M
             + Double(usage.outputTokens) / 1_000_000 * outputCostPer1M
             + cacheRead / 1_000_000 * cacheReadCostPer1M
+        guard cost > 0 else { return nil }
         return String(format: "$%.4f", cost)
     }
 }
