@@ -108,6 +108,9 @@ struct ChatCommand: AsyncParsableCommand {
         let terminalTitle = TerminalTitleRenderer()
         terminalTitle.setIdle()
 
+        // Desktop notifications — Codex-inspired OSC 9 / BEL pattern
+        let desktopNotifier = DesktopNotifier()
+
         // Initialize REPL state
         var state = ChatREPLState(
             buildResult: buildResult,
@@ -380,6 +383,7 @@ struct ChatCommand: AsyncParsableCommand {
             let turnStartTime = ContinuousClock.now
             let preTurnUsage = state.sessionUsage
             var turnToolCount = 0
+            var lastAssistantText = ""  // For desktop notification preview
             sessionTurnCount += 1
 
             let outputHandler = ChatOutputFormatter(theme: chatTheme)
@@ -392,6 +396,10 @@ struct ChatCommand: AsyncParsableCommand {
                 case .toolUse(let data):
                     turnToolCount += 1
                     terminalTitle.setToolExecuting(data.toolName)
+                case .assistant(let data):
+                    if !data.text.isEmpty {
+                        lastAssistantText = data.text
+                    }
                 case .result(let data):
                     if let usage = data.usage {
                         state.sessionUsage = state.sessionUsage + usage
@@ -463,6 +471,9 @@ struct ChatCommand: AsyncParsableCommand {
                 ),
                 stderr
             )
+
+            // Desktop notification — Codex-inspired OSC 9 / BEL on turn complete
+            desktopNotifier.notify(.agentTurnComplete(preview: lastAssistantText))
 
             // Story 38.5 AC2: Turn 结束后检查队列 — 仅正常完成时自动消费，中断时不消费
             // （避免 Ctrl+C 中断后排队消息被自动发送，用户被迫多次 Ctrl+C）
