@@ -95,10 +95,15 @@ struct BannerRenderer {
     ///   - width: 进度条宽度（字符数）
     /// - Returns: 进度条字符串，如 `███░░░░░░░`
     static func renderContextBar(pct: Int, width: Int = 10) -> String {
-        let clampedPct = max(0, min(100, pct))
-        let filled = Int(Double(clampedPct) / 100.0 * Double(width))
-        let empty = width - filled
-        return String(repeating: "█", count: filled) + String(repeating: "░", count: empty)
+        let clampedPct = max(0, min(pct, 200))
+        let filledRange = min(clampedPct, 100)
+        let overflowRange = max(0, clampedPct - 100)
+        let filled = min(Int(Double(filledRange) / 100.0 * Double(width)), width)
+        let overflow = min(Int(Double(overflowRange) / 100.0 * Double(width)), width - filled)
+        let empty = width - filled - overflow
+        return String(repeating: "█", count: filled)
+            + String(repeating: "▓", count: overflow)
+            + String(repeating: "░", count: empty)
     }
 
     /// 根据上下文使用百分比返回颜色 ANSI 码。
@@ -107,10 +112,12 @@ struct BannerRenderer {
     /// - 50-80% → 黄色（注意）
     /// - > 80% → 红色（紧张）
     static func contextBarColor(pct: Int, profile: TerminalColorProfile) -> String {
-        let clampedPct = max(0, min(100, pct))
+        let clampedPct = max(0, min(pct, 200))
         switch profile {
         case .trueColor:
-            if clampedPct > 80 {
+            if clampedPct > 100 {
+                return "\u{1B}[38;2;255;0;255m"   // 紫/品红：溢出警告
+            } else if clampedPct > 80 {
                 return "\u{1B}[38;2;244;67;54m"   // 红
             } else if clampedPct >= 50 {
                 return "\u{1B}[38;2;255;193;7m"   // 黄
@@ -118,7 +125,9 @@ struct BannerRenderer {
                 return "\u{1B}[38;2;76;175;80m"   // 绿
             }
         case .ansi256:
-            if clampedPct > 80 {
+            if clampedPct > 100 {
+                return "\u{1B}[38;5;201m"   // 紫/品红
+            } else if clampedPct > 80 {
                 return "\u{1B}[38;5;160m"   // 暗红
             } else if clampedPct >= 50 {
                 return "\u{1B}[38;5;178m"   // 黄
@@ -126,7 +135,9 @@ struct BannerRenderer {
                 return "\u{1B}[38;5;71m"    // 绿
             }
         case .ansi16:
-            if clampedPct > 80 {
+            if clampedPct > 100 {
+                return "\u{1B}[35m"  // magenta
+            } else if clampedPct > 80 {
                 return "\u{1B}[31m"  // red
             } else if clampedPct >= 50 {
                 return "\u{1B}[33m"  // yellow

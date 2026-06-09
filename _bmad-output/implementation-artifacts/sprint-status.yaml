@@ -1,5 +1,5 @@
 # generated: 2026-05-08
-# last_updated: 2026-06-07 (38-7 in-progress)
+# last_updated: 2026-06-09 (38 retro done)
 # project: axion
 # project_key: NOKEY
 # tracking_system: file-system
@@ -429,4 +429,4 @@ development_status:
   38-6-workspace-quick-context: done
   38-7-session-workflow: done
   # 38-8-side-conversation: 延后至 Epic 39，不阻塞 Epic 38 交付
-  epic-38-retrospective: optional
+  epic-38-retrospective: done

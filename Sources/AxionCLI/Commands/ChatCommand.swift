@@ -419,7 +419,15 @@ struct ChatCommand: AsyncParsableCommand {
                 case .result(let data):
                     if let usage = data.usage {
                         state.sessionUsage = state.sessionUsage + usage
-                        state.contextTokens = usage.inputTokens
+                    }
+                    // 使用 SDK 报告的最后一次 LLM 调用 input_tokens 作为上下文大小
+                    // 这是精确的当前上下文快照，而非累计 totalUsage.inputTokens
+                    if let lastTokens = data.lastTurnInputTokens {
+                        state.contextTokens = lastTokens
+                    } else {
+                        // 降级：从消息估算（如 skill 错误路径无 LLM 调用）
+                        let messages = state.buildResult.agent.getMessages()
+                        state.contextTokens = ContextManager.estimateContextTokens(messages: messages)
                     }
                 case .system(let data):
                     if data.subtype == .compactBoundary {

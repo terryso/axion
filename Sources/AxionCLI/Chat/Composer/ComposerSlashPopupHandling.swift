@@ -151,8 +151,18 @@ extension ChatComposer {
                 refreshSlashPopupRender(prompt: prompt)
             }
 
-        // AC5: Tab/Enter → 补全选中命令
-        case .tab, .enter:
+        // AC5: Tab → 仅补全命令名，始终留在编辑模式
+        case .tab:
+            if let _ = completeSelectedCommand() {
+                clearPopupOutput()
+                popupRenderedLines = 0
+                mode = .normal
+                refreshDisplay(prompt: prompt)
+            }
+            // 无选中或无匹配 → tab 忽略
+
+        // AC5: Enter → 补全选中命令并执行（不接受参数时直接提交）
+        case .enter:
             if let completed = completeSelectedCommand() {
                 clearPopupOutput()
                 popupRenderedLines = 0
@@ -166,7 +176,7 @@ extension ChatComposer {
                     return .returnInput(buffer)
                 }
             }
-            // 无选中或无匹配 → tab/enter 忽略
+            // 无选中或无匹配 → enter 忽略
 
         // AC7: Esc → 取消 popup，恢复原始草稿
         case .escape:

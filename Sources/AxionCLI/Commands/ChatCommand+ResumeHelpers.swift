@@ -5,6 +5,13 @@ import AxionCore
 
 // MARK: - Interrupt helpers
 
+/// 从 sessionsDir 加载 axion-state.json overlay（不依赖 AxionRuntime 实例）。
+private func loadOverlay(sessionId: String, sessionsDir: String) -> AxionStateOverlay? {
+    let statePath = ((sessionsDir as NSString).appendingPathComponent(sessionId) as NSString)
+        .appendingPathComponent("axion-state.json")
+    return loadDecodableFile(statePath, as: AxionStateOverlay.self)
+}
+
 /// Check if double Ctrl+C should trigger exit (AC2: within 2 seconds).
 func chatShouldExit(
     lastInterrupt: ContinuousClock.Instant,
@@ -28,7 +35,19 @@ func handleResumeList(
     do {
         let metadataList = try await store.list(limit: 20)
         let sessions = metadataList.map { md in
-            SessionInfo(
+            // 尝试加载 axion-state.json（daemon 模式写入的状态）
+            let overlay = loadOverlay(sessionId: md.id, sessionsDir: sessionsDir)
+            let derivedStatus: String
+            let derivedSteps: Int
+            if let overlay = overlay {
+                derivedStatus = overlay.status
+                derivedSteps = overlay.totalSteps
+            } else {
+                // Chat 模式不写 state 文件 — 从 messageCount 推导
+                derivedStatus = md.messageCount > 0 ? "completed" : "empty"
+                derivedSteps = md.messageCount
+            }
+            return SessionInfo(
                 sessionId: md.id,
                 cwd: md.cwd,
                 model: md.model,
@@ -36,9 +55,9 @@ func handleResumeList(
                 updatedAt: md.updatedAt,
                 messageCount: md.messageCount,
                 summary: md.summary ?? md.firstPrompt,
-                status: "unknown",
-                totalSteps: 0,
-                durationMs: nil,
+                status: derivedStatus,
+                totalSteps: derivedSteps,
+                durationMs: overlay?.durationMs,
                 tag: md.tag
             )
         }

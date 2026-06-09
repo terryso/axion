@@ -103,10 +103,12 @@ struct ContextManager {
         return "Context:        \(used)/\(max) (\(pct)%)"
     }
 
+    /// Axion 侧上下文警告阈值比例（80%）
+    static let contextWarningRatio = 0.80
+
     /// 格式化 `/compact` 显示的当前上下文状态。
     ///
-    /// 使用 SDK 实际阈值（contextWindow - 13_000 buffer）判断是否显示自动压缩提示，
-    /// 而非 AC1 的 80% 阈值（SDK 内部 compact 在更高阈值才触发）。
+    /// 使用 80% 阈值判断是否显示自动压缩提示。
     static func formatCompactStatus(usedTokens: Int, contextWindow: Int) -> String {
         let used = BannerRenderer.formatTokenCount(usedTokens)
         let maxTokenStr = BannerRenderer.formatTokenCount(contextWindow)
@@ -114,10 +116,11 @@ struct ContextManager {
             ? Int(Double(usedTokens) / Double(contextWindow) * 100)
             : 0
 
-        // SDK auto-compact threshold = contextWindow - 13_000 buffer
-        let sdkThreshold = Swift.max(contextWindow - 13_000, 0)
-        if contextWindow > 0 && usedTokens >= sdkThreshold {
-            return "[axion] 当前上下文: \(used)/\(maxTokenStr) (\(pct)%)，下次发消息将自动压缩\n"
+        let warningThreshold = contextWindow > 0
+            ? Int(Double(contextWindow) * contextWarningRatio)
+            : 0
+        if contextWindow > 0 && usedTokens >= warningThreshold {
+            return "[axion] 当前上下文: \(used)/\(maxTokenStr) (\(pct)%)，上下文接近上限，建议使用 /compact 压缩\n"
         }
         return "[axion] 当前上下文: \(used)/\(maxTokenStr) (\(pct)%)\n"
     }

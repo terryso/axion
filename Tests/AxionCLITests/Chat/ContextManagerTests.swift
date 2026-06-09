@@ -139,29 +139,29 @@ struct ContextManagerTests {
         #expect(!result.contains("自动压缩"))
     }
 
-    @Test("formatCompactStatus: 达到 SDK 阈值 → 提示自动压缩")
+    @Test("formatCompactStatus: 达到 80% 阈值 → 提示压缩")
     func formatCompactStatus_atSDKThreshold() {
-        // SDK threshold for 200K = 200K - 13K = 187K
-        let result = ContextManager.formatCompactStatus(usedTokens: 190_000, contextWindow: 200_000)
-        #expect(result.contains("190k/200k"))
-        #expect(result.contains("95%"))
-        #expect(result.contains("自动压缩"))
+        // 80% threshold for 200K = 160K; 170K > 160K triggers warning
+        let result = ContextManager.formatCompactStatus(usedTokens: 170_000, contextWindow: 200_000)
+        #expect(result.contains("170k/200k"))
+        #expect(result.contains("85%"))
+        #expect(result.contains("压缩"))
     }
 
-    @Test("formatCompactStatus: 低于 SDK 阈值 → 不提示自动压缩")
+    @Test("formatCompactStatus: 低于 80% 阈值 → 不提示压缩")
     func formatCompactStatus_belowSDKThreshold() {
-        // 160K < 187K SDK threshold
-        let result = ContextManager.formatCompactStatus(usedTokens: 160_000, contextWindow: 200_000)
-        #expect(result.contains("160k/200k"))
-        #expect(result.contains("80%"))
-        #expect(!result.contains("自动压缩"))
+        // 120K < 160K (80% threshold)
+        let result = ContextManager.formatCompactStatus(usedTokens: 120_000, contextWindow: 200_000)
+        #expect(result.contains("120k/200k"))
+        #expect(result.contains("60%"))
+        #expect(!result.contains("压缩"))
     }
 
-    @Test("formatCompactStatus: 远超阈值 → 提示自动压缩")
+    @Test("formatCompactStatus: 远超阈值 → 提示压缩")
     func formatCompactStatus_aboveThreshold() {
         let result = ContextManager.formatCompactStatus(usedTokens: 195_000, contextWindow: 200_000)
         #expect(result.contains("195k/200k"))
-        #expect(result.contains("自动压缩"))
+        #expect(result.contains("压缩"))
     }
 }
 
@@ -190,14 +190,14 @@ struct SlashCommandHandlerContextTests {
         #expect(!output.contains("暂未实现"))
     }
 
-    @Test("handleCompact: 达到 SDK 阈值提示自动压缩")
+    @Test("handleCompact: 达到 80% 阈值提示压缩")
     func handleCompact_atSDKThreshold() {
-        // SDK threshold for 200K = 187K; use 190K to exceed it
+        // 80% threshold for 200K = 160K; use 190K to exceed it
         let output = SlashCommandHandler.handleCompact(
             contextTokens: 190_000,
             contextWindow: 200_000
         )
-        #expect(output.contains("自动压缩"))
+        #expect(output.contains("压缩"))
     }
 
     // MARK: - handleCost (enhanced with context line)
