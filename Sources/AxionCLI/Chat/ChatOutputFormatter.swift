@@ -24,19 +24,28 @@ final class ChatOutputFormatter: OpenAgentSDK.SDKMessageOutputHandler, @unchecke
     // 流式代码块渲染器 — 检测代码围栏并渲染视觉边框
     private var codeBlockRenderer: StreamingCodeBlockRenderer
 
+    // 流式 Markdown 内联格式化器 — 增强标题、粗体、内联代码等
+    private let markdownFormatter: StreamingMarkdownFormatter
+
     init(
         writeStdout: @escaping (String) -> Void = { fputs($0, stdout); fflush(stdout) },
         writeStderr: @escaping (String) -> Void = { fputs($0, stderr); fflush(stderr) },
         spinner: SpinnerRenderer? = nil,
         theme: ChatTheme? = nil,  // AC7: 可选注入，nil 时保持原有行为
-        codeBlockRenderer: StreamingCodeBlockRenderer? = nil
+        codeBlockRenderer: StreamingCodeBlockRenderer? = nil,
+        markdownFormatter: StreamingMarkdownFormatter? = nil
     ) {
         self.writeStdout = writeStdout
         self.writeStderr = writeStderr
         self.spinner = spinner ?? SpinnerRenderer()
         self.theme = theme
         self.transcriptRenderer = theme.map { TranscriptRenderer(theme: $0) }
-        self.codeBlockRenderer = codeBlockRenderer ?? StreamingCodeBlockRenderer()
+        self.markdownFormatter = markdownFormatter ?? StreamingMarkdownFormatter()
+        self.codeBlockRenderer = codeBlockRenderer ?? StreamingCodeBlockRenderer(
+            plainTextFormatter: { [markdownFormatter = self.markdownFormatter] line in
+                markdownFormatter.formatLine(line)
+            }
+        )
     }
 
     /// 开始等待 LLM 首次响应（用户提交 prompt 后调用）。

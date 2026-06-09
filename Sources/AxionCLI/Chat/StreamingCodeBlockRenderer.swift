@@ -33,14 +33,19 @@ struct StreamingCodeBlockRenderer: Sendable {
     /// 终端宽度（用于边框长度计算）
     private let terminalWidth: Int
 
+    /// 纯文本行格式化器（用于增强非代码块内的 Markdown 输出）
+    private let plainTextFormatter: @Sendable (String) -> String
+
     init(
         profile: TerminalColorProfile = TerminalColorProfile.detect(),
         isTTY: Bool = false,
-        terminalWidth: Int = 80
+        terminalWidth: Int = 80,
+        plainTextFormatter: @escaping @Sendable (String) -> String = { $0 }
     ) {
         self.profile = profile
         self.isTTY = isTTY
         self.terminalWidth = terminalWidth
+        self.plainTextFormatter = plainTextFormatter
     }
 
     // MARK: - Public API
@@ -122,8 +127,8 @@ struct StreamingCodeBlockRenderer: Sendable {
             // 代码块内内容 — 渲染为 dim 样式
             write(renderCodeContent(line))
         } else {
-            // 普通文本 — 原样输出
-            write(line)
+            // 普通文本 — 通过 Markdown 格式化器增强输出
+            write(plainTextFormatter(line))
         }
     }
 
