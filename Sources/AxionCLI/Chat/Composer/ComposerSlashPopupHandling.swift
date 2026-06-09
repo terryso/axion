@@ -175,8 +175,16 @@ extension ChatComposer {
                     writeStdout("\r\n")
                     return .returnInput(buffer)
                 }
+            } else if buffer.hasPrefix("/") {
+                // 无匹配内置命令但以 / 开头 — 可能是 skill，
+                // 提交输入让 REPL 的 skill 匹配逻辑处理
+                clearPopupOutput()
+                popupRenderedLines = 0
+                mode = .normal
+                writeStdout("\r\n")
+                return .returnInput(buffer)
             }
-            // 无选中或无匹配 → enter 忽略
+            // 无选中、非 / 开头 → enter 忽略
 
         // AC7: Esc → 取消 popup，恢复原始草稿
         case .escape:
