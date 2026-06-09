@@ -1,6 +1,15 @@
 /// 流式代码块视觉渲染器 — Codex 启发，在 LLM 流式输出中检测 markdown 代码围栏，
 /// 并用视觉边框替代原始 ``` 标记，提升代码块可读性。
 ///
+/// Diff 感知渲染：
+/// 当代码块语言为 `diff`/`patch`，或内容首行以 `diff --git` 开头时，
+/// 自动检测并按 unified diff 语法着色代码内容：
+/// - `+` 行 → 绿色（新增）
+/// - `-` 行 → 红色（删除）
+/// - `@@` hunk 头 → dim 青色
+/// - `diff --git` / `---` / `+++` 文件头 → dim 紫/蓝色
+/// - 其他行 → 默认 dim
+///
 /// 设计原则：
 /// - 纯状态机，不持有 I/O（写入由调用方控制）
 /// - 在行边界处检测代码围栏（```），渲染可视化边框
@@ -38,6 +47,12 @@ struct StreamingCodeBlockRenderer: Sendable {
 
     /// 流式表格渲染器 — 在非代码块文本中检测并渲染 pipe tables
     private var tableRenderer: StreamingTableRenderer
+
+    /// Diff 检测状态 — 在代码块内跟踪是否检测到 diff 内容
+    private var isDiffBlock = false
+
+    /// 是否已检查首行以检测 diff 内容（延迟检测）
+    private var hasCheckedFirstContentLine = false
 
     init(
         profile: TerminalColorProfile = TerminalColorProfile.detect(),
@@ -101,6 +116,8 @@ struct StreamingCodeBlockRenderer: Sendable {
         inCodeBlock = false
         currentLang = ""
         lineBuffer = ""
+        isDiffBlock = false
+        hasCheckedFirstContentLine = false
         tableRenderer.reset()
     }
 
@@ -128,16 +145,35 @@ struct StreamingCodeBlockRenderer: Sendable {
                 write(renderCloseBorder())
                 inCodeBlock = false
                 currentLang = ""
+                isDiffBlock = false
+                hasCheckedFirstContentLine = false
             } else {
                 // 开始代码块 — 提取语言标签并渲染顶部边框
                 currentLang = extractLanguage(from: line)
                 write(renderOpenBorder(lang: currentLang))
                 inCodeBlock = true
+                // 预检测 diff 语言
+                isDiffBlock = isDiffLanguage(currentLang)
+                hasCheckedFirstContentLine = false
             }
             return true
         } else if inCodeBlock {
-            // 代码块内内容 — 渲染为 dim 样式
-            write(renderCodeContent(line))
+            // 延迟 diff 检测：语言不是 diff 但首行内容以 "diff --git" 开头
+            if !hasCheckedFirstContentLine && !isDiffBlock {
+                hasCheckedFirstContentLine = true
+                let trimmed = line.trimmingCharacters(in: .whitespaces)
+                if trimmed.hasPrefix("diff --git") {
+                    isDiffBlock = true
+                }
+            } else if !hasCheckedFirstContentLine {
+                hasCheckedFirstContentLine = true
+            }
+            // Diff 感知代码内容渲染
+            if isDiffBlock {
+                write(renderDiffContent(line))
+            } else {
+                write(renderCodeContent(line))
+            }
             return true
         } else {
             // 非代码块文本 — 通过表格渲染器检测 pipe tables，再走 Markdown 格式化
@@ -218,6 +254,120 @@ struct StreamingCodeBlockRenderer: Sendable {
     private func renderCodeContent(_ line: String) -> String {
         let (dimCode, resetCode) = dimStyles()
         return "\(dimCode)│ \(resetCode)\(line)"
+    }
+
+    // MARK: - Diff Detection
+
+    /// 检测语言标签是否为 diff/patch 类型。
+    private func isDiffLanguage(_ lang: String) -> Bool {
+        let lower = lang.lowercased()
+        return lower == "diff" || lower == "patch" || lower == "udiff"
+    }
+
+    // MARK: - Diff Content Rendering
+
+    /// Diff 行类型 — 用于选择渲染颜色。
+    private enum DiffLineType {
+        case fileHeader    // diff --git a/... b/...
+        case oldFileHeader // --- a/...
+        case newFileHeader // +++ b/...
+        case hunkHeader    // @@ -l,s +l,s @@
+        case addedLine     // +text
+        case removedLine   // -text
+        case contextLine   //  text (unchanged)
+        case otherLine     // anything else
+    }
+
+    /// 从行首内容判断 diff 行类型。
+    private func classifyDiffLine(_ line: String) -> DiffLineType {
+        let trimmed = line.trimmingCharacters(in: .whitespaces)
+        if trimmed.hasPrefix("diff --git") { return .fileHeader }
+        if trimmed.hasPrefix("--- ") { return .oldFileHeader }
+        if trimmed.hasPrefix("+++ ") { return .newFileHeader }
+        if trimmed.hasPrefix("@@") { return .hunkHeader }
+        // `+` 行：排除 `+++` 文件头（已在上面匹配）
+        if trimmed.hasPrefix("+") && !trimmed.hasPrefix("+++") { return .addedLine }
+        // `-` 行：排除 `---` 文件头（已在上面匹配）
+        if trimmed.hasPrefix("-") && !trimmed.hasPrefix("---") { return .removedLine }
+        // 上下文行以空格开头（unchanged）
+        if line.hasPrefix(" ") { return .contextLine }
+        return .otherLine
+    }
+
+    /// 渲染 diff 代码块内的一行内容 — 根据行类型着色。
+    ///
+    /// 保留 `│ ` 前缀（与非 diff 代码块视觉一致），对内容部分按 diff 语义着色：
+    /// - 文件头 (diff --git) → dim 紫/蓝色
+    /// - 旧/新文件头 (--- / +++) → dim 色
+    /// - Hunk 头 (@@ ... @@) → dim 青色
+    /// - 新增行 (+) → 绿色
+    /// - 删除行 (-) → 红色
+    /// - 上下文行 (空格开头) → dim 色
+    /// - 其他 → 默认 dim 色
+    private func renderDiffContent(_ line: String) -> String {
+        let (dimCode, resetCode) = dimStyles()
+
+        let lineType = classifyDiffLine(line)
+        let contentColor: String
+
+        switch lineType {
+        case .fileHeader:
+            contentColor = diffFileHeaderCode()
+        case .oldFileHeader, .newFileHeader:
+            contentColor = diffFileHeaderCode()
+        case .hunkHeader:
+            contentColor = diffHunkHeaderCode()
+        case .addedLine:
+            contentColor = diffAddedCode()
+        case .removedLine:
+            contentColor = diffRemovedCode()
+        case .contextLine:
+            contentColor = dimCode
+        case .otherLine:
+            contentColor = dimCode
+        }
+
+        return "\(dimCode)│ \(resetCode)\(contentColor)\(line)\(resetCode)"
+    }
+
+    /// Diff 文件头颜色 — 紫蓝色（与标题 H1 一致）。
+    private func diffFileHeaderCode() -> String {
+        switch profile {
+        case .trueColor: return "\u{1B}[38;2;129;140;248m"
+        case .ansi256: return "\u{1B}[38;5;104m"
+        case .ansi16: return "\u{1B}[36m"
+        case .unknown: return ""
+        }
+    }
+
+    /// Diff hunk 头颜色 — dim 青色。
+    private func diffHunkHeaderCode() -> String {
+        switch profile {
+        case .trueColor: return "\u{1B}[38;2;100;150;170m"
+        case .ansi256: return "\u{1B}[38;5;73m"
+        case .ansi16: return "\u{1B}[36m"
+        case .unknown: return ""
+        }
+    }
+
+    /// Diff 新增行颜色 — 绿色（与 DiffFormatter 一致）。
+    private func diffAddedCode() -> String {
+        switch profile {
+        case .trueColor: return "\u{1B}[38;2;76;175;80m"
+        case .ansi256: return "\u{1B}[38;5;71m"
+        case .ansi16: return "\u{1B}[32m"
+        case .unknown: return ""
+        }
+    }
+
+    /// Diff 删除行颜色 — 红色（与 DiffFormatter 一致）。
+    private func diffRemovedCode() -> String {
+        switch profile {
+        case .trueColor: return "\u{1B}[38;2;244;67;54m"
+        case .ansi256: return "\u{1B}[38;5;160m"
+        case .ansi16: return "\u{1B}[31m"
+        case .unknown: return ""
+        }
     }
 
     // MARK: - Style Helpers
