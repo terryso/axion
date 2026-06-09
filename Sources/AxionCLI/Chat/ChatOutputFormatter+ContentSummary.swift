@@ -13,6 +13,7 @@ func formatDuration(_ duration: ContinuousClock.Duration) -> String {
 }
 
 /// Summarizes JSON content by detecting skill results and success/failure status.
+/// Enhanced with compact JSON formatting (Codex-inspired format_json_compact).
 func summarizeContentJSON(_ content: String) -> String {
     if let json = parseJSONDict(from: content) {
         if let commandName = json["commandName"] as? String {
@@ -22,7 +23,11 @@ func summarizeContentJSON(_ content: String) -> String {
             return "[JSON result: \(success ? "success" : "failed")]"
         }
     }
-    return String(content.prefix(100)) + "…"
+    // Codex-inspired: 尝试紧凑 JSON 格式化（在 : 和 , 后加空格，提升可读性）
+    if let compact = ToolOutputFormatter.formatJSONCompact(content) {
+        return ToolOutputFormatter.truncateText(compact, maxLength: 120)
+    }
+    return ToolOutputFormatter.truncateText(content, maxLength: 120)
 }
 
 /// Detects whether a line is primarily composed of box-drawing border characters.
@@ -35,27 +40,10 @@ func isBoxDrawingBorder(_ line: String) -> Bool {
 }
 
 /// Summarizes tool result content, detecting screenshots, JSON results, and multi-line output.
+/// Enhanced with ToolOutputFormatter for compact JSON and smart truncation (Codex-inspired).
 func summarizeToolContent(_ content: String, maxLines: Int = 4) -> String {
-    if content.hasPrefix("{\"action\":\"screenshot\"") || content.contains("image_data") || content.contains("[微压缩]") {
-        return "[screenshot captured]"
-    }
-    if content.contains("Base64") || content.contains("base64") {
-        return "[screenshot captured]"
-    }
-    if content.hasPrefix("{") && content.hasSuffix("}") {
-        return summarizeContentJSON(content)
-    }
-    let cleaned = content.replacingOccurrences(
-        of: "\u{001B}\\[[0-9;]*[A-Za-z]",
-        with: "",
-        options: .regularExpression
-    )
-    let lines = cleaned.components(separatedBy: "\n")
-        .map { $0.trimmingCharacters(in: .whitespaces) }
-        .filter { !$0.isEmpty && !isBoxDrawingBorder($0) }
-    return lines.prefix(maxLines).map { line in
-        line.count > 100 ? String(line.prefix(100)) + "…" : line
-    }.joined(separator: "\n")
+    // 委托给 ToolOutputFormatter — 统一截图检测、JSON 紧凑化、多行摘要逻辑
+    return ToolOutputFormatter.formatToolResult(content, maxWidth: 120, maxLines: maxLines)
 }
 
 // MARK: - ChatOutputFormatter Extension
@@ -63,33 +51,34 @@ func summarizeToolContent(_ content: String, maxLines: Int = 4) -> String {
 extension ChatOutputFormatter {
 
     /// Summarizes tool input JSON by extracting the most relevant parameter.
+    /// Enhanced with path-aware truncation (Codex-inspired center_truncate_path).
     func summarizeInput(_ input: String) -> String {
         // 尝试提取工具输入的关键参数
         guard let json = parseJSONDict(from: input) else {
-            return String(input.prefix(80))
+            return ToolOutputFormatter.truncateText(input, maxLength: 80)
         }
 
-        // 常见工具参数提取
+        // 常见工具参数提取 — 路径类参数使用居中截断保留首尾
         if let command = json["command"] as? String {
-            return String(command.prefix(80))
+            return ToolOutputFormatter.truncateText(command, maxLength: 80)
         }
         if let filePath = json["file_path"] as? String {
-            return String(filePath.prefix(80))
+            return ToolOutputFormatter.truncatePathCenter(filePath, maxWidth: 80)
         }
         if let path = json["path"] as? String {
-            return String(path.prefix(80))
+            return ToolOutputFormatter.truncatePathCenter(path, maxWidth: 80)
         }
         if let content = json["content"] as? String {
-            let preview = String(content.prefix(60))
-            return "\"\(preview)…\""
+            let preview = ToolOutputFormatter.truncateText(content, maxLength: 60)
+            return "\"\(preview)\""
         }
 
         // 通用：取第一个值
         if let first = json.values.first {
             let str = String(describing: first)
-            return String(str.prefix(80))
+            return ToolOutputFormatter.truncateText(str, maxLength: 80)
         }
 
-        return String(input.prefix(80))
+        return ToolOutputFormatter.truncateText(input, maxLength: 80)
     }
 }
