@@ -90,6 +90,16 @@ struct ChatCommand: AsyncParsableCommand {
             throw ExitCode(1)
         }
 
+        // 抑制 SDK 内部的 Ctrl+C 取消错误日志（JSON 输出到 stderr）
+        // Agent.init() 已配置 Logger，这里覆盖 output 为自定义过滤器
+        Logger.configure(level: verbose ? .debug : .info, output: .custom { jsonLine in
+            // 过滤 Ctrl+C 导致的 api_error + cancelled — 不是真正的错误
+            if jsonLine.contains("\"api_error\"") && jsonLine.contains("\"cancelled\"") {
+                return
+            }
+            FileHandle.standardError.write((jsonLine + "\n").data(using: .utf8) ?? Data())
+        })
+
         // AC1: 启动横幅 — 显示版本、模型、CWD、session ID、上下文窗口、构建耗时
         let contextWindow = getContextWindowSize(model: buildResult.agent.model)
         fputs(

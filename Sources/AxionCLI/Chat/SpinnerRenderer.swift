@@ -20,6 +20,9 @@ final class SpinnerRenderer {
     /// 动画开始时刻，用于计算实时耗时。
     private var animationStartTime: DispatchTime?
 
+    /// 防止 stop() 后 timer handler 仍写入一帧（GCD 取消不保证已 dispatch 的 handler 被拦截）。
+    private var isStopped: Bool = true
+
     init(isTTY: Bool = isatty(STDERR_FILENO) != 0,
          colorProfile: TerminalColorProfile = .detect(),
          writeStderr: @escaping (String) -> Void = { fputs($0, stderr); fflush(stderr) }) {
@@ -35,6 +38,7 @@ final class SpinnerRenderer {
     func start(message: String, delayMs: Int = 0) {
         guard isTTY else { return }
         stop()  // 清理已有的 timer
+        isStopped = false
 
         if delayMs > 0 {
             let queue = DispatchQueue(label: "axion.spinner-delay", qos: .utility)
@@ -53,6 +57,7 @@ final class SpinnerRenderer {
 
     /// 停止 spinner 并清除行（仅当动画曾启动时才输出清除码）。
     func stop() {
+        isStopped = true
         let hadAnimation = animationTimer != nil
         animationTimer?.cancel()
         animationTimer = nil
@@ -81,8 +86,10 @@ final class SpinnerRenderer {
         let writer = self.writeStderr
         let shimmerTTY = self.isTTY
         let shimmerProfile = self.colorProfile
+        let spinner = self
 
         timer.setEventHandler {
+            guard !spinner.isStopped else { return }
             let frame = frames[index % frames.count]
             let elapsedNs = DispatchTime.now().uptimeNanoseconds - startTime.uptimeNanoseconds
             let elapsedMs = Int(elapsedNs / 1_000_000)
