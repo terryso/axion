@@ -250,10 +250,19 @@ struct StreamingCodeBlockRenderer: Sendable {
         return "\(dimCode)╰\(line)╯\(resetCode)"
     }
 
-    /// 渲染代码块内的一行内容 — 使用 dim 样式。
+    /// 渲染代码块内的一行内容 — 使用语法高亮（支持语言感知着色）。
+    ///
+    /// 当语言被 `CodeSyntaxHighlighter` 支持时，对代码内容应用关键字、字符串、
+    /// 注释、数字、内建类型等 token 着色；不支持的语言保持原有 dim 样式。
     private func renderCodeContent(_ line: String) -> String {
         let (dimCode, resetCode) = dimStyles()
-        return "\(dimCode)│ \(resetCode)\(line)"
+        let highlighted = CodeSyntaxHighlighter.highlight(
+            line: line,
+            language: currentLang,
+            profile: profile,
+            isTTY: true  // renderCodeContent 仅在 TTY 路径调用
+        )
+        return "\(dimCode)│ \(resetCode)\(highlighted)"
     }
 
     // MARK: - Diff Detection

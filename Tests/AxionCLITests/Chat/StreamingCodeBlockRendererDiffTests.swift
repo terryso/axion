@@ -3,6 +3,11 @@ import Foundation
 
 @testable import AxionCLI
 
+/// Strip ANSI escape sequences from a string for content-based assertions.
+private func strippedANSI(_ s: String) -> String {
+    s.replacingOccurrences(of: "\u{1B}\\[[0-9;]*m", with: "", options: .regularExpression)
+}
+
 @Suite("StreamingCodeBlockRenderer Diff Rendering")
 struct StreamingCodeBlockRendererDiffTests {
 
@@ -97,7 +102,7 @@ struct StreamingCodeBlockRendererDiffTests {
         r.process("let x = 1\n") { output.append($0) }
 
         let combined = output.joined()
-        #expect(combined.contains("let x = 1"))
+        #expect(strippedANSI(combined).contains("let x = 1"))
         // Should use standard dim style, not diff green
         #expect(!combined.contains("\u{1B}[38;2;76;175;80m"))
     }
@@ -354,7 +359,7 @@ struct StreamingCodeBlockRendererDiffTests {
         r.process("let x = 1\n") { output.append($0) }
 
         let combined = output.joined()
-        #expect(combined.contains("let x = 1"))
+        #expect(strippedANSI(combined).contains("let x = 1"))
         // Regular code block should NOT have diff green coloring
         #expect(!combined.contains("\u{1B}[38;2;76;175;80m"))
     }
@@ -380,7 +385,8 @@ struct StreamingCodeBlockRendererDiffTests {
         r.process("let x = 1\n") { output.append($0) }
 
         let combined = output.joined()
-        #expect(!combined.contains("\u{1B}[38;2;76;175,80m"))
+        // After reset, regular code block should NOT have diff green coloring
+        #expect(!combined.contains("\u{1B}[38;2;76;175;80m"))
     }
 
     // MARK: - Edge Cases
@@ -483,7 +489,7 @@ struct StreamingCodeBlockRendererDiffTests {
         r.process("x = 1\n") { output.append($0) }
 
         let combined = output.joined()
-        #expect(combined.contains("x = 1"))
+        #expect(strippedANSI(combined).contains("x = 1"))
         // Should use standard dim style, not diff green
         #expect(!combined.contains("\u{1B}[38;2;76;175;80m"))
     }

@@ -3,6 +3,11 @@ import Foundation
 
 @testable import AxionCLI
 
+/// Strip ANSI escape sequences from a string for content-based assertions.
+private func strippedANSI(_ s: String) -> String {
+    s.replacingOccurrences(of: "\u{1B}\\[[0-9;]*m", with: "", options: .regularExpression)
+}
+
 @Suite("StreamingCodeBlockRenderer")
 struct StreamingCodeBlockRendererTests {
 
@@ -57,9 +62,10 @@ struct StreamingCodeBlockRendererTests {
         // Should NOT contain raw fence markers
         #expect(!combined.contains("```swift"))
         #expect(!combined.contains("```\n"))
-        // Should contain code content (preserved)
-        #expect(combined.contains("func hello()"))
-        #expect(combined.contains("print(\"Hi\")"))
+        // Should contain code content (preserved — syntax highlighting may insert ANSI codes)
+        let plain = strippedANSI(combined)
+        #expect(plain.contains("func hello()"))
+        #expect(plain.contains("print(\"Hi\")"))
         // Should contain border characters
         #expect(combined.contains("╭") || combined.contains("─"))
         #expect(combined.contains("╯"))
@@ -111,7 +117,7 @@ struct StreamingCodeBlockRendererTests {
 
         let combined = output.joined()
         #expect(combined.contains("Here's the code:"))
-        #expect(combined.contains("let x = 1"))
+        #expect(strippedANSI(combined).contains("let x = 1"))
         #expect(combined.contains("That was the code."))
         #expect(!combined.contains("```swift"))
         #expect(!combined.contains("```\n"))
@@ -167,8 +173,9 @@ struct StreamingCodeBlockRendererTests {
         let combined = output.joined()
         #expect(!combined.contains("```python"))
         #expect(combined.contains("python"))
-        #expect(combined.contains("def foo():"))
-        #expect(combined.contains("pass"))
+        let plain = strippedANSI(combined)
+        #expect(plain.contains("def foo():"))
+        #expect(plain.contains("pass"))
     }
 
     // MARK: - Language Extraction
@@ -303,7 +310,7 @@ struct StreamingCodeBlockRendererTests {
 
         let combined = output.joined()
         #expect(combined.contains("swift"))
-        #expect(combined.contains("let x = 1"))
+        #expect(strippedANSI(combined).contains("let x = 1"))
     }
 
     @Test("handles four backticks as fence")
@@ -347,7 +354,7 @@ struct StreamingCodeBlockRendererTests {
         r.process("~~~\n") { output.append($0) }
 
         let combined = output.joined()
-        #expect(combined.contains("let x = 1"))
+        #expect(strippedANSI(combined).contains("let x = 1"))
         #expect(combined.contains("markdown"))
     }
 
@@ -365,7 +372,7 @@ struct StreamingCodeBlockRendererTests {
 
         let combined = output.joined()
         #expect(combined.contains("│"))
-        #expect(combined.contains("let x = 1"))
+        #expect(strippedANSI(combined).contains("let x = 1"))
     }
 
     // MARK: - Multiple Sequential Code Blocks
@@ -388,9 +395,9 @@ struct StreamingCodeBlockRendererTests {
         let combined = output.joined()
         #expect(combined.contains("First:"))
         #expect(combined.contains("swift"))
-        #expect(combined.contains("let a = 1"))
+        #expect(strippedANSI(combined).contains("let a = 1"))
         #expect(combined.contains("Second:"))
         #expect(combined.contains("python"))
-        #expect(combined.contains("b = 2"))
+        #expect(strippedANSI(combined).contains("b = 2"))
     }
 }
