@@ -555,8 +555,8 @@ struct StreamingTableRendererTests {
         let plain = stripANSI(output)
         // Non-table line should go through formatPlain
         #expect(plain.contains("[FORMATTED] Plain line"))
-        // Table cells should NOT have [FORMATTED] prefix
-        #expect(!plain.contains("[FORMATTED] A"))
+        // Table cells now also go through formatPlain (for Markdown formatting support)
+        #expect(plain.contains("[FORMATTED] A"))
     }
 
     @Test("released buffered header line goes through formatPlain")

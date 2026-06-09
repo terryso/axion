@@ -104,7 +104,7 @@ struct StreamingTableRenderer: Sendable {
             write("\n")
         case .inTable:
             // 表格未关闭（流结束）→ 渲染已收集的行
-            write(renderTable(headerCells: headerCells, bodyRows: bodyRows))
+            write(renderTable(headerCells: headerCells, bodyRows: bodyRows, formatPlain: formatPlain))
             write("\n")
         }
         resetState()
@@ -173,7 +173,7 @@ struct StreamingTableRenderer: Sendable {
 
         case .inTable:
             // 表格完成 → 渲染完整表格 + 当前行
-            write(renderTable(headerCells: headerCells, bodyRows: bodyRows))
+            write(renderTable(headerCells: headerCells, bodyRows: bodyRows, formatPlain: formatPlain))
             write("\n")
             resetState()
             write(formatPlain(line))
@@ -246,16 +246,27 @@ struct StreamingTableRenderer: Sendable {
     // MARK: - Table Rendering
 
     /// 渲染完整表格（含边框），返回不带末尾 `\n` 的字符串。
-    private func renderTable(headerCells: [String], bodyRows: [[String]]) -> String {
+    ///
+    /// 单元格内容先经 `formatPlain` 格式化（处理 **bold**、`code` 等 Markdown），
+    /// 再基于 ANSI-stripped 视觉宽度计算列宽和对齐。
+    private func renderTable(
+        headerCells: [String],
+        bodyRows: [[String]],
+        formatPlain: @Sendable (String) -> String
+    ) -> String {
         let columnCount = headerCells.count
         guard columnCount > 0 else { return "" }
 
-        // 计算每列最大宽度
-        var columnWidths = headerCells.map { visualWidth($0) }
-        for row in bodyRows {
+        // 先格式化所有单元格内容（Markdown → ANSI styled）
+        let styledHeaders = headerCells.map { formatPlain($0) }
+        let styledBodyRows = bodyRows.map { row in row.map { formatPlain($0) } }
+
+        // 基于 ANSI-stripped 视觉宽度计算每列最大宽度
+        var columnWidths = styledHeaders.map { styledVisualWidth($0) }
+        for row in styledBodyRows {
             for (i, cell) in row.enumerated() {
                 if i < columnWidths.count {
-                    columnWidths[i] = max(columnWidths[i], visualWidth(cell))
+                    columnWidths[i] = max(columnWidths[i], styledVisualWidth(cell))
                 }
             }
         }
@@ -275,8 +286,8 @@ struct StreamingTableRenderer: Sendable {
         ))
 
         // 表头行: │ Name │ Type │
-        lines.append(renderCellRow(
-            cells: headerCells, widths: columnWidths,
+        lines.append(renderStyledCellRow(
+            cells: styledHeaders, widths: columnWidths,
             borderColor: borderColor, resetColor: resetColor,
             cellStyleOn: boldOn, cellStyleOff: boldOff
         ))
@@ -289,9 +300,9 @@ struct StreamingTableRenderer: Sendable {
         ))
 
         // 表体行: │ id │ Int │
-        for row in bodyRows {
+        for row in styledBodyRows {
             let padded = padRow(row, toCount: columnCount)
-            lines.append(renderCellRow(
+            lines.append(renderStyledCellRow(
                 cells: padded, widths: columnWidths,
                 borderColor: borderColor, resetColor: resetColor,
                 cellStyleOn: "", cellStyleOff: ""
@@ -329,8 +340,10 @@ struct StreamingTableRenderer: Sendable {
         return parts.joined()
     }
 
-    /// 渲染单元格行（表头或表体）。
-    private func renderCellRow(
+    /// 渲染单元格行（表头或表体）— 支持 ANSI styled 内容。
+    ///
+    /// 使用 `styledVisualWidth` 计算 padding，确保含 ANSI 转义码的单元格正确对齐。
+    private func renderStyledCellRow(
         cells: [String],
         widths: [Int],
         borderColor: String, resetColor: String,
@@ -341,7 +354,7 @@ struct StreamingTableRenderer: Sendable {
 
         for (i, width) in widths.enumerated() {
             let cell = i < cells.count ? cells[i] : ""
-            let padded = padCell(cell, toWidth: width)
+            let padded = padStyledCell(cell, toWidth: width)
             parts.append(" " + cellStyleOn + padded + cellStyleOff + " ")
             if i < widths.count - 1 {
                 parts.append(borderColor + "│" + resetColor)
@@ -367,11 +380,75 @@ struct StreamingTableRenderer: Sendable {
         return cell + String(repeating: " ", count: toWidth - currentWidth)
     }
 
+    /// 补齐含 ANSI 转义码的单元格到指定视觉宽度（左对齐）。
+    ///
+    /// 先剥离 ANSI 码计算视觉宽度，然后在末尾补空格。
+    private func padStyledCell(_ cell: String, toWidth: Int) -> String {
+        let currentWidth = styledVisualWidth(cell)
+        if currentWidth >= toWidth { return cell }
+        return cell + String(repeating: " ", count: toWidth - currentWidth)
+    }
+
     /// 计算字符串的视觉宽度（CJK 字符计为 2，其余计为 1）。
     private func visualWidth(_ s: String) -> Int {
         var width = 0
         for char in s {
             width += char.isCJKCharacter ? 2 : 1
+        }
+        return width
+    }
+
+    /// 计算含 ANSI 转义码的字符串的视觉宽度（先剥离 ANSI 码，再计 CJK 宽度）。
+    ///
+    /// CSI 序列 (`\e[...字母`) 和 OSC 序列 (`\e]...BEL/ST`) 均计为 0 宽度。
+    private func styledVisualWidth(_ s: String) -> Int {
+        var width = 0
+        var i = s.startIndex
+        while i < s.endIndex {
+            if s[i] == "\u{1B}" {
+                // ANSI escape sequence — skip without counting width
+                let next = s.index(after: i)
+                if next < s.endIndex {
+                    let c = s[next]
+                    if c == "[" {
+                        // CSI: skip until final byte (0x40–0x7E)
+                        i = s.index(after: next)
+                        while i < s.endIndex {
+                            let b = s[i]
+                            if let ascii = b.asciiValue, ascii >= 0x40 && ascii <= 0x7E {
+                                i = s.index(after: i)
+                                break
+                            }
+                            i = s.index(after: i)
+                        }
+                    } else if c == "]" {
+                        // OSC: skip until BEL (0x07) or ST (\e\\)
+                        i = s.index(after: next)
+                        while i < s.endIndex {
+                            if s[i] == "\u{07}" {
+                                i = s.index(after: i)
+                                break
+                            }
+                            if s[i] == "\u{1B}" {
+                                let afterEsc = s.index(after: i)
+                                if afterEsc < s.endIndex && s[afterEsc] == "\\" {
+                                    i = s.index(after: afterEsc)
+                                    break
+                                }
+                            }
+                            i = s.index(after: i)
+                        }
+                    } else {
+                        // Other 2-char escape
+                        i = s.index(after: next)
+                    }
+                } else {
+                    i = next
+                }
+            } else {
+                width += s[i].isCJKCharacter ? 2 : 1
+                i = s.index(after: i)
+            }
         }
         return width
     }
