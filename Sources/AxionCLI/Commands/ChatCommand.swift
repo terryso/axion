@@ -138,6 +138,11 @@ struct ChatCommand: AsyncParsableCommand {
         // Story 38.5: InputQueue — 忙时输入排队
         var inputQueue = InputQueue()
 
+        // Codex-inspired session metrics: turn counter, total tools, session start time
+        var sessionTurnCount = 0
+        var sessionTotalTools = 0
+        let sessionStartTime = ContinuousClock.now
+
         // REPL loop: each turn calls agent.stream() for full streaming events.
         var skipNextRead = false
 
@@ -147,11 +152,12 @@ struct ChatCommand: AsyncParsableCommand {
             // Story 38.5: 同步 inputQueue 到 composer
             composer.inputQueue = inputQueue
 
-            // AC2: 动态提示符（含上下文进度条）
+            // AC2: 动态提示符（含上下文进度条 + 回合计数）
             let colorProfile = TerminalColorProfile.detect()
             let prompt = BannerRenderer.renderPrompt(
                 usedTokens: state.contextTokens,
                 contextWindow: state.contextWindow,
+                turnNumber: sessionTurnCount,
                 isTTY: isatty(STDERR_FILENO) != 0,
                 colorProfile: colorProfile
             )
@@ -374,6 +380,7 @@ struct ChatCommand: AsyncParsableCommand {
             let turnStartTime = ContinuousClock.now
             let preTurnUsage = state.sessionUsage
             var turnToolCount = 0
+            sessionTurnCount += 1
 
             let outputHandler = ChatOutputFormatter(theme: chatTheme)
             outputHandler.startLLMWaiting()
@@ -446,6 +453,7 @@ struct ChatCommand: AsyncParsableCommand {
             let turnDuration = formatDuration(turnElapsed)
             let turnInputDelta = state.sessionUsage.inputTokens - preTurnUsage.inputTokens
             let turnOutputDelta = state.sessionUsage.outputTokens - preTurnUsage.outputTokens
+            sessionTotalTools += turnToolCount
             fputs(
                 transcriptRenderer.renderTurnSummary(
                     duration: turnDuration,
@@ -482,6 +490,17 @@ struct ChatCommand: AsyncParsableCommand {
         SignalHandler.uninstall()
         try? await state.buildResult.agent.close()
         terminalTitle.clear()
-        fputs(BannerRenderer.renderExit(sessionId: state.sessionId), stderr)
+        let sessionDurationMs = durationToMs(ContinuousClock.now - sessionStartTime)
+        fputs(
+            BannerRenderer.renderExit(
+                sessionId: state.sessionId,
+                sessionDurationMs: sessionDurationMs,
+                turns: sessionTurnCount,
+                totalTools: sessionTotalTools,
+                usage: state.sessionUsage,
+                model: state.buildResult.agent.model
+            ),
+            stderr
+        )
     }
 }

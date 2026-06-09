@@ -1,4 +1,5 @@
 import Foundation
+import OpenAgentSDK
 import Testing
 
 @testable import AxionCLI
@@ -200,6 +201,47 @@ struct BannerRendererTests {
         #expect(prompt == "axion [1k/0 0%]> ")
     }
 
+    // MARK: - renderPrompt with turnNumber
+
+    @Test("renderPrompt 非 TTY 含回合号显示 T3")
+    func renderPrompt_nonTTY_withTurnNumber() {
+        let prompt = BannerRenderer.renderPrompt(
+            usedTokens: 12_000,
+            contextWindow: 200_000,
+            turnNumber: 3,
+            isTTY: false,
+            colorProfile: .unknown
+        )
+        #expect(prompt == "axion [12k/200k 6% T3]> ")
+    }
+
+    @Test("renderPrompt TTY 含回合号显示在进度条后")
+    func renderPrompt_tty_withTurnNumber() {
+        let prompt = BannerRenderer.renderPrompt(
+            usedTokens: 30_000,
+            contextWindow: 200_000,
+            turnNumber: 5,
+            isTTY: true,
+            colorProfile: .trueColor
+        )
+        #expect(prompt.contains("T5"))
+        #expect(prompt.contains("15%"))
+        #expect(prompt.hasSuffix("T5]> "))
+    }
+
+    @Test("renderPrompt 回合号为零时不显示回合标签")
+    func renderPrompt_zeroTurnNumber() {
+        let prompt = BannerRenderer.renderPrompt(
+            usedTokens: 0,
+            contextWindow: 200_000,
+            turnNumber: 0,
+            isTTY: false,
+            colorProfile: .unknown
+        )
+        #expect(!prompt.contains("T0"))
+        #expect(prompt == "axion [0/200k 0%]> ")
+    }
+
     // MARK: - renderContextBar
 
     @Test("renderContextBar: 0% → 全空")
@@ -272,12 +314,44 @@ struct BannerRendererTests {
         #expect(color == "\u{1B}[31m")  // red
     }
 
+    // MARK: - formatSessionDuration
+
+    @Test("formatSessionDuration: 300ms → \"0.3s\"")
+    func formatSessionDuration_subSecond() {
+        #expect(BannerRenderer.formatSessionDuration(ms: 300) == "0.3s")
+    }
+
+    @Test("formatSessionDuration: 3200ms → \"3.2s\"")
+    func formatSessionDuration_seconds() {
+        #expect(BannerRenderer.formatSessionDuration(ms: 3_200) == "3.2s")
+    }
+
+    @Test("formatSessionDuration: 5000ms → \"5s\"")
+    func formatSessionDuration_exactSeconds() {
+        #expect(BannerRenderer.formatSessionDuration(ms: 5_000) == "5s")
+    }
+
+    @Test("formatSessionDuration: 125000ms → \"2m 05s\"")
+    func formatSessionDuration_minutes() {
+        #expect(BannerRenderer.formatSessionDuration(ms: 125_000) == "2m 05s")
+    }
+
+    @Test("formatSessionDuration: 6543000ms → \"1h 49m 03s\"")
+    func formatSessionDuration_hours() {
+        #expect(BannerRenderer.formatSessionDuration(ms: 6_543_000) == "1h 49m 03s")
+    }
+
+    @Test("formatSessionDuration: 0ms → \"0s\"")
+    func formatSessionDuration_zero() {
+        #expect(BannerRenderer.formatSessionDuration(ms: 0) == "0s")
+    }
+
     // MARK: - renderExit
 
-    @Test("renderExit 包含 sessionId 和恢复命令")
+    @Test("renderExit 包含 sessionId（截断为 8 字符）和恢复命令")
     func renderExit_containsSessionId() {
         let exit = BannerRenderer.renderExit(sessionId: "chat-a3f8b2c1")
-        #expect(exit.contains("chat-a3f8b2c1"))
+        #expect(exit.contains("chat-a3f"))
         #expect(exit.contains("/resume"))
     }
 
@@ -285,5 +359,94 @@ struct BannerRendererTests {
     func renderExit_endsWithNewline() {
         let exit = BannerRenderer.renderExit(sessionId: "chat-test")
         #expect(exit.hasSuffix("\n"))
+    }
+
+    // MARK: - renderExit with session summary
+
+    @Test("renderExit 默认参数仍包含 sessionId 和 /resume")
+    func renderExit_defaults_stillContainsSessionId() {
+        let exit = BannerRenderer.renderExit(sessionId: "chat-a3f8b2c1")
+        #expect(exit.contains("chat-a3f"))
+        #expect(exit.contains("/resume"))
+    }
+
+    @Test("renderExit 含会话摘要显示时长和回合数")
+    func renderExit_withSessionSummary() {
+        let usage = TokenUsage(inputTokens: 50_000, outputTokens: 12_000)
+        let exit = BannerRenderer.renderExit(
+            sessionId: "chat-test1234",
+            sessionDurationMs: 125_000,
+            turns: 5,
+            totalTools: 12,
+            usage: usage,
+            model: "claude-sonnet-4-6"
+        )
+        #expect(exit.contains("2m 05s"))
+        #expect(exit.contains("5 turns"))
+        #expect(exit.contains("12 tools"))
+        #expect(exit.contains("↑50k ↓12k"))
+        #expect(exit.contains("预估成本"))
+    }
+
+    @Test("renderExit 单数形式显示 1 turn 和 1 tool")
+    func renderExit_singularForm() {
+        let usage = TokenUsage(inputTokens: 3_000, outputTokens: 800)
+        let exit = BannerRenderer.renderExit(
+            sessionId: "chat-test",
+            sessionDurationMs: 5_000,
+            turns: 1,
+            totalTools: 1,
+            usage: usage,
+            model: "claude-sonnet-4-6"
+        )
+        #expect(exit.contains("1 turn"))
+        #expect(exit.contains("1 tool"))
+    }
+
+    @Test("renderExit 无工具调用时不显示工具计数")
+    func renderExit_noTools_omitsToolCount() {
+        let usage = TokenUsage(inputTokens: 5_000, outputTokens: 1_000)
+        let exit = BannerRenderer.renderExit(
+            sessionId: "chat-test",
+            sessionDurationMs: 10_000,
+            turns: 2,
+            totalTools: 0,
+            usage: usage,
+            model: "claude-sonnet-4-6"
+        )
+        #expect(!exit.contains("tools"))
+        #expect(exit.contains("2 turns"))
+    }
+
+    @Test("renderExit opus 模型显示不同成本估算")
+    func renderExit_opusModelCost() {
+        let usage = TokenUsage(inputTokens: 50_000, outputTokens: 12_000)
+        let exitSonnet = BannerRenderer.renderExit(
+            sessionId: "chat-test",
+            sessionDurationMs: 60_000,
+            turns: 3,
+            totalTools: 5,
+            usage: usage,
+            model: "claude-sonnet-4-6"
+        )
+        let exitOpus = BannerRenderer.renderExit(
+            sessionId: "chat-test",
+            sessionDurationMs: 60_000,
+            turns: 3,
+            totalTools: 5,
+            usage: usage,
+            model: "claude-opus-4-8"
+        )
+        // Both should have cost lines, opus should be more expensive
+        #expect(exitSonnet.contains("预估成本"))
+        #expect(exitOpus.contains("预估成本"))
+        // Parse costs and compare
+        let sonnetCost = exitSonnet.components(separatedBy: "$").last?.trimmingCharacters(in: .whitespacesAndNewlines)
+        let opusCost = exitOpus.components(separatedBy: "$").last?.trimmingCharacters(in: .whitespacesAndNewlines)
+        #expect(sonnetCost != nil)
+        #expect(opusCost != nil)
+        if let s = sonnetCost, let o = opusCost {
+            #expect(Double(s) ?? 0 < Double(o) ?? 0)
+        }
     }
 }

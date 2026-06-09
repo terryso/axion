@@ -1,4 +1,5 @@
 import Foundation
+import OpenAgentSDK
 
 /// 交互模式横幅和提示符格式化。纯函数，不持有状态。
 struct BannerRenderer {
@@ -42,16 +43,17 @@ struct BannerRenderer {
 
     /// 生成带上下文用量和可视化进度条的提示符。
     ///
-    /// Codex-inspired: 显示上下文窗口使用百分比 + 微型进度条 + 颜色编码。
+    /// Codex-inspired: 显示上下文窗口使用百分比 + 微型进度条 + 颜色编码 + 回合计数。
     /// 进度条使用 Unicode block 元素：█▓▒░
     /// 颜色随使用率变化：绿(<50%) → 黄(50-80%) → 红(>80%)
     ///
-    /// - TTY 示例：`axion [12k/200k 6% ▏░░░░░░░░░]> `
-    /// - 高使用率：`axion [180k/200k 90% ████████░░]> `（红色）
-    /// - 非 TTY：  `axion [12k/200k 6%]> `（无进度条、无颜色）
+    /// - TTY 示例：`axion [12k/200k 6% ░░░░░░░░░░ T3]> `
+    /// - 高使用率：`axion [180k/200k 90% ████████░░ T12]> `（红色）
+    /// - 非 TTY：  `axion [12k/200k 6% T3]> `（无进度条、无颜色）
     static func renderPrompt(
         usedTokens: Int,
         contextWindow: Int,
+        turnNumber: Int = 0,
         isTTY: Bool = isatty(STDERR_FILENO) != 0,
         colorProfile: TerminalColorProfile = .detect()
     ) -> String {
@@ -61,15 +63,17 @@ struct BannerRenderer {
             ? Int(Double(usedTokens) / Double(contextWindow) * 100)
             : 0
 
+        let turnLabel = turnNumber > 0 ? " T\(turnNumber)" : ""
+
         guard isTTY else {
-            return "axion [\(used)/\(max) \(pct)%]> "
+            return "axion [\(used)/\(max) \(pct)%\(turnLabel)]> "
         }
 
         let bar = renderContextBar(pct: pct, width: 10)
         let colorCode = contextBarColor(pct: pct, profile: colorProfile)
         let reset = "\u{1B}[0m"
 
-        return "axion [\(used)/\(max) \(colorCode)\(pct)%\(reset) \(colorCode)\(bar)\(reset)]> "
+        return "axion [\(used)/\(max) \(colorCode)\(pct)%\(reset) \(colorCode)\(bar)\(reset)\(turnLabel)]> "
     }
 
     // MARK: - Context Progress Bar
@@ -128,9 +132,49 @@ struct BannerRenderer {
         }
     }
 
-    /// 生成退出信息。
-    static func renderExit(sessionId: String) -> String {
-        "[axion] 会话 \(sessionId) 已保存，使用 /resume 可恢复\n"
+    /// 生成退出信息，含会话统计摘要。
+    ///
+    /// Codex-inspired: 显示会话累计统计（时长、回合、工具、token、成本），
+    /// 用户退出时一目了然本次工作投入。
+    ///
+    /// - Parameters:
+    ///   - sessionId: 会话 ID
+    ///   - sessionDurationMs: 会话总时长（毫秒）
+    ///   - turns: 用户消息回合数
+    ///   - totalTools: 总工具调用次数
+    ///   - usage: 累计 token 用量
+    ///   - model: 当前模型名（用于成本估算）
+    static func renderExit(
+        sessionId: String,
+        sessionDurationMs: Int = 0,
+        turns: Int = 0,
+        totalTools: Int = 0,
+        usage: TokenUsage? = nil,
+        model: String = ""
+    ) -> String {
+        let shortId = String(sessionId.prefix(8))
+        let duration = formatSessionDuration(ms: sessionDurationMs)
+        let turnStr = turns == 1 ? "1 turn" : "\(turns) turns"
+        let toolStr = totalTools == 1 ? "1 tool" : "\(totalTools) tools"
+
+        var lines: [String] = []
+        lines.append("[axion] 会话 \(shortId) 已保存，使用 /resume 可恢复")
+
+        // Session summary line — Codex-inspired compact stats
+        var statsParts: [String] = ["\(duration)", turnStr]
+        if totalTools > 0 { statsParts.append(toolStr) }
+        if let u = usage, u.totalTokens > 0 {
+            statsParts.append("↑\(formatTokenCount(u.inputTokens)) ↓\(formatTokenCount(u.outputTokens))")
+        }
+        lines.append("[axion] \(statsParts.joined(separator: " · "))")
+
+        // Estimated cost line
+        if let u = usage, u.totalTokens > 0, !model.isEmpty {
+            let cost = estimateCost(usage: u, model: model)
+            lines.append("[axion] 预估成本: \(cost)")
+        }
+
+        return lines.joined(separator: "\n") + "\n"
     }
 
     /// 生成恢复会话横幅。
@@ -156,5 +200,49 @@ struct BannerRenderer {
         guard path.count > maxLength else { return path }
         let truncated = path.suffix(maxLength - 1)
         return "…" + truncated
+    }
+
+    /// 格式化会话时长，支持分钟/小时级别。
+    ///
+    /// Codex-inspired (fmt_elapsed_compact):
+    /// - <1s → "0.3s"
+    /// - ≥1s → "3.2s"
+    /// - ≥60s → "2m 05s"
+    /// - ≥1h → "1h 02m 03s"
+    static func formatSessionDuration(ms: Int) -> String {
+        let totalSeconds = ms / 1000
+        if totalSeconds < 60 {
+            let seconds = Double(ms) / 1000.0
+            return seconds == floor(seconds) ? "\(Int(seconds))s" : String(format: "%.1fs", seconds)
+        }
+        let hours = totalSeconds / 3600
+        let minutes = (totalSeconds % 3600) / 60
+        let seconds = totalSeconds % 60
+        if hours > 0 {
+            return String(format: "%dh %02dm %02ds", hours, minutes, seconds)
+        }
+        return String(format: "%dm %02ds", minutes, seconds)
+    }
+
+    /// 估算 token 使用成本（美元）。
+    /// 简化估算：基于 Anthropic 公开定价，sonnet 默认，opus 检测。
+    private static func estimateCost(usage: TokenUsage, model: String) -> String {
+        let inputCostPer1M: Double
+        let outputCostPer1M: Double
+        let cacheReadCostPer1M: Double
+        if model.contains("opus") {
+            inputCostPer1M = 15.0
+            outputCostPer1M = 75.0
+            cacheReadCostPer1M = 1.50
+        } else {
+            inputCostPer1M = 3.0
+            outputCostPer1M = 15.0
+            cacheReadCostPer1M = 0.30
+        }
+        let cacheRead = Double(usage.cacheReadInputTokens ?? 0)
+        let cost = Double(usage.inputTokens) / 1_000_000 * inputCostPer1M
+            + Double(usage.outputTokens) / 1_000_000 * outputCostPer1M
+            + cacheRead / 1_000_000 * cacheReadCostPer1M
+        return String(format: "$%.4f", cost)
     }
 }
