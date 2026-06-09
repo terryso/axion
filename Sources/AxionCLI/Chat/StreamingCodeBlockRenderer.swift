@@ -36,6 +36,9 @@ struct StreamingCodeBlockRenderer: Sendable {
     /// 纯文本行格式化器（用于增强非代码块内的 Markdown 输出）
     private let plainTextFormatter: @Sendable (String) -> String
 
+    /// 流式表格渲染器 — 在非代码块文本中检测并渲染 pipe tables
+    private var tableRenderer: StreamingTableRenderer
+
     init(
         profile: TerminalColorProfile = TerminalColorProfile.detect(),
         isTTY: Bool = false,
@@ -46,6 +49,7 @@ struct StreamingCodeBlockRenderer: Sendable {
         self.isTTY = isTTY
         self.terminalWidth = terminalWidth
         self.plainTextFormatter = plainTextFormatter
+        self.tableRenderer = StreamingTableRenderer(profile: profile, isTTY: isTTY)
     }
 
     // MARK: - Public API
@@ -56,7 +60,7 @@ struct StreamingCodeBlockRenderer: Sendable {
     /// - 不完整行（不以 \n 结尾）缓冲到 `lineBuffer`
     /// - 完整行检查是否匹配代码围栏标记
     /// - 围栏标记替换为视觉边框输出
-    /// - 非围栏内容原样输出
+    /// - 非围栏内容通过表格渲染器和 Markdown 格式化器处理
     ///
     /// - Parameters:
     ///   - text: 流式文本 chunk
@@ -76,8 +80,10 @@ struct StreamingCodeBlockRenderer: Sendable {
             let line = String(lineBuffer[..<newlineRange.lowerBound])
             lineBuffer = String(lineBuffer[newlineRange.lowerBound...].dropFirst())
 
-            processCompleteLine(line, write: write)
-            write("\n")
+            let needsNewline = processCompleteLine(line, write: write)
+            if needsNewline {
+                write("\n")
+            }
         }
 
         // 检查缓冲区是否包含完整的代码围栏行（不以换行结尾但本身是围栏标记）
@@ -85,7 +91,7 @@ struct StreamingCodeBlockRenderer: Sendable {
         if !lineBuffer.isEmpty && isFenceLine(lineBuffer) {
             let line = lineBuffer
             lineBuffer = ""
-            processCompleteLine(line, write: write)
+            let _ = processCompleteLine(line, write: write)
             write("\n")
         }
     }
@@ -95,6 +101,7 @@ struct StreamingCodeBlockRenderer: Sendable {
         inCodeBlock = false
         currentLang = ""
         lineBuffer = ""
+        tableRenderer.reset()
     }
 
     /// 刷新缓冲区中剩余的内容（用于 turn 结束时确保所有文本已输出）。
@@ -102,15 +109,19 @@ struct StreamingCodeBlockRenderer: Sendable {
         if !lineBuffer.isEmpty {
             // 如果还在代码块内，可能是 LLM 忘记关闭的围栏
             // 先处理缓冲区中的内容
-            processCompleteLine(lineBuffer, write: write)
+            let _ = processCompleteLine(lineBuffer, write: write)
             lineBuffer = ""
         }
+        // 刷新表格渲染器中缓冲的内容
+        tableRenderer.flush(write: write, formatPlain: plainTextFormatter)
     }
 
     // MARK: - Line Processing
 
     /// 处理一行完整文本（不含末尾 \n）。
-    private mutating func processCompleteLine(_ line: String, write: (String) -> Void) {
+    /// - Returns: `true` 表示调用方应追加 `\n`；`false` 表示行被 holdback（表格缓冲中）。
+    @discardableResult
+    private mutating func processCompleteLine(_ line: String, write: (String) -> Void) -> Bool {
         if isFenceLine(line) {
             if inCodeBlock {
                 // 结束代码块 — 渲染底部边框
@@ -123,12 +134,18 @@ struct StreamingCodeBlockRenderer: Sendable {
                 write(renderOpenBorder(lang: currentLang))
                 inCodeBlock = true
             }
+            return true
         } else if inCodeBlock {
             // 代码块内内容 — 渲染为 dim 样式
             write(renderCodeContent(line))
+            return true
         } else {
-            // 普通文本 — 通过 Markdown 格式化器增强输出
-            write(plainTextFormatter(line))
+            // 非代码块文本 — 通过表格渲染器检测 pipe tables，再走 Markdown 格式化
+            return tableRenderer.processLine(
+                line,
+                write: write,
+                formatPlain: plainTextFormatter
+            )
         }
     }
 
