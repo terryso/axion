@@ -97,13 +97,18 @@ struct SlashCommandHandler {
 
     // MARK: - Individual handlers
 
-    /// /help — 格式化输出所有命令列表。
+    /// /help — 格式化输出命令列表和键盘快捷键。
+    ///
+    /// Codex-inspired: 在命令列表下方追加快捷键分组提示，
+    /// 帮助用户发现编辑、导航、队列等交互操作。
     static func handleHelp() -> String {
         var lines = ["可用命令:\n"]
         for cmd in SlashCommand.allCases {
             lines.append("  \(cmd.rawValue.padding(toLength: 10, withPad: " ", startingAt: 0)) \(cmd.helpText)")
         }
         lines.append("\n  /quit                 退出交互模式（/exit 同义）")
+        lines.append("")
+        lines.append(KeyHintsFormatter.renderFull())
         return lines.joined(separator: "\n") + "\n"
     }
 

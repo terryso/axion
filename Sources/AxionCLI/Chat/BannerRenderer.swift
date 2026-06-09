@@ -22,21 +22,27 @@ struct BannerRenderer {
     }
 
     /// 生成启动横幅文本（简洁文本格式，无 Unicode box-drawing）。
+    ///
+    /// Codex-inspired: 横幅底部显示键盘快捷键提示行（KeyHintsFormatter），
+    /// 帮助用户在首次交互前发现可用操作，无需阅读 /help。
     static func renderBanner(
         version: String,
         model: String,
         cwd: String,
         sessionId: String,
         contextWindow: Int,
-        buildTimeMs: Int
+        buildTimeMs: Int,
+        isTTY: Bool = isatty(STDERR_FILENO) != 0,
+        colorProfile: TerminalColorProfile = .detect()
     ) -> String {
         let contextMax = formatTokenCount(contextWindow)
         let duration = formatDurationMs(buildTimeMs)
         let displayCwd = truncatePath(cwd, maxLength: 60)
+        let keyHints = KeyHintsFormatter.renderInline(isTTY: isTTY, colorProfile: colorProfile)
         return """
             Axion v\(version) · \(model) · \(displayCwd) [\(duration)]
             Session: \(sessionId) · Context: 0/\(contextMax)
-            输入任务开始对话，/help 查看命令
+            \(keyHints)
 
             """
     }
@@ -182,13 +188,16 @@ struct BannerRenderer {
         sessionId: String,
         messageCount: Int,
         model: String,
-        contextWindow: Int
+        contextWindow: Int,
+        isTTY: Bool = isatty(STDERR_FILENO) != 0,
+        colorProfile: TerminalColorProfile = .detect()
     ) -> String {
         let contextMax = formatTokenCount(contextWindow)
+        let keyHints = KeyHintsFormatter.renderInline(isTTY: isTTY, colorProfile: colorProfile)
         return """
             [axion] 已恢复会话 \(sessionId) (\(messageCount) 条消息)
             Model: \(model) · Context: 0/\(contextMax)
-            输入任务继续对话，/help 查看命令
+            \(keyHints)
 
             """
     }

@@ -61,7 +61,7 @@ struct BannerRendererTests {
 
     // MARK: - renderBanner
 
-    @Test("renderBanner 包含版本号、模型、CWD、sessionId")
+    @Test("renderBanner 包含版本号、模型、CWD、sessionId、快捷键提示")
     func renderBanner_containsKeyInfo() {
         let banner = BannerRenderer.renderBanner(
             version: "0.11.0",
@@ -69,7 +69,9 @@ struct BannerRendererTests {
             cwd: "/Users/nick/project",
             sessionId: "chat-a3f8b2c1",
             contextWindow: 200_000,
-            buildTimeMs: 157
+            buildTimeMs: 157,
+            isTTY: false,
+            colorProfile: .unknown
         )
         #expect(banner.contains("Axion v0.11.0"))
         #expect(banner.contains("claude-sonnet-4-6"))
@@ -78,6 +80,9 @@ struct BannerRendererTests {
         #expect(banner.contains("0/200k"))
         #expect(banner.contains("157ms"))
         #expect(banner.contains("/help"))
+        // Codex-inspired: 横幅现在包含快捷键提示行
+        #expect(banner.contains("[Enter]"))
+        #expect(banner.contains("[Ctrl+C]"))
     }
 
     @Test("renderBanner 秒级耗时格式化")
@@ -88,7 +93,9 @@ struct BannerRendererTests {
             cwd: "/tmp",
             sessionId: "chat-abc12345",
             contextWindow: 200_000,
-            buildTimeMs: 2345
+            buildTimeMs: 2345,
+            isTTY: false,
+            colorProfile: .unknown
         )
         #expect(banner.contains("2.3s"))
     }
@@ -102,7 +109,9 @@ struct BannerRendererTests {
             cwd: longPath,
             sessionId: "chat-test",
             contextWindow: 200_000,
-            buildTimeMs: 100
+            buildTimeMs: 100,
+            isTTY: false,
+            colorProfile: .unknown
         )
         // Banner should still render, path should be truncated with "…"
         #expect(banner.contains("…"))
