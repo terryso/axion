@@ -1,3 +1,4 @@
+import Foundation
 
 // MARK: - AC5/AC7/AC9: 审批渲染器
 
@@ -72,9 +73,10 @@ struct ApprovalRenderer: Sendable {
         }
     }
 
-    /// 渲染 Edit 工具的变更摘要。
+    /// 渲染 Edit 工具的变更摘要（增强版：TTY 环境下显示 color-coded diff 预览）。
     ///
-    /// 统计 old_string 和 new_string 的行数差异。
+    /// TTY 环境使用 ApprovalDiffPreview 生成可视化差异预览，
+    /// 非 TTY 环境退回到简单的行数摘要。
     private static func renderEditDiffSummary(input: [String: Any]) -> String? {
         guard let oldString = input["old_string"] as? String,
               let newString = input["new_string"] as? String else {
@@ -82,6 +84,20 @@ struct ApprovalRenderer: Sendable {
         }
 
         let filePath = input["file_path"] as? String ?? "文件"
+        let isTTY = isatty(STDERR_FILENO) != 0
+        let config = ApprovalDiffPreview.Config(isTTY: isTTY)
+
+        if isTTY {
+            // TTY: 显示 color-coded diff 预览
+            return ApprovalDiffPreview.renderEditPreview(
+                filePath: filePath,
+                oldString: oldString,
+                newString: newString,
+                config: config
+            )
+        }
+
+        // 非 TTY: 简单行数摘要（兼容原有格式）
         let oldLines = oldString.components(separatedBy: "\n").count
         let newLines = newString.components(separatedBy: "\n").count
 
@@ -99,17 +115,30 @@ struct ApprovalRenderer: Sendable {
         }
     }
 
-    /// 渲染 Write 工具的变更摘要。
+    /// 渲染 Write 工具的变更摘要（增强版：TTY 环境下显示内容预览）。
     ///
-    /// 统计 content 的行数。
+    /// TTY 环境使用 ApprovalDiffPreview 生成新文件内容预览，
+    /// 非 TTY 环境退回到简单的行数摘要。
     private static func renderWriteDiffSummary(input: [String: Any]) -> String? {
         guard let content = input["content"] as? String else {
             return nil
         }
 
         let filePath = input["file_path"] as? String ?? "文件"
-        let lineCount = content.components(separatedBy: "\n").count
+        let isTTY = isatty(STDERR_FILENO) != 0
+        let config = ApprovalDiffPreview.Config(isTTY: isTTY)
 
+        if isTTY {
+            // TTY: 显示内容预览
+            return ApprovalDiffPreview.renderWritePreview(
+                filePath: filePath,
+                content: content,
+                config: config
+            )
+        }
+
+        // 非 TTY: 简单行数摘要（兼容原有格式）
+        let lineCount = content.components(separatedBy: "\n").count
         return "  \(filePath): \(lineCount) 行"
     }
 }
