@@ -936,4 +936,254 @@ struct StreamingMarkdownFormatterTests {
         let result = formatter.formatLine("~~old `code` style~~")
         #expect(result.contains("\u{1B}[9m"))  // strikethrough
     }
+
+    // MARK: - Heading Underline Decoration
+
+    @Test("H1 heading includes double-line underline")
+    func h1_heading_hasUnderline() {
+        let formatter = StreamingMarkdownFormatter(profile: .trueColor, isTTY: true)
+        let result = formatter.formatLine("# Title")
+        // Should contain newline separating heading from underline
+        #expect(result.contains("\n"))
+        // Underline should use ═ characters (double line for H1)
+        let lines = result.components(separatedBy: "\n")
+        #expect(lines.count == 2)
+        #expect(lines[1].contains("═"))
+    }
+
+    @Test("H2 heading includes single-line underline")
+    func h2_heading_hasUnderline() {
+        let formatter = StreamingMarkdownFormatter(profile: .trueColor, isTTY: true)
+        let result = formatter.formatLine("## Section")
+        #expect(result.contains("\n"))
+        let lines = result.components(separatedBy: "\n")
+        #expect(lines.count == 2)
+        #expect(lines[1].contains("─"))
+    }
+
+    @Test("H3 heading has no underline")
+    func h3_heading_noUnderline() {
+        let formatter = StreamingMarkdownFormatter(profile: .trueColor, isTTY: true)
+        let result = formatter.formatLine("### Subsection")
+        // H3 should NOT have an underline (single line output)
+        #expect(!result.contains("\n"))
+    }
+
+    @Test("H4 heading has no underline")
+    func h4_heading_noUnderline() {
+        let formatter = StreamingMarkdownFormatter(profile: .trueColor, isTTY: true)
+        let result = formatter.formatLine("#### Details")
+        #expect(!result.contains("\n"))
+    }
+
+    @Test("H1 underline width matches heading text")
+    func h1_underlineWidth() {
+        let formatter = StreamingMarkdownFormatter(profile: .trueColor, isTTY: true)
+        let result = formatter.formatLine("# Hi")
+        let lines = result.components(separatedBy: "\n")
+        // Underline width = "# " (2) + "Hi" (2) = 4 ═ characters
+        // Strip ANSI codes to get visible underline
+        let underlineVisible = stripANSI(lines[1])
+        #expect(underlineVisible == "════")
+    }
+
+    @Test("H2 underline width matches heading text")
+    func h2_underlineWidth() {
+        let formatter = StreamingMarkdownFormatter(profile: .trueColor, isTTY: true)
+        let result = formatter.formatLine("## Hello World")
+        let lines = result.components(separatedBy: "\n")
+        // Underline width = "## " (3) + "Hello World" (11) = 14 ─ characters
+        let underlineVisible = stripANSI(lines[1])
+        #expect(underlineVisible == String(repeating: "─", count: 14))
+    }
+
+    @Test("H1 underline uses dim color")
+    func h1_underline_dimColor() {
+        let formatter = StreamingMarkdownFormatter(profile: .trueColor, isTTY: true)
+        let result = formatter.formatLine("# Title")
+        let lines = result.components(separatedBy: "\n")
+        // Underline line should use dim color code
+        #expect(lines[1].contains("\u{1B}[38;2;100;100;120m"))
+    }
+
+    @Test("H1 underline ANSI256 color")
+    func h1_underline_ansi256() {
+        let formatter = StreamingMarkdownFormatter(profile: .ansi256, isTTY: true)
+        let result = formatter.formatLine("# Title")
+        let lines = result.components(separatedBy: "\n")
+        #expect(lines.count == 2)
+        #expect(lines[1].contains("\u{1B}[38;5;243m"))
+    }
+
+    @Test("H1 underline ANSI16 color")
+    func h1_underline_ansi16() {
+        let formatter = StreamingMarkdownFormatter(profile: .ansi16, isTTY: true)
+        let result = formatter.formatLine("# Title")
+        let lines = result.components(separatedBy: "\n")
+        #expect(lines.count == 2)
+        #expect(lines[1].contains("\u{1B}[2m"))  // dim
+    }
+
+    @Test("H1 heading preserves leading spaces with underline")
+    func h1_leadingSpaces_withUnderline() {
+        let formatter = StreamingMarkdownFormatter(profile: .trueColor, isTTY: true)
+        let result = formatter.formatLine("  # Indented")
+        let lines = result.components(separatedBy: "\n")
+        // First line should have leading spaces preserved
+        #expect(lines[0].hasPrefix("  "))
+        #expect(lines.count == 2)
+        #expect(lines[1].contains("═"))
+    }
+
+    @Test("heading underline non-TTY passthrough")
+    func heading_underline_nonTTY() {
+        let formatter = StreamingMarkdownFormatter(profile: .trueColor, isTTY: false)
+        let result = formatter.formatLine("# Title")
+        // Non-TTY: no ANSI codes, no underline
+        #expect(!result.contains("\u{1B}"))
+        #expect(!result.contains("\n"))
+    }
+
+    // MARK: - Image Syntax
+
+    @Test("image syntax renders as camera emoji placeholder")
+    func image_basic() {
+        let formatter = StreamingMarkdownFormatter(profile: .trueColor, isTTY: true)
+        let result = formatter.formatLine("![screenshot](https://example.com/img.png)")
+        #expect(result.contains("📷"))
+        #expect(result.contains("screenshot"))
+        #expect(result.contains("\u{1B}[38;2;96;165;250m"))  // link color
+    }
+
+    @Test("image syntax renders brackets around emoji")
+    func image_hasBrackets() {
+        let formatter = StreamingMarkdownFormatter(profile: .trueColor, isTTY: true)
+        let result = formatter.formatLine("![diagram](https://example.com/diagram.png)")
+        #expect(result.contains("[📷"))
+        #expect(result.contains("]"))
+    }
+
+    @Test("image with empty alt text uses fallback")
+    func image_emptyAlt() {
+        let formatter = StreamingMarkdownFormatter(profile: .trueColor, isTTY: true)
+        let result = formatter.formatLine("![](https://example.com/img.png)")
+        #expect(result.contains("📷"))
+        #expect(result.contains("image"))  // fallback text
+    }
+
+    @Test("image in text context")
+    func image_inContext() {
+        let formatter = StreamingMarkdownFormatter(profile: .trueColor, isTTY: true)
+        let result = formatter.formatLine("Here is a ![photo](https://example.com/p.jpg) in text")
+        #expect(result.contains("📷"))
+        #expect(result.contains("photo"))
+        #expect(result.contains("Here is a"))
+        #expect(result.contains("in text"))
+    }
+
+    @Test("image with OSC 8 hyperlink")
+    func image_osc8() {
+        let formatter = StreamingMarkdownFormatter(
+            profile: .trueColor,
+            isTTY: true,
+            hyperlinkFormatter: TerminalHyperlinkFormatter(isTTY: true, termProgram: "iTerm.app")
+        )
+        let result = formatter.formatLine("![icon](https://example.com/icon.svg)")
+        // Should contain OSC 8 hyperlink escape sequence
+        #expect(result.contains("\u{1B}]8;;"))
+        #expect(result.contains("https://example.com/icon.svg"))
+        #expect(result.contains("📷"))
+    }
+
+    @Test("image without OSC 8 does not show URL")
+    func image_noOSC8_noURL() {
+        let formatter = StreamingMarkdownFormatter(
+            profile: .trueColor,
+            isTTY: true,
+            hyperlinkFormatter: TerminalHyperlinkFormatter(isTTY: true, termProgram: nil)
+        )
+        let result = formatter.formatLine("![icon](https://example.com/icon.svg)")
+        // Without OSC 8, URL should not appear in visible output
+        #expect(!result.contains("https://example.com/icon.svg"))
+        #expect(result.contains("📷"))
+    }
+
+    @Test("image syntax non-TTY passthrough")
+    func image_nonTTY() {
+        let formatter = StreamingMarkdownFormatter(profile: .trueColor, isTTY: false)
+        let result = formatter.formatLine("![alt](https://example.com/img.png)")
+        // Non-TTY: passthrough unchanged
+        #expect(result == "![alt](https://example.com/img.png)")
+    }
+
+    @Test("image ANSI256 color")
+    func image_ansi256() {
+        let formatter = StreamingMarkdownFormatter(profile: .ansi256, isTTY: true)
+        let result = formatter.formatLine("![pic](https://example.com/pic.png)")
+        #expect(result.contains("\u{1B}[38;5;111m"))  // ANSI256 sky blue
+        #expect(result.contains("📷"))
+    }
+
+    @Test("image ANSI16 color")
+    func image_ansi16() {
+        let formatter = StreamingMarkdownFormatter(profile: .ansi16, isTTY: true)
+        let result = formatter.formatLine("![pic](https://example.com/pic.png)")
+        #expect(result.contains("\u{1B}[34m"))  // ANSI16 blue
+        #expect(result.contains("📷"))
+    }
+
+    @Test("exclamation mark without bracket is not image")
+    func exclamationNotImage() {
+        let formatter = StreamingMarkdownFormatter(profile: .trueColor, isTTY: true)
+        let result = formatter.formatLine("Wow! That's great")
+        #expect(!result.contains("📷"))
+    }
+
+    @Test("image and link in same line")
+    func imageAndLink_sameLine() {
+        let formatter = StreamingMarkdownFormatter(profile: .trueColor, isTTY: true)
+        let result = formatter.formatLine("See ![img](https://a.com/i.png) and [link](https://b.com)")
+        #expect(result.contains("📷"))
+        #expect(result.contains("img"))
+        // Both image and link should have link color applied
+        let linkColorCount = result.components(separatedBy: "\u{1B}[38;2;96;165;250m").count - 1
+        #expect(linkColorCount == 2)  // one for image, one for link
+    }
+
+    @Test("image does not match inside bold")
+    func image_insideBold() {
+        let formatter = StreamingMarkdownFormatter(profile: .trueColor, isTTY: true)
+        // Image inside bold context — should not trigger image rendering
+        let result = formatter.formatLine("**![img](https://a.com/i.png)**")
+        // Bold markers should be processed, but image inside bold is suppressed
+        #expect(result.contains("\u{1B}[1m"))  // bold applied
+    }
+
+    @Test("image URL with parentheses")
+    func image_urlWithParens() {
+        let formatter = StreamingMarkdownFormatter(profile: .trueColor, isTTY: true)
+        let result = formatter.formatLine("![pic](https://example.com/pic_(1).png)")
+        #expect(result.contains("📷"))
+        #expect(result.contains("pic"))
+    }
+
+    @Test("unclosed image syntax falls through")
+    func image_unclosed() {
+        let formatter = StreamingMarkdownFormatter(profile: .trueColor, isTTY: true)
+        let result = formatter.formatLine("![alt](https://example.com/unclosed")
+        // Unclosed paren → not a valid image, treated as plain text
+        #expect(!result.contains("📷"))
+    }
+
+    // MARK: - Test Helpers
+
+    /// Strip ANSI escape sequences from a string for visible-length assertions.
+    private func stripANSI(_ string: String) -> String {
+        let pattern = "\u{1B}\\[[0-9;]*m"
+        return string.replacingOccurrences(
+            of: pattern,
+            with: "",
+            options: .regularExpression
+        )
+    }
 }

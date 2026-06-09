@@ -3,12 +3,13 @@ import Foundation
 /// 流式 Markdown 内联格式化器 — Codex 启发，增强 LLM 流式输出中非代码文本的可读性。
 ///
 /// 处理的 Markdown 元素：
-/// - 标题（`#` ~ `####`）→ 粗体 + 颜色
+/// - 标题（`#` ~ `####`）→ 粗体 + 颜色 + H1/H2 下划线装饰
 /// - 粗体（`**text**`）→ 明亮/粗体 ANSI
 /// - 斜体（`*text*`、`_text_`）→ italic ANSI
 /// - 删除线（`~~text~~`）→ ANSI strikethrough + dim 颜色
 /// - 内联代码（`` `code` ``）→ 独立颜色高亮
 /// - 内联链接（`[text](url)`）→ 颜色文本 + OSC 8 可点击超链接
+/// - 图片（`![alt](url)`）→ `[📷 alt]` 颜色占位
 /// - 水平分割线（`---`、`***`、`___`）→ Unicode 可视化分隔线
 /// - 有序列表（`1. text`）→ 彩色编号 + 缩进
 /// - 无序列表（`- text`、`* text`、`+ text`）→ 彩色符号 + 缩进
@@ -282,7 +283,11 @@ struct StreamingMarkdownFormatter: Sendable {
         return "\(dimCode)\(line)\(resetCode)"
     }
 
-    /// 渲染标题 — 粗体 + 级别相关颜色
+    /// 渲染标题 — 粗体 + 级别相关颜色 + H1/H2 下划线装饰。
+    ///
+    /// H1: `# Title` + `═══════`（双线下划线，长度与标题文本对齐）
+    /// H2: `## Title` + `───────`（单线下划线）
+    /// H3/H4: 仅颜色 + 粗体（无下划线）
     private func renderHeading(originalLine: String, level: Int, text: String) -> String {
         let (boldCode, resetCode) = boldCodes()
         let colorCode = headingColor(level: level)
@@ -294,7 +299,21 @@ struct StreamingMarkdownFormatter: Sendable {
         // 格式化文本（处理内联元素）
         let formattedText = formatInlineElements(text)
 
-        return "\(leadingSpaces)\(colorCode)\(boldCode)\(hashPrefix)\(resetCode) \(formattedText)"
+        let headingLine = "\(leadingSpaces)\(colorCode)\(boldCode)\(hashPrefix)\(resetCode) \(formattedText)"
+
+        // H1/H2 下划线装饰 — 使用标题文本的可见长度计算下划线宽度
+        if level <= 2 {
+            let (dimCode, dimReset) = dimCodes()
+            let underlineChar = level == 1 ? "═" : "─"
+            // 计算可见字符宽度：# 前缀(1-2字符) + 空格(1) + 文本长度
+            let prefixWidth = hashPrefix.count + 1  // "# " or "## "
+            let textWidth = text.count
+            let underlineWidth = prefixWidth + textWidth
+            let underline = String(repeating: underlineChar, count: underlineWidth)
+            return "\(headingLine)\n\(dimCode)\(underline)\(dimReset)"
+        }
+
+        return headingLine
     }
 
     /// 渲染引用块 — dim 竖线前缀 + 引用内容。
@@ -377,7 +396,7 @@ struct StreamingMarkdownFormatter: Sendable {
 
     // MARK: - Inline Element Formatting
 
-    /// 格式化行内 Markdown 元素（粗体 + 斜体 + 删除线 + 内联代码 + 链接）。
+    /// 格式化行内 Markdown 元素（粗体 + 斜体 + 删除线 + 内联代码 + 链接 + 图片）。
     ///
     /// 扫描策略：逐字符扫描，维护粗体/斜体/代码/删除线开关状态。
     /// - `**text**` → 粗体开关（ANSI bold）
@@ -385,10 +404,11 @@ struct StreamingMarkdownFormatter: Sendable {
     /// - `_text_` → 斜体开关（ANSI italic）
     /// - `~~text~~` → 删除线开关（ANSI strikethrough + dim 颜色）
     /// - `` `code` `` → 内联代码开关（ANSI 颜色）
+    /// - `![alt](url)` → `[📷 alt]` 颜色图片占位
     /// - `[text](url)` → 颜色文本 + OSC 8 超链接
     ///
     /// 注意：`*` 优先匹配 `**`（粗体），单 `*` 在非粗体上下文中视为斜体。
-    /// 检测顺序：`~~` → `**` → `` ` `` → `[`（链接）→ `*` → `_`。
+    /// 检测顺序：`~~` → `**` → `` ` `` → `![`（图片）→ `[`（链接）→ `*` → `_`。
     private func formatInlineElements(_ line: String) -> String {
         guard isTTY && profile != .unknown else { return line }
 
@@ -396,6 +416,7 @@ struct StreamingMarkdownFormatter: Sendable {
         let needsFormatting = line.contains("**") || line.contains("`")
             || line.contains("*") || line.contains("_")
             || line.contains("~~") || line.contains("](")
+            || line.contains("![")
         guard needsFormatting else { return line }
 
         var result = ""
@@ -459,6 +480,16 @@ struct StreamingMarkdownFormatter: Sendable {
                 }
                 i += 1
                 continue
+            }
+
+            // 检测 `![alt](url)` 图片语法（非粗体/非代码/非删除线上下文）
+            // 必须在 `[` 链接检测之前，因为 `![` 是 `[` 的前缀
+            if chars[i] == "!" && i + 1 < chars.count && chars[i + 1] == "[" && !inBold && !inCode && !inStrikethrough {
+                if let imageResult = parseAndRenderImage(chars: chars, startIndex: i) {
+                    result += imageResult.rendered
+                    i = imageResult.endIndex
+                    continue
+                }
             }
 
             // 检测 `[text](url)` 内联链接（非粗体/非代码/非删除线上下文）
@@ -627,6 +658,67 @@ struct StreamingMarkdownFormatter: Sendable {
             // 无 OSC 8 支持 — 着色文本 + dim URL
             let (dimCode, dimReset) = dimCodes()
             return "\(linkColor)\(text)\(resetCode) \(dimCode)(\(url))\(dimReset)"
+        }
+    }
+
+    // MARK: - Image Parsing & Rendering
+
+    /// 图片解析结果（内部使用）
+    private struct ImageRenderResult {
+        let rendered: String
+        let endIndex: Int
+    }
+
+    /// 从 `![` 位置尝试解析 `![alt](url)` 格式的图片语法。
+    ///
+    /// 成功时返回渲染后的字符串和结束索引；失败时返回 nil（让调用方按普通 `!` + `[` 处理）。
+    private func parseAndRenderImage(chars: [Character], startIndex: Int) -> ImageRenderResult? {
+        // startIndex 指向 `!`，下一个字符应该是 `[`
+        guard startIndex + 1 < chars.count && chars[startIndex + 1] == "[" else {
+            return nil
+        }
+
+        // 1. 找到匹配的 `]`（从 `[` 位置开始搜索）
+        guard let closeBracket = findMatchingCloseBracket(chars: chars, openIndex: startIndex + 1) else {
+            return nil
+        }
+
+        let alt = String(chars[(startIndex + 2)..<closeBracket])
+
+        // 2. `]` 后必须紧跟 `(`
+        let afterCloseBracket = closeBracket + 1
+        guard afterCloseBracket < chars.count && chars[afterCloseBracket] == "(" else {
+            return nil
+        }
+
+        // 3. 找到匹配的 `)`
+        let openParen = afterCloseBracket
+        guard let closeParen = findMatchingCloseParen(chars: chars, openIndex: openParen) else {
+            return nil
+        }
+
+        let url = String(chars[(openParen + 1)..<closeParen])
+
+        // 4. 渲染图片占位 — `[📷 alt]` 格式
+        let rendered = renderImage(alt: alt, url: url)
+        return ImageRenderResult(rendered: rendered, endIndex: closeParen + 1)
+    }
+
+    /// 渲染图片语法 — `[📷 alt]` 格式。
+    ///
+    /// 有 OSC 8 支持：`[📷 alt]` 作为可点击超链接指向图片 URL
+    /// 无 OSC 8 支持：`[📷 alt]` 着色文本
+    private func renderImage(alt: String, url: String) -> String {
+        let (linkColor, resetCode) = linkColorCodes()
+        let displayAlt = alt.isEmpty ? "image" : alt
+
+        if let formatter = hyperlinkFormatter, formatter.supportsOSC8 {
+            // OSC 8 可点击超链接
+            let coloredText = "\(linkColor)[📷 \(displayAlt)]\(resetCode)"
+            return formatter.formatURL(url, visibleText: coloredText)
+        } else {
+            // 无 OSC 8 — 着色图片占位符
+            return "\(linkColor)[📷 \(displayAlt)]\(resetCode)"
         }
     }
 
