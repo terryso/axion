@@ -27,6 +27,9 @@ final class ChatOutputFormatter: OpenAgentSDK.SDKMessageOutputHandler, @unchecke
     // 流式 Markdown 内联格式化器 — 增强标题、粗体、内联代码等
     private let markdownFormatter: StreamingMarkdownFormatter
 
+    // 文件变更追踪器 — Codex 风格回合结束摘要
+    private(set) var fileChangeTracker = FileChangeTracker()
+
     /// 中断标记：为 true 时，.cancelled 和 .errorDuringExecution 不输出警告。
     /// 由 ChatCommand 在检测到 Ctrl+C 中断后设置。
     var suppressInterruptError: Bool = false
@@ -139,6 +142,18 @@ final class ChatOutputFormatter: OpenAgentSDK.SDKMessageOutputHandler, @unchecke
             )
             writeToolLine(role: .tool, content: startedLine)
 
+            // Codex-inspired: 追踪文件变更用于回合结束摘要
+            if let info = FileChangeTracker.extractFileInfo(toolName: data.toolName, input: data.input) {
+                switch info.kind {
+                case .created:
+                    fileChangeTracker.recordWrite(filePath: info.filePath, contentLineCount: info.linesAdded)
+                case .edited:
+                    fileChangeTracker.recordEdit(filePath: info.filePath, linesAdded: info.linesAdded, linesRemoved: info.linesRemoved)
+                case .read:
+                    fileChangeTracker.recordRead(filePath: info.filePath)
+                }
+            }
+
             // 启动工具执行 spinner（立即，无延迟）
             spinner.start(message: data.toolName)
 
@@ -204,6 +219,15 @@ final class ChatOutputFormatter: OpenAgentSDK.SDKMessageOutputHandler, @unchecke
             // 重置 assistant block 和代码块渲染器
             codeBlockRenderer.reset()
             assistantBlockStarted = false
+
+            // Codex-inspired: 输出文件变更摘要（仅在有变更时）
+            if fileChangeTracker.hasChanges {
+                let summary = fileChangeTracker.renderSummary()
+                if !summary.isEmpty {
+                    writeStdout(summary)
+                }
+                fileChangeTracker.reset()
+            }
 
         case .system(let data):
             switch data.subtype {
