@@ -6,10 +6,13 @@ import Foundation
 /// - 标题（`#` ~ `####`）→ 粗体 + 颜色
 /// - 粗体（`**text**`）→ 明亮/粗体 ANSI
 /// - 斜体（`*text*`、`_text_`）→ italic ANSI
+/// - 删除线（`~~text~~`）→ ANSI strikethrough + dim 颜色
 /// - 内联代码（`` `code` ``）→ 独立颜色高亮
+/// - 内联链接（`[text](url)`）→ 颜色文本 + OSC 8 可点击超链接
 /// - 水平分割线（`---`、`***`、`___`）→ Unicode 可视化分隔线
 /// - 有序列表（`1. text`）→ 彩色编号 + 缩进
 /// - 无序列表（`- text`、`* text`、`+ text`）→ 彩色符号 + 缩进
+/// - 任务列表（`- [ ]`、`- [x]`）→ Unicode 复选框 + 缩进
 /// - 引用块（`> text`）→ dim 前缀竖线
 ///
 /// 设计原则：
@@ -29,14 +32,19 @@ struct StreamingMarkdownFormatter: Sendable {
     /// 终端宽度（用于分割线长度）
     private let terminalWidth: Int
 
+    /// 超链接格式化器 — 用于渲染内联链接为 OSC 8 可点击超链接
+    private let hyperlinkFormatter: TerminalHyperlinkFormatter?
+
     init(
         profile: TerminalColorProfile = TerminalColorProfile.detect(),
         isTTY: Bool = isatty(STDOUT_FILENO) != 0,
-        terminalWidth: Int = 80
+        terminalWidth: Int = 80,
+        hyperlinkFormatter: TerminalHyperlinkFormatter? = nil
     ) {
         self.profile = isTTY ? profile : .unknown
         self.isTTY = isTTY
         self.terminalWidth = terminalWidth
+        self.hyperlinkFormatter = hyperlinkFormatter
     }
 
     // MARK: - Public API
@@ -72,12 +80,17 @@ struct StreamingMarkdownFormatter: Sendable {
             return renderBlockquote(prefix: blockquote.prefix, text: blockquote.text)
         }
 
-        // 4. 列表项
+        // 4. 任务列表（优先于普通列表，因为 `- [ ]` 以 `- ` 开头）
+        if let task = parseTaskList(trimmed) {
+            return renderTaskList(originalLine: line, checked: task.checked, text: task.text)
+        }
+
+        // 5. 列表项
         if let list = parseList(trimmed) {
             return renderList(originalLine: line, marker: list.marker, text: list.text)
         }
 
-        // 5. 内联元素（粗体 + 斜体 + 内联代码）
+        // 6. 内联元素（粗体 + 斜体 + 删除线 + 内联代码 + 链接）
         return formatInlineElements(line)
     }
 
@@ -180,6 +193,10 @@ struct StreamingMarkdownFormatter: Sendable {
                 let markerChar = String(marker.dropLast())  // 去掉尾部空格
                 let text = String(trimmed.dropFirst(marker.count))
                 guard !text.isEmpty else { return nil }
+                // 排除任务列表模式（- [ ] / - [x]）
+                if markerChar == "-" && (text.hasPrefix("[ ] ") || text.hasPrefix("[x] ") || text == "[ ]" || text == "[x]") {
+                    return nil
+                }
                 return ListInfo(marker: markerChar, text: text)
             }
         }
@@ -203,6 +220,57 @@ struct StreamingMarkdownFormatter: Sendable {
         guard !text.isEmpty else { return nil }
 
         return ListInfo(marker: marker, text: text)
+    }
+
+    // MARK: - Task List Detection
+
+    /// 任务列表解析结果
+    private struct TaskListInfo {
+        let checked: Bool    // true = [x], false = [ ]
+        let text: String     // 任务描述
+    }
+
+    /// 检测任务列表项（`- [ ]` 或 `- [x]`）。
+    ///
+    /// 支持 `- [ ] text`、`- [x] text`、`* [ ] text`、`+ [x] text` 格式。
+    /// 方括号内的空格必须是精确的 ` ` 或 `x`/`X`。
+    private func parseTaskList(_ trimmed: String) -> TaskListInfo? {
+        let markers = ["- ", "* ", "+ "]
+        for marker in markers {
+            if trimmed.hasPrefix(marker) {
+                let afterMarker = String(trimmed.dropFirst(marker.count))
+                // 检查 [ ] 或 [x] / [X]
+                guard afterMarker.hasPrefix("[") else { continue }
+                let chars = Array(afterMarker)
+                guard chars.count >= 3 else { continue }
+                guard chars[2] == "]" else { continue }
+
+                let checked: Bool
+                switch chars[1] {
+                case " ":
+                    checked = false
+                case "x", "X":
+                    checked = true
+                default:
+                    continue
+                }
+
+                // 方括号后必须跟空格或为行尾
+                let textStart: String.Index
+                if chars.count > 3 && chars[3] == " " {
+                    textStart = afterMarker.index(afterMarker.startIndex, offsetBy: 4)
+                } else if chars.count == 3 {
+                    // `- [ ]` 无后续文本 — 空任务
+                    return TaskListInfo(checked: checked, text: "")
+                } else {
+                    continue
+                }
+
+                let text = String(afterMarker[textStart...])
+                return TaskListInfo(checked: checked, text: text)
+            }
+        }
+        return nil
     }
 
     // MARK: - Rendering
@@ -269,6 +337,20 @@ struct StreamingMarkdownFormatter: Sendable {
         }
     }
 
+    /// 渲染任务列表项 — Unicode 复选框 + 描述文本。
+    ///
+    /// TTY 示例：`  ☑ Task completed`（绿色勾选）
+    /// TTY 示例：`  ☐ Task pending`（dim 未勾选）
+    private func renderTaskList(originalLine: String, checked: Bool, text: String) -> String {
+        let (markerColor, resetCode) = taskListMarkerCodes(checked: checked)
+
+        let leadingSpaces = originalLine.prefix(while: { $0 == " " })
+        let checkbox = checked ? "☑" : "☐"
+        let formattedText = text.isEmpty ? "" : " \(formatInlineElements(text))"
+
+        return "\(leadingSpaces)\(markerColor)\(checkbox)\(resetCode)\(formattedText)"
+    }
+
     /// 标题颜色 — 级别越深颜色越暗
     private func headingColor(level: Int) -> String {
         switch profile {
@@ -295,22 +377,25 @@ struct StreamingMarkdownFormatter: Sendable {
 
     // MARK: - Inline Element Formatting
 
-    /// 格式化行内 Markdown 元素（粗体 + 斜体 + 内联代码）。
+    /// 格式化行内 Markdown 元素（粗体 + 斜体 + 删除线 + 内联代码 + 链接）。
     ///
-    /// 扫描策略：逐字符扫描，维护粗体/斜体/代码开关状态。
+    /// 扫描策略：逐字符扫描，维护粗体/斜体/代码/删除线开关状态。
     /// - `**text**` → 粗体开关（ANSI bold）
     /// - `*text*` → 斜体开关（ANSI italic）
     /// - `_text_` → 斜体开关（ANSI italic）
+    /// - `~~text~~` → 删除线开关（ANSI strikethrough + dim 颜色）
     /// - `` `code` `` → 内联代码开关（ANSI 颜色）
+    /// - `[text](url)` → 颜色文本 + OSC 8 超链接
     ///
     /// 注意：`*` 优先匹配 `**`（粗体），单 `*` 在非粗体上下文中视为斜体。
-    /// 检测顺序：`**` → `` ` `` → `*` → `_`。
+    /// 检测顺序：`~~` → `**` → `` ` `` → `[`（链接）→ `*` → `_`。
     private func formatInlineElements(_ line: String) -> String {
         guard isTTY && profile != .unknown else { return line }
 
         // 快速路径：不含任何格式标记的行直接返回
         let needsFormatting = line.contains("**") || line.contains("`")
             || line.contains("*") || line.contains("_")
+            || line.contains("~~") || line.contains("](")
         guard needsFormatting else { return line }
 
         var result = ""
@@ -319,14 +404,34 @@ struct StreamingMarkdownFormatter: Sendable {
         var inBold = false
         var inItalic = false
         var inCode = false
+        var inStrikethrough = false
 
         let (boldOn, boldOff) = boldToggleCodes()
         let (italicOn, italicOff) = italicToggleCodes()
         let (codeOn, codeOff) = inlineCodeToggleCodes()
+        let (strikeOn, strikeOff) = strikethroughToggleCodes()
 
         while i < chars.count {
+            // 检测 `~~` 删除线标记（优先于其他标记，避免 ~~ 中的 ~ 干扰）
+            if i + 1 < chars.count && chars[i] == "~" && chars[i + 1] == "~" && !inCode && !inBold {
+                if inStrikethrough {
+                    result += strikeOff
+                    inStrikethrough = false
+                } else {
+                    // 关闭斜体再进入删除线（防止样式冲突）
+                    if inItalic {
+                        result += italicOff
+                        inItalic = false
+                    }
+                    result += strikeOn
+                    inStrikethrough = true
+                }
+                i += 2
+                continue
+            }
+
             // 检测 `**` 粗体标记（优先级最高，避免误匹配为斜体）
-            if i + 1 < chars.count && chars[i] == "*" && chars[i + 1] == "*" && !inCode {
+            if i + 1 < chars.count && chars[i] == "*" && chars[i + 1] == "*" && !inCode && !inStrikethrough {
                 if inBold {
                     result += boldOff
                     inBold = false
@@ -339,7 +444,7 @@ struct StreamingMarkdownFormatter: Sendable {
             }
 
             // 检测 `` ` `` 内联代码标记（优先于斜体，避免代码内的 * 被误处理）
-            if chars[i] == "`" && !inBold {
+            if chars[i] == "`" && !inBold && !inStrikethrough {
                 if inCode {
                     result += codeOff
                     inCode = false
@@ -356,8 +461,17 @@ struct StreamingMarkdownFormatter: Sendable {
                 continue
             }
 
-            // 检测 `*` 斜体标记（仅在非粗体、非代码上下文）
-            if chars[i] == "*" && !inBold && !inCode {
+            // 检测 `[text](url)` 内联链接（非粗体/非代码/非删除线上下文）
+            if chars[i] == "[" && !inBold && !inCode && !inStrikethrough {
+                if let linkResult = parseAndRenderInlineLink(chars: chars, startIndex: i) {
+                    result += linkResult.rendered
+                    i = linkResult.endIndex
+                    continue
+                }
+            }
+
+            // 检测 `*` 斜体标记（仅在非粗体、非代码、非删除线上下文）
+            if chars[i] == "*" && !inBold && !inCode && !inStrikethrough {
                 // 启发式：`*` 应该是 Markdown 斜体标记而非数学/符号乘号
                 let prevChar: Character? = i > 0 ? chars[i - 1] : nil
                 let nextChar: Character? = i + 1 < chars.count ? chars[i + 1] : nil
@@ -385,7 +499,7 @@ struct StreamingMarkdownFormatter: Sendable {
             }
 
             // 检测 `_` 斜体标记（仅在非粗体、非代码上下文，且前后为单词边界）
-            if chars[i] == "_" && !inBold && !inCode {
+            if chars[i] == "_" && !inBold && !inCode && !inStrikethrough {
                 // 简单启发式：前后不能是字母/数字（避免误匹配 snake_case 变量名）
                 let prevIsAlnum = i > 0 && chars[i - 1].isLetter || (i > 0 && chars[i - 1].isNumber)
                 let nextIsAlnum = i + 1 < chars.count && (chars[i + 1].isLetter || chars[i + 1].isNumber)
@@ -413,11 +527,107 @@ struct StreamingMarkdownFormatter: Sendable {
         }
 
         // 如果有未关闭的样式，追加 reset
-        if inBold || inItalic || inCode {
+        if inBold || inItalic || inCode || inStrikethrough {
             result += "\u{1B}[0m"
         }
 
         return result
+    }
+
+    // MARK: - Inline Link Parsing & Rendering
+
+    /// 内联链接解析结果（内部使用）
+    private struct LinkRenderResult {
+        let rendered: String
+        let endIndex: Int
+    }
+
+    /// 从 `[` 位置尝试解析 `[text](url)` 格式的内联链接。
+    ///
+    /// 成功时返回渲染后的字符串和结束索引；失败时返回 nil（让调用方按普通 `[` 处理）。
+    private func parseAndRenderInlineLink(chars: [Character], startIndex: Int) -> LinkRenderResult? {
+        // 1. 找到匹配的 `]`
+        guard let closeBracket = findMatchingCloseBracket(chars: chars, openIndex: startIndex) else {
+            return nil
+        }
+
+        let text = String(chars[(startIndex + 1)..<closeBracket])
+        guard !text.isEmpty else { return nil }
+
+        // 2. `]` 后必须紧跟 `(`
+        let afterCloseBracket = closeBracket + 1
+        guard afterCloseBracket < chars.count && chars[afterCloseBracket] == "(" else {
+            return nil
+        }
+
+        // 3. 找到匹配的 `)`
+        let openParen = afterCloseBracket
+        guard let closeParen = findMatchingCloseParen(chars: chars, openIndex: openParen) else {
+            return nil
+        }
+
+        let url = String(chars[(openParen + 1)..<closeParen])
+        guard !url.isEmpty else { return nil }
+
+        // 4. 渲染链接
+        let rendered = renderInlineLink(text: text, url: url)
+        return LinkRenderResult(rendered: rendered, endIndex: closeParen + 1)
+    }
+
+    /// 在字符数组中找到匹配的 `]`（处理嵌套 `[`）。
+    private func findMatchingCloseBracket(chars: [Character], openIndex: Int) -> Int? {
+        var depth = 1
+        var i = openIndex + 1
+        while i < chars.count {
+            if chars[i] == "[" {
+                depth += 1
+            } else if chars[i] == "]" {
+                depth -= 1
+                if depth == 0 { return i }
+            } else if chars[i] == "`" {
+                // 跳过内联代码内容
+                i += 1
+                while i < chars.count && chars[i] != "`" { i += 1 }
+            }
+            i += 1
+        }
+        return nil
+    }
+
+    /// 在字符数组中找到匹配的 `)`（处理嵌套 `(`）。
+    private func findMatchingCloseParen(chars: [Character], openIndex: Int) -> Int? {
+        var depth = 1
+        var i = openIndex + 1
+        while i < chars.count {
+            if chars[i] == "(" {
+                depth += 1
+            } else if chars[i] == ")" {
+                depth -= 1
+                if depth == 0 { return i }
+            }
+            // URL 中的空格意味着这不是有效的 Markdown 链接
+            if chars[i] == " " { return nil }
+            i += 1
+        }
+        return nil
+    }
+
+    /// 渲染内联链接 — 颜色文本 + 可选 OSC 8 超链接。
+    ///
+    /// 有 OSC 8 支持：`ESC]8;;urlBELcolored textESC]8;;BEL`
+    /// 无 OSC 8 支持：`colored text (url)`（展示 URL）
+    private func renderInlineLink(text: String, url: String) -> String {
+        let (linkColor, resetCode) = linkColorCodes()
+
+        if let formatter = hyperlinkFormatter, formatter.supportsOSC8 {
+            // OSC 8 可点击超链接
+            let coloredText = "\(linkColor)\(text)\(resetCode)"
+            return formatter.formatURL(url, visibleText: coloredText)
+        } else {
+            // 无 OSC 8 支持 — 着色文本 + dim URL
+            let (dimCode, dimReset) = dimCodes()
+            return "\(linkColor)\(text)\(resetCode) \(dimCode)(\(url))\(dimReset)"
+        }
     }
 
     // MARK: - ANSI Code Helpers
@@ -487,6 +697,63 @@ struct StreamingMarkdownFormatter: Sendable {
             return (on: "\u{1B}[36m", off: "\u{1B}[0m")  // cyan
         case .unknown:
             return (on: "", off: "")
+        }
+    }
+
+    /// 删除线颜色切换代码 — strikethrough ANSI 属性 + dim 颜色
+    private func strikethroughToggleCodes() -> (on: String, off: String) {
+        switch profile {
+        case .trueColor:
+            // strikethrough 属性 + dim 灰红色
+            return (on: "\u{1B}[9m\u{1B}[38;2;140;120;120m", off: "\u{1B}[0m")
+        case .ansi256:
+            return (on: "\u{1B}[9m\u{1B}[38;5;138m", off: "\u{1B}[0m")
+        case .ansi16:
+            // strikethrough 属性 + dim（ANSI16 没有 strikethrough 颜色）
+            return (on: "\u{1B}[9m\u{1B}[2m", off: "\u{1B}[0m")
+        case .unknown:
+            return (on: "", off: "")
+        }
+    }
+
+    /// 任务列表复选框颜色代码 — 已勾选绿色 / 未勾选 dim 灰色
+    private func taskListMarkerCodes(checked: Bool) -> (color: String, reset: String) {
+        if checked {
+            switch profile {
+            case .trueColor:
+                return ("\u{1B}[38;2;76;175;80m", "\u{1B}[0m")  // 绿色（与 DiffFormatter 一致）
+            case .ansi256:
+                return ("\u{1B}[38;5;71m", "\u{1B}[0m")
+            case .ansi16:
+                return ("\u{1B}[32m", "\u{1B}[0m")
+            case .unknown:
+                return ("", "")
+            }
+        } else {
+            switch profile {
+            case .trueColor:
+                return ("\u{1B}[38;2;120;120;140m", "\u{1B}[0m")  // dim 灰色
+            case .ansi256:
+                return ("\u{1B}[38;5;244m", "\u{1B}[0m")
+            case .ansi16:
+                return ("\u{1B}[2m", "\u{1B}[0m")  // dim
+            case .unknown:
+                return ("", "")
+            }
+        }
+    }
+
+    /// 内联链接文本颜色代码 — 蓝色下划线风格
+    private func linkColorCodes() -> (color: String, reset: String) {
+        switch profile {
+        case .trueColor:
+            return ("\u{1B}[38;2;96;165;250m", "\u{1B}[0m")  // 天蓝色（与 H2 标题一致）
+        case .ansi256:
+            return ("\u{1B}[38;5;111m", "\u{1B}[0m")
+        case .ansi16:
+            return ("\u{1B}[34m", "\u{1B}[0m")  // blue
+        case .unknown:
+            return ("", "")
         }
     }
 

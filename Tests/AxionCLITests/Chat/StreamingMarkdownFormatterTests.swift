@@ -650,4 +650,290 @@ struct StreamingMarkdownFormatterTests {
         let result = formatter.formatLine("- Item")
         #expect(result.contains("\u{1B}[33m"))  // ANSI16 yellow
     }
+
+    // MARK: - Task List Formatting
+
+    @Test("task list unchecked renders empty checkbox")
+    func taskList_unchecked() {
+        let formatter = StreamingMarkdownFormatter(profile: .trueColor, isTTY: true)
+        let result = formatter.formatLine("- [ ] Pending task")
+        #expect(result.contains("☐"))  // empty checkbox
+        #expect(result.contains("Pending task"))
+        // Should use dim gray color for unchecked
+        #expect(result.contains("\u{1B}[38;2;120;120;140m"))
+    }
+
+    @Test("task list checked renders checked checkbox")
+    func taskList_checked() {
+        let formatter = StreamingMarkdownFormatter(profile: .trueColor, isTTY: true)
+        let result = formatter.formatLine("- [x] Done task")
+        #expect(result.contains("☑"))  // checked checkbox
+        #expect(result.contains("Done task"))
+        // Should use green color for checked
+        #expect(result.contains("\u{1B}[38;2;76;175;80m"))
+    }
+
+    @Test("task list checked with capital X")
+    func taskList_capitalX() {
+        let formatter = StreamingMarkdownFormatter(profile: .trueColor, isTTY: true)
+        let result = formatter.formatLine("- [X] Capital X")
+        #expect(result.contains("☑"))
+        #expect(result.contains("Capital X"))
+    }
+
+    @Test("task list with asterisk marker")
+    func taskList_asteriskMarker() {
+        let formatter = StreamingMarkdownFormatter(profile: .trueColor, isTTY: true)
+        let result = formatter.formatLine("* [ ] Asterisk task")
+        #expect(result.contains("☐"))
+        #expect(result.contains("Asterisk task"))
+    }
+
+    @Test("task list with plus marker")
+    func taskList_plusMarker() {
+        let formatter = StreamingMarkdownFormatter(profile: .trueColor, isTTY: true)
+        let result = formatter.formatLine("+ [x] Plus task")
+        #expect(result.contains("☑"))
+        #expect(result.contains("Plus task"))
+    }
+
+    @Test("task list preserves leading whitespace")
+    func taskList_leadingWhitespace() {
+        let formatter = StreamingMarkdownFormatter(profile: .trueColor, isTTY: true)
+        let result = formatter.formatLine("  - [ ] Nested task")
+        #expect(result.hasPrefix("  "))
+        #expect(result.contains("☐"))
+    }
+
+    @Test("task list with inline formatting in text")
+    func taskList_withInlineFormatting() {
+        let formatter = StreamingMarkdownFormatter(profile: .trueColor, isTTY: true)
+        let result = formatter.formatLine("- [x] Use **bold** in task")
+        #expect(result.contains("☑"))
+        #expect(result.contains("\u{1B}[1m"))  // bold
+    }
+
+    @Test("task list empty text")
+    func taskList_emptyText() {
+        let formatter = StreamingMarkdownFormatter(profile: .trueColor, isTTY: true)
+        let result = formatter.formatLine("- [ ]")
+        #expect(result.contains("☐"))
+    }
+
+    @Test("task list non-TTY passthrough")
+    func taskList_nonTTY() {
+        let formatter = StreamingMarkdownFormatter(profile: .trueColor, isTTY: false)
+        let result = formatter.formatLine("- [ ] Pending task")
+        #expect(result == "- [ ] Pending task")
+    }
+
+    @Test("task list checked ANSI256 green")
+    func taskList_checked_ansi256() {
+        let formatter = StreamingMarkdownFormatter(profile: .ansi256, isTTY: true)
+        let result = formatter.formatLine("- [x] Done")
+        #expect(result.contains("☑"))
+        #expect(result.contains("\u{1B}[38;5;71m"))  // ANSI256 green
+    }
+
+    @Test("task list unchecked ANSI256 dim")
+    func taskList_unchecked_ansi256() {
+        let formatter = StreamingMarkdownFormatter(profile: .ansi256, isTTY: true)
+        let result = formatter.formatLine("- [ ] Pending")
+        #expect(result.contains("☐"))
+        #expect(result.contains("\u{1B}[38;5;244m"))  // ANSI256 dim gray
+    }
+
+    @Test("dash bracket but not task list")
+    func dash_bracket_notTaskList() {
+        let formatter = StreamingMarkdownFormatter(profile: .trueColor, isTTY: true)
+        let result = formatter.formatLine("- [invalid content")
+        // Should NOT be a task list — bracket not followed by space/x/X]
+        #expect(!result.contains("☐"))
+        #expect(!result.contains("☑"))
+    }
+
+    // MARK: - Strikethrough Formatting
+
+    @Test("strikethrough with double tilde")
+    func strikethrough_basic() {
+        let formatter = StreamingMarkdownFormatter(profile: .trueColor, isTTY: true)
+        let result = formatter.formatLine("This is ~~deleted~~ text")
+        #expect(result.contains("\u{1B}[9m"))  // strikethrough attribute
+        #expect(result.contains("deleted"))
+        #expect(result.contains("\u{1B}[0m"))  // reset
+    }
+
+    @Test("strikethrough TrueColor has dim red color")
+    func strikethrough_trueColor() {
+        let formatter = StreamingMarkdownFormatter(profile: .trueColor, isTTY: true)
+        let result = formatter.formatLine("~~old text~~")
+        #expect(result.contains("\u{1B}[9m"))  // strikethrough
+        #expect(result.contains("\u{1B}[38;2;140;120;120m"))  // dim red-gray
+    }
+
+    @Test("strikethrough ANSI256")
+    func strikethrough_ansi256() {
+        let formatter = StreamingMarkdownFormatter(profile: .ansi256, isTTY: true)
+        let result = formatter.formatLine("~~deleted~~")
+        #expect(result.contains("\u{1B}[9m"))
+        #expect(result.contains("\u{1B}[38;5;138m"))
+    }
+
+    @Test("strikethrough ANSI16")
+    func strikethrough_ansi16() {
+        let formatter = StreamingMarkdownFormatter(profile: .ansi16, isTTY: true)
+        let result = formatter.formatLine("~~deleted~~")
+        #expect(result.contains("\u{1B}[9m"))  // strikethrough
+        #expect(result.contains("\u{1B}[2m"))  // dim
+    }
+
+    @Test("strikethrough non-TTY passthrough")
+    func strikethrough_nonTTY() {
+        let formatter = StreamingMarkdownFormatter(profile: .trueColor, isTTY: false)
+        let result = formatter.formatLine("This is ~~deleted~~ text")
+        #expect(result == "This is ~~deleted~~ text")
+    }
+
+    @Test("strikethrough unclosed gets reset")
+    func strikethrough_unclosed_reset() {
+        let formatter = StreamingMarkdownFormatter(profile: .trueColor, isTTY: true)
+        let result = formatter.formatLine("This is ~~unclosed")
+        #expect(result.contains("\u{1B}[9m"))
+        #expect(result.hasSuffix("\u{1B}[0m"))
+    }
+
+    @Test("single tilde is not strikethrough")
+    func singleTilde_notStrikethrough() {
+        let formatter = StreamingMarkdownFormatter(profile: .trueColor, isTTY: true)
+        let result = formatter.formatLine("a ~ b")
+        #expect(!result.contains("\u{1B}[9m"))
+    }
+
+    @Test("strikethrough with bold in same line")
+    func strikethrough_withBold() {
+        let formatter = StreamingMarkdownFormatter(profile: .trueColor, isTTY: true)
+        let result = formatter.formatLine("**bold** and ~~strikethrough~~")
+        #expect(result.contains("\u{1B}[1m"))  // bold
+        #expect(result.contains("\u{1B}[9m"))  // strikethrough
+    }
+
+    // MARK: - Inline Link Formatting
+
+    @Test("inline link renders colored text without OSC 8")
+    func inlineLink_noOSC8() {
+        // No hyperlinkFormatter → text + dim URL
+        let formatter = StreamingMarkdownFormatter(profile: .trueColor, isTTY: true)
+        let result = formatter.formatLine("Visit [docs](https://example.com) here")
+        #expect(result.contains("\u{1B}[38;2;96;165;250m"))  // link color (sky blue)
+        #expect(result.contains("docs"))
+        #expect(result.contains("(https://example.com)"))  // dim URL shown
+    }
+
+    @Test("inline link with OSC 8 support")
+    func inlineLink_withOSC8() {
+        let hyperlinkFormatter = TerminalHyperlinkFormatter(isTTY: true, termProgram: "iTerm.app")
+        let formatter = StreamingMarkdownFormatter(
+            profile: .trueColor,
+            isTTY: true,
+            hyperlinkFormatter: hyperlinkFormatter
+        )
+        let result = formatter.formatLine("Visit [docs](https://example.com) here")
+        #expect(result.contains("docs"))
+        // OSC 8 sequence: ESC]8;;urlBEL
+        #expect(result.contains("\u{1B}]8;;https://example.com\u{07}"))
+    }
+
+    @Test("inline link non-TTY passthrough")
+    func inlineLink_nonTTY() {
+        let formatter = StreamingMarkdownFormatter(profile: .trueColor, isTTY: false)
+        let result = formatter.formatLine("Visit [docs](https://example.com) here")
+        #expect(result == "Visit [docs](https://example.com) here")
+    }
+
+    @Test("inline link empty text not treated as link")
+    func inlineLink_emptyText() {
+        let formatter = StreamingMarkdownFormatter(profile: .trueColor, isTTY: true)
+        let result = formatter.formatLine("[](https://example.com)")
+        // Empty link text → not a valid link, should passthrough
+        #expect(!result.contains("\u{1B}[38;2;96;165;250m"))
+    }
+
+    @Test("inline link empty URL not treated as link")
+    func inlineLink_emptyURL() {
+        let formatter = StreamingMarkdownFormatter(profile: .trueColor, isTTY: true)
+        let result = formatter.formatLine("[text]()")
+        // Empty URL → not a valid link
+        #expect(!result.contains("\u{1B}[38;2;96;165;250m"))
+    }
+
+    @Test("inline link with bold in text")
+    func inlineLink_boldInText() {
+        let formatter = StreamingMarkdownFormatter(profile: .trueColor, isTTY: true)
+        // Links are parsed before bold/italic, so ** inside [] won't trigger bold
+        let result = formatter.formatLine("[**bold link**](https://example.com)")
+        #expect(result.contains("\u{1B}[38;2;96;165;250m"))  // link color
+    }
+
+    @Test("multiple inline links in same line")
+    func inlineLink_multiple() {
+        let formatter = StreamingMarkdownFormatter(profile: .trueColor, isTTY: true)
+        let result = formatter.formatLine("[foo](http://a.com) and [bar](http://b.com)")
+        let linkColorCount = result.components(separatedBy: "\u{1B}[38;2;96;165;250m").count - 1
+        #expect(linkColorCount == 2)
+    }
+
+    @Test("link URL with parentheses")
+    func inlineLink_urlWithParens() {
+        let formatter = StreamingMarkdownFormatter(profile: .trueColor, isTTY: true)
+        let result = formatter.formatLine("[wiki](https://en.wikipedia.org/wiki/Page_(disambiguation))")
+        #expect(result.contains("\u{1B}[38;2;96;165;250m"))  // link color
+        #expect(result.contains("wiki"))
+    }
+
+    @Test("bracket without paren is not a link")
+    func bracketWithoutParen_notLink() {
+        let formatter = StreamingMarkdownFormatter(profile: .trueColor, isTTY: true)
+        let result = formatter.formatLine("See [README] for details")
+        // No (url) after ] → not a link
+        #expect(!result.contains("\u{1B}[38;2;96;165;250m"))
+    }
+
+    @Test("inline link ANSI256 color")
+    func inlineLink_ansi256() {
+        let formatter = StreamingMarkdownFormatter(profile: .ansi256, isTTY: true)
+        let result = formatter.formatLine("[docs](https://example.com)")
+        #expect(result.contains("\u{1B}[38;5;111m"))  // ANSI256 sky blue
+    }
+
+    @Test("inline link ANSI16 color")
+    func inlineLink_ansi16() {
+        let formatter = StreamingMarkdownFormatter(profile: .ansi16, isTTY: true)
+        let result = formatter.formatLine("[docs](https://example.com)")
+        #expect(result.contains("\u{1B}[34m"))  // ANSI16 blue
+    }
+
+    // MARK: - Combined New Features
+
+    @Test("task list with strikethrough in text")
+    func taskList_withStrikethrough() {
+        let formatter = StreamingMarkdownFormatter(profile: .trueColor, isTTY: true)
+        let result = formatter.formatLine("- [x] ~~old approach~~ replaced")
+        #expect(result.contains("☑"))
+        #expect(result.contains("\u{1B}[9m"))  // strikethrough
+    }
+
+    @Test("link in list item")
+    func linkInListItem() {
+        let formatter = StreamingMarkdownFormatter(profile: .trueColor, isTTY: true)
+        let result = formatter.formatLine("- See [docs](https://example.com)")
+        #expect(result.contains("•"))  // bullet
+        #expect(result.contains("\u{1B}[38;2;96;165;250m"))  // link color
+    }
+
+    @Test("strikethrough with inline code")
+    func strikethrough_withInlineCode() {
+        let formatter = StreamingMarkdownFormatter(profile: .trueColor, isTTY: true)
+        let result = formatter.formatLine("~~old `code` style~~")
+        #expect(result.contains("\u{1B}[9m"))  // strikethrough
+    }
 }
