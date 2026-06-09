@@ -136,6 +136,17 @@ struct ChatCommand: AsyncParsableCommand {
             consecutiveCompactFailures: 0
         )
 
+        // Skill registry — 用于 /skills 列表和 /skill-name 直接执行
+        let skillRegistry: SkillRegistry?
+        if !noSkills {
+            let registry = SkillRegistry()
+            AxionBuiltInSkills.registerAll(into: registry)
+            registry.registerDiscoveredSkills(from: ConfigManager.skillDiscoveryDirectories)
+            skillRegistry = registry
+        } else {
+            skillRegistry = nil
+        }
+
         // Agent reference for SIGINT handler — uses nonisolated(unsafe) to satisfy
         // Sendable closure requirement. Agent.interrupt() is thread-safe.
         nonisolated(unsafe) var currentAgent = state.buildResult.agent
@@ -363,7 +374,8 @@ struct ChatCommand: AsyncParsableCommand {
                     sessionUsage: state.sessionUsage,
                     buildConfig: state.buildConfig,
                     contextWindow: state.contextWindow,
-                    contextTokens: state.contextTokens
+                    contextTokens: state.contextTokens,
+                    skillRegistry: skillRegistry
                 )
 
                 switch action {
@@ -404,6 +416,157 @@ struct ChatCommand: AsyncParsableCommand {
                 }
                 continue
             } else if trimmed.hasPrefix("/") {
+                // 检查是否匹配 skill 名称（参考 TG 的 skillNameChecker 模式）
+                let rawSkillName = String(trimmed.split(separator: " ", maxSplits: 1)[0].dropFirst())
+                if let registry = skillRegistry,
+                   let matchedSkill = registry.find(rawSkillName),
+                   matchedSkill.userInvocable
+                {
+                    // 匹配到 skill — 解析 promptTemplate 并执行 agent stream
+                    let skillArg = trimmed.split(separator: " ", maxSplits: 1).count > 1
+                        ? String(trimmed.split(separator: " ", maxSplits: 1)[1])
+                        : nil
+                    let skillTaskText: String
+                    if let arg = skillArg, !arg.isEmpty {
+                        skillTaskText = matchedSkill.promptTemplate.replacingOccurrences(of: "{args}", with: arg)
+                    } else {
+                        skillTaskText = matchedSkill.promptTemplate
+                    }
+                    // Fall through to agent execution with the resolved task text
+                    let displayText = "/\(matchedSkill.name)" + (skillArg.map { " \($0)" } ?? "")
+                    state.sessionUserMessages[state.sessionUserMessages.count - 1] = displayText
+                    // 执行 agent stream（使用 skill prompt template）
+                    let chatTheme = ChatTheme(profile: colorProfile, isTTY: isatty(STDERR_FILENO) != 0)
+                    let transcriptRenderer = TranscriptRenderer(theme: chatTheme)
+                    fputs(transcriptRenderer.renderUserMessage(text: displayText), stderr)
+                    composer.slashContext = SlashCommandContext(isAgentBusy: true, isSideSession: false)
+                    let turnStartTime = ContinuousClock.now
+                    let preTurnUsage = state.sessionUsage
+                    var turnToolCount = 0
+                    var lastAssistantText = ""
+                    var turnFileTracker = TurnFileChangeTracker()
+                    sessionTurnCount += 1
+                    let outputHandler = ChatOutputFormatter(theme: chatTheme)
+                    outputHandler.startLLMWaiting()
+                    terminalTitle.setThinking()
+                    let escListener = EscapeInterruptListener {
+                        SignalHandler.simulateFire()
+                        currentAgent.interrupt()
+                    }
+                    let messageStream = state.buildResult.agent.stream(skillTaskText)
+                    for await message in messageStream {
+                        if SignalHandler.fireCount() > 0 {
+                            outputHandler.suppressInterruptError = true
+                        }
+                        outputHandler.handle(message)
+                        switch message {
+                        case .toolUse(let data):
+                            turnToolCount += 1
+                            terminalTitle.setToolExecuting(data.toolName)
+                            turnFileTracker.recordToolUse(toolName: data.toolName, input: data.input)
+                        case .assistant(let data):
+                            if !data.text.isEmpty {
+                                lastAssistantText = data.text
+                            }
+                        case .result(let data):
+                            if let usage = data.usage {
+                                state.sessionUsage = state.sessionUsage + usage
+                            }
+                            if let lastTokens = data.lastTurnInputTokens {
+                                state.contextTokens = lastTokens
+                            } else {
+                                let messages = state.buildResult.agent.getMessages()
+                                state.contextTokens = ContextManager.estimateContextTokens(messages: messages)
+                            }
+                        case .system(let data):
+                            if data.subtype == .compactBoundary {
+                                if data.compactResult == "failed" {
+                                    state.consecutiveCompactFailures += 1
+                                    fputs(
+                                        ContextManager.formatCompactFailureMessage(
+                                            failureCount: state.consecutiveCompactFailures
+                                        ),
+                                        stderr
+                                    )
+                                } else if let metadata = data.compactMetadata,
+                                          let postTokens = metadata.postTokens,
+                                          let preTokens = metadata.preTokens
+                                {
+                                    state.contextTokens = postTokens
+                                    state.consecutiveCompactFailures = 0
+                                    fputs(
+                                        ContextManager.formatCompactMessage(
+                                            beforeTokens: preTokens,
+                                            afterTokens: postTokens
+                                        ),
+                                        stderr
+                                    )
+                                } else {
+                                    let messages = state.buildResult.agent.getMessages()
+                                    state.contextTokens = ContextManager.estimateContextTokens(
+                                        messages: messages
+                                    )
+                                    fputs(
+                                        ContextManager.formatCompactMessage(
+                                            beforeTokens: state.contextTokens * 3,
+                                            afterTokens: state.contextTokens
+                                        ),
+                                        stderr
+                                    )
+                                }
+                            }
+                        default:
+                            break
+                        }
+                    }
+                    escListener.cancel()
+                    composer.slashContext = SlashCommandContext(isAgentBusy: false, isSideSession: false)
+                    if contextPct > 80 {
+                        terminalTitle.setContextWarning(pct: contextPct)
+                    } else {
+                        terminalTitle.setIdle()
+                    }
+                    let interruptCount = SignalHandler.fireCount()
+                    if interruptCount > 0 {
+                        let now = ContinuousClock.now
+                        if let last = state.lastInterruptTime,
+                           chatShouldExit(lastInterrupt: last, now: now)
+                        {
+                            break
+                        }
+                        state.lastInterruptTime = now
+                        composer.prefill = displayText
+                    } else {
+                        let turnElapsed = ContinuousClock.now - turnStartTime
+                        let turnDuration = formatDuration(turnElapsed)
+                        let turnInputDelta = state.sessionUsage.inputTokens - preTurnUsage.inputTokens
+                        let turnOutputDelta = state.sessionUsage.outputTokens - preTurnUsage.outputTokens
+                        sessionTotalTools += turnToolCount
+                        fputs(
+                            transcriptRenderer.renderTurnSummary(
+                                duration: turnDuration,
+                                toolCount: turnToolCount,
+                                inputTokens: BannerRenderer.formatTokenCount(turnInputDelta),
+                                outputTokens: BannerRenderer.formatTokenCount(turnOutputDelta)
+                            ),
+                            stderr
+                        )
+                        if let fileSummary = turnFileTracker.renderSummary(
+                            isTTY: isatty(STDERR_FILENO) != 0,
+                            profile: colorProfile
+                        ) {
+                            fputs(fileSummary, stderr)
+                        }
+                        desktopNotifier.notify(.agentTurnComplete(preview: lastAssistantText))
+                        if !inputQueue.isEmpty {
+                            skipNextRead = true
+                        }
+                        state.lastInterruptTime = nil
+                        outputHandler.displayCompletion()
+                        fputs("\n", stdout)
+                    }
+                    continue
+                }
                 fputs(SlashCommandHandler.handleUnknown(trimmed), stderr)
                 continue
             }
@@ -428,6 +591,13 @@ struct ChatCommand: AsyncParsableCommand {
             let outputHandler = ChatOutputFormatter(theme: chatTheme)
             outputHandler.startLLMWaiting()
             terminalTitle.setThinking()
+            // ESC 键中断监听 — agent streaming 期间并发检测 ESC 按键
+            // 与 Ctrl+C 共用 SignalHandler 中断路径：suppressInterruptError + 预填 + 不显示 summary
+            let escListener = EscapeInterruptListener {
+                SignalHandler.simulateFire()
+                currentAgent.interrupt()
+            }
+
             let messageStream = state.buildResult.agent.stream(trimmed)
             for await message in messageStream {
                 // Ctrl+C 中断时：抑制 "执行错误" 显示
@@ -498,6 +668,8 @@ struct ChatCommand: AsyncParsableCommand {
                     break
                 }
             }
+
+            escListener.cancel()
 
             composer.slashContext = SlashCommandContext(isAgentBusy: false, isSideSession: false)
 

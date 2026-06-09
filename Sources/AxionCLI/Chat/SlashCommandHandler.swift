@@ -3,6 +3,8 @@ import Foundation
 import OpenAgentSDK
 
 /// SlashCommandHandler.handle() 的返回类型。
+
+/// SlashCommandHandler.handle() 的返回类型。
 ///
 /// 支持 REPL 循环根据不同 action 执行不同的后续逻辑。
 enum SlashCommandAction: Equatable, Sendable {
@@ -31,7 +33,8 @@ struct SlashCommandHandler {
         buildConfig: AgentBuilder.BuildConfig,
         contextWindow: Int = 0,
         contextTokens: Int = 0,
-        isAgentBusy: Bool = false  // AC6: 38.7
+        isAgentBusy: Bool = false,  // AC6: 38.7
+        skillRegistry: SkillRegistry? = nil
     ) -> SlashCommandAction {
         switch command {
         case .help:
@@ -91,6 +94,8 @@ struct SlashCommandHandler {
             return .none
         case .exit:
             return .exit
+        case .skills:
+            fputs(handleSkills(registry: skillRegistry), stderr)
         }
         return .none
     }
@@ -218,5 +223,45 @@ struct SlashCommandHandler {
     /// /unknown — 未知命令提示。
     static func handleUnknown(_ input: String) -> String {
         "[axion] 未知命令: \(input)，输入 /help 查看可用命令\n"
+    }
+
+    /// /skills — 列出所有可用技能。
+    ///
+    /// 从 `SkillRegistry` 获取 `userInvocableSkills`，格式化输出名称、描述和来源。
+    static func handleSkills(registry: SkillRegistry?) -> String {
+        guard let registry else {
+            return "[axion] 技能系统未启用\n"
+        }
+        let skills = registry.userInvocableSkills.sorted { $0.name < $1.name }
+        guard !skills.isEmpty else {
+            return "暂无可用技能\n"
+        }
+
+        // 计算列宽（包含 [fs] 标记）
+        let displayNameWidths = skills.map { skill in
+            let tag = skill.baseDir != nil ? " [fs]" : ""
+            return (skill.name + tag).count
+        }
+        let columnWidth = max((displayNameWidths.max() ?? 0) + 2, 12)
+
+        var lines = ["可用技能:\n"]
+        for skill in skills {
+            let sourceTag: String
+            if skill.baseDir != nil {
+                sourceTag = " [fs]"
+            } else {
+                sourceTag = ""
+            }
+            let namePart = (skill.name + sourceTag).padding(toLength: columnWidth, withPad: " ", startingAt: 0)
+            let desc = skill.description.count > 60
+                ? String(skill.description.prefix(57)) + "..."
+                : skill.description
+            lines.append("  \(namePart)\(desc)")
+            if !skill.aliases.isEmpty {
+                lines.append("  \("".padding(toLength: columnWidth, withPad: " ", startingAt: 0))别名: \(skill.aliases.joined(separator: ", "))")
+            }
+        }
+        lines.append("\n提示: 直接输入 /技能名 即可执行，例如 /\(skills[0].name)")
+        return lines.joined(separator: "\n") + "\n"
     }
 }
