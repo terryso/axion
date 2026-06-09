@@ -240,6 +240,49 @@ final class ChatOutputFormatter: OpenAgentSDK.SDKMessageOutputHandler, @unchecke
             case .pausedTimeout:
                 spinner.stop()
                 writeWarning("⏸️ 接管超时（5 分钟无操作），任务终止。")
+
+            // Codex-inspired: 上下文压缩事件
+            case .compactBoundary:
+                if let output = SystemEventRenderer.renderCompaction(
+                    metadata: data.compactMetadata,
+                    isTTY: theme?.isTTY ?? (isatty(STDOUT_FILENO) != 0),
+                    colorProfile: theme?.profile ?? .detect()
+                ) {
+                    writeStdout(output)
+                }
+
+            // Codex-inspired: 系统状态事件（compacting/requesting）
+            case .status:
+                if let output = SystemEventRenderer.renderStatus(
+                    statusValue: data.statusValue,
+                    compactResult: data.compactResult,
+                    compactError: data.compactError,
+                    isTTY: theme?.isTTY ?? (isatty(STDOUT_FILENO) != 0),
+                    colorProfile: theme?.profile ?? .detect()
+                ) {
+                    writeStdout(output)
+                }
+
+            // Codex-inspired: 速率限制警告
+            case .rateLimit:
+                if let output = SystemEventRenderer.renderRateLimit(
+                    rateLimitInfo: data.rateLimitInfo,
+                    isTTY: theme?.isTTY ?? (isatty(STDOUT_FILENO) != 0),
+                    colorProfile: theme?.profile ?? .detect()
+                ) {
+                    writeStderr(output)
+                }
+
+            // Codex-inspired: 任务完成通知
+            case .taskNotification:
+                if let output = SystemEventRenderer.renderTaskNotification(
+                    taskInfo: data.taskNotificationInfo,
+                    isTTY: theme?.isTTY ?? (isatty(STDOUT_FILENO) != 0),
+                    colorProfile: theme?.profile ?? .detect()
+                ) {
+                    writeStdout(output)
+                }
+
             default:
                 break
             }
