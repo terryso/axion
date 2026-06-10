@@ -516,6 +516,7 @@ struct ChatCommand: AsyncParsableCommand {
             var turnToolCount = 0
             var lastAssistantText = ""  // For desktop notification preview
             var turnFileTracker = TurnFileChangeTracker()  // Codex-inspired file change tracking
+            var responseSpeedTracker = ResponseSpeedTracker()  // Codex-inspired TTFT + tok/s
             sessionTurnCount += 1
 
             let outputHandler = ChatOutputFormatter(theme: chatTheme)
@@ -554,6 +555,8 @@ struct ChatCommand: AsyncParsableCommand {
                         sessionId: sessionId, dirPath: sessionsDir
                     )
                 case .assistant(let data):
+                    // Codex-inspired: 标记首个输出 token 到达时刻
+                    responseSpeedTracker.markFirstToken()
                     if !data.text.isEmpty {
                         lastAssistantText = data.text
                         sessionLastAssistantText = data.text  // /copy 需要：持久化到 session 级别
@@ -669,6 +672,12 @@ struct ChatCommand: AsyncParsableCommand {
                     return costStr
                 }()
 
+                // Codex-inspired: 计算响应速度（TTFT + tok/s）
+                let turnResponseSpeed = responseSpeedTracker.computeSpeed(
+                    outputTokens: turnOutputDelta,
+                    endTime: ContinuousClock.now
+                )
+
                 fputs(
                     transcriptRenderer.renderTurnSummary(
                         duration: turnDuration,
@@ -676,7 +685,8 @@ struct ChatCommand: AsyncParsableCommand {
                         inputTokens: BannerRenderer.formatTokenCount(turnInputDelta),
                         outputTokens: BannerRenderer.formatTokenCount(turnOutputDelta),
                         contextPct: contextPct,
-                        estimatedCost: turnCost
+                        estimatedCost: turnCost,
+                        responseSpeed: turnResponseSpeed
                     ),
                     stderr
                 )

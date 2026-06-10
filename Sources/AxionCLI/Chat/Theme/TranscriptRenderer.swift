@@ -53,11 +53,15 @@ struct TranscriptRenderer: Sendable {
     /// 渲染回合完成摘要 — dim/灰色分隔线，显示 turn 统计信息。
     ///
     /// 基础格式：`── 3.2s · 2 tools · ↑1.2k ↓856 ──`
-    /// 含上下文：`── 3.2s · 2 tools · ↑1.2k ↓856 · [████░░░░░░] 45% ──`
-    /// 含成本：  `── 3.2s · 2 tools · ↑1.2k ↓856 · $0.01 ──`
-    /// 全部：    `── 3.2s · 2 tools · ↑1.2k ↓856 · [████░░░░░░] 45% · $0.01 ──`
+    /// 含速度：  `── 3.2s (think 0.8s · 86 tok/s) · 2 tools · ↑1.2k ↓856 ──`
+    /// 含上下文：`── 3.2s (think 0.8s · 86 tok/s) · 2 tools · ↑1.2k ↓856 · [████░░░░░░] 45% ──`
+    /// 含成本：  `── 3.2s (think 0.8s · 86 tok/s) · 2 tools · ↑1.2k ↓856 · $0.01 ──`
+    /// 全部：    `── 3.2s (think 0.8s · 86 tok/s) · 2 tools · ↑1.2k ↓856 · [████░░░░░░] 45% · $0.01 ──`
     ///
-    /// 非 TTY：`[turn: 3.2s · 2 tools · ↑1.2k ↓856 · ctx 45% · $0.01]`
+    /// 非 TTY：`[turn: 3.2s (think 0.8s, 86 tok/s) · 2 tools · ↑1.2k ↓856 · ctx 45% · $0.01]`
+    ///
+    /// Codex-inspired: 显示 TTFT（Time To First Token）和生成速度，
+    /// 帮助用户了解模型响应性能。
     ///
     /// - Parameters:
     ///   - duration: 格式化的时长字符串（如 "3.2s"）
@@ -66,16 +70,33 @@ struct TranscriptRenderer: Sendable {
     ///   - outputTokens: 格式化的输出 token 数
     ///   - contextPct: 可选的上下文窗口使用百分比（0-100）
     ///   - estimatedCost: 可选的预估成本字符串（如 "$0.01"）
+    ///   - responseSpeed: 可选的响应速度分析结果
     func renderTurnSummary(
         duration: String,
         toolCount: Int,
         inputTokens: String,
         outputTokens: String,
         contextPct: Int? = nil,
-        estimatedCost: String? = nil
+        estimatedCost: String? = nil,
+        responseSpeed: ResponseSpeed? = nil
     ) -> String {
         let toolStr = toolCount == 1 ? "1 tool" : "\(toolCount) tools"
-        var stats = "\(duration) · \(toolStr) · ↑\(inputTokens) ↓\(outputTokens)"
+        var stats = "\(duration)"
+
+        // 添加响应速度指标 — Codex-inspired TTFT + tok/s
+        if let speed = responseSpeed {
+            if theme.isTTY {
+                if let speedStr = speed.formatCompact() {
+                    stats += " (\(speedStr))"
+                }
+            } else {
+                if let speedStr = speed.formatPlain() {
+                    stats += " (\(speedStr))"
+                }
+            }
+        }
+
+        stats += " · \(toolStr) · ↑\(inputTokens) ↓\(outputTokens)"
 
         // 添加上下文窗口使用率
         if let pct = contextPct {
