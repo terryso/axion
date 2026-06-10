@@ -1,7 +1,7 @@
 
-// MARK: - AC1: 五种审批决策
+// MARK: - AC1: 审批决策
 
-/// 审批决策枚举 — 定义用户对工具执行权限的五种选择。
+/// 审批决策枚举 — 定义用户对工具执行权限的选择。
 ///
 /// 每个决策携带快捷键和显示标签，用于 REPL 审批渲染。
 /// 纯 enum，零外部依赖。
@@ -12,10 +12,8 @@ enum ApprovalDecision: Equatable, Sendable {
     case session
     /// 允许匹配前缀的所有命令（携带前缀预览文本）
     case prefix(String)
-    /// 拒绝执行
+    /// 拒绝执行（含取消 — 两者功能相同，统一为拒绝）
     case decline
-    /// 取消（等同拒绝，语义不同）
-    case cancel
 
     // MARK: - 快捷键
 
@@ -26,7 +24,6 @@ enum ApprovalDecision: Equatable, Sendable {
         case .session: return "a"
         case .prefix:  return "p"
         case .decline: return "d"
-        case .cancel:  return "\u{1B}"  // Esc
         }
     }
 
@@ -37,16 +34,12 @@ enum ApprovalDecision: Equatable, Sendable {
         case .session:           return "本会话"
         case .prefix(let text):  return "前缀: \(text)"
         case .decline:           return "拒绝"
-        case .cancel:            return "取消"
         }
     }
 
     /// 快捷键的显示文本（用于渲染）
     var shortcutDisplay: String {
-        switch self {
-        case .cancel: return "Esc"
-        default:      return String(shortcut)
-        }
+        return String(shortcut)
     }
 }
 
@@ -65,9 +58,9 @@ struct ApprovalOption: Equatable, Sendable {
 
     /// 根据工具类型和操作内容动态生成可用选项列表。
     ///
-    /// - Bash 命令 → 全部 5 个选项（含 prefix，显示前缀预览）
-    /// - Write/Edit → once/session/decline/cancel（无 prefix）
-    /// - 其他非只读工具 → once/session/decline/cancel
+    /// - Bash 命令 → 4 个选项（含 prefix，显示前缀预览）
+    /// - Write/Edit → once/session/decline（无 prefix）
+    /// - 其他非只读工具 → once/session/decline
     /// - 只读工具 → 空列表（直接放行，不弹审批）
     ///
     /// - Parameters:
@@ -78,7 +71,6 @@ struct ApprovalOption: Equatable, Sendable {
         let once = ApprovalOption(decision: .once, shortcut: "y", label: "仅本次")
         let session = ApprovalOption(decision: .session, shortcut: "a", label: "本会话")
         let decline = ApprovalOption(decision: .decline, shortcut: "d", label: "拒绝")
-        let cancel = ApprovalOption(decision: .cancel, shortcut: "\u{1B}", label: "取消")
 
         if toolName == "Bash" {
             // Bash 命令 → 包含 prefix 选项（仅当 ≥ 2 tokens 时）
@@ -91,14 +83,14 @@ struct ApprovalOption: Equatable, Sendable {
                     shortcut: "p",
                     label: "前缀: \(preview)"
                 )
-                return [once, session, prefix, decline, cancel]
+                return [once, session, prefix, decline]
             }
             // 单 token / 空命令 → prefix 等同 session，不单独显示
-            return [once, session, decline, cancel]
+            return [once, session, decline]
         }
 
         // Write/Edit 及其他非只读工具 → 无 prefix 选项
-        return [once, session, decline, cancel]
+        return [once, session, decline]
     }
 
     // MARK: - 前缀预览 (AC4)
@@ -110,16 +102,26 @@ struct ApprovalOption: Equatable, Sendable {
     ///
     /// - Parameter command: 完整命令字符串
     /// - Returns: 前缀预览文本（如 "git commit*"）
+    /// 前缀预览最大长度（超出截断显示 `…*`）
+    private static let prefixPreviewMaxLength = 40
+
     static func prefixPreview(for command: String) -> String {
         let tokens = Self.tokenize(command)
         guard !tokens.isEmpty else {
             return ""  // 空命令无前缀预览
         }
         guard tokens.count >= 2 else {
-            return command + "*"  // 单 token：等同精确匹配
+            return truncateForPreview(command) + "*"  // 单 token：等同精确匹配
         }
         // 取前 2 个 token 作为前缀
-        return tokens.prefix(2).joined(separator: " ") + "*"
+        let prefix = tokens.prefix(2).joined(separator: " ")
+        return truncateForPreview(prefix) + "*"
+    }
+
+    /// 截断过长的预览文本（保留末尾 `…` 标记）。
+    private static func truncateForPreview(_ text: String) -> String {
+        guard text.count > prefixPreviewMaxLength else { return text }
+        return String(text.prefix(prefixPreviewMaxLength)) + "…"
     }
 
     /// 将命令字符串按 shell 风格拆分为 tokens。

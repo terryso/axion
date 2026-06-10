@@ -29,11 +29,6 @@ struct ApprovalDecisionTests {
         #expect(ApprovalDecision.decline.shortcut == "d")
     }
 
-    @Test("cancel 快捷键为 Esc")
-    func cancelShortcut() {
-        #expect(ApprovalDecision.cancel.shortcut == "\u{1B}")
-    }
-
     // MARK: - 标签测试
 
     @Test("once 标签为 '仅本次'")
@@ -57,20 +52,10 @@ struct ApprovalDecisionTests {
         #expect(ApprovalDecision.decline.label == "拒绝")
     }
 
-    @Test("cancel 标签为 '取消'")
-    func cancelLabel() {
-        #expect(ApprovalDecision.cancel.label == "取消")
-    }
-
     // MARK: - 快捷键显示文本
 
-    @Test("cancel 快捷键显示为 'Esc'")
-    func cancelShortcutDisplay() {
-        #expect(ApprovalDecision.cancel.shortcutDisplay == "Esc")
-    }
-
-    @Test("其他决策快捷键显示为单字符")
-    func otherShortcutDisplay() {
+    @Test("所有决策快捷键显示为单字符")
+    func shortcutDisplay() {
         #expect(ApprovalDecision.once.shortcutDisplay == "y")
         #expect(ApprovalDecision.session.shortcutDisplay == "a")
         #expect(ApprovalDecision.prefix("x").shortcutDisplay == "p")
@@ -93,13 +78,13 @@ struct ApprovalOptionTests {
 
     // MARK: - Bash 工具选项
 
-    @Test("Bash 工具包含全部 5 个选项")
+    @Test("Bash 工具包含 4 个选项（once, session, prefix, decline）")
     func bashAllOptions() {
         let options = ApprovalOption.allOptions(
             toolName: "Bash",
             input: ["command": "swift test"]
         )
-        #expect(options.count == 5)
+        #expect(options.count == 4)
 
         #expect(options[0].decision == .once)
         #expect(options[1].decision == .session)
@@ -110,7 +95,6 @@ struct ApprovalOptionTests {
             Issue.record("Expected prefix decision")
         }
         #expect(options[3].decision == .decline)
-        #expect(options[4].decision == .cancel)
     }
 
     @Test("Bash 工具 prefix 选项显示前缀预览")
@@ -142,7 +126,7 @@ struct ApprovalOptionTests {
             toolName: "Write",
             input: ["file_path": "/tmp/test.txt"]
         )
-        #expect(options.count == 4)
+        #expect(options.count == 3)
         let hasPrefix = options.contains { if case .prefix = $0.decision { true } else { false } }
         #expect(!hasPrefix)
     }
@@ -153,12 +137,12 @@ struct ApprovalOptionTests {
             toolName: "Edit",
             input: ["file_path": "src/main.swift"]
         )
-        #expect(options.count == 4)
+        #expect(options.count == 3)
         let hasPrefix = options.contains { if case .prefix = $0.decision { true } else { false } }
         #expect(!hasPrefix)
     }
 
-    @Test("Write 工具选项顺序: once, session, decline, cancel")
+    @Test("Write 工具选项顺序: once, session, decline")
     func writeOptionOrder() {
         let options = ApprovalOption.allOptions(
             toolName: "Write",
@@ -167,7 +151,6 @@ struct ApprovalOptionTests {
         #expect(options[0].decision == .once)
         #expect(options[1].decision == .session)
         #expect(options[2].decision == .decline)
-        #expect(options[3].decision == .cancel)
     }
 
     @Test("Bash 单 token 命令不包含 prefix 选项")
@@ -176,7 +159,7 @@ struct ApprovalOptionTests {
             toolName: "Bash",
             input: ["command": "make"]
         )
-        #expect(options.count == 4)
+        #expect(options.count == 3)
         let hasPrefix = options.contains { if case .prefix = $0.decision { true } else { false } }
         #expect(!hasPrefix)
     }
@@ -187,7 +170,7 @@ struct ApprovalOptionTests {
             toolName: "Bash",
             input: ["command": ""]
         )
-        #expect(options.count == 4)
+        #expect(options.count == 3)
         let hasPrefix = options.contains { if case .prefix = $0.decision { true } else { false } }
         #expect(!hasPrefix)
     }
@@ -198,7 +181,7 @@ struct ApprovalOptionTests {
             toolName: "Bash",
             input: nil
         )
-        #expect(options.count == 4)
+        #expect(options.count == 3)
     }
 
     // MARK: - 未知工具
@@ -209,7 +192,7 @@ struct ApprovalOptionTests {
             toolName: "SomeTool",
             input: [:]
         )
-        #expect(options.count == 4)
+        #expect(options.count == 3)
     }
 
     // MARK: - Tokenize

@@ -233,7 +233,11 @@ final class ChatOutputFormatter: OpenAgentSDK.SDKMessageOutputHandler, @unchecke
                 suppressInterruptError = false
             case .errorDuringExecution:
                 if !suppressInterruptError {
-                    writeWarning("❌ 执行错误")
+                    if let errors = data.errors, !errors.isEmpty {
+                        writeWarning("❌ 执行错误: \(errors.joined(separator: ", "))")
+                    } else {
+                        writeWarning("❌ 执行错误")
+                    }
                 }
                 suppressInterruptError = false
             case .errorMaxStructuredOutputRetries:

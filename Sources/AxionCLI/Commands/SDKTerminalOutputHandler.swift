@@ -83,7 +83,11 @@ final class SDKTerminalOutputHandler: OpenAgentSDK.SDKMessageOutputHandler, @unc
             case .cancelled:
                 write("[axion] 已取消")
             case .errorDuringExecution:
-                write("[axion] 执行错误")
+                if let errors = data.errors, !errors.isEmpty {
+                    write("[axion] 执行错误: \(errors.joined(separator: ", "))")
+                } else {
+                    write("[axion] 执行错误")
+                }
                 if isFast {
                     write("[axion] 建议去掉 --fast 重新尝试。")
                 }

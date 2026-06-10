@@ -83,8 +83,7 @@ struct ApprovalRendererTests {
         #expect(result.contains("[p]"))
         #expect(result.contains("[d]"))
         #expect(result.contains("拒绝"))
-        #expect(result.contains("[Esc]"))
-        #expect(result.contains("取消"))
+        // Esc/取消 已合并到 decline（[d] 拒绝）
     }
 
     @Test("renderOptionsList Write 工具无 prefix 选项")

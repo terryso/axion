@@ -46,6 +46,14 @@ extension PermissionHandler {
 
         let decision = mapInputToDecision(response, options: options)
 
+        // UX: 显示用户选择的确认（readSingleKey 不回显按键，需要视觉反馈）
+        switch decision {
+        case .decline:
+            fputs("  → 拒绝 ✗\n", stderr)
+        default:
+            fputs("  → \(decision.label) ✓\n", stderr)
+        }
+
         switch decision {
         case .once:
             return .allow()
@@ -66,9 +74,6 @@ extension PermissionHandler {
 
         case .decline:
             return .deny("用户拒绝执行 \(tool.name)")
-
-        case .cancel:
-            return .deny("用户取消执行 \(tool.name)")
         }
     }
 
@@ -122,11 +127,11 @@ extension PermissionHandler {
     /// Maps user input string to an `ApprovalDecision`.
     ///
     /// Checks the first character against option shortcuts.
-    /// Empty input → cancel. Unknown input → decline.
+    /// Empty input or unknown input → decline.
     static func mapInputToDecision(_ input: String, options: [ApprovalOption]) -> ApprovalDecision {
         let trimmed = input.lowercased().trimmingCharacters(in: .whitespaces)
         guard let first = trimmed.first else {
-            return .cancel  // Empty input = cancel
+            return .decline  // Empty input = decline
         }
 
         for option in options {
@@ -135,7 +140,7 @@ extension PermissionHandler {
             }
         }
 
-        return .decline  // Unknown input = decline
+        return .decline  // Unknown input (including ESC key) = decline
     }
 
     // MARK: - Description Extraction

@@ -49,11 +49,16 @@ struct ChatCommand: AsyncParsableCommand {
         // AC3: Session allow list — shared across all canUseTool callbacks in this REPL session
         let sessionAllowList = SessionAllowListRef()
 
+        // ESC listener ref — bridges per-turn listener lifecycle to the once-created canUseTool closure
+        let escListenerRef = EscapeInterruptListenerRef()
+
         // Create canUseTool callback (controls tool-level permissions)
         // AC3/AC5: v2 overload injects sessionAllowList for dynamic approval options
+        // escListenerRef: pauses ESC listener before rendering prompt, resumes after read
         let canUseTool = PermissionHandler.createCanUseTool(
             mode: permissionMode,
-            sessionAllowList: sessionAllowList
+            sessionAllowList: sessionAllowList,
+            escListenerRef: escListenerRef
         )
 
         let buildParams = ChatREPLState.BuildParams(
@@ -476,6 +481,7 @@ struct ChatCommand: AsyncParsableCommand {
                 SignalHandler.simulateFire()
                 currentAgent.interrupt()
             }
+            escListenerRef.set(escListener)
 
             let messageStream: AsyncStream<SDKMessage>
             if let skillExec = matchedSkillExec {
@@ -557,6 +563,7 @@ struct ChatCommand: AsyncParsableCommand {
             }
 
             escListener.cancel()
+            escListenerRef.set(nil)
 
             composer.slashContext = SlashCommandContext(isAgentBusy: false, isSideSession: false)
 
