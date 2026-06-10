@@ -1,5 +1,6 @@
 import Foundation
 import OpenAgentSDK
+import AxionCore
 
 /// 交互模式横幅和提示符格式化。纯函数，不持有状态。
 struct BannerRenderer {
@@ -49,19 +50,28 @@ struct BannerRenderer {
 
     /// 生成带上下文用量和可视化进度条的提示符。
     ///
-    /// Codex-inspired: 显示上下文窗口使用百分比 + 微型进度条 + 颜色编码 + 回合计数。
+    /// Codex-inspired (token_usage.rs + branch_summary.rs): 显示上下文窗口使用百分比
+    /// + 微型进度条 + 颜色编码 + 回合计数 + 累计会话成本 + Git 分支。
     /// 进度条使用 Unicode block 元素：█▓▒░
     /// 颜色随使用率变化：绿(<50%) → 黄(50-80%) → 红(>80%)
+    /// 成本显示：累计会话成本紧跟回合计数后，如 `$0.05`。
+    /// Git 分支：dirty 时显示 `main*`，clean 时显示 `main`。
     ///
-    /// - TTY 示例：`axion [12k/200k 6% ░░░░░░░░░░ T3]> `
-    /// - 高使用率：`axion [180k/200k 90% ████████░░ T12]> `（红色）
-    /// - 非 TTY：  `axion [12k/200k 6% T3]> `（无进度条、无颜色）
+    /// 通过 `displayConfig` 控制各段的显示/隐藏，实现可配置的 prompt 长度。
+    /// 默认全显示（向后兼容）。
+    ///
+    /// - TTY 全开：`axion [12k/200k 6% ░░░░░░░░░░ T3 · $0.05 · …de-6ba7a0-1*]> `
+    /// - 全关：    `axion [12k/200k 6%]> `
+    /// - 非 TTY：  `axion [12k/200k 6% T3 $0.05 …de-6ba7a0-1*]> `（无进度条、无颜色）
     static func renderPrompt(
         usedTokens: Int,
         contextWindow: Int,
         turnNumber: Int = 0,
+        estimatedCost: String? = nil,
+        gitBranch: String? = nil,
         isTTY: Bool = isatty(STDERR_FILENO) != 0,
-        colorProfile: TerminalColorProfile = .detect()
+        colorProfile: TerminalColorProfile = .detect(),
+        displayConfig: PromptDisplayConfig = .init()
     ) -> String {
         let used = formatTokenCount(usedTokens)
         let max = formatTokenCount(contextWindow)
@@ -69,17 +79,60 @@ struct BannerRenderer {
             ? Int(Double(usedTokens) / Double(contextWindow) * 100)
             : 0
 
-        let turnLabel = turnNumber > 0 ? " T\(turnNumber)" : ""
+        let turnLabel = displayConfig.showTurn && turnNumber > 0 ? " T\(turnNumber)" : ""
 
         guard isTTY else {
-            return "axion [\(used)/\(max) \(pct)%\(turnLabel)]> "
+            let costPlain = (displayConfig.showCost && estimatedCost != nil) ? " \(estimatedCost!)" : ""
+            let branchPlain = (displayConfig.showBranch && gitBranch != nil) ? " \u{E0A0}\(gitBranch!)" : ""
+            return "axion [\(used)/\(max) \(pct)%\(turnLabel)\(costPlain)\(branchPlain)]> "
         }
 
-        let bar = renderContextBar(pct: pct, width: 10)
-        let colorCode = contextBarColor(pct: pct, profile: colorProfile)
         let reset = "\u{1B}[0m"
 
-        return "axion [\(used)/\(max) \(colorCode)\(pct)%\(reset) \(colorCode)\(bar)\(reset)\(turnLabel)]> "
+        // Progress bar segment (configurable)
+        let barSegment: String
+        if displayConfig.showProgress {
+            let bar = renderContextBar(pct: pct, width: 10)
+            let colorCode = contextBarColor(pct: pct, profile: colorProfile)
+            barSegment = " \(colorCode)\(bar)\(reset)"
+        } else {
+            barSegment = ""
+        }
+
+        // Dim separator style (shared by cost and branch segments)
+        let dimCode: String
+        switch colorProfile {
+        case .trueColor: dimCode = "\u{1B}[38;2;148;163;184m"  // slate-400
+        case .ansi256: dimCode = "\u{1B}[38;5;145m"
+        case .ansi16: dimCode = "\u{1B}[37m"
+        case .unknown: dimCode = ""
+        }
+
+        // Cost segment (configurable)
+        let costSegment: String
+        if displayConfig.showCost, let cost = estimatedCost {
+            costSegment = " \(dimCode)·\(reset) \(dimCode)\(cost)\(reset)"
+        } else {
+            costSegment = ""
+        }
+
+        // Git branch segment (configurable, with truncation)
+        let branchSegment: String
+        if displayConfig.showBranch, let branch = gitBranch {
+            let branchColor: String
+            switch colorProfile {
+            case .trueColor: branchColor = "\u{1B}[38;2;180;170;140m"  // warm sand
+            case .ansi256: branchColor = "\u{1B}[38;5;180m"
+            case .ansi16: branchColor = "\u{1B}[33m"
+            case .unknown: branchColor = ""
+            }
+            branchSegment = " \(dimCode)·\(reset) \(branchColor)\u{E0A0}\(branch)\(reset)"
+        } else {
+            branchSegment = ""
+        }
+
+        let colorCode = contextBarColor(pct: pct, profile: colorProfile)
+        return "axion [\(used)/\(max) \(colorCode)\(pct)%\(reset)\(barSegment)\(turnLabel)\(costSegment)\(branchSegment)]> "
     }
 
     // MARK: - Context Progress Bar
@@ -167,7 +220,8 @@ struct BannerRenderer {
         turns: Int = 0,
         totalTools: Int = 0,
         usage: TokenUsage? = nil,
-        model: String = ""
+        model: String = "",
+        toolUsage: ToolUsageTracker? = nil
     ) -> String {
         let shortId = String(sessionId.prefix(8))
         let duration = formatSessionDuration(ms: sessionDurationMs)
@@ -184,6 +238,13 @@ struct BannerRenderer {
             statsParts.append("↑\(formatTokenCount(u.inputTokens)) ↓\(formatTokenCount(u.outputTokens))")
         }
         lines.append("[axion] \(statsParts.joined(separator: " · "))")
+
+        // Tool usage breakdown — Codex-inspired analytics
+        if let tracker = toolUsage, tracker.totalCount > 0 {
+            let tools = tracker.topTools(limit: 5)
+            let toolParts = tools.map { "\($0.toolName) \($0.count)" }
+            lines.append("[axion] 工具分布: \(toolParts.joined(separator: ", "))")
+        }
 
         // Estimated cost line
         if let u = usage, u.totalTokens > 0, !model.isEmpty {

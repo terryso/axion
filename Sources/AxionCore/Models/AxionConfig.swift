@@ -3,6 +3,65 @@ public enum LLMProvider: String, Sendable, Equatable, Codable {
     case openai
 }
 
+/// 交互模式 prompt 显示配置。
+///
+/// 控制提示符中各信息段（进度条、回合数、费用、Git 分支）的显示开关，
+/// 以及分支名的最大显示长度。所有字段为可选 — `nil` 表示显示（默认全开）。
+///
+/// ```json
+/// {
+///   "promptDisplay": {
+///     "progressBar": false,
+///     "cost": false,
+///     "gitBranch": false,
+///     "maxBranchLength": 12
+///   }
+/// }
+/// ```
+public struct PromptDisplayConfig: Equatable, Sendable {
+    /// 是否显示上下文进度条。`nil` = 显示（默认）。
+    public var progressBar: Bool?
+    /// 是否显示回合号（T1, T2, …）。`nil` = 显示（默认）。
+    public var turnCount: Bool?
+    /// 是否显示累计会话费用。`nil` = 显示（默认）。
+    public var cost: Bool?
+    /// 是否显示 Git 分支名。`nil` = 显示（默认）。
+    public var gitBranch: Bool?
+    /// Git 分支名最大显示字符数。`nil` = 15（默认）。超出部分截断并加 `…` 前缀。
+    public var maxBranchLength: Int?
+
+    /// 进度条是否显示（nil → true）。
+    public var showProgress: Bool { progressBar ?? true }
+    /// 回合号是否显示（nil → true）。
+    public var showTurn: Bool { turnCount ?? true }
+    /// 费用是否显示（nil → true）。
+    public var showCost: Bool { cost ?? true }
+    /// Git 分支是否显示（nil → true）。
+    public var showBranch: Bool { gitBranch ?? true }
+    /// 分支名最大显示长度（nil → 15）。
+    public var branchMaxLength: Int { maxBranchLength ?? 15 }
+
+    public init(
+        progressBar: Bool? = nil,
+        turnCount: Bool? = nil,
+        cost: Bool? = nil,
+        gitBranch: Bool? = nil,
+        maxBranchLength: Int? = nil
+    ) {
+        self.progressBar = progressBar
+        self.turnCount = turnCount
+        self.cost = cost
+        self.gitBranch = gitBranch
+        self.maxBranchLength = maxBranchLength
+    }
+}
+
+extension PromptDisplayConfig: Codable {
+    public enum CodingKeys: String, CodingKey {
+        case progressBar, turnCount, cost, gitBranch, maxBranchLength
+    }
+}
+
 public struct AxionConfig: Equatable, Sendable {
 
     public static let defaultReviewModel = "claude-haiku-4-5-20251001"
@@ -38,6 +97,7 @@ public struct AxionConfig: Equatable, Sendable {
     public var telegramTypingEnabled: Bool?
     public var telegramTypingInterval: Double?
     public var env: [String: String]?
+    public var promptDisplay: PromptDisplayConfig?
 
     public static let `default` = AxionConfig(
         apiKey: nil,
@@ -71,7 +131,8 @@ public struct AxionConfig: Equatable, Sendable {
         telegramAllowedUsers: nil,
         telegramTypingEnabled: nil,
         telegramTypingInterval: nil,
-        env: nil
+        env: nil,
+        promptDisplay: nil
     )
 
     public init(
@@ -106,7 +167,8 @@ public struct AxionConfig: Equatable, Sendable {
         telegramAllowedUsers: String? = nil,
         telegramTypingEnabled: Bool? = nil,
         telegramTypingInterval: Double? = nil,
-        env: [String: String]? = nil
+        env: [String: String]? = nil,
+        promptDisplay: PromptDisplayConfig? = nil
     ) {
         self.apiKey = apiKey
         self.provider = provider
@@ -140,6 +202,7 @@ public struct AxionConfig: Equatable, Sendable {
         self.telegramTypingEnabled = telegramTypingEnabled
         self.telegramTypingInterval = telegramTypingInterval
         self.env = env
+        self.promptDisplay = promptDisplay
     }
 
     public var tgTypingEnabled: Bool { telegramTypingEnabled ?? true }
@@ -154,7 +217,7 @@ extension AxionConfig: Codable {
         case curatorEnabled, curatorDryRun, curatorIntervalHours, curatorStaleAfterDays, curatorArchiveAfterDays
         case gatewayEnabled, gatewayCuratorIdleHours, gatewayCuratorIntervalHours, gatewayTaskTimeoutMinutes, gatewayNotifyCuratorResults, gatewayMemoryNudgeInterval
         case telegramBotToken, telegramChatId, telegramAllowedUsers, telegramTypingEnabled, telegramTypingInterval
-        case env
+        case env, promptDisplay
     }
 
     public init(from decoder: Decoder) throws {
@@ -191,5 +254,6 @@ extension AxionConfig: Codable {
         telegramTypingEnabled = try c.decodeIfPresent(Bool.self, forKey: .telegramTypingEnabled)
         telegramTypingInterval = try c.decodeIfPresent(Double.self, forKey: .telegramTypingInterval)
         env = try c.decodeIfPresent([String: String].self, forKey: .env)
+        promptDisplay = try c.decodeIfPresent(PromptDisplayConfig.self, forKey: .promptDisplay)
     }
 }

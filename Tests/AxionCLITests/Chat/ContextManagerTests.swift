@@ -163,6 +163,147 @@ struct ContextManagerTests {
         #expect(result.contains("195k/200k"))
         #expect(result.contains("压缩"))
     }
+
+    // MARK: - formatTurnEndContextWarning
+
+    @Test("formatTurnEndContextWarning: 低于 70% → nil")
+    func formatTurnEndContextWarning_belowThreshold() {
+        let result = ContextManager.formatTurnEndContextWarning(
+            usedTokens: 100_000,  // 50%
+            contextWindow: 200_000,
+            isTTY: true,
+            profile: .trueColor
+        )
+        #expect(result == nil)
+    }
+
+    @Test("formatTurnEndContextWarning: 70-80% 范围 → 返回警告")
+    func formatTurnEndContextWarning_inRange() {
+        let result = ContextManager.formatTurnEndContextWarning(
+            usedTokens: 150_000,  // 75%
+            contextWindow: 200_000,
+            isTTY: true,
+            profile: .trueColor
+        )
+        #expect(result != nil)
+        #expect(result!.contains("75%"))
+        #expect(result!.contains("/compact"))
+        #expect(result!.contains("⚠"))
+    }
+
+    @Test("formatTurnEndContextWarning: 恰好 70% → 返回警告")
+    func formatTurnEndContextWarning_at70() {
+        let result = ContextManager.formatTurnEndContextWarning(
+            usedTokens: 140_000,  // 70%
+            contextWindow: 200_000,
+            isTTY: true,
+            profile: .trueColor
+        )
+        #expect(result != nil)
+        #expect(result!.contains("70%"))
+    }
+
+    @Test("formatTurnEndContextWarning: 恰好 80% → nil（由自动压缩处理）")
+    func formatTurnEndContextWarning_at80() {
+        let result = ContextManager.formatTurnEndContextWarning(
+            usedTokens: 160_000,  // 80%
+            contextWindow: 200_000,
+            isTTY: true,
+            profile: .trueColor
+        )
+        #expect(result == nil)
+    }
+
+    @Test("formatTurnEndContextWarning: 超过 80% → nil")
+    func formatTurnEndContextWarning_above80() {
+        let result = ContextManager.formatTurnEndContextWarning(
+            usedTokens: 180_000,  // 90%
+            contextWindow: 200_000,
+            isTTY: true,
+            profile: .trueColor
+        )
+        #expect(result == nil)
+    }
+
+    @Test("formatTurnEndContextWarning: 非 TTY → 纯文本格式")
+    func formatTurnEndContextWarning_nonTTY() {
+        let result = ContextManager.formatTurnEndContextWarning(
+            usedTokens: 150_000,
+            contextWindow: 200_000,
+            isTTY: false,
+            profile: .unknown
+        )
+        #expect(result != nil)
+        #expect(result!.contains("[warning:"))
+        #expect(result!.contains("/compact"))
+        // No ANSI codes
+        #expect(!result!.contains("\u{1B}"))
+    }
+
+    @Test("formatTurnEndContextWarning: TTY 包含黄色 ANSI 码")
+    func formatTurnEndContextWarning_tty_yellowColor() {
+        let result = ContextManager.formatTurnEndContextWarning(
+            usedTokens: 150_000,
+            contextWindow: 200_000,
+            isTTY: true,
+            profile: .trueColor
+        )
+        #expect(result != nil)
+        // Amber/yellow color
+        #expect(result!.contains("\u{1B}[38;2;255;193;7m"))
+        // Reset code
+        #expect(result!.contains("\u{1B}[0m"))
+    }
+
+    @Test("formatTurnEndContextWarning: ANSI256 使用正确色码")
+    func formatTurnEndContextWarning_ansi256() {
+        let result = ContextManager.formatTurnEndContextWarning(
+            usedTokens: 150_000,
+            contextWindow: 200_000,
+            isTTY: true,
+            profile: .ansi256
+        )
+        #expect(result != nil)
+        #expect(result!.contains("\u{1B}[38;5;178m"))
+    }
+
+    @Test("formatTurnEndContextWarning: ANSI16 使用黄色")
+    func formatTurnEndContextWarning_ansi16() {
+        let result = ContextManager.formatTurnEndContextWarning(
+            usedTokens: 150_000,
+            contextWindow: 200_000,
+            isTTY: true,
+            profile: .ansi16
+        )
+        #expect(result != nil)
+        #expect(result!.contains("\u{1B}[33m"))
+    }
+
+    @Test("formatTurnEndContextWarning: unknown profile 无颜色码但有重置码")
+    func formatTurnEndContextWarning_unknownProfile() {
+        let result = ContextManager.formatTurnEndContextWarning(
+            usedTokens: 150_000,
+            contextWindow: 200_000,
+            isTTY: true,
+            profile: .unknown
+        )
+        #expect(result != nil)
+        // unknown profile: no color codes but still has reset codes in TTY mode
+        // (reset code is always present in TTY path for safety)
+        #expect(result!.contains("75%"))
+        #expect(result!.contains("/compact"))
+    }
+
+    @Test("formatTurnEndContextWarning: 零 contextWindow → nil")
+    func formatTurnEndContextWarning_zeroWindow() {
+        let result = ContextManager.formatTurnEndContextWarning(
+            usedTokens: 100,
+            contextWindow: 0,
+            isTTY: true,
+            profile: .trueColor
+        )
+        #expect(result == nil)
+    }
 }
 
 // MARK: - SlashCommandHandler Updated Tests

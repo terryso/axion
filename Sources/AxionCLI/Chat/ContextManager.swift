@@ -1,3 +1,4 @@
+import Foundation
 import OpenAgentSDK
 
 /// 上下文管理核心逻辑。纯函数 struct，不持有状态。
@@ -67,14 +68,30 @@ struct ContextManager {
 
     /// 格式化自动压缩成功消息。
     ///
+    /// Codex-inspired: 使用 `CompactionDisplayFormatter` 渲染可视化压缩结果，
+    /// 包含 before → after 进度条对比和节省空间指标。
+    ///
     /// - Parameters:
     ///   - beforeTokens: 压缩前 token 数
     ///   - afterTokens: 压缩后 token 数
-    /// - Returns: 格式化消息，如 `[axion] 上下文已自动压缩 (45k → 8k tokens)`
-    static func formatCompactMessage(beforeTokens: Int, afterTokens: Int) -> String {
-        let before = BannerRenderer.formatTokenCount(beforeTokens)
-        let after = BannerRenderer.formatTokenCount(afterTokens)
-        return "[axion] 上下文已自动压缩 (\(before) → \(after) tokens)\n"
+    ///   - contextWindow: 上下文窗口大小（用于计算进度条百分比）
+    ///   - isTTY: 是否连接到 TTY
+    ///   - profile: 终端颜色 profile
+    /// - Returns: 格式化消息
+    static func formatCompactMessage(
+        beforeTokens: Int,
+        afterTokens: Int,
+        contextWindow: Int = 0,
+        isTTY: Bool = isatty(STDERR_FILENO) != 0,
+        profile: TerminalColorProfile = .detect()
+    ) -> String {
+        CompactionDisplayFormatter.format(
+            beforeTokens: beforeTokens,
+            afterTokens: afterTokens,
+            contextWindow: contextWindow,
+            isTTY: isTTY,
+            profile: profile
+        )
     }
 
     /// 格式化压缩失败消息。
@@ -123,5 +140,68 @@ struct ContextManager {
             return "[axion] 当前上下文: \(used)/\(maxTokenStr) (\(pct)%)，上下文接近上限，建议使用 /compact 压缩\n"
         }
         return "[axion] 当前上下文: \(used)/\(maxTokenStr) (\(pct)%)\n"
+    }
+
+    // MARK: - Turn-end Context Warning
+
+    /// 回合结束时的上下文警告阈值（70%）。
+    ///
+    /// 低于 `contextWarningRatio`（80% 自动压缩阈值），在自动压缩触发前
+    /// 给用户一个温和的提醒。Codex-inspired: `percent_of_context_window_remaining()`
+    /// 在上下文不足时主动提醒用户。
+    static let contextSuggestThreshold = 0.70
+
+    /// 格式化回合结束时的上下文警告提示。
+    ///
+    /// 当上下文使用率 ≥70% 且 <80%（自动压缩触发前）时，显示黄色警告
+    /// 并建议使用 `/compact`。≥80% 时自动压缩会处理，无需额外提示。
+    ///
+    /// - Parameters:
+    ///   - usedTokens: 当前上下文 token 数
+    ///   - contextWindow: 上下文窗口大小
+    ///   - isTTY: 是否连接到 TTY
+    ///   - profile: 终端颜色配置
+    /// - Returns: 警告字符串，上下文不足时返回 `nil`
+    static func formatTurnEndContextWarning(
+        usedTokens: Int,
+        contextWindow: Int,
+        isTTY: Bool = isatty(STDERR_FILENO) != 0,
+        profile: TerminalColorProfile = .detect()
+    ) -> String? {
+        guard contextWindow > 0 else { return nil }
+        let pct = Double(usedTokens) / Double(contextWindow)
+        let pctInt = Int(pct * 100)
+
+        // 仅在 70%-80% 范围内提示（≥80% 由自动压缩处理）
+        let suggestThreshold = Double(contextWindow) * contextSuggestThreshold
+        let autoCompactThreshold = Double(contextWindow) * contextWarningRatio
+        guard Double(usedTokens) >= suggestThreshold && Double(usedTokens) < autoCompactThreshold else {
+            return nil
+        }
+
+        let yellow: String
+        let dim: String
+
+        switch profile {
+        case .trueColor:
+            yellow = "\u{1B}[38;2;255;193;7m"   // amber
+            dim = "\u{1B}[38;2;148;163;184m"     // slate-400
+        case .ansi256:
+            yellow = "\u{1B}[38;5;178m"
+            dim = "\u{1B}[38;5;145m"
+        case .ansi16:
+            yellow = "\u{1B}[33m"
+            dim = "\u{1B}[37m"
+        case .unknown:
+            yellow = ""
+            dim = ""
+        }
+
+        if isTTY {
+            let r = "\u{1B}[0m"
+            return "\(yellow)⚠ 上下文 \(pctInt)% — 建议使用 \(dim)/compact\(r)\(yellow) 压缩以避免自动截断\(r)\n"
+        } else {
+            return "[warning: context \(pctInt)% — consider /compact]\n"
+        }
     }
 }

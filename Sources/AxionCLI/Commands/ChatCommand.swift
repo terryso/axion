@@ -159,6 +159,34 @@ struct ChatCommand: AsyncParsableCommand {
             currentAgent.interrupt()
         }
 
+        // Cross-session command history (Codex-inspired)
+        let historyStore = CommandHistoryStore.live()
+        let historyPath = ConfigManager.historyFilePath
+        let persistentHistory = historyStore.load(filePath: historyPath)
+
+        // Compact history file on startup if it's grown too large
+        historyStore.compact(filePath: historyPath)
+
+        // Codex-inspired startup tip — first-run welcome or random feature discovery tip
+        let isFirstRun = StartupTipProvider.isFirstRun(historyFilePath: historyPath)
+        if let tipLine = StartupTipProvider.renderTip(
+            StartupTipProvider.getTip(isFirstRun: isFirstRun),
+            isTTY: isatty(STDERR_FILENO) != 0,
+            colorProfile: TerminalColorProfile.detect()
+        ) {
+            fputs(tipLine, stderr)
+        }
+
+        // Session transcript logger — Codex-inspired session_log.rs
+        // Persists full conversation (user/assistant/tool/system) to JSONL for post-session review.
+        let transcriptLogger = SessionTranscriptLogger.live(dirPath: sessionsDir)
+        transcriptLogger.open(
+            sessionId: sessionId,
+            dirPath: sessionsDir,
+            model: buildResult.agent.model,
+            cwd: FileManager.default.currentDirectoryPath
+        )
+
         // AC9: ChatComposer replaces MultiLineInputReader as the REPL input component.
         var composer = ChatComposer()
         composer.enableBracketPaste()
@@ -179,6 +207,7 @@ struct ChatCommand: AsyncParsableCommand {
         var sessionTotalTools = 0
         var sessionLastAssistantText = ""  // /copy 需要：跨 turn 持久化
         let sessionStartTime = ContinuousClock.now
+        var sessionToolUsage = ToolUsageTracker()  // Codex-inspired tool analytics
 
         // REPL loop: each turn calls agent.stream() for full streaming events.
         var skipNextRead = false
@@ -189,14 +218,26 @@ struct ChatCommand: AsyncParsableCommand {
             // Story 38.5: 同步 inputQueue 到 composer
             composer.inputQueue = inputQueue
 
-            // AC2: 动态提示符（含上下文进度条 + 回合计数）
+            // AC2: 动态提示符（含上下文进度条 + 回合计数 + 累计成本 + Git 分支）
             let colorProfile = TerminalColorProfile.detect()
+            // Codex-inspired: 计算累计会话成本显示在提示符中
+            let sessionCost = BannerRenderer.estimateCostString(
+                model: state.buildResult.agent.model,
+                usage: state.sessionUsage
+            )
+            // Codex-inspired (branch_summary.rs): 检测当前 git 分支显示在提示符中
+            let promptCfg = config.promptDisplay ?? PromptDisplayConfig()
+            let gitStatus = GitBranchDetector.detect()
+            let gitBranch = gitStatus.map { $0.displayString(maxLength: promptCfg.branchMaxLength) }
             let prompt = BannerRenderer.renderPrompt(
                 usedTokens: state.contextTokens,
                 contextWindow: state.contextWindow,
                 turnNumber: sessionTurnCount,
+                estimatedCost: sessionCost,
+                gitBranch: gitBranch,
                 isTTY: isatty(STDERR_FILENO) != 0,
-                colorProfile: colorProfile
+                colorProfile: colorProfile,
+                displayConfig: promptCfg
             )
 
             // 上下文使用率警告标题
@@ -214,8 +255,8 @@ struct ChatCommand: AsyncParsableCommand {
                 fputs("\(preview)\n", stderr)
             }
 
-            // AC1/AC2: 注入会话历史到 composer
-            composer.history = state.sessionUserMessages
+            // AC1/AC2: 注入会话历史到 composer（跨会话持久化 + 当前会话）
+            composer.history = persistentHistory + state.sessionUserMessages
 
             // Story 38.5 AC2: 优先消费队列
             let trimmed: String
@@ -255,6 +296,10 @@ struct ChatCommand: AsyncParsableCommand {
             }
 
             state.sessionUserMessages.append(trimmed)
+            // Persist to cross-session history file (Codex-inspired)
+            historyStore.append(text: trimmed, filePath: historyPath)
+            // Persist to session transcript (Codex-inspired session_log.rs)
+            transcriptLogger.logUserInput(trimmed, sessionId: sessionId, dirPath: sessionsDir)
 
             // ── Slash command handling ──────────────────────────────────
 
@@ -403,7 +448,11 @@ struct ChatCommand: AsyncParsableCommand {
                     contextWindow: state.contextWindow,
                     contextTokens: state.contextTokens,
                     skillRegistry: skillRegistry,
-                    lastAssistantText: sessionLastAssistantText
+                    lastAssistantText: sessionLastAssistantText,
+                    sessionStartTime: sessionStartTime,
+                    sessionTurnCount: sessionTurnCount,
+                    sessionTotalTools: sessionTotalTools,
+                    sessionToolUsage: sessionToolUsage
                 )
 
                 switch action {
@@ -477,6 +526,7 @@ struct ChatCommand: AsyncParsableCommand {
             var turnToolCount = 0
             var lastAssistantText = ""  // For desktop notification preview
             var turnFileTracker = TurnFileChangeTracker()  // Codex-inspired file change tracking
+            var responseSpeedTracker = ResponseSpeedTracker()  // Codex-inspired TTFT + tok/s
             sessionTurnCount += 1
 
             let outputHandler = ChatOutputFormatter(theme: chatTheme)
@@ -507,12 +557,22 @@ struct ChatCommand: AsyncParsableCommand {
                 switch message {
                 case .toolUse(let data):
                     turnToolCount += 1
+                    sessionToolUsage.record(toolName: data.toolName)  // Codex-inspired analytics
                     terminalTitle.setToolExecuting(data.toolName)
                     turnFileTracker.recordToolUse(toolName: data.toolName, input: data.input)
+                    transcriptLogger.logToolUse(
+                        toolName: data.toolName, input: data.input,
+                        sessionId: sessionId, dirPath: sessionsDir
+                    )
                 case .assistant(let data):
+                    // Codex-inspired: 标记首个输出 token 到达时刻
+                    responseSpeedTracker.markFirstToken()
                     if !data.text.isEmpty {
                         lastAssistantText = data.text
                         sessionLastAssistantText = data.text  // /copy 需要：持久化到 session 级别
+                        transcriptLogger.logAssistant(
+                            data.text, sessionId: sessionId, dirPath: sessionsDir
+                        )
                     }
                 case .result(let data):
                     if let usage = data.usage {
@@ -546,7 +606,8 @@ struct ChatCommand: AsyncParsableCommand {
                             fputs(
                                 ContextManager.formatCompactMessage(
                                     beforeTokens: preTokens,
-                                    afterTokens: postTokens
+                                    afterTokens: postTokens,
+                                    contextWindow: state.contextWindow
                                 ),
                                 stderr
                             )
@@ -558,7 +619,8 @@ struct ChatCommand: AsyncParsableCommand {
                             fputs(
                                 ContextManager.formatCompactMessage(
                                     beforeTokens: state.contextTokens * 3,
-                                    afterTokens: state.contextTokens
+                                    afterTokens: state.contextTokens,
+                                    contextWindow: state.contextWindow
                                 ),
                                 stderr
                             )
@@ -620,6 +682,12 @@ struct ChatCommand: AsyncParsableCommand {
                     return costStr
                 }()
 
+                // Codex-inspired: 计算响应速度（TTFT + tok/s）
+                let turnResponseSpeed = responseSpeedTracker.computeSpeed(
+                    outputTokens: turnOutputDelta,
+                    endTime: ContinuousClock.now
+                )
+
                 fputs(
                     transcriptRenderer.renderTurnSummary(
                         duration: turnDuration,
@@ -627,7 +695,8 @@ struct ChatCommand: AsyncParsableCommand {
                         inputTokens: BannerRenderer.formatTokenCount(turnInputDelta),
                         outputTokens: BannerRenderer.formatTokenCount(turnOutputDelta),
                         contextPct: contextPct,
-                        estimatedCost: turnCost
+                        estimatedCost: turnCost,
+                        responseSpeed: turnResponseSpeed
                     ),
                     stderr
                 )
@@ -638,6 +707,16 @@ struct ChatCommand: AsyncParsableCommand {
                     profile: colorProfile
                 ) {
                     fputs(fileSummary, stderr)
+                }
+
+                // Codex-inspired context warning — proactive /compact suggestion at 70-80%
+                if let contextWarning = ContextManager.formatTurnEndContextWarning(
+                    usedTokens: state.contextTokens,
+                    contextWindow: state.contextWindow,
+                    isTTY: isatty(STDERR_FILENO) != 0,
+                    profile: colorProfile
+                ) {
+                    fputs(contextWarning, stderr)
                 }
 
                 // Desktop notification — Codex-inspired OSC 9 / BEL on turn complete
@@ -657,6 +736,14 @@ struct ChatCommand: AsyncParsableCommand {
         try? await state.buildResult.agent.close()
         terminalTitle.clear()
         let sessionDurationMs = durationToMs(ContinuousClock.now - sessionStartTime)
+        // Close session transcript — Codex-inspired session_log.rs
+        transcriptLogger.close(
+            sessionId: sessionId,
+            dirPath: sessionsDir,
+            turns: sessionTurnCount,
+            totalTokens: state.sessionUsage.totalTokens,
+            durationMs: sessionDurationMs
+        )
         fputs(
             BannerRenderer.renderExit(
                 sessionId: state.sessionId,
@@ -664,7 +751,8 @@ struct ChatCommand: AsyncParsableCommand {
                 turns: sessionTurnCount,
                 totalTools: sessionTotalTools,
                 usage: state.sessionUsage,
-                model: state.buildResult.agent.model
+                model: state.buildResult.agent.model,
+                toolUsage: sessionToolUsage
             ),
             stderr
         )

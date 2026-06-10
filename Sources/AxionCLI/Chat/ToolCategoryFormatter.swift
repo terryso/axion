@@ -272,6 +272,23 @@ struct ToolCategoryFormatter {
         let dimCode = "\u{1B}[2m"  // dim for output preview
 
         var result = "\(iconColor)\(statusIcon)\(reset) \(statusLabel)"
+
+        // Codex-inspired: Shell commands show multi-line output inline
+        // (like Codex's aggregated_output pattern), all other categories
+        // show single-line preview on the same line.
+        if category == .shell && !isError && !content.isEmpty {
+            let outputLines = renderShellOutput(
+                content: content,
+                maxLines: 4,
+                maxWidth: 100
+            )
+            if outputLines.numberOfLines > 0 {
+                result += "\(durationSuffix)\n"
+                result += outputLines.text
+                return result
+            }
+        }
+
         if !outputPreview.isEmpty {
             result += " \(dimCode)\(outputPreview)\(reset)"
         }
@@ -438,7 +455,8 @@ struct ToolCategoryFormatter {
     private static func extractSuccessPreview(content: String, category: ToolCategory) -> String {
         switch category {
         case .shell:
-            // Show first line of command output (dimmed)
+            // TTY mode uses renderShellOutput() multi-line block in formatCompleted.
+            // Non-TTY fallback still needs a single-line preview here.
             let firstLine = content.components(separatedBy: "\n").first?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
             return ToolOutputFormatter.truncateText(firstLine, maxLength: 60)
         case .edit, .fileWrite:
@@ -456,6 +474,135 @@ struct ToolCategoryFormatter {
     private static func extractErrorPreview(content: String, category: ToolCategory) -> String {
         let summary = ToolOutputFormatter.truncateText(content, maxLength: 100)
         return summary
+    }
+
+    // MARK: - Shell Output Rendering (Codex-inspired)
+
+    /// Result of rendering multi-line shell output.
+    private struct ShellOutputResult {
+        let text: String
+        let numberOfLines: Int
+    }
+
+    /// Renders shell command output as an indented, dimmed multi-line block.
+    ///
+    /// Codex-inspired: Codex's `EventProcessorWithHumanOutput.render_item_completed`
+    /// shows `aggregated_output` inline after the completion status line.
+    /// Axion adapts this with:
+    /// - Indented output lines (3-space prefix) for visual hierarchy
+    /// - Dimmed ANSI styling for non-intrusive display
+    /// - Smart truncation: up to `maxLines` shown, "...N more lines" indicator
+    /// - Per-line truncation to prevent terminal overflow
+    /// - Strip ANSI escape sequences from command output (avoids garbled display)
+    /// - Skip empty lines and box-drawing borders for cleaner output
+    ///
+    /// Example TTY output:
+    /// ```
+    /// ✓ completed [350ms]
+    ///     total 32
+    ///     drwxr-xr-x  5 user  staff  160 Jun 10...
+    ///     -rw-r--r--  1 user  staff  847 Jun 10...
+    ///     … 12 more lines
+    /// ```
+    ///
+    /// - Parameters:
+    ///   - content: Raw tool result content (may contain JSON wrapper or plain text)
+    ///   - maxLines: Maximum output lines to display (default 4)
+    ///   - maxWidth: Maximum characters per line (default 100)
+    ///   - isTTY: Whether output is to a TTY (enables colors/indentation)
+    ///   - profile: Terminal color capability
+    /// - Returns: ShellOutputResult with formatted text and line count
+    private static func renderShellOutput(
+        content: String,
+        maxLines: Int = 4,
+        maxWidth: Int = 100,
+        isTTY: Bool = isatty(STDERR_FILENO) != 0,
+        profile: TerminalColorProfile = .detect()
+    ) -> ShellOutputResult {
+        // Extract actual output text — may be wrapped in JSON by SDK
+        let outputText = extractShellOutputText(from: content)
+        guard !outputText.isEmpty else {
+            return ShellOutputResult(text: "", numberOfLines: 0)
+        }
+
+        // Strip ANSI escape sequences from command output
+        let cleaned = outputText.replacingOccurrences(
+            of: "\u{001B}\\[[0-9;]*[A-Za-z]",
+            with: "",
+            options: .regularExpression
+        )
+
+        // Split into lines, clean whitespace, filter empty/border lines
+        let allLines = cleaned.components(separatedBy: "\n")
+            .map { $0.trimmingCharacters(in: .whitespaces) }
+            .filter { !$0.isEmpty && !isBoxDrawingBorder($0) }
+
+        guard !allLines.isEmpty else {
+            return ShellOutputResult(text: "", numberOfLines: 0)
+        }
+
+        let dimANSI: String
+        let resetANSI: String
+        if isTTY {
+            dimANSI = Self.dimCode(for: profile)
+            resetANSI = reset
+        } else {
+            dimANSI = ""
+            resetANSI = ""
+        }
+
+        let indent = "   "  // 3-space indent for visual hierarchy
+        let visibleLines = allLines.prefix(maxLines)
+        let hasMore = allLines.count > maxLines
+
+        var result = ""
+        for line in visibleLines {
+            let truncated = ToolOutputFormatter.truncateText(line, maxLength: maxWidth)
+            result += "\(dimANSI)\(indent)\(truncated)\(resetANSI)\n"
+        }
+
+        if hasMore {
+            let remaining = allLines.count - maxLines
+            result += "\(dimANSI)\(indent)… \(remaining) more lines\(resetANSI)\n"
+        }
+
+        return ShellOutputResult(text: result, numberOfLines: allLines.count)
+    }
+
+    /// Extracts the actual command output text from tool result content.
+    ///
+    /// SDK may wrap bash results as JSON with "output"/"stdout" field,
+    /// or the content may be plain text. This method handles both cases.
+    private static func extractShellOutputText(from content: String) -> String {
+        // Try JSON wrapper first (SDK bash tool format)
+        if let json = parseJSONDict(from: content) {
+            if let output = json["output"] as? String {
+                return output
+            }
+            if let stdout = json["stdout"] as? String {
+                return stdout
+            }
+            // JSON but no output field — might be just exit code
+            if json["exitCode"] != nil || json["exit_code"] != nil {
+                // Return empty if only exit code (no actual output)
+                return json.values
+                    .compactMap { $0 as? String }
+                    .filter { !$0.isEmpty }
+                    .joined(separator: "\n")
+            }
+        }
+        // Plain text — return as-is
+        return content.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? "" : content
+    }
+
+    /// Returns the dim ANSI code for the given terminal color profile.
+    private static func dimCode(for profile: TerminalColorProfile) -> String {
+        switch profile {
+        case .trueColor: return "\u{1B}[38;2;120;120;120m"
+        case .ansi256: return "\u{1B}[38;5;244m"
+        case .ansi16: return "\u{1B}[2m"
+        case .unknown: return ""
+        }
     }
 
     // MARK: - JSON Parsing Helpers

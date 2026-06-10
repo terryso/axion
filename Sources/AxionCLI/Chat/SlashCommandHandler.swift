@@ -35,7 +35,11 @@ struct SlashCommandHandler {
         contextTokens: Int = 0,
         isAgentBusy: Bool = false,  // AC6: 38.7
         skillRegistry: SkillRegistry? = nil,
-        lastAssistantText: String = ""  // /copy 需要
+        lastAssistantText: String = "",  // /copy 需要
+        sessionStartTime: ContinuousClock.Instant? = nil,
+        sessionTurnCount: Int = 0,
+        sessionTotalTools: Int = 0,
+        sessionToolUsage: ToolUsageTracker = ToolUsageTracker()
     ) -> SlashCommandAction {
         switch command {
         case .help:
@@ -79,7 +83,11 @@ struct SlashCommandHandler {
                     contextTokens: contextTokens,
                     contextWindow: contextWindow,
                     cwd: FileManager.default.currentDirectoryPath,
-                    usage: sessionUsage
+                    usage: sessionUsage,
+                    sessionStartTime: sessionStartTime,
+                    turnCount: sessionTurnCount,
+                    totalToolsUsed: sessionTotalTools,
+                    toolUsage: sessionToolUsage
                 ),
                 stderr
             )
@@ -199,7 +207,8 @@ struct SlashCommandHandler {
         if result.success && result.preTokens > 0 {
             return ContextManager.formatCompactMessage(
                 beforeTokens: result.preTokens,
-                afterTokens: result.postTokens
+                afterTokens: result.postTokens,
+                contextWindow: contextWindow
             )
         } else if !result.success {
             return "[axion] ⚠️ 上下文压缩失败: \(result.error ?? "未知错误")\n"
