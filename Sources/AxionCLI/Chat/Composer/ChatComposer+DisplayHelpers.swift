@@ -70,26 +70,19 @@ extension ChatComposer {
 
         // 4. 光标定位（如果不在末尾）
         if cursor != buffer.count {
-            let promptWidth = Self.displayWidth(prompt)
-            let cursorIndex = buffer.index(buffer.startIndex, offsetBy: cursor)
-            let cursorDisplayCol = promptWidth + Self.displayWidth(String(buffer[..<cursorIndex]))
-            let endDisplayCol = promptWidth + Self.displayWidth(buffer)
             let termWidth = max(1, Self.terminalColumns())
+            let endPos = Self.cursorVisualPosition(
+                prompt: prompt, buffer: buffer, cursor: buffer.count, termWidth: termWidth)
+            let curPos = Self.cursorVisualPosition(
+                prompt: prompt, buffer: buffer, cursor: cursor, termWidth: termWidth)
 
-            // 从末尾位置移动到目标位置
-            let endRow = endDisplayCol / termWidth
-            let cursorRow = cursorDisplayCol / termWidth
-            let cursorCol = cursorDisplayCol % termWidth
-
-            // 先上移行差
-            let rowsUp = endRow - cursorRow
+            let rowsUp = endPos.row - curPos.row
             if rowsUp > 0 {
                 writeStdout("\u{1B}[\(rowsUp)A")
             }
-            // 回到第 0 列，然后右移到目标列
             writeStdout("\r")
-            if cursorCol > 0 {
-                writeStdout("\u{1B}[\(cursorCol)C")
+            if curPos.col > 0 {
+                writeStdout("\u{1B}[\(curPos.col)C")
             }
         }
 
@@ -212,10 +205,55 @@ extension ChatComposer {
     }
 
     /// 计算 prompt + buffer 占用的终端物理行数。
+    ///
+    /// 正确处理 buffer 中的 `\n`（如 bracket paste 多行内容）：
+    /// 每个 `\n` 在终端中产生真正的换行，需要按段分别计算行数。
+    /// - 第一段: prompt 宽度 + 第一段 buffer 宽度 → 向上取整
+    /// - 后续段: 纯 buffer 段宽度 → 向上取整
+    /// - 空段也占 1 行（终端中 `\n` 后的空行）
     static func calculateDisplayLines(prompt: String, buffer: String) -> Int {
-        let totalWidth = displayWidth(prompt) + displayWidth(buffer)
         let cols = max(1, terminalColumns())
-        // 向上取整除法：0 width → 1 line（至少占一行）
-        return max(1, (totalWidth + cols - 1) / cols)
+        let bufferLines = buffer.components(separatedBy: "\n")
+
+        var totalLines = 0
+        for (i, line) in bufferLines.enumerated() {
+            let lineWidth = (i == 0 ? displayWidth(prompt) : 0) + displayWidth(line)
+            totalLines += max(1, (lineWidth + cols - 1) / cols)
+        }
+        return totalLines
+    }
+
+    /// 计算光标在终端中的视觉 (行, 列) 位置。
+    ///
+    /// 行从 0 开始（第一行 = prompt 所在行），列为该行内的偏移。
+    /// 正确处理 buffer 中的 `\n`：每个 `\n` 分隔独立的终端行。
+    ///
+    /// - Parameters:
+    ///   - prompt: 提示符字符串（第一行独占）
+    ///   - buffer: 编辑缓冲区（可能含 `\n`）
+    ///   - cursor: 光标在 buffer 中的字符偏移
+    ///   - termWidth: 终端宽度（列数）
+    /// - Returns: (row, col) — row 是从第一行起的行号，col 是行内列号
+    static func cursorVisualPosition(
+        prompt: String, buffer: String, cursor: Int, termWidth: Int
+    ) -> (row: Int, col: Int) {
+        let clampedCursor = max(0, min(cursor, buffer.count))
+        let cursorIndex = buffer.index(buffer.startIndex, offsetBy: clampedCursor)
+        let textBeforeCursor = String(buffer[..<cursorIndex])
+        let segments = textBeforeCursor.components(separatedBy: "\n")
+
+        var row = 0
+        for (i, seg) in segments.enumerated() {
+            let lineW = (i == 0 ? displayWidth(prompt) : 0) + displayWidth(seg)
+            if i < segments.count - 1 {
+                // 完整行（光标不在此段末尾）
+                row += max(1, (lineW + termWidth - 1) / termWidth)
+            } else {
+                // 光标所在行
+                row += lineW / termWidth
+                return (row: row, col: lineW % termWidth)
+            }
+        }
+        return (row: 0, col: displayWidth(prompt) % termWidth)
     }
 }
