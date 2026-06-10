@@ -349,7 +349,7 @@ struct StreamingMarkdownFormatterTests {
         // Code fence line should NOT be formatted
         renderer.process("```swift\n") { formatted.append($0) }
         let fenceLine = formatted.first { $0.contains("swift") } ?? ""
-        #expect(fenceLine.contains("╭"))  // code block border, not markdown heading
+        #expect(fenceLine.contains("┌"))  // code block border, not markdown heading
     }
 
     @Test("code block content is not markdown formatted")

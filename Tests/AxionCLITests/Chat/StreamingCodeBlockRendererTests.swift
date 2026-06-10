@@ -67,8 +67,8 @@ struct StreamingCodeBlockRendererTests {
         #expect(plain.contains("func hello()"))
         #expect(plain.contains("print(\"Hi\")"))
         // Should contain border characters
-        #expect(combined.contains("╭") || combined.contains("─"))
-        #expect(combined.contains("╯"))
+        #expect(combined.contains("┌") || combined.contains("─"))
+        #expect(combined.contains("┘"))
     }
 
     @Test("renders code block without language tag")
@@ -100,7 +100,7 @@ struct StreamingCodeBlockRendererTests {
         let combined = output.joined()
         #expect(combined.contains("Hello world"))
         #expect(combined.contains("This is normal text"))
-        #expect(!combined.contains("╭"))
+        #expect(!combined.contains("┌"))
     }
 
     @Test("handles mixed text and code blocks")
@@ -338,7 +338,7 @@ struct StreamingCodeBlockRendererTests {
 
         let combined = output.joined()
         #expect(combined.contains("Use `code` in your text"))
-        #expect(!combined.contains("╭"))
+        #expect(!combined.contains("┌"))
     }
 
     @Test("handles nested code blocks with different fence chars")

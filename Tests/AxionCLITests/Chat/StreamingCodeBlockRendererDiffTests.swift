@@ -257,7 +257,7 @@ struct StreamingCodeBlockRendererDiffTests {
         #expect(!combined.contains("```\n"))
 
         // Verify close border present
-        #expect(combined.contains("╯"))
+        #expect(combined.contains("┘"))
     }
 
     // MARK: - Color Profile Degradation

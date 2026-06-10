@@ -158,6 +158,21 @@ struct StreamingCodeBlockRenderer: Sendable {
             }
             return true
         } else if inCodeBlock {
+            // 回退语言检测：某些 LLM 将 ``` 和语言标签分成两行输出（如 ```↵swift↵）
+            // 当 currentLang 为空且是第一行内容时，检查该行是否只是一个语言标签，
+            // 如果是则设为 currentLang 并跳过渲染（消费该行）。
+            if currentLang.isEmpty && !hasCheckedFirstContentLine {
+                let trimmed = line.trimmingCharacters(in: .whitespaces)
+                if !trimmed.isEmpty && trimmed.allSatisfy({ $0.isLetter || $0 == "+" || $0 == "-" || $0 == "." || $0 == "_" }) {
+                    if CodeSyntaxHighlighter.normalizeLanguage(trimmed) != nil {
+                        currentLang = trimmed
+                        isDiffBlock = isDiffLanguage(currentLang)
+                        hasCheckedFirstContentLine = true
+                        return false  // 跳过渲染这一行（已作为语言标签消费），不输出多余换行
+                    }
+                }
+            }
+
             // 延迟 diff 检测：语言不是 diff 但首行内容以 "diff --git" 开头
             if !hasCheckedFirstContentLine && !isDiffBlock {
                 hasCheckedFirstContentLine = true
@@ -247,7 +262,7 @@ struct StreamingCodeBlockRenderer: Sendable {
         let (_, _, midBorder, dimCode, resetCode) = borderStyles()
         let innerWidth = terminalWidth - 2
         let line = String(repeating: midBorder, count: max(innerWidth, 10))
-        return "\(dimCode)╰\(line)╯\(resetCode)"
+        return "\(dimCode)└\(line)┘\(resetCode)"
     }
 
     /// 渲染代码块内的一行内容 — 使用语法高亮（支持语言感知着色）。
@@ -395,7 +410,7 @@ struct StreamingCodeBlockRenderer: Sendable {
             dimCode = ""
         }
         let resetCode = dimCode.isEmpty ? "" : "\u{1B}[0m"
-        return (open: "╭", close: "╮", mid: "─", dimCode: dimCode, resetCode: resetCode)
+        return (open: "┌", close: "┐", mid: "─", dimCode: dimCode, resetCode: resetCode)
     }
 
     /// 返回代码内容的 dim 样式。

@@ -20,6 +20,7 @@ final class ChatOutputFormatter: OpenAgentSDK.SDKMessageOutputHandler, @unchecke
     private let theme: ChatTheme?
     private let transcriptRenderer: TranscriptRenderer?
     private var assistantBlockStarted = false  // 同一轮 assistant 输出共享圆点标记
+    private var pendingAssistantPrefix: String?  // 缓冲的 ● 前缀，延迟到首行非边框输出时拼接
 
     // 流式代码块渲染器 — 检测代码围栏并渲染视觉边框
     private var codeBlockRenderer: StreamingCodeBlockRenderer
@@ -47,8 +48,15 @@ final class ChatOutputFormatter: OpenAgentSDK.SDKMessageOutputHandler, @unchecke
         self.spinner = spinner ?? SpinnerRenderer()
         self.theme = theme
         self.transcriptRenderer = theme.map { TranscriptRenderer(theme: $0) }
-        self.markdownFormatter = markdownFormatter ?? StreamingMarkdownFormatter()
+        let resolvedProfile = theme?.profile ?? TerminalColorProfile.detect()
+        let resolvedIsTTY = theme?.isTTY ?? (isatty(STDOUT_FILENO) != 0)
+        self.markdownFormatter = markdownFormatter ?? StreamingMarkdownFormatter(
+            profile: resolvedProfile,
+            isTTY: resolvedIsTTY
+        )
         self.codeBlockRenderer = codeBlockRenderer ?? StreamingCodeBlockRenderer(
+            profile: resolvedProfile,
+            isTTY: resolvedIsTTY,
             plainTextFormatter: { [markdownFormatter = self.markdownFormatter] line in
                 markdownFormatter.formatLine(line)
             }
@@ -92,22 +100,40 @@ final class ChatOutputFormatter: OpenAgentSDK.SDKMessageOutputHandler, @unchecke
             // 收到首个 partial → 停止等待 spinner（无论是否已启动动画）
             spinner.stop()
 
-            // AC2: 首次 partialMessage 时输出 assistant 圆点（如果 theme 可用）
+            // AC2: 首次 partialMessage 时缓冲 assistant 圆点（延迟到首行输出时拼接）
             if let renderer = transcriptRenderer, !assistantBlockStarted {
-                writeStdout(renderer.renderAssistantBlockStart())
+                pendingAssistantPrefix = renderer.renderAssistantBlockStart()
                 assistantBlockStarted = true
             }
 
             // 通过代码块渲染器处理 LLM 文本 — 检测代码围栏并渲染视觉边框
             if !data.text.isEmpty {
-                codeBlockRenderer.process(data.text) { [writeStdout] output in
-                    writeStdout(output)
+                codeBlockRenderer.process(data.text) { [weak self] output in
+                    guard let self else { return }
+                    if let prefix = self.pendingAssistantPrefix {
+                        self.pendingAssistantPrefix = nil
+                        if output.contains("┌") {
+                            // 代码块边框：圆点独占一行，边框另起一行（避免挤偏边框）
+                            self.writeStdout(prefix + "\n" + output)
+                        } else {
+                            // 普通文本：圆点和文本在同一行
+                            self.writeStdout(prefix + output)
+                        }
+                    } else {
+                        self.writeStdout(output)
+                    }
                 }
                 hasOutputText = true
             }
 
         case .assistant(let data):
             spinner.stop()
+
+            // 兜底：如果 ● 前缀未被消费（极端情况如空回复），直接输出
+            if let prefix = pendingAssistantPrefix {
+                writeStdout(prefix + "\n")
+                pendingAssistantPrefix = nil
+            }
 
             // 如果 assistant 有文本且与 partial 不同，输出换行
             if !data.text.isEmpty && hasOutputText {
