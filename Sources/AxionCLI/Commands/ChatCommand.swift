@@ -167,6 +167,16 @@ struct ChatCommand: AsyncParsableCommand {
         // Compact history file on startup if it's grown too large
         historyStore.compact(filePath: historyPath)
 
+        // Session transcript logger — Codex-inspired session_log.rs
+        // Persists full conversation (user/assistant/tool/system) to JSONL for post-session review.
+        let transcriptLogger = SessionTranscriptLogger.live(dirPath: sessionsDir)
+        transcriptLogger.open(
+            sessionId: sessionId,
+            dirPath: sessionsDir,
+            model: buildResult.agent.model,
+            cwd: FileManager.default.currentDirectoryPath
+        )
+
         // AC9: ChatComposer replaces MultiLineInputReader as the REPL input component.
         var composer = ChatComposer()
         composer.enableBracketPaste()
@@ -258,6 +268,8 @@ struct ChatCommand: AsyncParsableCommand {
             state.sessionUserMessages.append(trimmed)
             // Persist to cross-session history file (Codex-inspired)
             historyStore.append(text: trimmed, filePath: historyPath)
+            // Persist to session transcript (Codex-inspired session_log.rs)
+            transcriptLogger.logUserInput(trimmed, sessionId: sessionId, dirPath: sessionsDir)
 
             // ── Slash command handling ──────────────────────────────────
 
@@ -512,10 +524,17 @@ struct ChatCommand: AsyncParsableCommand {
                     turnToolCount += 1
                     terminalTitle.setToolExecuting(data.toolName)
                     turnFileTracker.recordToolUse(toolName: data.toolName, input: data.input)
+                    transcriptLogger.logToolUse(
+                        toolName: data.toolName, input: data.input,
+                        sessionId: sessionId, dirPath: sessionsDir
+                    )
                 case .assistant(let data):
                     if !data.text.isEmpty {
                         lastAssistantText = data.text
                         sessionLastAssistantText = data.text  // /copy 需要：持久化到 session 级别
+                        transcriptLogger.logAssistant(
+                            data.text, sessionId: sessionId, dirPath: sessionsDir
+                        )
                     }
                 case .result(let data):
                     if let usage = data.usage {
@@ -660,6 +679,14 @@ struct ChatCommand: AsyncParsableCommand {
         try? await state.buildResult.agent.close()
         terminalTitle.clear()
         let sessionDurationMs = durationToMs(ContinuousClock.now - sessionStartTime)
+        // Close session transcript — Codex-inspired session_log.rs
+        transcriptLogger.close(
+            sessionId: sessionId,
+            dirPath: sessionsDir,
+            turns: sessionTurnCount,
+            totalTokens: state.sessionUsage.totalTokens,
+            durationMs: sessionDurationMs
+        )
         fputs(
             BannerRenderer.renderExit(
                 sessionId: state.sessionId,
