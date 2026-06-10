@@ -22,10 +22,12 @@ Axion is a Swift-based AI agent that lives in your terminal. Type `axion` and st
 
 **Key highlights:**
 
-- **Interactive Coding Agent** — `axion` launches a Claude Code–like REPL with streaming output, slash commands (`/help`, `/clear`, `/diff`, `/model`, `/cost`, …), file edit approval diffs, multiline input with CJK support, and session resume
+- **Interactive Coding Agent** — `axion` launches a Claude Code–like REPL with streaming output, 16 slash commands (`/help`, `/clear`, `/diff`, `/model`, `/cost`, `/copy`, …), file edit approval diffs, multiline input with CJK support, and session resume
 - **Full Tool Spectrum** — Bash execution, file read/write/edit, code search (Grep/Glob), web search & fetch, LSP code intelligence — plus 21 native macOS desktop tools via MCP when you need GUI
+- **Rich Terminal Rendering** — Streaming Unicode tables, 16-language syntax highlighting, diff-colored code blocks, Markdown extensions (strikethrough, task lists, clickable links, image placeholders), file change summaries, and context progress bars
 - **Context-Aware File Editing** — Diff-based approval flow shows exactly what changes before applying. Tracks file modifications per turn with `/diff` summary
 - **Cross-run Memory** — Two complementary memory systems: App operation facts (auto-extracted from tool calls) and Universal Memory (environment knowledge + user profile)
+- **Clipboard Integration** — `/copy` command copies last assistant response to clipboard (pbcopy / OSC 52 / tmux auto-fallback)
 - **SDK Skill System** — Prompt skills, recorded skills, and built-in desktop skills with dual-track lookup and skill-scoped memory
 - **Record & Replay** — Record a workflow once, replay it instantly without LLM calls
 - **HTTP API & MCP Server** — Integrate with CI/CD or let external agents (Claude Code, Cursor) use Axion's tools
@@ -41,9 +43,12 @@ Axion is a Swift-based AI agent that lives in your terminal. Type `axion` and st
 │                                                                │
 │   Interactive Chat (default)         Desktop Automation       │
 │   ├── Streaming Markdown             ├── axion run "task"      │
-│   ├── Slash Commands (14)            ├── MCP Tools (21)        │
-│   ├── File Edit Approval             ├── Record & Replay       │
-│   ├── Session Resume                 └── User Takeover         │
+│   ├── Syntax Highlight (16 langs)    ├── MCP Tools (21)        │
+│   ├── Unicode Tables                 ├── Record & Replay       │
+│   ├── Slash Commands (16)            └── User Takeover         │
+│   ├── File Edit Approval                                       │
+│   ├── Clipboard (/copy)                                        │
+│   ├── Session Resume                                            │
 │   └── CJK Input                                                │
 │                                                                │
 │   Core Tools: Bash · File R/W · Grep/Glob · Web · LSP         │
@@ -118,6 +123,7 @@ axion
 # Check what changed
 > /diff          # git diff summary for this session
 > /cost          # token usage and cost breakdown
+> /copy          # copy last response to clipboard
 > /status        # session state card
 ```
 
@@ -207,9 +213,15 @@ Axion's unique advantage — when CLI tools aren't enough, it controls macOS GUI
 
 The default `axion` command opens a REPL with rich terminal UX:
 
-- **Streaming output** — Markdown, code blocks, and tool results rendered in real time
+- **Streaming output** — Markdown, code blocks, and tool results rendered in real time with syntax highlighting for 16 languages
+- **Streaming tables** — Markdown pipe tables auto-detected and rendered as Unicode box-drawing aligned tables
+- **Diff-aware code blocks** — Unified diff content in code blocks gets syntax-colored (green additions, red deletions, cyan hunk headers)
+- **Markdown extensions** — Strikethrough, task lists (☐/☑), clickable OSC 8 hyperlinks, image placeholders, H1/H2 underlines, blockquotes, italic
+- **Turn summary** — Context window progress bar (green/yellow/red) and per-turn cost estimate after each turn
+- **File change summary** — Tree-structured overview of file operations (Created/Edited/Read) at end of each turn
+- **System events** — Codex-style rendering for context compression, rate limits, and task completion notifications
 - **File edit approval** — Shows a diff preview before applying changes; approve, reject, or edit
-- **14 slash commands** — `/help`, `/clear`, `/compact`, `/model`, `/cost`, `/diff`, `/status`, `/resume`, `/config`, `/new`, `/fork`, `/archive`, `/skills`, `/exit`
+- **16 slash commands** — `/help`, `/clear`, `/compact`, `/model`, `/cost`, `/diff`, `/status`, `/resume`, `/config`, `/new`, `/fork`, `/archive`, `/skills`, `/copy`, `/exit`
 - **Multiline input** — Paste or compose multi-line prompts naturally
 - **CJK support** — Full Chinese/Japanese/Korean input handling
 - **Session persistence** — Conversations auto-saved; resume with `/resume` or `axion resume`
@@ -466,6 +478,11 @@ swift test --filter AxionHelperIntegrationTests
 Sources/
 ├── AxionCLI/              # Agent entry point
 │   ├── Chat/              # Interactive REPL (streaming, approval, composer, CJK)
+│   │   ├── Rendering/     # StreamingMarkdown, StreamingTable, CodeBlock, SyntaxHighlight
+│   │   ├── Theme/         # TranscriptRenderer, BannerRenderer, progress bars
+│   │   ├── FileChangeTracker  # Per-turn file operation summary
+│   │   ├── SystemEventRenderer # Codex-style system event display
+│   │   └── ClipboardService   # /copy command (pbcopy/OSC 52/tmux)
 │   ├── Commands/          # CLI subcommands (chat, run, setup, server, mcp, …)
 │   ├── Tools/             # Built-in tool implementations
 │   ├── Memory/            # Memory context, extraction, security scanner
