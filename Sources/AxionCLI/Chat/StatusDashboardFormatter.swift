@@ -53,6 +53,8 @@ struct StatusDashboardFormatter {
         let estimatedCost: String?
         /// Working directory.
         let cwd: String
+        /// Tool usage tracker for per-tool breakdown (Codex-inspired analytics).
+        let toolUsage: ToolUsageTracker?
     }
 
     /// Lightweight token usage estimate (no SDK dependency).
@@ -180,6 +182,17 @@ struct StatusDashboardFormatter {
             ))
         }
 
+        // Tool usage breakdown (Codex-inspired analytics)
+        if let toolUsage = stats.toolUsage, toolUsage.totalCount > 0 {
+            let tools = toolUsage.topTools(limit: 5)
+            let toolParts = tools.map { "\($0.toolName) \($0.count)" }
+            lines.append(renderRow(
+                label: "Tools",
+                value: toolParts.joined(separator: " · "),
+                dimC: dimC, valueC: accentCode(for: profile), resetC: resetC
+            ))
+        }
+
         // Working directory
         lines.append(renderRow(
             label: "Dir",
@@ -217,6 +230,12 @@ struct StatusDashboardFormatter {
 
         if let cost = stats.estimatedCost {
             lines.append("  Cost:     \(cost)")
+        }
+
+        if let toolUsage = stats.toolUsage, toolUsage.totalCount > 0 {
+            let tools = toolUsage.topTools(limit: 5)
+            let toolParts = tools.map { "\($0.toolName) \($0.count)" }
+            lines.append("  Tools:    \(toolParts.joined(separator: ", "))")
         }
 
         lines.append("  Dir:      \(stats.cwd)")

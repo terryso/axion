@@ -200,6 +200,7 @@ struct ChatCommand: AsyncParsableCommand {
         var sessionTotalTools = 0
         var sessionLastAssistantText = ""  // /copy 需要：跨 turn 持久化
         let sessionStartTime = ContinuousClock.now
+        var sessionToolUsage = ToolUsageTracker()  // Codex-inspired tool analytics
 
         // REPL loop: each turn calls agent.stream() for full streaming events.
         var skipNextRead = false
@@ -440,7 +441,8 @@ struct ChatCommand: AsyncParsableCommand {
                     lastAssistantText: sessionLastAssistantText,
                     sessionStartTime: sessionStartTime,
                     sessionTurnCount: sessionTurnCount,
-                    sessionTotalTools: sessionTotalTools
+                    sessionTotalTools: sessionTotalTools,
+                    sessionToolUsage: sessionToolUsage
                 )
 
                 switch action {
@@ -544,6 +546,7 @@ struct ChatCommand: AsyncParsableCommand {
                 switch message {
                 case .toolUse(let data):
                     turnToolCount += 1
+                    sessionToolUsage.record(toolName: data.toolName)  // Codex-inspired analytics
                     terminalTitle.setToolExecuting(data.toolName)
                     turnFileTracker.recordToolUse(toolName: data.toolName, input: data.input)
                     transcriptLogger.logToolUse(
@@ -728,7 +731,8 @@ struct ChatCommand: AsyncParsableCommand {
                 turns: sessionTurnCount,
                 totalTools: sessionTotalTools,
                 usage: state.sessionUsage,
-                model: state.buildResult.agent.model
+                model: state.buildResult.agent.model,
+                toolUsage: sessionToolUsage
             ),
             stderr
         )

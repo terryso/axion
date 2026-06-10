@@ -208,7 +208,8 @@ struct BannerRenderer {
         turns: Int = 0,
         totalTools: Int = 0,
         usage: TokenUsage? = nil,
-        model: String = ""
+        model: String = "",
+        toolUsage: ToolUsageTracker? = nil
     ) -> String {
         let shortId = String(sessionId.prefix(8))
         let duration = formatSessionDuration(ms: sessionDurationMs)
@@ -225,6 +226,13 @@ struct BannerRenderer {
             statsParts.append("↑\(formatTokenCount(u.inputTokens)) ↓\(formatTokenCount(u.outputTokens))")
         }
         lines.append("[axion] \(statsParts.joined(separator: " · "))")
+
+        // Tool usage breakdown — Codex-inspired analytics
+        if let tracker = toolUsage, tracker.totalCount > 0 {
+            let tools = tracker.topTools(limit: 5)
+            let toolParts = tools.map { "\($0.toolName) \($0.count)" }
+            lines.append("[axion] 工具分布: \(toolParts.joined(separator: ", "))")
+        }
 
         // Estimated cost line
         if let u = usage, u.totalTokens > 0, !model.isEmpty {

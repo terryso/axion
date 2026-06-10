@@ -38,7 +38,8 @@ struct SlashCommandHandler {
         lastAssistantText: String = "",  // /copy 需要
         sessionStartTime: ContinuousClock.Instant? = nil,
         sessionTurnCount: Int = 0,
-        sessionTotalTools: Int = 0
+        sessionTotalTools: Int = 0,
+        sessionToolUsage: ToolUsageTracker = ToolUsageTracker()
     ) -> SlashCommandAction {
         switch command {
         case .help:
@@ -85,7 +86,8 @@ struct SlashCommandHandler {
                     usage: sessionUsage,
                     sessionStartTime: sessionStartTime,
                     turnCount: sessionTurnCount,
-                    totalToolsUsed: sessionTotalTools
+                    totalToolsUsed: sessionTotalTools,
+                    toolUsage: sessionToolUsage
                 ),
                 stderr
             )

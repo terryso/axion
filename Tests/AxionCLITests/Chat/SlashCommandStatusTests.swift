@@ -153,7 +153,8 @@ struct SlashCommandStatusTests {
                 inputTokens: 1000, outputTokens: 500, cacheReadTokens: 0, totalTokens: 1500
             ),
             estimatedCost: nil,
-            cwd: "/tmp"
+            cwd: "/tmp",
+            toolUsage: nil
         )
         let lowOutput = StatusDashboardFormatter.format(
             stats: lowStats, isTTY: true, profile: .trueColor
@@ -175,7 +176,8 @@ struct SlashCommandStatusTests {
                 inputTokens: 1000, outputTokens: 500, cacheReadTokens: 0, totalTokens: 1500
             ),
             estimatedCost: nil,
-            cwd: "/tmp"
+            cwd: "/tmp",
+            toolUsage: nil
         )
         let highOutput = StatusDashboardFormatter.format(
             stats: highStats, isTTY: true, profile: .trueColor
@@ -247,7 +249,8 @@ struct SlashCommandStatusTests {
                 inputTokens: 45000, outputTokens: 12000, cacheReadTokens: 5000, totalTokens: 62000
             ),
             estimatedCost: "$0.05",
-            cwd: "/tmp/project"
+            cwd: "/tmp/project",
+            toolUsage: nil
         )
     }
 }

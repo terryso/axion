@@ -52,6 +52,7 @@ extension SlashCommandHandler {
         sessionStartTime: ContinuousClock.Instant? = nil,
         turnCount: Int = 0,
         totalToolsUsed: Int = 0,
+        toolUsage: ToolUsageTracker? = nil,
         isTTY: Bool = isatty(STDERR_FILENO) != 0,
         colorProfile: TerminalColorProfile = .detect()
     ) -> String {
@@ -74,7 +75,8 @@ extension SlashCommandHandler {
                 totalTokens: usage.totalTokens
             ),
             estimatedCost: costStr,
-            cwd: cwd
+            cwd: cwd,
+            toolUsage: toolUsage
         )
 
         return StatusDashboardFormatter.format(
