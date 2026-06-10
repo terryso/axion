@@ -20,7 +20,7 @@ extension ChatComposer {
         mode = .slashPopup(query: buffer)
         selectedPopupIndex = 0
         let theme = ensureTheme()
-        popupItems = SlashPopup.filter(query: buffer, context: slashContext)
+        popupItems = SlashPopup.filter(query: buffer, context: slashContext, skills: availableSkills)
         let rendered = SlashPopup.render(items: popupItems, selectedIndex: selectedPopupIndex, theme: theme)
         let lines = rendered.components(separatedBy: "\n")
         popupRenderedLines = lines.count
@@ -42,7 +42,7 @@ extension ChatComposer {
         }
         // clamp selectedPopupIndex
         let theme = ensureTheme()
-        popupItems = SlashPopup.filter(query: buffer, context: slashContext)
+        popupItems = SlashPopup.filter(query: buffer, context: slashContext, skills: availableSkills)
         if popupItems.isEmpty {
             selectedPopupIndex = -1
         } else if selectedPopupIndex >= popupItems.count {
@@ -82,18 +82,18 @@ extension ChatComposer {
         writeStdout("\r\(prompt)\(buffer)\u{1B}[K")
     }
 
-    /// 补全选中的命令 — AC5。
-    /// 返回补全的 SlashCommand（nil 表示无匹配）。
-    mutating func completeSelectedCommand() -> SlashCommand? {
+    /// 补全选中的命令/skill — AC5。
+    /// 返回补全的 SlashPopupItemKind（nil 表示无匹配）。
+    mutating func completeSelected() -> SlashPopupItemKind? {
         let idx = selectedPopupIndex
         guard idx >= 0 && idx < popupItems.count else { return nil }
-        let cmd = popupItems[idx].command
-        buffer = cmd.rawValue
-        if cmd.acceptsArgs {
+        let kind = popupItems[idx].kind
+        buffer = kind.displayName
+        if kind.acceptsArgs {
             buffer += " "
         }
         cursor = buffer.count
-        return cmd
+        return kind
     }
 
     /// 取消 slashPopup 模式，恢复原始 draft — AC7。
@@ -151,9 +151,9 @@ extension ChatComposer {
                 refreshSlashPopupRender(prompt: prompt)
             }
 
-        // AC5: Tab → 仅补全命令名，始终留在编辑模式
+        // AC5: Tab → 仅补全名称，始终留在编辑模式
         case .tab:
-            if let _ = completeSelectedCommand() {
+            if let _ = completeSelected() {
                 clearPopupOutput()
                 popupRenderedLines = 0
                 mode = .normal
@@ -161,13 +161,13 @@ extension ChatComposer {
             }
             // 无选中或无匹配 → tab 忽略
 
-        // AC5: Enter → 补全选中命令并执行（不接受参数时直接提交）
+        // AC5: Enter → 补全选中项并执行
         case .enter:
-            if let completed = completeSelectedCommand() {
+            if let completed = completeSelected() {
                 clearPopupOutput()
                 popupRenderedLines = 0
                 if completed.acceptsArgs {
-                    // 留在编辑模式，光标在命令名后空格处
+                    // 接受参数 → 留在编辑模式
                     mode = .normal
                     refreshDisplay(prompt: prompt)
                 } else {
@@ -176,7 +176,7 @@ extension ChatComposer {
                     return .returnInput(buffer)
                 }
             } else if buffer.hasPrefix("/") {
-                // 无匹配内置命令但以 / 开头 — 可能是 skill，
+                // 无匹配命令但以 / 开头 — 可能是 skill，
                 // 提交输入让 REPL 的 skill 匹配逻辑处理
                 clearPopupOutput()
                 popupRenderedLines = 0

@@ -63,6 +63,9 @@ struct ChatComposer {
     /// Slash 上下文（agent 忙碌状态等）
     var slashContext: SlashCommandContext = SlashCommandContext(isAgentBusy: false, isSideSession: false)
 
+    /// 可用 skill 列表（从 ChatCommand 注入）
+    var availableSkills: [SkillInfo] = []
+
     /// 外部编辑器启动器（可注入 mock，nil 时自动创建 production 实例）。
     var injectedEditorLauncher: ExternalEditorLauncher?
 

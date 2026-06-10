@@ -51,9 +51,16 @@ struct StreamingTableRenderer: Sendable {
     /// 是否为 TTY 环境
     private let isTTY: Bool
 
-    init(profile: TerminalColorProfile, isTTY: Bool) {
+    /// 终端宽度（列数）。0 表示不限制，向后兼容。
+    private let terminalWidth: Int
+
+    /// 每列最小宽度（至少放 1 字符 + `…`）
+    private static let minColumnWidth = 3
+
+    init(profile: TerminalColorProfile, isTTY: Bool, terminalWidth: Int = 0) {
         self.profile = isTTY ? profile : .unknown
         self.isTTY = isTTY
+        self.terminalWidth = terminalWidth
     }
 
     // MARK: - Public API
@@ -273,6 +280,11 @@ struct StreamingTableRenderer: Sendable {
         // 最小列宽 1
         columnWidths = columnWidths.map { max($0, 1) }
 
+        // 终端宽度限制：确保表格不超出终端
+        if terminalWidth > 0 {
+            columnWidths = constrainColumnWidths(columnWidths, to: terminalWidth)
+        }
+
         let (borderColor, resetColor) = borderCodes()
         let (boldOn, boldOff) = headerStyleCodes()
 
@@ -343,6 +355,7 @@ struct StreamingTableRenderer: Sendable {
     /// 渲染单元格行（表头或表体）— 支持 ANSI styled 内容。
     ///
     /// 使用 `styledVisualWidth` 计算 padding，确保含 ANSI 转义码的单元格正确对齐。
+    /// 超宽单元格会被截断到目标宽度。
     private func renderStyledCellRow(
         cells: [String],
         widths: [Int],
@@ -354,7 +367,8 @@ struct StreamingTableRenderer: Sendable {
 
         for (i, width) in widths.enumerated() {
             let cell = i < cells.count ? cells[i] : ""
-            let padded = padStyledCell(cell, toWidth: width)
+            let truncated = truncateStyledCell(cell, toWidth: width)
+            let padded = padStyledCell(truncated, toWidth: width)
             parts.append(" " + cellStyleOn + padded + cellStyleOff + " ")
             if i < widths.count - 1 {
                 parts.append(borderColor + "│" + resetColor)
@@ -387,6 +401,137 @@ struct StreamingTableRenderer: Sendable {
         let currentWidth = styledVisualWidth(cell)
         if currentWidth >= toWidth { return cell }
         return cell + String(repeating: " ", count: toWidth - currentWidth)
+    }
+
+    // MARK: - Width Constraint
+
+    /// 将列宽限制在终端宽度内。
+    ///
+    /// 策略：
+    /// 1. 计算表格总宽度（内容 + padding + 边框）
+    /// 2. 如果超出，按比例缩减各列
+    /// 3. 每列不低于 `minColumnWidth`
+    /// 4. 极端情况（列数太多导致最小宽度总和已超限）从右向左截断列
+    private func constrainColumnWidths(_ widths: [Int], to maxWidth: Int) -> [Int] {
+        let colCount = widths.count
+        guard colCount > 0 else { return widths }
+
+        // 边框/分隔符占用：每列 2 padding (" " + " ") + (列数+1) 个 │
+        let borderOverhead = colCount * 2 + colCount + 1
+        let totalWidth = widths.reduce(0, +) + borderOverhead
+
+        if totalWidth <= maxWidth { return widths }
+
+        // 可用内容宽度
+        let availableContent = max(0, maxWidth - borderOverhead)
+        let minTotal = Self.minColumnWidth * colCount
+
+        if availableContent < minTotal {
+            // 极端情况：连最小宽度都放不下 → 从右向左砍列
+            let maxCols = max(1, availableContent / Self.minColumnWidth)
+            let keptWidths = Array(widths.prefix(maxCols))
+            return constrainColumnWidths(keptWidths, to: maxWidth)
+        }
+
+        // 按比例缩减
+        let total = widths.reduce(0, +)
+        var result = widths.map { width -> Int in
+            let scaled = Int(Double(width) * Double(availableContent) / Double(total))
+            return max(Self.minColumnWidth, scaled)
+        }
+
+        // 修正舍入误差：确保总和不超过 availableContent
+        let resultTotal = result.reduce(0, +)
+        if resultTotal > availableContent {
+            var excess = resultTotal - availableContent
+            var idx = result.count - 1
+            while excess > 0 && idx >= 0 {
+                let reduction = min(excess, result[idx] - Self.minColumnWidth)
+                result[idx] -= reduction
+                excess -= reduction
+                idx -= 1
+            }
+        }
+
+        return result
+    }
+
+    /// 截断含 ANSI 转义码的单元格到指定视觉宽度，末尾加 `…`。
+    ///
+    /// 策略：剥离 ANSI 码 → 按视觉宽度逐字符截断 → 加 `…` → ANSI 码丢弃
+    /// （截断后内容已不完整，丢弃 ANSI 样式是合理的简化）。
+    private func truncateStyledCell(_ cell: String, toWidth: Int) -> String {
+        let currentWidth = styledVisualWidth(cell)
+        if currentWidth <= toWidth { return cell }
+
+        guard toWidth > 1 else {
+            // 极窄：只放省略号
+            return "…"
+        }
+
+        // 剥离 ANSI 码，按视觉宽度截断纯文本
+        let plain = stripAnsiFromCell(cell)
+        var result = ""
+        var width = 0
+        let targetWidth = toWidth - 1  // 留 1 给 …
+
+        for char in plain {
+            let charWidth = char.isCJKCharacter ? 2 : 1
+            if width + charWidth > targetWidth { break }
+            result.append(char)
+            width += charWidth
+        }
+
+        return result + "…"
+    }
+
+    /// 剥离字符串中的 ANSI 转义序列（单元格级别）。
+    private func stripAnsiFromCell(_ s: String) -> String {
+        var result = ""
+        var i = s.startIndex
+        while i < s.endIndex {
+            if s[i] == "\u{1B}" {
+                let next = s.index(after: i)
+                if next < s.endIndex {
+                    let c = s[next]
+                    if c == "[" {
+                        i = s.index(after: next)
+                        while i < s.endIndex {
+                            let b = s[i]
+                            if let ascii = b.asciiValue, ascii >= 0x40 && ascii <= 0x7E {
+                                i = s.index(after: i)
+                                break
+                            }
+                            i = s.index(after: i)
+                        }
+                    } else if c == "]" {
+                        i = s.index(after: next)
+                        while i < s.endIndex {
+                            if s[i] == "\u{07}" {
+                                i = s.index(after: i)
+                                break
+                            }
+                            if s[i] == "\u{1B}" {
+                                let afterEsc = s.index(after: i)
+                                if afterEsc < s.endIndex && s[afterEsc] == "\\" {
+                                    i = s.index(after: afterEsc)
+                                    break
+                                }
+                            }
+                            i = s.index(after: i)
+                        }
+                    } else {
+                        i = s.index(after: next)
+                    }
+                } else {
+                    i = next
+                }
+            } else {
+                result.append(s[i])
+                i = s.index(after: i)
+            }
+        }
+        return result
     }
 
     /// 计算字符串的视觉宽度（CJK 字符计为 2，其余计为 1）。

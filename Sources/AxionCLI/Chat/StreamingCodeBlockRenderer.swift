@@ -64,7 +64,7 @@ struct StreamingCodeBlockRenderer: Sendable {
         self.isTTY = isTTY
         self.terminalWidth = terminalWidth
         self.plainTextFormatter = plainTextFormatter
-        self.tableRenderer = StreamingTableRenderer(profile: profile, isTTY: isTTY)
+        self.tableRenderer = StreamingTableRenderer(profile: profile, isTTY: isTTY, terminalWidth: terminalWidth)
     }
 
     // MARK: - Public API

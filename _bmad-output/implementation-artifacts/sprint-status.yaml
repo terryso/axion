@@ -1,5 +1,5 @@
 # generated: 2026-05-08
-# last_updated: 2026-06-09 (38 retro done)
+# last_updated: 2026-06-10 (38-9 completed, epic-38 done)
 # project: axion
 # project_key: NOKEY
 # tracking_system: file-system
@@ -35,7 +35,7 @@
 # - Dev moves story to 'review', then runs code-review (fresh context, different LLM recommended)
 
 generated: 2026-05-08
-last_updated: 2026-06-07
+last_updated: 2026-06-10
 
 project: axion
 project_key: NOKEY
@@ -419,7 +419,7 @@ development_status:
   # ============================================================
 
   # Epic 38: 终端对话体验增强
-  epic-38: in-progress
+  epic-38: done
   38-0-lightweight-composer-input-foundation: done
   38-1-conversation-visual-semantic-layer: done
   38-2-slash-command-panel-completion: done
@@ -429,4 +429,5 @@ development_status:
   38-6-workspace-quick-context: done
   38-7-session-workflow: done
   # 38-8-side-conversation: 延后至 Epic 39，不阻塞 Epic 38 交付
+  38-9-slash-popup-skill-completion: done
   epic-38-retrospective: done

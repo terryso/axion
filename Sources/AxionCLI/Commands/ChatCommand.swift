@@ -164,6 +164,13 @@ struct ChatCommand: AsyncParsableCommand {
         composer.enableBracketPaste()
         defer { composer.disableBracketPaste() }
 
+        // Story 38.9: 注入 skill 列表到 composer
+        if let registry = skillRegistry {
+            composer.availableSkills = registry.userInvocableSkills.map { skill in
+                SkillInfo(name: skill.name, description: skill.description, aliases: skill.aliases)
+            }
+        }
+
         // Story 38.5: InputQueue — 忙时输入排队
         var inputQueue = InputQueue()
 

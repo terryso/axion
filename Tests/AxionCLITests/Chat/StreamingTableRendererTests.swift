@@ -689,4 +689,150 @@ struct StreamingTableRendererTests {
         #expect(plain.contains("a"))
         #expect(plain.contains("Done"))
     }
+
+    // MARK: - Terminal Width Constraint
+
+    @Test("table respects terminal width by truncating columns")
+    func testTerminalWidthConstraint() {
+        // 渲染器限制 40 列宽
+        var renderer = StreamingTableRenderer(profile: .unknown, isTTY: true, terminalWidth: 40)
+        var output = ""
+
+        let _ = renderer.processLine(
+            "| Name | Type | Description |",
+            write: { output += $0 },
+            formatPlain: { $0 }
+        )
+        let _ = renderer.processLine(
+            "| --- | --- | --- |",
+            write: { output += $0 },
+            formatPlain: { $0 }
+        )
+        let _ = renderer.processLine(
+            "| id | Int | A very long description that would exceed the terminal width |",
+            write: { output += $0 },
+            formatPlain: { $0 }
+        )
+        renderer.flush(write: { output += $0 }, formatPlain: { $0 })
+
+        let plain = stripANSI(output)
+        // 表格应该被渲染
+        #expect(plain.contains("╭"))
+        #expect(plain.contains("id"))
+        // 超宽内容应该被截断（出现省略号）
+        #expect(plain.contains("…"))
+        // 原始超长文本不应完整出现
+        #expect(!plain.contains("A very long description that would exceed the terminal width"))
+
+        // 验证每行视觉宽度不超过 40
+        for line in plain.components(separatedBy: "\n") {
+            let visualWidth = testVisualWidth(line)
+            #expect(visualWidth <= 40, "Line exceeds 40 cols: \(visualWidth) — '\(line)'")
+        }
+    }
+
+    @Test("terminalWidth 0 means no constraint")
+    func testNoConstraintWhenZero() {
+        var renderer = StreamingTableRenderer(profile: .unknown, isTTY: true, terminalWidth: 0)
+        var output = ""
+
+        let _ = renderer.processLine(
+            "| A | B |",
+            write: { output += $0 },
+            formatPlain: { $0 }
+        )
+        let _ = renderer.processLine(
+            "| --- | --- |",
+            write: { output += $0 },
+            formatPlain: { $0 }
+        )
+        let _ = renderer.processLine(
+            "| very_long_content_here | short |",
+            write: { output += $0 },
+            formatPlain: { $0 }
+        )
+        renderer.flush(write: { output += $0 }, formatPlain: { $0 })
+
+        let plain = stripANSI(output)
+        // 不应出现截断省略号
+        #expect(!plain.contains("…"))
+        #expect(plain.contains("very_long_content_here"))
+    }
+
+    @Test("single column with long content gets truncated")
+    func testSingleColumnTruncation() {
+        var renderer = StreamingTableRenderer(profile: .unknown, isTTY: true, terminalWidth: 30)
+        var output = ""
+
+        let _ = renderer.processLine(
+            "| Message |",
+            write: { output += $0 },
+            formatPlain: { $0 }
+        )
+        let _ = renderer.processLine(
+            "| --- |",
+            write: { output += $0 },
+            formatPlain: { $0 }
+        )
+        let _ = renderer.processLine(
+            "| This is a very long message that should be truncated |",
+            write: { output += $0 },
+            formatPlain: { $0 }
+        )
+        renderer.flush(write: { output += $0 }, formatPlain: { $0 })
+
+        let plain = stripANSI(output)
+        #expect(plain.contains("…"))
+        // 完整长文本不应出现
+        #expect(!plain.contains("This is a very long message that should be truncated"))
+    }
+
+    @Test("many columns fit within terminal by reducing widths")
+    func testManyColumnsReduceWidths() {
+        var renderer = StreamingTableRenderer(profile: .unknown, isTTY: true, terminalWidth: 50)
+        var output = ""
+
+        let _ = renderer.processLine(
+            "| Col1 | Col2 | Col3 | Col4 | Col5 | Col6 | Col7 | Col8 |",
+            write: { output += $0 },
+            formatPlain: { $0 }
+        )
+        let _ = renderer.processLine(
+            "| --- | --- | --- | --- | --- | --- | --- | --- |",
+            write: { output += $0 },
+            formatPlain: { $0 }
+        )
+        let _ = renderer.processLine(
+            "| a | b | c | d | e | f | g | h |",
+            write: { output += $0 },
+            formatPlain: { $0 }
+        )
+        renderer.flush(write: { output += $0 }, formatPlain: { $0 })
+
+        let plain = stripANSI(output)
+        // 每行宽度不超过 50
+        for line in plain.components(separatedBy: "\n") {
+            let visualWidth = testVisualWidth(line)
+            #expect(visualWidth <= 50, "Line exceeds 50 cols: \(visualWidth) — '\(line)'")
+        }
+    }
+
+    // MARK: - Test Helpers
+
+    /// 计算视觉宽度（CJK = 2，其余 = 1）
+    private func testVisualWidth(_ s: String) -> Int {
+        var w = 0
+        for char in s {
+            guard let scalar = char.unicodeScalars.first else { continue }
+            let v = scalar.value
+            let isWide = (v >= 0x4E00 && v <= 0x9FFF)
+                || (v >= 0xF900 && v <= 0xFAFF)
+                || (v >= 0x3400 && v <= 0x4DBF)
+                || (v >= 0xFF01 && v <= 0xFF60)
+                || (v >= 0x3040 && v <= 0x309F)
+                || (v >= 0x30A0 && v <= 0x30FF)
+            w += isWide ? 2 : 1
+        }
+        return w
+    }
 }
