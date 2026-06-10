@@ -66,7 +66,10 @@ extension ChatComposer {
         writeStdout("\r\u{1B}[J")
 
         // 3. 重写 prompt + buffer
-        writeStdout("\(prompt)\(buffer)")
+        // OPOST 在 raw 模式下被禁用（KeyEventReader），\n 不会自动转为 \r\n，
+        // 所以必须显式替换，确保每行从列 0 开始。
+        let displayBuffer = buffer.replacingOccurrences(of: "\n", with: "\r\n")
+        writeStdout("\(prompt)\(displayBuffer)")
 
         // 4. 光标定位（如果不在末尾）
         if cursor != buffer.count {
