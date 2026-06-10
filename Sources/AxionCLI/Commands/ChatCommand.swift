@@ -159,6 +159,14 @@ struct ChatCommand: AsyncParsableCommand {
             currentAgent.interrupt()
         }
 
+        // Cross-session command history (Codex-inspired)
+        let historyStore = CommandHistoryStore.live()
+        let historyPath = ConfigManager.historyFilePath
+        let persistentHistory = historyStore.load(filePath: historyPath)
+
+        // Compact history file on startup if it's grown too large
+        historyStore.compact(filePath: historyPath)
+
         // AC9: ChatComposer replaces MultiLineInputReader as the REPL input component.
         var composer = ChatComposer()
         composer.enableBracketPaste()
@@ -207,8 +215,8 @@ struct ChatCommand: AsyncParsableCommand {
                 fputs("\(preview)\n", stderr)
             }
 
-            // AC1/AC2: 注入会话历史到 composer
-            composer.history = state.sessionUserMessages
+            // AC1/AC2: 注入会话历史到 composer（跨会话持久化 + 当前会话）
+            composer.history = persistentHistory + state.sessionUserMessages
 
             // Story 38.5 AC2: 优先消费队列
             let trimmed: String
@@ -248,6 +256,8 @@ struct ChatCommand: AsyncParsableCommand {
             }
 
             state.sessionUserMessages.append(trimmed)
+            // Persist to cross-session history file (Codex-inspired)
+            historyStore.append(text: trimmed, filePath: historyPath)
 
             // ── Slash command handling ──────────────────────────────────
 

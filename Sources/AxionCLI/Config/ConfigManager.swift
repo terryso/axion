@@ -112,6 +112,11 @@ enum ConfigManager {
         (defaultConfigDirectory as NSString).appendingPathComponent("sessions")
     }
 
+    /// Cross-session command history file (JSONL).
+    static var historyFilePath: String {
+        (defaultConfigDirectory as NSString).appendingPathComponent("history.jsonl")
+    }
+
     /// Unified skill discovery directories: SDK defaults + `~/.axion/skills/` (highest priority).
     static var skillDiscoveryDirectories: [String] {
         return SkillLoader.defaultSkillDirectories() + [skillsDirectory]
