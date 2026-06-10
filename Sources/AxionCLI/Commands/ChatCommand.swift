@@ -167,6 +167,16 @@ struct ChatCommand: AsyncParsableCommand {
         // Compact history file on startup if it's grown too large
         historyStore.compact(filePath: historyPath)
 
+        // Codex-inspired startup tip — first-run welcome or random feature discovery tip
+        let isFirstRun = StartupTipProvider.isFirstRun(historyFilePath: historyPath)
+        if let tipLine = StartupTipProvider.renderTip(
+            StartupTipProvider.getTip(isFirstRun: isFirstRun),
+            isTTY: isatty(STDERR_FILENO) != 0,
+            colorProfile: TerminalColorProfile.detect()
+        ) {
+            fputs(tipLine, stderr)
+        }
+
         // Session transcript logger — Codex-inspired session_log.rs
         // Persists full conversation (user/assistant/tool/system) to JSONL for post-session review.
         let transcriptLogger = SessionTranscriptLogger.live(dirPath: sessionsDir)
