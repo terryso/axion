@@ -49,17 +49,20 @@ struct BannerRenderer {
 
     /// 生成带上下文用量和可视化进度条的提示符。
     ///
-    /// Codex-inspired: 显示上下文窗口使用百分比 + 微型进度条 + 颜色编码 + 回合计数。
-    /// 进度条使用 Unicode block 元素：█▓▒░
+    /// Codex-inspired (token_usage.rs): 显示上下文窗口使用百分比 + 微型进度条 + 颜色编码
+    /// + 回合计数 + 累计会话成本。进度条使用 Unicode block 元素：█▓▒░
     /// 颜色随使用率变化：绿(<50%) → 黄(50-80%) → 红(>80%)
+    /// 成本显示：累计会话成本紧跟回合计数后，如 `$0.05`。
     ///
-    /// - TTY 示例：`axion [12k/200k 6% ░░░░░░░░░░ T3]> `
-    /// - 高使用率：`axion [180k/200k 90% ████████░░ T12]> `（红色）
-    /// - 非 TTY：  `axion [12k/200k 6% T3]> `（无进度条、无颜色）
+    /// - TTY 示例：`axion [12k/200k 6% ░░░░░░░░░░ T3 · $0.05]> `
+    /// - 高使用率：`axion [180k/200k 90% ████████░░ T12 · $0.23]> `（红色）
+    /// - 无成本： `axion [12k/200k 6% ░░░░░░░░░░ T3]> `（不显示成本段）
+    /// - 非 TTY：  `axion [12k/200k 6% T3 $0.05]> `（无进度条、无颜色）
     static func renderPrompt(
         usedTokens: Int,
         contextWindow: Int,
         turnNumber: Int = 0,
+        estimatedCost: String? = nil,
         isTTY: Bool = isatty(STDERR_FILENO) != 0,
         colorProfile: TerminalColorProfile = .detect()
     ) -> String {
@@ -72,14 +75,30 @@ struct BannerRenderer {
         let turnLabel = turnNumber > 0 ? " T\(turnNumber)" : ""
 
         guard isTTY else {
-            return "axion [\(used)/\(max) \(pct)%\(turnLabel)]> "
+            let costPlain = estimatedCost.map { " \($0)" } ?? ""
+            return "axion [\(used)/\(max) \(pct)%\(turnLabel)\(costPlain)]> "
         }
 
         let bar = renderContextBar(pct: pct, width: 10)
         let colorCode = contextBarColor(pct: pct, profile: colorProfile)
         let reset = "\u{1B}[0m"
 
-        return "axion [\(used)/\(max) \(colorCode)\(pct)%\(reset) \(colorCode)\(bar)\(reset)\(turnLabel)]> "
+        // Cost segment: dimmed style for session cost (less prominent than context bar)
+        let costSegment: String
+        if let cost = estimatedCost {
+            let dimCode: String
+            switch colorProfile {
+            case .trueColor: dimCode = "\u{1B}[38;2;148;163;184m"  // slate-400
+            case .ansi256: dimCode = "\u{1B}[38;5;145m"
+            case .ansi16: dimCode = "\u{1B}[37m"
+            case .unknown: dimCode = ""
+            }
+            costSegment = " \(dimCode)·\(reset) \(dimCode)\(cost)\(reset)"
+        } else {
+            costSegment = ""
+        }
+
+        return "axion [\(used)/\(max) \(colorCode)\(pct)%\(reset) \(colorCode)\(bar)\(reset)\(turnLabel)\(costSegment)]> "
     }
 
     // MARK: - Context Progress Bar

@@ -200,12 +200,18 @@ struct ChatCommand: AsyncParsableCommand {
             // Story 38.5: 同步 inputQueue 到 composer
             composer.inputQueue = inputQueue
 
-            // AC2: 动态提示符（含上下文进度条 + 回合计数）
+            // AC2: 动态提示符（含上下文进度条 + 回合计数 + 累计成本）
             let colorProfile = TerminalColorProfile.detect()
+            // Codex-inspired: 计算累计会话成本显示在提示符中
+            let sessionCost = BannerRenderer.estimateCostString(
+                model: state.buildResult.agent.model,
+                usage: state.sessionUsage
+            )
             let prompt = BannerRenderer.renderPrompt(
                 usedTokens: state.contextTokens,
                 contextWindow: state.contextWindow,
                 turnNumber: sessionTurnCount,
+                estimatedCost: sessionCost,
                 isTTY: isatty(STDERR_FILENO) != 0,
                 colorProfile: colorProfile
             )
@@ -660,6 +666,16 @@ struct ChatCommand: AsyncParsableCommand {
                     profile: colorProfile
                 ) {
                     fputs(fileSummary, stderr)
+                }
+
+                // Codex-inspired context warning — proactive /compact suggestion at 70-80%
+                if let contextWarning = ContextManager.formatTurnEndContextWarning(
+                    usedTokens: state.contextTokens,
+                    contextWindow: state.contextWindow,
+                    isTTY: isatty(STDERR_FILENO) != 0,
+                    profile: colorProfile
+                ) {
+                    fputs(contextWarning, stderr)
                 }
 
                 // Desktop notification — Codex-inspired OSC 9 / BEL on turn complete

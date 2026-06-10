@@ -251,6 +251,96 @@ struct BannerRendererTests {
         #expect(prompt == "axion [0/200k 0%]> ")
     }
 
+    // MARK: - renderPrompt with estimatedCost
+
+    @Test("renderPrompt 非 TTY 含成本显示在回合号后")
+    func renderPrompt_nonTTY_withCost() {
+        let prompt = BannerRenderer.renderPrompt(
+            usedTokens: 12_000,
+            contextWindow: 200_000,
+            turnNumber: 3,
+            estimatedCost: "$0.05",
+            isTTY: false,
+            colorProfile: .unknown
+        )
+        #expect(prompt == "axion [12k/200k 6% T3 $0.05]> ")
+    }
+
+    @Test("renderPrompt 非 TTY 无成本时不显示成本段")
+    func renderPrompt_nonTTY_noCost() {
+        let prompt = BannerRenderer.renderPrompt(
+            usedTokens: 12_000,
+            contextWindow: 200_000,
+            turnNumber: 3,
+            estimatedCost: nil,
+            isTTY: false,
+            colorProfile: .unknown
+        )
+        #expect(prompt == "axion [12k/200k 6% T3]> ")
+    }
+
+    @Test("renderPrompt TTY 含成本显示带 dim 样式")
+    func renderPrompt_tty_withCost() {
+        let prompt = BannerRenderer.renderPrompt(
+            usedTokens: 30_000,
+            contextWindow: 200_000,
+            turnNumber: 5,
+            estimatedCost: "$0.12",
+            isTTY: true,
+            colorProfile: .trueColor
+        )
+        #expect(prompt.contains("$0.12"))
+        #expect(prompt.contains("T5"))
+        #expect(prompt.contains("15%"))
+        // Should contain dim color for cost separator
+        #expect(prompt.contains("\u{1B}[38;2;148;163;184m"))
+        #expect(prompt.hasSuffix("]> "))
+    }
+
+    @Test("renderPrompt TTY ANSI256 含成本使用正确色码")
+    func renderPrompt_tty_ansi256_withCost() {
+        let prompt = BannerRenderer.renderPrompt(
+            usedTokens: 10_000,
+            contextWindow: 200_000,
+            turnNumber: 1,
+            estimatedCost: "$0.01",
+            isTTY: true,
+            colorProfile: .ansi256
+        )
+        #expect(prompt.contains("$0.01"))
+        // ANSI256 dim color: 145
+        #expect(prompt.contains("\u{1B}[38;5;145m"))
+    }
+
+    @Test("renderPrompt TTY ANSI16 含成本使用白色")
+    func renderPrompt_tty_ansi16_withCost() {
+        let prompt = BannerRenderer.renderPrompt(
+            usedTokens: 10_000,
+            contextWindow: 200_000,
+            turnNumber: 2,
+            estimatedCost: "$0.03",
+            isTTY: true,
+            colorProfile: .ansi16
+        )
+        #expect(prompt.contains("$0.03"))
+        // ANSI16 dim: white
+        #expect(prompt.contains("\u{1B}[37m"))
+    }
+
+    @Test("renderPrompt TTY 无成本时不包含 dim 色码分隔符")
+    func renderPrompt_tty_noCost_noDimSeparator() {
+        let prompt = BannerRenderer.renderPrompt(
+            usedTokens: 10_000,
+            contextWindow: 200_000,
+            turnNumber: 1,
+            estimatedCost: nil,
+            isTTY: true,
+            colorProfile: .trueColor
+        )
+        // Should not contain the · separator between turn and cost
+        #expect(!prompt.contains("·"))
+    }
+
     // MARK: - renderContextBar
 
     @Test("renderContextBar: 0% → 全空")
