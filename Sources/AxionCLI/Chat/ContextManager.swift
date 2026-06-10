@@ -68,14 +68,30 @@ struct ContextManager {
 
     /// 格式化自动压缩成功消息。
     ///
+    /// Codex-inspired: 使用 `CompactionDisplayFormatter` 渲染可视化压缩结果，
+    /// 包含 before → after 进度条对比和节省空间指标。
+    ///
     /// - Parameters:
     ///   - beforeTokens: 压缩前 token 数
     ///   - afterTokens: 压缩后 token 数
-    /// - Returns: 格式化消息，如 `[axion] 上下文已自动压缩 (45k → 8k tokens)`
-    static func formatCompactMessage(beforeTokens: Int, afterTokens: Int) -> String {
-        let before = BannerRenderer.formatTokenCount(beforeTokens)
-        let after = BannerRenderer.formatTokenCount(afterTokens)
-        return "[axion] 上下文已自动压缩 (\(before) → \(after) tokens)\n"
+    ///   - contextWindow: 上下文窗口大小（用于计算进度条百分比）
+    ///   - isTTY: 是否连接到 TTY
+    ///   - profile: 终端颜色 profile
+    /// - Returns: 格式化消息
+    static func formatCompactMessage(
+        beforeTokens: Int,
+        afterTokens: Int,
+        contextWindow: Int = 0,
+        isTTY: Bool = isatty(STDERR_FILENO) != 0,
+        profile: TerminalColorProfile = .detect()
+    ) -> String {
+        CompactionDisplayFormatter.format(
+            beforeTokens: beforeTokens,
+            afterTokens: afterTokens,
+            contextWindow: contextWindow,
+            isTTY: isTTY,
+            profile: profile
+        )
     }
 
     /// 格式化压缩失败消息。

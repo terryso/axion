@@ -205,7 +205,8 @@ struct SlashCommandHandler {
         if result.success && result.preTokens > 0 {
             return ContextManager.formatCompactMessage(
                 beforeTokens: result.preTokens,
-                afterTokens: result.postTokens
+                afterTokens: result.postTokens,
+                contextWindow: contextWindow
             )
         } else if !result.success {
             return "[axion] ⚠️ 上下文压缩失败: \(result.error ?? "未知错误")\n"

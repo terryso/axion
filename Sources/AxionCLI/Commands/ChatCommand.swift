@@ -590,7 +590,8 @@ struct ChatCommand: AsyncParsableCommand {
                             fputs(
                                 ContextManager.formatCompactMessage(
                                     beforeTokens: preTokens,
-                                    afterTokens: postTokens
+                                    afterTokens: postTokens,
+                                    contextWindow: state.contextWindow
                                 ),
                                 stderr
                             )
@@ -602,7 +603,8 @@ struct ChatCommand: AsyncParsableCommand {
                             fputs(
                                 ContextManager.formatCompactMessage(
                                     beforeTokens: state.contextTokens * 3,
-                                    afterTokens: state.contextTokens
+                                    afterTokens: state.contextTokens,
+                                    contextWindow: state.contextWindow
                                 ),
                                 stderr
                             )
