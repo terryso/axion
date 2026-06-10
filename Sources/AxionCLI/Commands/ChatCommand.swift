@@ -424,7 +424,10 @@ struct ChatCommand: AsyncParsableCommand {
                     contextWindow: state.contextWindow,
                     contextTokens: state.contextTokens,
                     skillRegistry: skillRegistry,
-                    lastAssistantText: sessionLastAssistantText
+                    lastAssistantText: sessionLastAssistantText,
+                    sessionStartTime: sessionStartTime,
+                    sessionTurnCount: sessionTurnCount,
+                    sessionTotalTools: sessionTotalTools
                 )
 
                 switch action {

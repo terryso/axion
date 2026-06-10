@@ -35,7 +35,10 @@ struct SlashCommandHandler {
         contextTokens: Int = 0,
         isAgentBusy: Bool = false,  // AC6: 38.7
         skillRegistry: SkillRegistry? = nil,
-        lastAssistantText: String = ""  // /copy 需要
+        lastAssistantText: String = "",  // /copy 需要
+        sessionStartTime: ContinuousClock.Instant? = nil,
+        sessionTurnCount: Int = 0,
+        sessionTotalTools: Int = 0
     ) -> SlashCommandAction {
         switch command {
         case .help:
@@ -79,7 +82,10 @@ struct SlashCommandHandler {
                     contextTokens: contextTokens,
                     contextWindow: contextWindow,
                     cwd: FileManager.default.currentDirectoryPath,
-                    usage: sessionUsage
+                    usage: sessionUsage,
+                    sessionStartTime: sessionStartTime,
+                    turnCount: sessionTurnCount,
+                    totalToolsUsed: sessionTotalTools
                 ),
                 stderr
             )

@@ -1,3 +1,4 @@
+import Foundation
 import OpenAgentSDK
 
 extension SlashCommandHandler {
@@ -39,6 +40,7 @@ extension SlashCommandHandler {
     // MARK: - /status (AC5)
 
     /// 格式化当前会话状态卡。AC5。
+    /// 使用 Codex-inspired StatusDashboardFormatter 渲染富文本状态面板。
     static func handleStatus(
         model: String,
         permissionMode: String,
@@ -46,23 +48,40 @@ extension SlashCommandHandler {
         contextTokens: Int,
         contextWindow: Int,
         cwd: String,
-        usage: TokenUsage
+        usage: TokenUsage,
+        sessionStartTime: ContinuousClock.Instant? = nil,
+        turnCount: Int = 0,
+        totalToolsUsed: Int = 0,
+        isTTY: Bool = isatty(STDERR_FILENO) != 0,
+        colorProfile: TerminalColorProfile = .detect()
     ) -> String {
-        let shortId = String(sessionId.prefix(8))
-        let contextLine = ContextManager.formatContextUsage(
-            usedTokens: contextTokens,
-            contextWindow: contextWindow
-        )
-        return """
-        会话状态:
-          模型:       \(model)
-          权限:       \(permissionMode)
-          Session:    \(shortId)
-          \(contextLine)
-          工作目录:   \(cwd)
-          Token:      输入 \(usage.inputTokens) / 输出 \(usage.outputTokens) / 总 \(usage.totalTokens)
+        // 计算预估成本
+        let costStr = BannerRenderer.estimateCostString(model: model, usage: usage)
 
-        """
+        let stats = StatusDashboardFormatter.SessionStats(
+            model: model,
+            permissionMode: permissionMode,
+            sessionId: sessionId,
+            sessionStartTime: sessionStartTime ?? ContinuousClock.now,
+            turnCount: turnCount,
+            totalToolsUsed: totalToolsUsed,
+            contextTokens: contextTokens,
+            contextWindow: contextWindow,
+            usage: StatusDashboardFormatter.TokenUsageEstimate(
+                inputTokens: usage.inputTokens,
+                outputTokens: usage.outputTokens,
+                cacheReadTokens: usage.cacheReadInputTokens ?? 0,
+                totalTokens: usage.totalTokens
+            ),
+            estimatedCost: costStr,
+            cwd: cwd
+        )
+
+        return StatusDashboardFormatter.format(
+            stats: stats,
+            isTTY: isTTY,
+            profile: colorProfile
+        )
     }
 
     // MARK: - Private
