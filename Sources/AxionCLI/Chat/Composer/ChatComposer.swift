@@ -391,8 +391,13 @@ struct ChatComposer {
 
             case .ctrl("c"):
                 if buffer.isEmpty {
-                    // 输入框为空 → 返回 nil，由 ChatCommand 决定是否退出
-                    writeStdout("\r\n")
+                    // 清除当前 prompt（避免与新 prompt 重复堆叠）
+                    if previousDisplayLines > 1 {
+                        writeStdout("\u{1B}[\(previousDisplayLines - 1)A")
+                    }
+                    writeStdout("\r\u{1B}[J")
+                    // 在旧 prompt 位置显示 dim 提示
+                    writeStdout("\u{1B}[2m（再按一次 Ctrl+C 退出）\u{1B}[0m\r\n")
                     return nil
                 } else {
                     // 输入框有内容 → 清空 buffer，继续输入（不退出）
