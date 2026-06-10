@@ -16,13 +16,17 @@ extension ChatComposer {
             buffer = ""
             cursor = 0
             mode = .normal
+            // 每轮续行开始前重置显示行数，避免沿用上一行的 previousDisplayLines
+            // 导致 refreshDisplay 光标上移到错误位置
+            previousDisplayLines = Self.calculateDisplayLines(prompt: prompt, buffer: "")
+            previousCursorRow = 0  // 空 buffer，光标在 prompt 末尾 = row 0
             writeStdout(prompt)
 
             // Bracket paste 状态（续行模式也需要支持粘贴）
             var inBracketPaste = false
             var pasteBuffer = ""
 
-            while true {
+            inputLoop: while true {
                 guard let event = reader.readNext() else {
                     // EOF：返回已累积内容（含未提交的粘贴）
                     if inBracketPaste, !pasteBuffer.isEmpty {
@@ -65,19 +69,21 @@ extension ChatComposer {
                         continue
                     }
 
-                    // 空行取消续行
+                    // 空行：有累积内容则提交，完全为空则取消
                     if buffer.isEmpty {
                         writeStdout("\r\n")
-                        return ""
+                        let result = parts.joined(separator: "\n")
+                        return result.isEmpty ? "" : result
                     }
-                    // 续行：行末有反斜杠
+                    // 续行：行末有反斜杠 → 跳出内层循环回到外层开始新一轮
                     if buffer.hasSuffix("\\") {
                         parts.append(String(buffer.dropLast()))
                         writeStdout("\r\n")
-                        break
+                        break inputLoop  // 跳出内层 while，回到外层循环
                     }
                     // 正常结束
                     parts.append(buffer)
+                    writeStdout("\r\n")
                     return parts.joined(separator: "\n")
 
                 case .backspace:

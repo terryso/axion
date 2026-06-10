@@ -56,10 +56,11 @@ extension ChatComposer {
     /// 4. 定位光标到正确位置
     mutating func refreshDisplay(prompt: String) {
         let newLineCount = Self.calculateDisplayLines(prompt: prompt, buffer: buffer)
+        let termWidth = max(1, Self.terminalColumns())
 
-        // 1. 上移到第一行（如果之前占多行）
-        if previousDisplayLines > 1 {
-            writeStdout("\u{1B}[\(previousDisplayLines - 1)A")
+        // 1. 上移到第一行（基于光标当前所在行）
+        if previousCursorRow > 0 {
+            writeStdout("\u{1B}[\(previousCursorRow)A")
         }
 
         // 2. 回到第 0 列 + 清除到屏幕末尾（清除旧内容）
@@ -71,14 +72,13 @@ extension ChatComposer {
         let displayBuffer = buffer.replacingOccurrences(of: "\n", with: "\r\n")
         writeStdout("\(prompt)\(displayBuffer)")
 
-        // 4. 光标定位（如果不在末尾）
+        // 4. 光标定位
+        let curPos = Self.cursorVisualPosition(
+            prompt: prompt, buffer: buffer, cursor: cursor, termWidth: termWidth)
+
         if cursor != buffer.count {
-            let termWidth = max(1, Self.terminalColumns())
             let endPos = Self.cursorVisualPosition(
                 prompt: prompt, buffer: buffer, cursor: buffer.count, termWidth: termWidth)
-            let curPos = Self.cursorVisualPosition(
-                prompt: prompt, buffer: buffer, cursor: cursor, termWidth: termWidth)
-
             let rowsUp = endPos.row - curPos.row
             if rowsUp > 0 {
                 writeStdout("\u{1B}[\(rowsUp)A")
@@ -90,7 +90,129 @@ extension ChatComposer {
         }
 
         // 5. 更新状态
+        previousCursorRow = curPos.row
         previousDisplayLines = newLineCount
+    }
+
+    /// 计算光标当前所在行号（0-based）。
+    ///
+    /// buffer 中的 `\n` 分隔逻辑行。光标在某行的 `\n` 之前算在该行。
+    static func currentLineIndex(cursor: Int, buffer: String) -> Int {
+        let clamped = max(0, min(cursor, buffer.count))
+        let idx = buffer.index(buffer.startIndex, offsetBy: clamped)
+        let prefix = buffer[..<idx]
+        return prefix.filter { $0 == "\n" }.count
+    }
+
+    /// 计算 buffer 中逻辑行的总数。
+    static func lineCount(in buffer: String) -> Int {
+        if buffer.isEmpty { return 1 }
+        return buffer.filter { $0 == "\n" }.count + 1
+    }
+
+    /// 返回 buffer 中第 lineIndex 行的起始字符偏移（0-based）。
+    static func lineStartOffset(lineIndex: Int, buffer: String) -> Int {
+        guard lineIndex > 0 else { return 0 }
+        var currentLine = 0
+        var offset = 0
+        for char in buffer {
+            if currentLine == lineIndex { return offset }
+            if char == "\n" { currentLine += 1 }
+            offset += 1
+        }
+        return offset
+    }
+
+    /// 返回 buffer 中第 lineIndex 行的结束字符偏移（不含 `\n`）。
+    static func lineEndOffset(lineIndex: Int, buffer: String) -> Int {
+        let start = lineStartOffset(lineIndex: lineIndex, buffer: buffer)
+        let startIndex = buffer.index(buffer.startIndex, offsetBy: start)
+        let rest = buffer[startIndex...]
+        if let newlineIdx = rest.firstIndex(of: "\n") {
+            return start + buffer.distance(from: startIndex, to: newlineIdx)
+        }
+        return buffer.count
+    }
+
+    /// 返回 buffer 中第 lineIndex 行的文本内容（不含 `\n`）。
+    static func lineContent(lineIndex: Int, buffer: String) -> String {
+        let start = lineStartOffset(lineIndex: lineIndex, buffer: buffer)
+        let end = lineEndOffset(lineIndex: lineIndex, buffer: buffer)
+        let startIdx = buffer.index(buffer.startIndex, offsetBy: start)
+        let endIdx = buffer.index(buffer.startIndex, offsetBy: end)
+        return String(buffer[startIdx..<endIdx])
+    }
+
+    /// 纯光标移动（不清屏不重绘）— 用于 Up/Down/Home/End/Left/Right。
+    ///
+    /// 前提：终端光标当前在 `oldCursor` 对应的视觉位置（由 refreshDisplay 或
+    /// 上一次 moveCursorOnly 保证）。
+    /// 计算旧/新视觉位置差，只发射光标移动 ANSI 序列。
+    mutating func moveCursorOnly(oldCursor: Int, newCursor: Int, prompt: String) {
+        guard oldCursor != newCursor else { return }
+
+        let termWidth = max(1, Self.terminalColumns())
+        let oldPos = Self.cursorVisualPosition(
+            prompt: prompt, buffer: buffer, cursor: oldCursor, termWidth: termWidth)
+        let newPos = Self.cursorVisualPosition(
+            prompt: prompt, buffer: buffer, cursor: newCursor, termWidth: termWidth)
+
+        let rowDelta = newPos.row - oldPos.row
+        if rowDelta > 0 {
+            writeStdout("\u{1B}[\(rowDelta)B")
+        } else if rowDelta < 0 {
+            writeStdout("\u{1B}[\(-rowDelta)A")
+        }
+
+        // 列定位：\r 回列 0，再右移
+        writeStdout("\r")
+        if newPos.col > 0 {
+            writeStdout("\u{1B}[\(newPos.col)C")
+        }
+
+        // 更新光标行追踪
+        previousCursorRow = newPos.row
+    }
+
+    /// 将光标移到 buffer 中第 lineIndex 行的对应列位置。
+    ///
+    /// 保留原光标在当前行的列位置（如果目标行更短则截断到行尾）。
+    mutating func moveCursorToLine(_ targetLine: Int, prompt: String) {
+        let curLine = Self.currentLineIndex(cursor: cursor, buffer: buffer)
+        let curLineStart = Self.lineStartOffset(lineIndex: curLine, buffer: buffer)
+        // 当前列内偏移（字符数）
+        let colInLine = cursor - curLineStart
+
+        let targetStart = Self.lineStartOffset(lineIndex: targetLine, buffer: buffer)
+        let targetEnd = Self.lineEndOffset(lineIndex: targetLine, buffer: buffer)
+        let targetLen = targetEnd - targetStart
+
+        // 保持列位置，但不超过目标行长度
+        let newColInLine = min(colInLine, targetLen)
+        let newCursor = targetStart + newColInLine
+
+        moveCursorOnly(oldCursor: cursor, newCursor: newCursor, prompt: prompt)
+        cursor = newCursor
+    }
+
+    /// 将光标移到当前行的行首。
+    mutating func moveCursorToLineStart(prompt: String) {
+        let curLine = Self.currentLineIndex(cursor: cursor, buffer: buffer)
+        let start = Self.lineStartOffset(lineIndex: curLine, buffer: buffer)
+        if cursor != start {
+            moveCursorOnly(oldCursor: cursor, newCursor: start, prompt: prompt)
+            cursor = start
+        }
+    }
+
+    /// 将光标移到当前行的行尾。
+    mutating func moveCursorToLineEnd(prompt: String) {
+        let curLine = Self.currentLineIndex(cursor: cursor, buffer: buffer)
+        let end = Self.lineEndOffset(lineIndex: curLine, buffer: buffer)
+        if cursor != end {
+            moveCursorOnly(oldCursor: cursor, newCursor: end, prompt: prompt)
+            cursor = end
+        }
     }
 
     /// 保存当前编辑状态为 draft。

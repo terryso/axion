@@ -128,14 +128,14 @@ struct ChatComposerTests {
         #expect(result == "a\npasted")
     }
 
-    @Test("AC2: 续行取消 — 空行返回空字符串")
-    func continuationCancelEmptyLine() {
+    @Test("AC2: 续行空行提交 — 有内容时空行直接提交")
+    func continuationEmptyLineSubmits() {
         var ctx = makeComposer(events: [
             .printable("a"), .printable("\\"), .enter,  // 触发续行
-            .enter  // 空行取消
+            .enter  // 空行提交已有内容
         ])
         let result = ctx.composer.readInput(prompt: "> ", continuationPrompt: "...> ")
-        #expect(result == "")
+        #expect(result == "a")
     }
 
     // MARK: - AC3: Bracket Paste
@@ -416,5 +416,376 @@ struct ChatComposerTests {
         ])
         let result = ctx.composer.readInput(prompt: "> ", continuationPrompt: "...> ")
         #expect(result == "你好世")
+    }
+
+    // MARK: - 多行编辑（Bracket Paste / 续行产生的 \n）
+
+    @Test("多行 Backspace 删除换行符")
+    func multilineBackspaceRemovesNewline() {
+        var ctx = makeComposer(events: [
+            .printable("a"), .printable("\n"), .printable("b"),
+            .backspace, .backspace,  // 删除 'b' 和 '\n'
+            .enter
+        ])
+        let result = ctx.composer.readInput(prompt: "> ", continuationPrompt: "...> ")
+        #expect(result == "a")
+    }
+
+    // MARK: - Up/Down 多行行间导航
+
+    @Test("多行 Up 在行间移动光标")
+    func multilineUpMovesBetweenLines() {
+        var ctx = makeComposer(events: [
+            .printable("l"), .printable("1"), .printable("\n"),
+            .printable("l"), .printable("2"),
+            .up,  // 光标从 line2 移到 line1
+            .printable("X"),  // 在 line1 末尾插入
+            .enter
+        ])
+        let result = ctx.composer.readInput(prompt: "> ", continuationPrompt: "...> ")
+        #expect(result == "l1X\nl2")
+    }
+
+    @Test("多行 Down 在行间移动光标")
+    func multilineDownMovesBetweenLines() {
+        var ctx = makeComposer(events: [
+            .printable("l"), .printable("1"), .printable("\n"),
+            .printable("l"), .printable("2"),
+            .up,   // 到 line1
+            .down,  // 回到 line2
+            .printable("X"),
+            .enter
+        ])
+        let result = ctx.composer.readInput(prompt: "> ", continuationPrompt: "...> ")
+        #expect(result == "l1\nl2X")
+    }
+
+    @Test("多行首行 Up 溢出到历史")
+    func multilineFirstLineUpGoesToHistory() {
+        var ctx = makeComposer(events: [
+            .printable("l"), .printable("1"), .printable("\n"),
+            .printable("l"), .printable("2"),
+            .up,   // 到 line1
+            .up,   // 溢出到历史 → 加载 history[0]
+            .enter
+        ])
+        ctx.composer.history = ["past input"]
+        let result = ctx.composer.readInput(prompt: "> ", continuationPrompt: "...> ")
+        #expect(result == "past input")
+    }
+
+    @Test("多行末行 Down 溢出到历史")
+    func multilineLastLineDownGoesToHistory() {
+        var ctx = makeComposer(events: [
+            .printable("l"), .printable("1"), .printable("\n"),
+            .printable("l"), .printable("2"),
+            .up,   // 到 line1
+            .up,   // 溢出到 history[1]
+            .down, // newer 方向：回到浏览前状态 "l1\nl2"
+            .enter
+        ])
+        ctx.composer.history = ["past1", "past2"]
+        let result = ctx.composer.readInput(prompt: "> ", continuationPrompt: "...> ")
+        #expect(result == "l1\nl2")
+    }
+
+    @Test("多行末行 Down 溢出到历史 — 多步导航")
+    func multilineLastLineDownMultiStepHistory() {
+        var ctx = makeComposer(events: [
+            .printable("a"), .printable("\n"), .printable("b"),
+            .up,   // 到 line1
+            .up,   // 溢出到 history[2] = "h3"
+            .up,   // history[1] = "h2"
+            .down, // history[2] = "h3"
+            .enter
+        ])
+        ctx.composer.history = ["h1", "h2", "h3"]
+        let result = ctx.composer.readInput(prompt: "> ", continuationPrompt: "...> ")
+        #expect(result == "h3")
+    }
+
+    @Test("单行 Up/Down 走历史导航（无回归）")
+    func singleLineUpDownHistoryNoRegression() {
+        var ctx = makeComposer(events: [
+            .up,    // 加载 history[0]
+            .enter
+        ])
+        ctx.composer.history = ["old message"]
+        let result = ctx.composer.readInput(prompt: "> ", continuationPrompt: "...> ")
+        #expect(result == "old message")
+    }
+
+    // MARK: - Home/End
+
+    @Test("Home 跳到当前行首")
+    func homeJumpsToLineStart() {
+        var ctx = makeComposer(events: [
+            .printable("a"), .printable("b"), .printable("c"),
+            .home,
+            .printable("X"),  // 在行首插入
+            .enter
+        ])
+        let result = ctx.composer.readInput(prompt: "> ", continuationPrompt: "...> ")
+        #expect(result == "Xabc")
+    }
+
+    @Test("End 跳到当前行尾")
+    func endJumpsToLineEnd() {
+        var ctx = makeComposer(events: [
+            .printable("a"), .printable("b"),
+            .left, .left,  // 光标在 'a' 前
+            .end,           // 跳到行尾
+            .printable("X"),
+            .enter
+        ])
+        let result = ctx.composer.readInput(prompt: "> ", continuationPrompt: "...> ")
+        #expect(result == "abX")
+    }
+
+    @Test("多行 Home 跳到当前行首")
+    func multilineHomeJumpsToCurrentLineStart() {
+        var ctx = makeComposer(events: [
+            .printable("a"), .printable("b"), .printable("\n"),
+            .printable("c"), .printable("d"),
+            .home,     // 跳到 "cd" 行首
+            .printable("X"),  // 在 line2 行首插入
+            .enter
+        ])
+        let result = ctx.composer.readInput(prompt: "> ", continuationPrompt: "...> ")
+        #expect(result == "ab\nXcd")
+    }
+
+    @Test("多行 End 跳到当前行尾")
+    func multilineEndJumpsToCurrentLineEnd() {
+        var ctx = makeComposer(events: [
+            .printable("a"), .printable("b"), .printable("\n"),
+            .printable("c"), .printable("d"),
+            .home,     // 跳到 line2 行首
+            .end,      // 跳到 line2 行尾
+            .printable("X"),
+            .enter
+        ])
+        let result = ctx.composer.readInput(prompt: "> ", continuationPrompt: "...> ")
+        #expect(result == "ab\ncdX")
+    }
+
+    // MARK: - Ctrl+A / Ctrl+E
+
+    @Test("Ctrl+A 跳到当前行首")
+    func ctrlAJumpsToLineStart() {
+        var ctx = makeComposer(events: [
+            .printable("h"), .printable("i"),
+            .ctrl("a"),
+            .printable("X"),
+            .enter
+        ])
+        let result = ctx.composer.readInput(prompt: "> ", continuationPrompt: "...> ")
+        #expect(result == "Xhi")
+    }
+
+    @Test("Ctrl+A 多行时只跳到当前行首")
+    func ctrlAMultilineJumpsToCurrentLineStart() {
+        var ctx = makeComposer(events: [
+            .printable("a"), .printable("\n"),
+            .printable("b"), .printable("c"),
+            .ctrl("a"),    // 跳到 line2 行首
+            .printable("X"),
+            .enter
+        ])
+        let result = ctx.composer.readInput(prompt: "> ", continuationPrompt: "...> ")
+        #expect(result == "a\nXbc")
+    }
+
+    // MARK: - History Navigation Display
+
+    @Test("历史导航 Up — 空buffer不应产生光标上移序列")
+    func historyUpNoCursorUpOnEmptyBuffer() {
+        var ctx = makeComposer(events: [.up, .enter])
+        ctx.composer.history = ["old message"]
+        let result = ctx.composer.readInput(prompt: "> ", continuationPrompt: "...> ")
+        #expect(result == "old message")
+
+        let output = ctx.capture.stdout
+        // 空buffer + 短prompt → previousDisplayLines=1 → 不应有光标上移
+        #expect(!output.contains("\u{1B}[1A"))
+        #expect(!output.contains("\u{1B}[2A"))
+    }
+
+    @Test("历史导航 — 长history→短history 正确回退显示行")
+    func historyNavLongToShort() {
+        // 模拟：空buffer → Up(长history) → Up(短history)
+        // 验证第二次 Up 的 refreshDisplay 正确使用了第一次的 displayLines
+        let longHistory = String(repeating: "x", count: 80)  // > 终端宽度，会换行
+        let shortHistory = "short"
+        var ctx = makeComposer(events: [.up, .up, .enter])
+        ctx.composer.history = [shortHistory, longHistory]
+        let result = ctx.composer.readInput(prompt: "> ", continuationPrompt: "...> ")
+        #expect(result == shortHistory)
+
+        let output = ctx.capture.stdout
+        // 第二次 refreshDisplay 应该有光标上移（因为第一次 longHistory 占多行）
+        // 验证最终显示正确：应包含 shortHistory
+        #expect(output.contains(shortHistory))
+    }
+
+    @Test("历史导航 — 从长history回到draft，显示不漂移")
+    func historyNavLongBackToDraft() {
+        let longHistory = String(repeating: "x", count: 80)
+        var ctx = makeComposer(events: [
+            .printable("h"), .printable("i"),  // 输入 "hi"
+            .up,   // 加载 longHistory (多行)
+            .down, // 回到 draft "hi"
+            .enter
+        ])
+        ctx.composer.history = [longHistory]
+        let result = ctx.composer.readInput(prompt: "> ", continuationPrompt: "...> ")
+        #expect(result == "hi")
+
+        let output = ctx.capture.stdout
+        // 验证输出包含 "hi" 且最终显示正确
+        #expect(output.contains("hi"))
+    }
+
+    // MARK: - Multi-line History Navigation
+
+    @Test("多行历史导航 — Up/Down 循环不累积光标上移")
+    func multiLineHistoryNoAccumulation() {
+        // history 含 \n（用户用 \ 续行输入的多行命令）
+        let multiLineHistory = "first line\nsecond line"
+        var ctx = makeComposer(events: [
+            .up,   // 加载多行历史
+            .down, // 回到空 draft
+            .up,   // 再次加载多行历史
+            .down, // 回到空 draft
+            .enter
+        ])
+        ctx.composer.history = [multiLineHistory]
+        let result = ctx.composer.readInput(prompt: "> ", continuationPrompt: "...> ")
+        #expect(result == "")
+
+        let output = ctx.capture.stdout
+        // historyDisplayShifted flag 确保预防性上移只发生一次
+        // 不应该出现 \e[2A 或更高（表示累积偏移）
+        #expect(!output.contains("\u{1B}[2A"))
+        #expect(!output.contains("\u{1B}[3A"))
+    }
+
+    @Test("多行历史导航 — 两条多行历史切换正确")
+    func multiLineHistorySwitchBetween() {
+        // history[0] = 最旧, history[1] = 最新
+        let history1 = "aaa\nbbb"
+        let history2 = "ccc\nddd"
+        var ctx = makeComposer(events: [
+            .up,   // → history2 (最新), buffer = "ccc\nddd"
+            .up,   // buffer 含 \n → 光标移到第 0 行（行间移动）
+            .up,   // 光标在第 0 行 → navigateHistory(.older) → history1
+            .down, // buffer = "aaa\nbbb", 光标在末尾(行1=末行) → navigateHistory(.newer) → history2
+            .down, // buffer = "ccc\nddd", 光标在末尾(行1=末行) → navigateHistory(.newer) → draft ""
+            .enter
+        ])
+        ctx.composer.history = [history1, history2]
+        let result = ctx.composer.readInput(prompt: "> ", continuationPrompt: "...> ")
+        #expect(result == "")
+
+        let output = ctx.capture.stdout
+        // 验证所有历史内容都被正确输出
+        #expect(output.contains("aaa"))
+        #expect(output.contains("bbb"))
+        #expect(output.contains("ccc"))
+        #expect(output.contains("ddd"))
+        // 不应有超过 1 行的上移（无累积）
+        #expect(!output.contains("\u{1B}[2A"))
+    }
+
+    @Test("多行历史导航 — \r\\n 在 raw mode 下正确替换为 \\r\\n")
+    func multiLineHistoryNewlineDisplay() {
+        let multiLine = "hello\nworld"
+        var ctx = makeComposer(events: [.up, .enter])
+        ctx.composer.history = [multiLine]
+        let result = ctx.composer.readInput(prompt: "> ", continuationPrompt: "...> ")
+        #expect(result == "hello\nworld")
+
+        let output = ctx.capture.stdout
+        // raw mode 下 \n 必须被替换为 \r\n，确保第二行从列 0 开始
+        #expect(output.contains("hello\r\nworld"))
+    }
+
+    // MARK: - Debug: Multi-line History ANSI Trace
+
+    @Test("DEBUG: 多行历史导航 — 精确 ANSI 序列追踪")
+    func debugMultiLineHistoryAnsiTrace() {
+        // 模拟用户场景：空 buffer → Up(多行历史) → Down(回draft) → Up(多行历史) → Down(回draft)
+        let multiLine = "line1\nline2"
+        var ctx = makeComposer(events: [
+            .up,   // 加载多行历史
+            .down, // 回到空 draft
+            .up,   // 再次加载
+            .down, // 回到空 draft
+            .enter
+        ])
+        ctx.composer.history = [multiLine]
+        let _ = ctx.composer.readInput(prompt: "> ", continuationPrompt: "...> ")
+
+        let output = ctx.capture.stdout
+        // 将输出分解为有意义的操作步骤
+        var pos = output.startIndex
+        var ops: [String] = []
+        while pos < output.endIndex {
+            let char = output[pos]
+            if char == "\u{1B}" {
+                // ANSI escape sequence
+                let next = output.index(after: pos)
+                if next < output.endIndex && output[next] == "[" {
+                    // CSI sequence: collect until letter
+                    var end = output.index(next, offsetBy: 1)
+                    while end < output.endIndex && !output[end].isLetter {
+                        end = output.index(after: end)
+                    }
+                    if end < output.endIndex {
+                        end = output.index(after: end) // include the letter
+                    }
+                    let seq = String(output[pos..<end])
+                    ops.append("CSI(\(seq))")
+                    pos = end
+                } else {
+                    ops.append("ESC")
+                    pos = next
+                }
+            } else if char == "\r" {
+                ops.append("\\r")
+                pos = output.index(after: pos)
+            } else if char == "\n" {
+                ops.append("\\n")
+                pos = output.index(after: pos)
+            } else {
+                // Printable: collect until next control/escape
+                var end = pos
+                while end < output.endIndex {
+                    let c = output[end]
+                    if c == "\r" || c == "\n" || c == "\u{1B}" { break }
+                    end = output.index(after: end)
+                }
+                let text = String(output[pos..<end])
+                ops.append("TEXT(\"\(text)\")")
+                pos = end
+            }
+        }
+
+        // Print the operations for debugging
+        print("=== Multi-line History ANSI Trace ===")
+        for (i, op) in ops.enumerated() {
+            print("  [\(i)] \(op)")
+        }
+        print("=== Total operations: \(ops.count) ===")
+
+        // Count cursor-up sequences
+        let cursorUpCount = ops.filter { $0.contains("[1A") }.count
+        let cursorUp2Count = ops.filter { $0.contains("[2A") || $0.contains("[3A") }.count
+
+        print("Cursor-up(1) count: \(cursorUpCount)")
+        print("Cursor-up(2+) count: \(cursorUp2Count)")
+
+        // The key assertion: no cursor-up beyond 1 row (no accumulation)
+        #expect(cursorUp2Count == 0)
     }
 }

@@ -46,7 +46,8 @@ struct KeyEventReader: KeyReading, Sendable {
             return nil
         }
 
-        return KeyEventReader(original: original)
+        let reader = KeyEventReader(original: original)
+        return reader
     }
 
     // MARK: - KeyReading

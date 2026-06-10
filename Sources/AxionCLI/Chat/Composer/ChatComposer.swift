@@ -113,6 +113,10 @@ struct ChatComposer {
     /// 用于在下次重绘时上移光标到正确的起始行。
     var previousDisplayLines: Int = 1
 
+    /// 光标在 display 中的当前视觉行号（0-based）。
+    /// refreshDisplay 根据此值上移光标到第一行，而不是假设光标在最后一行。
+    var previousCursorRow: Int = 0
+
     // MARK: - Prefill State
 
     /// 下次 readInput 时预填到 buffer 的文本（由外部设置，readRawLoop 消费后清空）。
@@ -219,15 +223,23 @@ struct ChatComposer {
         fileSearchRenderedLines = 0
         fileSearchDraftBackup = nil
         previousDisplayLines = 1
+        previousCursorRow = 0
+
+        // \r: 确保从列 0 开始写 prompt。
+        // 正常流程：ChatCommand 已输出 \n（cooked → \r\n），光标在列 0，\r 无副作用。
+        // 中断流程：光标可能在行中，\r 回列 0 后重写该行即可。
+        // 不用 \r\n 是为了避免每轮多出一个空行。
+        writeStdout("\r")
 
         // 显示主提示符
         writeStdout(prompt)
-        // 如果有 prefill 内容，显示它
+        // 如果有 prefill 内容，显示它（\n → \r\n，raw mode 下 LF 不自动回列 0）
         if !buffer.isEmpty {
-            writeStdout(buffer)
+            writeStdout(buffer.replacingOccurrences(of: "\n", with: "\r\n"))
         }
         // 初始化：计算 prompt + buffer 的物理行数
         previousDisplayLines = Self.calculateDisplayLines(prompt: prompt, buffer: buffer)
+        previousCursorRow = previousDisplayLines - 1  // cursor at end = last row
 
         // Bracket paste 状态
         var inBracketPaste = false
@@ -361,16 +373,30 @@ struct ChatComposer {
                     refreshDisplay(prompt: prompt)
                 }
 
-            // AC1: Up/Down 历史导航
+            // Up: 多行时行间移动，首行 Up 溢出到历史；单行时直接历史导航
             case .up:
-                // AC1: 空 buffer 或已在历史浏览中时触发
-                if !history.isEmpty && (buffer.isEmpty || historyIndex >= 0) {
+                if buffer.contains("\n") {
+                    let curLine = Self.currentLineIndex(cursor: cursor, buffer: buffer)
+                    if curLine > 0 {
+                        moveCursorToLine(curLine - 1, prompt: prompt)
+                    } else if !history.isEmpty {
+                        navigateHistory(direction: .older, prompt: prompt)
+                    }
+                } else if !history.isEmpty && (buffer.isEmpty || historyIndex >= 0) {
                     navigateHistory(direction: .older, prompt: prompt)
                 }
 
+            // Down: 多行时行间移动，末行 Down 溢出到历史；单行时直接历史导航
             case .down:
-                // AC1: 已在历史浏览中时触发
-                if historyIndex >= 0 {
+                if buffer.contains("\n") {
+                    let curLine = Self.currentLineIndex(cursor: cursor, buffer: buffer)
+                    let lastLine = Self.lineCount(in: buffer) - 1
+                    if curLine < lastLine {
+                        moveCursorToLine(curLine + 1, prompt: prompt)
+                    } else if !history.isEmpty {
+                        navigateHistory(direction: .newer, prompt: prompt)
+                    }
+                } else if historyIndex >= 0 {
                     navigateHistory(direction: .newer, prompt: prompt)
                 }
 
@@ -395,8 +421,8 @@ struct ChatComposer {
             case .ctrl("c"):
                 if buffer.isEmpty {
                     // 清除当前 prompt（避免与新 prompt 重复堆叠）
-                    if previousDisplayLines > 1 {
-                        writeStdout("\u{1B}[\(previousDisplayLines - 1)A")
+                    if previousCursorRow > 0 {
+                        writeStdout("\u{1B}[\(previousCursorRow)A")
                     }
                     writeStdout("\r\u{1B}[J")
                     // 在旧 prompt 位置显示 dim 提示
@@ -409,20 +435,34 @@ struct ChatComposer {
                     refreshDisplay(prompt: prompt)
                 }
 
+            // Home: 跳到当前行首
+            case .home:
+                moveCursorToLineStart(prompt: prompt)
+
+            // End: 跳到当前行尾
+            case .end:
+                moveCursorToLineEnd(prompt: prompt)
+
+            // Ctrl+A: 跳到当前行首（与 Home 等价）
+            case .ctrl("a"):
+                moveCursorToLineStart(prompt: prompt)
+
             case .tab:
                 break
 
-            // 光标移动（保留，后续 Story 扩展）
+            // 光标移动（纯视觉定位，不清屏重绘）
             case .left:
                 if cursor > 0 {
+                    let old = cursor
                     cursor -= 1
-                    refreshDisplay(prompt: prompt)
+                    moveCursorOnly(oldCursor: old, newCursor: cursor, prompt: prompt)
                 }
 
             case .right:
                 if cursor < buffer.count {
+                    let old = cursor
                     cursor += 1
-                    refreshDisplay(prompt: prompt)
+                    moveCursorOnly(oldCursor: old, newCursor: cursor, prompt: prompt)
                 }
 
             // EOF — 终止输入

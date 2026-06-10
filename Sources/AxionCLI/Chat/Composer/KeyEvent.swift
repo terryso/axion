@@ -27,6 +27,10 @@ enum KeyEvent: Equatable {
     case tab
     /// Ctrl 组合键（如 Ctrl+R = .ctrl("r")）
     case ctrl(Character)
+    /// Home 键（\x1b[1~ 或 \x1bOH 或 CSI u keycode 72）
+    case home
+    /// End 键（\x1b[4~ 或 \x1bOF 或 CSI u keycode 76）
+    case end
     /// Bracket Paste 开始标记（\x1b[200~）
     case bracketPasteStart
     /// Bracket Paste 结束标记（\x1b[201~）

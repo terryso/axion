@@ -28,6 +28,15 @@ struct KeyEventTests {
         #expect(KeyEvent.up != KeyEvent.down)
         #expect(KeyEvent.bracketPasteStart != KeyEvent.bracketPasteEnd)
     }
+
+    @Test("home/end 相等性")
+    func homeEndEquality() {
+        #expect(KeyEvent.home == KeyEvent.home)
+        #expect(KeyEvent.end == KeyEvent.end)
+        #expect(KeyEvent.home != KeyEvent.end)
+        #expect(KeyEvent.home != KeyEvent.up)
+        #expect(KeyEvent.end != KeyEvent.down)
+    }
 }
 
 @Suite("KeyEventReader.utf8CharLength")

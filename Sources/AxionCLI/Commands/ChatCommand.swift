@@ -592,8 +592,8 @@ struct ChatCommand: AsyncParsableCommand {
                     break
                 }
                 state.lastInterruptTime = now
-                // 中断：不显示 turn summary / file summary，预填上次输入
-                composer.prefill = trimmed
+                // 中断：不显示 turn summary / file summary
+                // 不预填上次输入 — 用户中断通常想重新开始，需要重发可用 ↑ 历史导航
             } else {
                 // Turn completion summary — Codex-inspired "worked for Xs" pattern
                 let turnElapsed = ContinuousClock.now - turnStartTime
