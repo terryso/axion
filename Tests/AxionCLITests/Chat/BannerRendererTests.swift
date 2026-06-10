@@ -548,4 +548,113 @@ struct BannerRendererTests {
             #expect(Double(s) ?? 0 < Double(o) ?? 0)
         }
     }
+
+    // MARK: - renderPrompt with gitBranch
+
+    @Test("renderPrompt 非 TTY 含 git 分支显示在末尾")
+    func renderPrompt_nonTTY_withGitBranch() {
+        let prompt = BannerRenderer.renderPrompt(
+            usedTokens: 12_000,
+            contextWindow: 200_000,
+            turnNumber: 3,
+            estimatedCost: "$0.05",
+            gitBranch: "main",
+            isTTY: false,
+            colorProfile: .unknown
+        )
+        #expect(prompt == "axion [12k/200k 6% T3 $0.05 main]> ")
+    }
+
+    @Test("renderPrompt 非 TTY 含 dirty 分支（带星号）")
+    func renderPrompt_nonTTY_dirtyBranch() {
+        let prompt = BannerRenderer.renderPrompt(
+            usedTokens: 12_000,
+            contextWindow: 200_000,
+            turnNumber: 3,
+            gitBranch: "feature/auth*",
+            isTTY: false,
+            colorProfile: .unknown
+        )
+        #expect(prompt == "axion [12k/200k 6% T3 feature/auth*]> ")
+    }
+
+    @Test("renderPrompt 非 TTY 无 git 分支不显示分支段")
+    func renderPrompt_nonTTY_noGitBranch() {
+        let prompt = BannerRenderer.renderPrompt(
+            usedTokens: 12_000,
+            contextWindow: 200_000,
+            turnNumber: 3,
+            estimatedCost: "$0.05",
+            gitBranch: nil,
+            isTTY: false,
+            colorProfile: .unknown
+        )
+        #expect(prompt == "axion [12k/200k 6% T3 $0.05]> ")
+    }
+
+    @Test("renderPrompt TTY 含 git 分支带暖色样式")
+    func renderPrompt_tty_withGitBranch() {
+        let prompt = BannerRenderer.renderPrompt(
+            usedTokens: 30_000,
+            contextWindow: 200_000,
+            turnNumber: 5,
+            estimatedCost: "$0.12",
+            gitBranch: "main",
+            isTTY: true,
+            colorProfile: .trueColor
+        )
+        #expect(prompt.contains("main"))
+        #expect(prompt.contains("$0.12"))
+        #expect(prompt.contains("T5"))
+        // Should contain warm sand color for branch
+        #expect(prompt.contains("\u{1B}[38;2;180;170;140m"))
+        #expect(prompt.hasSuffix("]> "))
+    }
+
+    @Test("renderPrompt TTY ANSI256 含 git 分支")
+    func renderPrompt_tty_ansi256_withGitBranch() {
+        let prompt = BannerRenderer.renderPrompt(
+            usedTokens: 10_000,
+            contextWindow: 200_000,
+            turnNumber: 1,
+            gitBranch: "develop",
+            isTTY: true,
+            colorProfile: .ansi256
+        )
+        #expect(prompt.contains("develop"))
+        // ANSI256 branch color: 180
+        #expect(prompt.contains("\u{1B}[38;5;180m"))
+    }
+
+    @Test("renderPrompt TTY ANSI16 含 git 分支使用黄色")
+    func renderPrompt_tty_ansi16_withGitBranch() {
+        let prompt = BannerRenderer.renderPrompt(
+            usedTokens: 10_000,
+            contextWindow: 200_000,
+            turnNumber: 1,
+            gitBranch: "fix-bug",
+            isTTY: true,
+            colorProfile: .ansi16
+        )
+        #expect(prompt.contains("fix-bug"))
+        // ANSI16 branch color: yellow
+        #expect(prompt.contains("\u{1B}[33m"))
+    }
+
+    @Test("renderPrompt TTY 无 git 分支时不显示分支分隔符")
+    func renderPrompt_tty_noGitBranch_noSeparator() {
+        let prompt = BannerRenderer.renderPrompt(
+            usedTokens: 10_000,
+            contextWindow: 200_000,
+            turnNumber: 1,
+            estimatedCost: "$0.01",
+            gitBranch: nil,
+            isTTY: true,
+            colorProfile: .trueColor
+        )
+        // With cost but no branch: cost separator exists but no branch separator
+        #expect(prompt.contains("$0.01"))
+        // Should end after cost segment, no trailing ·
+        #expect(prompt.hasSuffix("]> "))
+    }
 }

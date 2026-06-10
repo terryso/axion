@@ -200,18 +200,21 @@ struct ChatCommand: AsyncParsableCommand {
             // Story 38.5: 同步 inputQueue 到 composer
             composer.inputQueue = inputQueue
 
-            // AC2: 动态提示符（含上下文进度条 + 回合计数 + 累计成本）
+            // AC2: 动态提示符（含上下文进度条 + 回合计数 + 累计成本 + Git 分支）
             let colorProfile = TerminalColorProfile.detect()
             // Codex-inspired: 计算累计会话成本显示在提示符中
             let sessionCost = BannerRenderer.estimateCostString(
                 model: state.buildResult.agent.model,
                 usage: state.sessionUsage
             )
+            // Codex-inspired (branch_summary.rs): 检测当前 git 分支显示在提示符中
+            let gitBranch = GitBranchDetector.detect()?.displayString
             let prompt = BannerRenderer.renderPrompt(
                 usedTokens: state.contextTokens,
                 contextWindow: state.contextWindow,
                 turnNumber: sessionTurnCount,
                 estimatedCost: sessionCost,
+                gitBranch: gitBranch,
                 isTTY: isatty(STDERR_FILENO) != 0,
                 colorProfile: colorProfile
             )
