@@ -219,7 +219,9 @@ struct ChatCommand: AsyncParsableCommand {
                 usage: state.sessionUsage
             )
             // Codex-inspired (branch_summary.rs): 检测当前 git 分支显示在提示符中
-            let gitBranch = GitBranchDetector.detect()?.displayString
+            let promptCfg = config.promptDisplay ?? PromptDisplayConfig()
+            let gitStatus = GitBranchDetector.detect()
+            let gitBranch = gitStatus.map { $0.displayString(maxLength: promptCfg.branchMaxLength) }
             let prompt = BannerRenderer.renderPrompt(
                 usedTokens: state.contextTokens,
                 contextWindow: state.contextWindow,
@@ -227,7 +229,8 @@ struct ChatCommand: AsyncParsableCommand {
                 estimatedCost: sessionCost,
                 gitBranch: gitBranch,
                 isTTY: isatty(STDERR_FILENO) != 0,
-                colorProfile: colorProfile
+                colorProfile: colorProfile,
+                displayConfig: promptCfg
             )
 
             // 上下文使用率警告标题

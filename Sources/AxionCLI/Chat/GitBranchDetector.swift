@@ -21,11 +21,22 @@ struct GitBranchDetector {
         /// 工作区是否有未提交的变更。
         let isDirty: Bool
 
-        /// 格式化为显示字符串。
-        /// - dirty: "main*"（星号表示有未提交变更）
-        /// - clean: "main"
-        var displayString: String {
-            isDirty ? "\(branch)*" : branch
+        /// 格式化为显示字符串，可选截断长分支名。
+        ///
+        /// - Parameters:
+        ///   - maxLength: 分支名最大显示字符数（dirty `*` 不计入）。默认 15。
+        /// - Returns: 格式化后的字符串。
+        ///   - dirty: "main*" 或截断后 "…de-6ba7a0-1*"
+        ///   - clean: "main" 或截断后 "…de-6ba7a0-1"
+        func displayString(maxLength: Int = 15) -> String {
+            let effectiveMax = max(maxLength, 1)
+            let displayBranch: String
+            if branch.count > effectiveMax {
+                displayBranch = String(branch.prefix(effectiveMax - 1)) + "…"
+            } else {
+                displayBranch = branch
+            }
+            return isDirty ? "\(displayBranch)*" : displayBranch
         }
     }
 

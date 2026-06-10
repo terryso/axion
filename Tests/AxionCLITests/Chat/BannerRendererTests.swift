@@ -1,6 +1,7 @@
 import Foundation
 import OpenAgentSDK
 import Testing
+import AxionCore
 
 @testable import AxionCLI
 
@@ -562,7 +563,7 @@ struct BannerRendererTests {
             isTTY: false,
             colorProfile: .unknown
         )
-        #expect(prompt == "axion [12k/200k 6% T3 $0.05 main]> ")
+        #expect(prompt == "axion [12k/200k 6% T3 $0.05 \u{E0A0}main]> ")
     }
 
     @Test("renderPrompt 非 TTY 含 dirty 分支（带星号）")
@@ -575,7 +576,7 @@ struct BannerRendererTests {
             isTTY: false,
             colorProfile: .unknown
         )
-        #expect(prompt == "axion [12k/200k 6% T3 feature/auth*]> ")
+        #expect(prompt == "axion [12k/200k 6% T3 \u{E0A0}feature/auth*]> ")
     }
 
     @Test("renderPrompt 非 TTY 无 git 分支不显示分支段")
@@ -656,5 +657,172 @@ struct BannerRendererTests {
         #expect(prompt.contains("$0.01"))
         // Should end after cost segment, no trailing ·
         #expect(prompt.hasSuffix("]> "))
+    }
+
+    // MARK: - renderPrompt with displayConfig
+
+    @Test("displayConfig 全关时仅显示上下文和百分比")
+    func renderPrompt_displayConfig_allOff() {
+        let config = PromptDisplayConfig(
+            progressBar: false,
+            turnCount: false,
+            cost: false,
+            gitBranch: false
+        )
+        // Use non-TTY for exact string matching (no ANSI codes)
+        let prompt = BannerRenderer.renderPrompt(
+            usedTokens: 10_000,
+            contextWindow: 200_000,
+            turnNumber: 3,
+            estimatedCost: "$0.05",
+            gitBranch: "main",
+            isTTY: false,
+            colorProfile: .unknown,
+            displayConfig: config
+        )
+        // Minimal: axion [10k/200k 5%]>
+        #expect(!prompt.contains("T3"))
+        #expect(!prompt.contains("$0.05"))
+        #expect(!prompt.contains("main"))
+        #expect(prompt == "axion [10k/200k 5%]> ")
+    }
+
+    @Test("displayConfig 全关非 TTY 格式")
+    func renderPrompt_displayConfig_allOff_nonTTY() {
+        let config = PromptDisplayConfig(
+            progressBar: false,
+            turnCount: false,
+            cost: false,
+            gitBranch: false
+        )
+        let prompt = BannerRenderer.renderPrompt(
+            usedTokens: 10_000,
+            contextWindow: 200_000,
+            turnNumber: 3,
+            estimatedCost: "$0.05",
+            gitBranch: "main",
+            isTTY: false,
+            colorProfile: .unknown,
+            displayConfig: config
+        )
+        #expect(prompt == "axion [10k/200k 5%]> ")
+    }
+
+    @Test("displayConfig 关闭进度条但保留其他段")
+    func renderPrompt_displayConfig_noProgressBar() {
+        let config = PromptDisplayConfig(progressBar: false)
+        let prompt = BannerRenderer.renderPrompt(
+            usedTokens: 10_000,
+            contextWindow: 200_000,
+            turnNumber: 3,
+            estimatedCost: "$0.05",
+            gitBranch: "main",
+            isTTY: true,
+            colorProfile: .unknown,
+            displayConfig: config
+        )
+        #expect(!prompt.contains("█"))
+        #expect(!prompt.contains("░"))
+        #expect(prompt.contains("T3"))
+        #expect(prompt.contains("$0.05"))
+        #expect(prompt.contains("main"))
+    }
+
+    @Test("displayConfig 关闭费用段")
+    func renderPrompt_displayConfig_noCost() {
+        let config = PromptDisplayConfig(cost: false)
+        let prompt = BannerRenderer.renderPrompt(
+            usedTokens: 10_000,
+            contextWindow: 200_000,
+            turnNumber: 1,
+            estimatedCost: "$0.05",
+            gitBranch: "main",
+            isTTY: true,
+            colorProfile: .unknown,
+            displayConfig: config
+        )
+        #expect(!prompt.contains("$0.05"))
+        #expect(prompt.contains("main"))
+        #expect(prompt.contains("T1"))
+    }
+
+    @Test("displayConfig 关闭 Git 分支段")
+    func renderPrompt_displayConfig_noGitBranch() {
+        let config = PromptDisplayConfig(gitBranch: false)
+        let prompt = BannerRenderer.renderPrompt(
+            usedTokens: 10_000,
+            contextWindow: 200_000,
+            turnNumber: 1,
+            estimatedCost: "$0.05",
+            gitBranch: "main",
+            isTTY: true,
+            colorProfile: .unknown,
+            displayConfig: config
+        )
+        #expect(!prompt.contains("main"))
+        #expect(prompt.contains("$0.05"))
+    }
+
+    @Test("displayConfig 关闭回合号")
+    func renderPrompt_displayConfig_noTurnCount() {
+        let config = PromptDisplayConfig(turnCount: false)
+        let prompt = BannerRenderer.renderPrompt(
+            usedTokens: 10_000,
+            contextWindow: 200_000,
+            turnNumber: 5,
+            isTTY: false,
+            colorProfile: .unknown,
+            displayConfig: config
+        )
+        #expect(!prompt.contains("T5"))
+        #expect(prompt == "axion [10k/200k 5%]> ")
+    }
+
+    @Test("displayConfig 默认值全开 = 向后兼容")
+    func renderPrompt_displayConfig_defaultIsAllOn() {
+        let config = PromptDisplayConfig()
+        #expect(config.showProgress == true)
+        #expect(config.showTurn == true)
+        #expect(config.showCost == true)
+        #expect(config.showBranch == true)
+        #expect(config.branchMaxLength == 15)
+
+        // Default config should produce same result as omitting it
+        let withConfig = BannerRenderer.renderPrompt(
+            usedTokens: 12_000,
+            contextWindow: 200_000,
+            turnNumber: 3,
+            estimatedCost: "$0.05",
+            gitBranch: "main",
+            isTTY: false,
+            colorProfile: .unknown,
+            displayConfig: config
+        )
+        let withoutConfig = BannerRenderer.renderPrompt(
+            usedTokens: 12_000,
+            contextWindow: 200_000,
+            turnNumber: 3,
+            estimatedCost: "$0.05",
+            gitBranch: "main",
+            isTTY: false,
+            colorProfile: .unknown
+        )
+        #expect(withConfig == withoutConfig)
+    }
+
+    @Test("displayConfig 非 TTY 关闭费用和分支")
+    func renderPrompt_displayConfig_nonTTY_noCostNoBranch() {
+        let config = PromptDisplayConfig(cost: false, gitBranch: false)
+        let prompt = BannerRenderer.renderPrompt(
+            usedTokens: 12_000,
+            contextWindow: 200_000,
+            turnNumber: 3,
+            estimatedCost: "$0.05",
+            gitBranch: "main",
+            isTTY: false,
+            colorProfile: .unknown,
+            displayConfig: config
+        )
+        #expect(prompt == "axion [12k/200k 6% T3]> ")
     }
 }

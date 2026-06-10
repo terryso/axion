@@ -257,8 +257,8 @@ struct SlashCommandE2ETests {
 
         #expect(output.contains("claude-sonnet-4-6"), "Should show model")
         #expect(output.contains("chat-tes"), "Should show session ID prefix")
-        #expect(output.contains("10000"), "Should show input tokens")
-        #expect(output.contains("12000"), "Should show total tokens")
+        #expect(output.contains("10K"), "Should show input tokens (formatted)")
+        #expect(output.contains("12K"), "Should show total tokens (formatted)")
         #expect(output.contains("/Users/test/project"), "Should show cwd")
     }
 

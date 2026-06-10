@@ -1,5 +1,6 @@
 import Foundation
 import Testing
+import AxionCore
 
 @testable import AxionCLI
 import OpenAgentSDK
@@ -247,5 +248,367 @@ struct BannerAndPromptE2ETests {
     func sessionDurationHours() {
         let dur = BannerRenderer.formatSessionDuration(ms: 3_753_000)
         #expect(dur == "1h 02m 33s")
+    }
+
+    // MARK: - displayConfig E2E
+
+    @Test("E2E: displayConfig 全关 → prompt 仅含上下文和百分比")
+    func e2e_displayConfig_allOff() {
+        let config = PromptDisplayConfig(
+            progressBar: false,
+            turnCount: false,
+            cost: false,
+            gitBranch: false
+        )
+        // TTY mode
+        let ttyPrompt = BannerRenderer.renderPrompt(
+            usedTokens: 12_000,
+            contextWindow: 200_000,
+            turnNumber: 3,
+            estimatedCost: "$0.05",
+            gitBranch: "main",
+            isTTY: true,
+            colorProfile: .ansi16,
+            displayConfig: config
+        )
+        #expect(ttyPrompt.contains("12k"))
+        #expect(ttyPrompt.contains("200k"))
+        #expect(ttyPrompt.contains("6%"))
+        #expect(!ttyPrompt.contains("T3"), "Turn should be hidden")
+        #expect(!ttyPrompt.contains("$0.05"), "Cost should be hidden")
+        #expect(!ttyPrompt.contains("main"), "Branch should be hidden")
+        #expect(!ttyPrompt.contains("█"), "Progress bar should be hidden")
+        #expect(!ttyPrompt.contains("░"), "Progress bar should be hidden")
+
+        // Non-TTY mode
+        let plainPrompt = BannerRenderer.renderPrompt(
+            usedTokens: 12_000,
+            contextWindow: 200_000,
+            turnNumber: 3,
+            estimatedCost: "$0.05",
+            gitBranch: "main",
+            isTTY: false,
+            colorProfile: .unknown,
+            displayConfig: config
+        )
+        #expect(plainPrompt == "axion [12k/200k 6%]> ")
+    }
+
+    @Test("E2E: displayConfig 关进度条 → TTY 无 ░/█ 但保留其他段")
+    func e2e_displayConfig_noProgressBar() {
+        let config = PromptDisplayConfig(progressBar: false)
+        let prompt = BannerRenderer.renderPrompt(
+            usedTokens: 30_000,
+            contextWindow: 200_000,
+            turnNumber: 5,
+            estimatedCost: "$0.12",
+            gitBranch: "develop",
+            isTTY: true,
+            colorProfile: .trueColor,
+            displayConfig: config
+        )
+        #expect(!prompt.contains("█"), "No filled blocks")
+        #expect(!prompt.contains("░"), "No empty blocks")
+        #expect(prompt.contains("T5"), "Turn still visible")
+        #expect(prompt.contains("$0.12"), "Cost still visible")
+        #expect(prompt.contains("develop"), "Branch still visible")
+        #expect(prompt.contains("15%"), "Percentage still visible")
+    }
+
+    @Test("E2E: displayConfig 关费用 → prompt 无 $ 符号和金额")
+    func e2e_displayConfig_noCost() {
+        let config = PromptDisplayConfig(cost: false)
+        // TTY
+        let ttyPrompt = BannerRenderer.renderPrompt(
+            usedTokens: 10_000,
+            contextWindow: 200_000,
+            turnNumber: 1,
+            estimatedCost: "$0.99",
+            gitBranch: "main",
+            isTTY: true,
+            colorProfile: .trueColor,
+            displayConfig: config
+        )
+        #expect(!ttyPrompt.contains("$0.99"), "Cost should be hidden in TTY")
+        #expect(ttyPrompt.contains("main"), "Branch still visible")
+
+        // Non-TTY
+        let plainPrompt = BannerRenderer.renderPrompt(
+            usedTokens: 10_000,
+            contextWindow: 200_000,
+            turnNumber: 1,
+            estimatedCost: "$0.99",
+            gitBranch: "main",
+            isTTY: false,
+            colorProfile: .unknown,
+            displayConfig: config
+        )
+        #expect(!plainPrompt.contains("$"), "No dollar sign in non-TTY")
+        #expect(plainPrompt.contains("T1"), "Turn still visible")
+        #expect(plainPrompt.contains("\u{E0A0}main"), "Branch still visible")
+    }
+
+    @Test("E2E: displayConfig 关分支 → prompt 无分支名")
+    func e2e_displayConfig_noGitBranch() {
+        let config = PromptDisplayConfig(gitBranch: false)
+        let prompt = BannerRenderer.renderPrompt(
+            usedTokens: 10_000,
+            contextWindow: 200_000,
+            turnNumber: 2,
+            estimatedCost: "$0.05",
+            gitBranch: "feature/auth",
+            isTTY: true,
+            colorProfile: .ansi16,
+            displayConfig: config
+        )
+        #expect(!prompt.contains("feature/auth"), "Branch should be hidden")
+        #expect(!prompt.contains("auth"), "No branch substring")
+        #expect(prompt.contains("$0.05"), "Cost still visible")
+        #expect(prompt.contains("T2"), "Turn still visible")
+    }
+
+    @Test("E2E: displayConfig 关回合号 → prompt 无 T 标签")
+    func e2e_displayConfig_noTurnCount() {
+        let config = PromptDisplayConfig(turnCount: false)
+        // TTY
+        let ttyPrompt = BannerRenderer.renderPrompt(
+            usedTokens: 10_000,
+            contextWindow: 200_000,
+            turnNumber: 42,
+            estimatedCost: "$0.05",
+            gitBranch: "main",
+            isTTY: true,
+            colorProfile: .trueColor,
+            displayConfig: config
+        )
+        #expect(!ttyPrompt.contains("T42"), "Turn label should be hidden in TTY")
+        #expect(ttyPrompt.contains("main"), "Branch still visible")
+
+        // Non-TTY
+        let plainPrompt = BannerRenderer.renderPrompt(
+            usedTokens: 10_000,
+            contextWindow: 200_000,
+            turnNumber: 42,
+            estimatedCost: "$0.05",
+            gitBranch: "main",
+            isTTY: false,
+            colorProfile: .unknown,
+            displayConfig: config
+        )
+        #expect(!plainPrompt.contains("T42"), "Turn label hidden in non-TTY")
+        #expect(plainPrompt == "axion [10k/200k 5% $0.05 \u{E0A0}main]> ")
+    }
+
+    @Test("E2E: displayConfig 默认值 → 与不传 config 完全一致（向后兼容）")
+    func e2e_displayConfig_default_backwardCompat() {
+        let defaultConfig = PromptDisplayConfig()
+        let args: (Int, Int, Int, String?, String?, Bool, TerminalColorProfile) = (
+            12_000, 200_000, 3, "$0.05", "main", false, TerminalColorProfile.unknown
+        )
+        let withConfig = BannerRenderer.renderPrompt(
+            usedTokens: args.0,
+            contextWindow: args.1,
+            turnNumber: args.2,
+            estimatedCost: args.3,
+            gitBranch: args.4,
+            isTTY: args.5,
+            colorProfile: args.6,
+            displayConfig: defaultConfig
+        )
+        let withoutConfig = BannerRenderer.renderPrompt(
+            usedTokens: args.0,
+            contextWindow: args.1,
+            turnNumber: args.2,
+            estimatedCost: args.3,
+            gitBranch: args.4,
+            isTTY: args.5,
+            colorProfile: args.6
+        )
+        #expect(withConfig == withoutConfig, "Default config must be backward compatible")
+    }
+
+    @Test("E2E: displayConfig 部分开关组合（关费用+关分支）")
+    func e2e_displayConfig_partialCombo() {
+        let config = PromptDisplayConfig(cost: false, gitBranch: false)
+        // Non-TTY: axion [12k/200k 6% T3]>
+        let prompt = BannerRenderer.renderPrompt(
+            usedTokens: 12_000,
+            contextWindow: 200_000,
+            turnNumber: 3,
+            estimatedCost: "$0.05",
+            gitBranch: "main",
+            isTTY: false,
+            colorProfile: .unknown,
+            displayConfig: config
+        )
+        #expect(prompt == "axion [12k/200k 6% T3]> ")
+    }
+
+    // MARK: - Branch truncation E2E
+
+    @Test("E2E: GitStatus.displayString → renderPrompt 串联截断长分支名")
+    func e2e_longBranch_truncationPipeline() {
+        let longBranch = "gnhf/cascadeprojects-code-6ba7a0-1"
+        let config = PromptDisplayConfig()  // default maxLength = 15
+
+        // 1. GitStatus 截断（模拟 ChatCommand 中的调用链）
+        let status = GitBranchDetector.GitStatus(branch: longBranch, isDirty: false)
+        let displayBranch = status.displayString(maxLength: config.branchMaxLength)
+
+        // 2. 截断后的分支名传给 renderPrompt
+        #expect(!displayBranch.contains(longBranch), "Full branch name should be truncated")
+        #expect(displayBranch.hasSuffix("…"), "Should end with truncation indicator")
+        #expect(displayBranch.count == 15, "Should be exactly maxLength chars")
+
+        let prompt = BannerRenderer.renderPrompt(
+            usedTokens: 10_000,
+            contextWindow: 200_000,
+            turnNumber: 1,
+            estimatedCost: "$0.05",
+            gitBranch: displayBranch,
+            isTTY: false,
+            colorProfile: .unknown,
+            displayConfig: config
+        )
+        // 3. Prompt 中不包含完整分支名，但包含截断版本
+        #expect(!prompt.contains(longBranch), "Full branch name should not appear")
+        #expect(prompt.contains("…"), "Should contain truncation indicator")
+    }
+
+    @Test("E2E: displayConfig 自定义 branchMaxLength 截断更短")
+    func e2e_displayConfig_customBranchMaxLength() {
+        let config = PromptDisplayConfig(maxBranchLength: 8)
+        #expect(config.branchMaxLength == 8)
+
+        let longBranch = "feature/very-long-branch-name"
+        let status = GitBranchDetector.GitStatus(branch: longBranch, isDirty: false)
+        let displayBranch = status.displayString(maxLength: config.branchMaxLength)
+
+        // 截断为 prefix(7) + "…" = 8 chars
+        #expect(!displayBranch.contains(longBranch), "Full branch name should be truncated")
+        #expect(displayBranch.hasSuffix("…"))
+        #expect(displayBranch.count == 8, "Should be exactly maxLength=8 chars")
+
+        let prompt = BannerRenderer.renderPrompt(
+            usedTokens: 10_000,
+            contextWindow: 200_000,
+            turnNumber: 1,
+            estimatedCost: "$0.05",
+            gitBranch: displayBranch,
+            isTTY: false,
+            colorProfile: .unknown,
+            displayConfig: config
+        )
+        #expect(!prompt.contains(longBranch), "Full branch name should not appear in prompt")
+        #expect(prompt.contains("…"), "Should contain truncation indicator in prompt")
+    }
+
+    @Test("E2E: GitStatus.displayString 截断 + dirty 星号")
+    func e2e_gitStatus_truncation_dirty() {
+        let longBranch = "gnhf/cascadeprojects-code-6ba7a0-1"
+        let status = GitBranchDetector.GitStatus(branch: longBranch, isDirty: true)
+        let display = status.displayString(maxLength: 15)
+
+        #expect(display.hasSuffix("…*"), "Truncated branch + dirty star")
+        #expect(display.count == 16, "15 chars branch + 1 star")
+        #expect(!display.contains(longBranch), "Full branch not present")
+
+        // Verify it renders correctly in prompt
+        let prompt = BannerRenderer.renderPrompt(
+            usedTokens: 10_000,
+            contextWindow: 200_000,
+            turnNumber: 1,
+            gitBranch: display,
+            isTTY: false,
+            colorProfile: .unknown
+        )
+        #expect(prompt.contains("…*"), "Prompt shows truncated dirty branch")
+    }
+
+    @Test("E2E: GitStatus.displayString 短分支不截断")
+    func e2e_gitStatus_shortBranch_noTruncation() {
+        let status = GitBranchDetector.GitStatus(branch: "main", isDirty: false)
+        let display = status.displayString(maxLength: 15)
+        #expect(display == "main")
+
+        // Verify in prompt
+        let prompt = BannerRenderer.renderPrompt(
+            usedTokens: 10_000,
+            contextWindow: 200_000,
+            turnNumber: 1,
+            gitBranch: display,
+            isTTY: false,
+            colorProfile: .unknown
+        )
+        #expect(prompt.contains("\u{E0A0}main"))
+    }
+
+    // MARK: - Config → PromptDisplayConfig 串联 E2E
+
+    @Test("E2E: PromptDisplayConfig 默认属性值正确")
+    func e2e_promptDisplayConfig_defaults() {
+        let config = PromptDisplayConfig()
+        #expect(config.showProgress == true)
+        #expect(config.showTurn == true)
+        #expect(config.showCost == true)
+        #expect(config.showBranch == true)
+        #expect(config.branchMaxLength == 15)
+    }
+
+    @Test("E2E: PromptDisplayConfig 显式 false 覆盖默认")
+    func e2e_promptDisplayConfig_explicitFalse() {
+        let config = PromptDisplayConfig(progressBar: false, turnCount: false, cost: false, gitBranch: false)
+        #expect(config.showProgress == false)
+        #expect(config.showTurn == false)
+        #expect(config.showCost == false)
+        #expect(config.showBranch == false)
+    }
+
+    @Test("E2E: displayConfig 关进度条+关分支 → 非 TTY 无额外段")
+    func e2e_displayConfig_noProgressNoBranch_nonTTY() {
+        let config = PromptDisplayConfig(progressBar: false, gitBranch: false)
+        let prompt = BannerRenderer.renderPrompt(
+            usedTokens: 12_000,
+            contextWindow: 200_000,
+            turnNumber: 3,
+            estimatedCost: "$0.05",
+            gitBranch: "main",
+            isTTY: false,
+            colorProfile: .unknown,
+            displayConfig: config
+        )
+        // Non-TTY: no progress bar visible anyway, branch hidden
+        #expect(!prompt.contains("main"), "Branch hidden")
+        #expect(prompt.contains("$0.05"), "Cost still shown")
+        #expect(prompt.contains("T3"), "Turn still shown")
+    }
+
+    @Test("E2E: displayConfig 全关 TTY 模式仍可解析为有效 prompt")
+    func e2e_displayConfig_allOff_tty_validPrompt() {
+        let config = PromptDisplayConfig(
+            progressBar: false,
+            turnCount: false,
+            cost: false,
+            gitBranch: false
+        )
+        let prompt = BannerRenderer.renderPrompt(
+            usedTokens: 50_000,
+            contextWindow: 200_000,
+            turnNumber: 10,
+            estimatedCost: "$1.23",
+            gitBranch: "develop",
+            isTTY: true,
+            colorProfile: .trueColor,
+            displayConfig: config
+        )
+        // Must still be a valid prompt
+        #expect(prompt.hasPrefix("axion ["))
+        #expect(prompt.hasSuffix("]> "))
+        #expect(prompt.contains("25%"), "Percentage always visible")
+        // Nothing else
+        #expect(!prompt.contains("T10"))
+        #expect(!prompt.contains("$1.23"))
+        #expect(!prompt.contains("develop"))
+        #expect(!prompt.contains("█"))
     }
 }

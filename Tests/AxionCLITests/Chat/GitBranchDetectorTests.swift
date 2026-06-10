@@ -40,13 +40,59 @@ struct GitBranchDetectorTests {
     @Test("GitStatus.displayString: clean 分支无星号")
     func gitStatus_clean() {
         let status = GitBranchDetector.GitStatus(branch: "main", isDirty: false)
-        #expect(status.displayString == "main")
+        #expect(status.displayString() == "main")
     }
 
     @Test("GitStatus.displayString: dirty 分支带星号")
     func gitStatus_dirty() {
         let status = GitBranchDetector.GitStatus(branch: "feature/auth", isDirty: true)
-        #expect(status.displayString == "feature/auth*")
+        #expect(status.displayString() == "feature/auth*")
+    }
+
+    @Test("GitStatus.displayString: 短分支名不截断")
+    func gitStatus_shortBranch_noTruncation() {
+        let status = GitBranchDetector.GitStatus(branch: "main", isDirty: false)
+        #expect(status.displayString(maxLength: 15) == "main")
+    }
+
+    @Test("GitStatus.displayString: 长分支名截断尾部并加省略号后缀")
+    func gitStatus_longBranch_truncated() {
+        let status = GitBranchDetector.GitStatus(
+            branch: "gnhf/cascadeprojects-code-6ba7a0-1",
+            isDirty: false
+        )
+        let result = status.displayString(maxLength: 15)
+        // prefix(14) + "…" = "gnhf/cascadepr…" = 15 chars
+        #expect(result.hasSuffix("…"))
+        #expect(result.count == 15)
+        #expect(result.hasPrefix("gnhf"))
+    }
+
+    @Test("GitStatus.displayString: 长分支名 + dirty 星号不计入长度")
+    func gitStatus_longBranch_dirtyStarNotCounted() {
+        let status = GitBranchDetector.GitStatus(
+            branch: "gnhf/cascadeprojects-code-6ba7a0-1",
+            isDirty: true
+        )
+        let result = status.displayString(maxLength: 15)
+        // branch part: "gnhf/cascadepr…" (15 chars) + "*" (dirty)
+        #expect(result.hasSuffix("…*"))
+        #expect(result.count == 16)  // 15 branch chars + 1 star
+        #expect(result.hasPrefix("gnhf"))
+    }
+
+    @Test("GitStatus.displayString: 恰好等于 maxLength 不截断")
+    func gitStatus_exactLength_noTruncation() {
+        let branch = "123456789012345"  // exactly 15 chars
+        let status = GitBranchDetector.GitStatus(branch: branch, isDirty: false)
+        #expect(status.displayString(maxLength: 15) == branch)
+    }
+
+    @Test("GitStatus.displayString: maxLength 为 0 时 clamp 到 1 显示首字符+省略号")
+    func gitStatus_zeroMaxLength() {
+        let status = GitBranchDetector.GitStatus(branch: "main", isDirty: false)
+        // maxLength clamped to 1: prefix(0) + "…" = "…"
+        #expect(status.displayString(maxLength: 0) == "…")
     }
 
     // MARK: - detect (mock injection)

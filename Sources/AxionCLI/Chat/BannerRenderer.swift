@@ -1,5 +1,6 @@
 import Foundation
 import OpenAgentSDK
+import AxionCore
 
 /// 交互模式横幅和提示符格式化。纯函数，不持有状态。
 struct BannerRenderer {
@@ -56,11 +57,12 @@ struct BannerRenderer {
     /// 成本显示：累计会话成本紧跟回合计数后，如 `$0.05`。
     /// Git 分支：dirty 时显示 `main*`，clean 时显示 `main`。
     ///
-    /// - TTY 示例：`axion [12k/200k 6% ░░░░░░░░░░ T3 · $0.05 · main]> `
-    /// - dirty：   `axion [12k/200k 6% ░░░░░░░░░░ T3 · $0.05 · feature/auth*]> `
-    /// - 无成本： `axion [12k/200k 6% ░░░░░░░░░░ T3 · main]> `
-    /// - 无 Git： `axion [12k/200k 6% ░░░░░░░░░░ T3 · $0.05]> `
-    /// - 非 TTY：  `axion [12k/200k 6% T3 $0.05 main]> `（无进度条、无颜色）
+    /// 通过 `displayConfig` 控制各段的显示/隐藏，实现可配置的 prompt 长度。
+    /// 默认全显示（向后兼容）。
+    ///
+    /// - TTY 全开：`axion [12k/200k 6% ░░░░░░░░░░ T3 · $0.05 · …de-6ba7a0-1*]> `
+    /// - 全关：    `axion [12k/200k 6%]> `
+    /// - 非 TTY：  `axion [12k/200k 6% T3 $0.05 …de-6ba7a0-1*]> `（无进度条、无颜色）
     static func renderPrompt(
         usedTokens: Int,
         contextWindow: Int,
@@ -68,7 +70,8 @@ struct BannerRenderer {
         estimatedCost: String? = nil,
         gitBranch: String? = nil,
         isTTY: Bool = isatty(STDERR_FILENO) != 0,
-        colorProfile: TerminalColorProfile = .detect()
+        colorProfile: TerminalColorProfile = .detect(),
+        displayConfig: PromptDisplayConfig = .init()
     ) -> String {
         let used = formatTokenCount(usedTokens)
         let max = formatTokenCount(contextWindow)
@@ -76,17 +79,25 @@ struct BannerRenderer {
             ? Int(Double(usedTokens) / Double(contextWindow) * 100)
             : 0
 
-        let turnLabel = turnNumber > 0 ? " T\(turnNumber)" : ""
+        let turnLabel = displayConfig.showTurn && turnNumber > 0 ? " T\(turnNumber)" : ""
 
         guard isTTY else {
-            let costPlain = estimatedCost.map { " \($0)" } ?? ""
-            let branchPlain = gitBranch.map { " \($0)" } ?? ""
+            let costPlain = (displayConfig.showCost && estimatedCost != nil) ? " \(estimatedCost!)" : ""
+            let branchPlain = (displayConfig.showBranch && gitBranch != nil) ? " \u{E0A0}\(gitBranch!)" : ""
             return "axion [\(used)/\(max) \(pct)%\(turnLabel)\(costPlain)\(branchPlain)]> "
         }
 
-        let bar = renderContextBar(pct: pct, width: 10)
-        let colorCode = contextBarColor(pct: pct, profile: colorProfile)
         let reset = "\u{1B}[0m"
+
+        // Progress bar segment (configurable)
+        let barSegment: String
+        if displayConfig.showProgress {
+            let bar = renderContextBar(pct: pct, width: 10)
+            let colorCode = contextBarColor(pct: pct, profile: colorProfile)
+            barSegment = " \(colorCode)\(bar)\(reset)"
+        } else {
+            barSegment = ""
+        }
 
         // Dim separator style (shared by cost and branch segments)
         let dimCode: String
@@ -97,17 +108,17 @@ struct BannerRenderer {
         case .unknown: dimCode = ""
         }
 
-        // Cost segment: dimmed style for session cost (less prominent than context bar)
+        // Cost segment (configurable)
         let costSegment: String
-        if let cost = estimatedCost {
+        if displayConfig.showCost, let cost = estimatedCost {
             costSegment = " \(dimCode)·\(reset) \(dimCode)\(cost)\(reset)"
         } else {
             costSegment = ""
         }
 
-        // Git branch segment: yellow-tinted for visibility, * for dirty working tree
+        // Git branch segment (configurable, with truncation)
         let branchSegment: String
-        if let branch = gitBranch {
+        if displayConfig.showBranch, let branch = gitBranch {
             let branchColor: String
             switch colorProfile {
             case .trueColor: branchColor = "\u{1B}[38;2;180;170;140m"  // warm sand
@@ -115,12 +126,13 @@ struct BannerRenderer {
             case .ansi16: branchColor = "\u{1B}[33m"
             case .unknown: branchColor = ""
             }
-            branchSegment = " \(dimCode)·\(reset) \(branchColor)\(branch)\(reset)"
+            branchSegment = " \(dimCode)·\(reset) \(branchColor)\u{E0A0}\(branch)\(reset)"
         } else {
             branchSegment = ""
         }
 
-        return "axion [\(used)/\(max) \(colorCode)\(pct)%\(reset) \(colorCode)\(bar)\(reset)\(turnLabel)\(costSegment)\(branchSegment)]> "
+        let colorCode = contextBarColor(pct: pct, profile: colorProfile)
+        return "axion [\(used)/\(max) \(colorCode)\(pct)%\(reset)\(barSegment)\(turnLabel)\(costSegment)\(branchSegment)]> "
     }
 
     // MARK: - Context Progress Bar
