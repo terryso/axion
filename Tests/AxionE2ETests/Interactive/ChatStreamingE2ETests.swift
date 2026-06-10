@@ -271,22 +271,37 @@ struct ChatStreamingE2ETests {
 
     @Test("real agent: simple question returns text")
     func realSimpleQuestion() async throws {
-        guard let (agent, _) = try await buildRealChatAgent(maxTurns: 2) else { return }
+        let maxRetries = 2
 
-        let capturing = CapturingChatOutput()
-        let handler = capturing.makeFormatter()
+        for attempt in 1...maxRetries {
+            guard let (agent, _) = try await buildRealChatAgent(maxTurns: 2) else { return }
 
-        handler.startLLMWaiting()
-        let result = await collectStreamResult(
-            agent: agent,
-            task: "回复 hello，不要使用任何工具",
-            handler: handler
-        )
+            let capturing = CapturingChatOutput()
+            let handler = capturing.makeFormatter()
 
-        try? await agent.close()
+            handler.startLLMWaiting()
+            let result = await collectStreamResult(
+                agent: agent,
+                task: "回复 hello，不要使用任何工具",
+                handler: handler
+            )
 
-        #expect(!result.assistantTexts.isEmpty, "Should have assistant text")
-        #expect(result.resultSubtype == .success, "Should complete successfully")
+            try? await agent.close()
+
+            if !result.assistantTexts.isEmpty && result.resultSubtype == .success {
+                return  // Test passed
+            }
+
+            if attempt < maxRetries {
+                print("[retry] realSimpleQuestion attempt \(attempt)/\(maxRetries) failed: subtype=\(String(describing: result.resultSubtype)), assistantTexts=\(result.assistantTexts.count), resultText=\(result.resultText.prefix(200))")
+                try? await _Concurrency.Task.sleep(for: .seconds(3))
+                continue
+            }
+
+            // Final attempt — fail with diagnostic info
+            #expect(!result.assistantTexts.isEmpty, "Should have assistant text (after \(maxRetries) attempts). subtype=\(String(describing: result.resultSubtype)), resultText=\(result.resultText.prefix(200))")
+            #expect(result.resultSubtype == .success, "Should complete successfully (after \(maxRetries) attempts). subtype=\(String(describing: result.resultSubtype))")
+        }
     }
 
     @Test("real agent: tool call produces tool output")
@@ -305,7 +320,6 @@ struct ChatStreamingE2ETests {
 
         try? await agent.close()
 
-        let output = capturing.allStdout + capturing.allStderr
         #expect(!result.toolCalls.isEmpty, "Should have at least one tool call")
         #expect(result.resultSubtype == .success, "Should complete successfully")
         // Output should contain tool execution info
