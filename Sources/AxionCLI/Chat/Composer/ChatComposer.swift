@@ -390,9 +390,16 @@ struct ChatComposer {
                 handleCtrlQ(prompt: prompt)
 
             case .ctrl("c"):
-                // Ctrl+C — 由 SignalHandler 处理，这里返回 nil
-                writeStdout("\r\n")
-                return nil
+                if buffer.isEmpty {
+                    // 输入框为空 → 返回 nil，由 ChatCommand 决定是否退出
+                    writeStdout("\r\n")
+                    return nil
+                } else {
+                    // 输入框有内容 → 清空 buffer，继续输入（不退出）
+                    buffer = ""
+                    cursor = 0
+                    refreshDisplay(prompt: prompt)
+                }
 
             case .tab:
                 break

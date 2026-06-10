@@ -221,7 +221,16 @@ struct ChatCommand: AsyncParsableCommand {
                     state.lastInterruptTime = ContinuousClock.now
                     continue
                 }
-                guard let line else { break }
+                guard let line else {
+                    // Ctrl+C 且输入为空 — 检查双击退出
+                    let now = ContinuousClock.now
+                    if let last = state.lastInterruptTime,
+                       chatShouldExit(lastInterrupt: last, now: now) {
+                        break  // 2 秒内第二次 Ctrl+C → 退出
+                    }
+                    state.lastInterruptTime = now
+                    continue  // 首次 Ctrl+C → 不退出，继续循环
+                }
                 let lineTrimmed = line.trimmingCharacters(in: .whitespaces)
                 if lineTrimmed.isEmpty { continue }
                 if lineTrimmed == "^C" { continue }
