@@ -31,6 +31,8 @@ extension AgentBuilder {
         let mode: AgentMode
         let permissionMode: PermissionMode
         let canUseTool: CanUseToolFn?
+        /// Story 39.4: run 入口 `--json` 输出模式（非交互时存储审批门保守拒绝，避免污染 JSON 流）。
+        let jsonOutput: Bool
 
         static func forCLI(
             config: AxionConfig,
@@ -43,6 +45,7 @@ extension AgentBuilder {
             verbose: Bool = false,
             dryrun: Bool = false,
             fast: Bool = false,
+            json: Bool = false,
             runId: String? = nil,
             sessionId: String? = nil,
             sessionStore: SessionStore? = nil
@@ -65,7 +68,8 @@ extension AgentBuilder {
                 emitTokenStream: false,
                 mode: .desktopAutomation,
                 permissionMode: .bypassPermissions,
-                canUseTool: nil
+                canUseTool: nil,
+                jsonOutput: json
             )
         }
 
@@ -100,7 +104,8 @@ extension AgentBuilder {
                 emitTokenStream: false,
                 mode: .codingAgent,
                 permissionMode: permissionMode,
-                canUseTool: canUseTool
+                canUseTool: canUseTool,
+                jsonOutput: false
             )
         }
 
@@ -127,7 +132,8 @@ extension AgentBuilder {
                 emitTokenStream: false,
                 mode: .desktopAutomation,
                 permissionMode: .bypassPermissions,
-                canUseTool: nil
+                canUseTool: nil,
+                jsonOutput: false
             )
         }
 
@@ -157,7 +163,8 @@ extension AgentBuilder {
                 emitTokenStream: false,
                 mode: .desktopAutomation,
                 permissionMode: .bypassPermissions,
-                canUseTool: nil
+                canUseTool: nil,
+                jsonOutput: false
             )
         }
 
@@ -185,7 +192,8 @@ extension AgentBuilder {
                 emitTokenStream: false,
                 mode: .desktopAutomation,
                 permissionMode: .bypassPermissions,
-                canUseTool: nil
+                canUseTool: nil,
+                jsonOutput: false
             )
         }
     }

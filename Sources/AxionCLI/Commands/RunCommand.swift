@@ -122,7 +122,8 @@ struct RunCommand: AsyncParsableCommand {
         let buildConfig = AgentBuilder.BuildConfig.forCLI(
             config: config, task: task, noMemory: noMemory, noSkills: noSkills,
             allowForeground: allowForeground, maxSteps: effectiveMaxSteps,
-            maxTokens: effectiveMaxTokens, verbose: verbose, dryrun: dryrun, fast: fast
+            maxTokens: effectiveMaxTokens, verbose: verbose, dryrun: dryrun, fast: fast,
+            json: json
         )
 
         let result = try await executeWithRuntime(config: config) { runtime, overrides in

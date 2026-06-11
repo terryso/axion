@@ -14,6 +14,12 @@ extension TaskSerialQueue {
     /// Deduplicates identical BuildConfig construction between executeNewWithTimeout and executeWithTimeout.
     func makeBuildConfig(for pending: PendingTask) -> AgentBuilder.BuildConfig {
         let request = OpenAgentSDK.CreateRunRequest(task: pending.task)
+        // Story 39.4: telegram 入口接入保守存储审批门（预留字段 + 不执行有副作用操作）。
+        // 非 storage 工具由门放行（等价 bypassPermissions 语义）；storage execute 走预留+取消。
+        let telegramCanUseTool = StorageApprovalGate.makeCanUseTool(
+            collector: TelegramApprovalReserve(),
+            surface: .telegram
+        )
         return AgentBuilder.BuildConfig(
             config: config,
             task: pending.task,
@@ -32,7 +38,8 @@ extension TaskSerialQueue {
             emitTokenStream: true,
             mode: .desktopAutomation,
             permissionMode: .bypassPermissions,
-            canUseTool: nil
+            canUseTool: telegramCanUseTool,
+            jsonOutput: false
         )
     }
 

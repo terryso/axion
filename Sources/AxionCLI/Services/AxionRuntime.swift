@@ -76,7 +76,8 @@ public actor AxionRuntime: AxionRuntimeRunning, AxionRuntimeResuming, SessionLis
             emitTokenStream: buildConfig.emitTokenStream,
             mode: buildConfig.mode,
             permissionMode: buildConfig.permissionMode,
-            canUseTool: buildConfig.canUseTool
+            canUseTool: buildConfig.canUseTool,
+            jsonOutput: buildConfig.jsonOutput
         )
     }
 

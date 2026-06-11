@@ -55,10 +55,16 @@ struct ChatCommand: AsyncParsableCommand {
         // Create canUseTool callback (controls tool-level permissions)
         // AC3/AC5: v2 overload injects sessionAllowList for dynamic approval options
         // escListenerRef: pauses ESC listener before rendering prompt, resumes after read
+        // Story 39.4: surfaceApproving — chat 逐项审批 storage execute 工具（计划项级，正交于工具级权限）。
+        let storageCollector = ChatApprovalCollector(
+            writeStdout: { msg in fputs(msg, stderr) },
+            readLine: { Swift.readLine() }
+        )
         let canUseTool = PermissionHandler.createCanUseTool(
             mode: permissionMode,
             sessionAllowList: sessionAllowList,
-            escListenerRef: escListenerRef
+            escListenerRef: escListenerRef,
+            surfaceApproving: storageCollector
         )
 
         let buildParams = ChatREPLState.BuildParams(

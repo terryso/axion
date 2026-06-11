@@ -254,9 +254,20 @@ enum AgentBuilder {
         agentOptions.eventBus = eventBus
 
         // Session resume: inject sessionId + sessionStore into SDK AgentOptions
-        // Permission: inject canUseTool from ChatCommand (codingAgent mode only)
+        // Permission: inject canUseTool from ChatCommand (codingAgent mode only).
+        // Story 39.4: run 入口（desktopAutomation）接入存储审批门（storage execute 工具走门，其余放行）。
         if let canUseTool = buildConfig.canUseTool {
             agentOptions.canUseTool = canUseTool
+        } else if buildConfig.mode == .desktopAutomation, !buildConfig.dryrun, !buildConfig.emitTokenStream {
+            let runCollector = RunApprovalCollector(
+                writeStdout: { msg in fputs(msg, stdout) },
+                readLine: { Swift.readLine() }
+            )
+            agentOptions.canUseTool = StorageApprovalGate.makeRunCanUseTool(
+                collector: runCollector,
+                isInteractiveFn: { isatty(fileno(stdin)) != 0 },
+                jsonOutput: buildConfig.jsonOutput
+            )
         } else if buildConfig.mode == .codingAgent {
             fputs("⚠️  [Axion] codingAgent 模式未设置 canUseTool，所有工具将无权限检查\n", stderr)
         }

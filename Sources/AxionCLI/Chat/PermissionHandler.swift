@@ -2,6 +2,8 @@ import Darwin
 import Foundation
 import OpenAgentSDK
 
+import AxionCore
+
 /// Handles tool permission checks for the interactive chat REPL.
 ///
 /// Provides a ``CanUseToolFn`` closure that:
@@ -25,6 +27,7 @@ enum PermissionHandler {
     static func createCanUseTool(
         mode: PermissionMode,
         isTTY: Bool = isatty(STDIN_FILENO) != 0,
+        surfaceApproving: StorageApproving? = nil,
         readUserInput: @Sendable @escaping () -> String? = { readLine(strippingNewline: true) }
     ) -> CanUseToolFn {
         // AC1–AC4/AC6/AC8: v2 overload without session allow list
@@ -33,6 +36,7 @@ enum PermissionHandler {
             isTTY: isTTY,
             sessionAllowList: nil,
             escListenerRef: nil,
+            surfaceApproving: surfaceApproving,
             readUserInput: readUserInput
         )
     }
@@ -54,6 +58,7 @@ enum PermissionHandler {
         isTTY: Bool = isatty(STDIN_FILENO) != 0,
         sessionAllowList: SessionAllowListRef?,
         escListenerRef: EscapeInterruptListenerRef? = nil,
+        surfaceApproving: StorageApproving? = nil,
         readUserInput: @Sendable @escaping () -> String? = { readLine(strippingNewline: true) }
     ) -> CanUseToolFn {
         // 当有 ESC listener 协调时，使用单字符 raw mode 读取（ESC 立即响应）
@@ -73,6 +78,29 @@ enum PermissionHandler {
             // AC3: bypassPermissions — auto-allow everything
             if mode == .bypassPermissions {
                 return .allow()
+            }
+
+            // Story 39.4: storage execute 工具走「计划项级」审批门（chat 逐项确认）。
+            // 插在 bypassPermissions 之后、通用提示之前：与既有工具级权限流程正交。
+            // decide(...) 对非 storage 工具返回 nil → 继续既有流程。
+            //
+            // 仅对 storage 执行工具暂停 ESC 监听器（与既有权限提示的 stdin 协调一致）：
+            // collector 内部走 readLine，若不暂停 ESC 轮询任务（raw mode 下逐字节吞非 ESC 输入），
+            // 会与 readLine 争抢 stdin → 用户输入被吞/错位。pause() 停轮询 + 恢复 canonical mode。
+            if let surfaceApproving = surfaceApproving,
+               tool.name == "execute_storage_plan" || tool.name == "execute_app_uninstall" {
+                let paused = escListenerRef?.pause() ?? false
+                defer { if paused { escListenerRef?.resume() } }
+                if let result = await StorageApprovalGate.decide(
+                    toolName: tool.name,
+                    input: input,
+                    surface: .chat,
+                    jsonOutput: false,
+                    isInteractive: isTTY,
+                    collector: surfaceApproving
+                ) {
+                    return result
+                }
             }
 
             // AC2: acceptEdits — auto-allow Write/Edit, others need confirmation
