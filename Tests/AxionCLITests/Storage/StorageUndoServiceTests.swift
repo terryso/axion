@@ -159,6 +159,110 @@ struct StorageUndoServiceTests {
         #expect(r.reason == "item_no_longer_in_trash")
     }
 
+    // MARK: - uninstallApp undo (AC #10, 39.3)
+
+    @Test("undo uninstallApp restores bundle from trashResultPath")
+    func undoUninstallAppRestoresFromTrashResultPath() async throws {
+        let ops = try makeTempDir("ops")
+        let work = try makeTempDir("work")
+        defer { cleanup(ops); cleanup(work) }
+        let (service, store) = makeService(ops: ops)
+
+        let source = work.appendingPathComponent("Apps/Foo.app")  // 原 bundle 路径（已不在）
+        let trashLoc = work.appendingPathComponent("trash/Foo.app")  // 废纸篓落位
+        // moveItem 要求目标父目录存在 → 预建 Apps 父目录（bundle 原父目录）。
+        try FileManager.default.createDirectory(at: work.appendingPathComponent("Apps"), withIntermediateDirectories: true)
+        // 伪造废纸篓中的 bundle
+        try FileManager.default.createDirectory(at: trashLoc.appendingPathComponent("Contents"), withIntermediateDirectories: true)
+        try Data(repeating: 0x61, count: 4).write(to: trashLoc.appendingPathComponent("Contents/Info.plist"))
+
+        _ = try seedManifest(store, items: [
+            StorageManifestItem(action: .uninstallApp, sourcePath: source.path, trashResultPath: trashLoc.path, outcome: .succeeded),
+        ], op: "op-undo-app-1")
+
+        let result = try #require(await service.undo(request(op: "op-undo-app-1", ops: ops)))
+        #expect(result.restored == 1)
+        // 恢复回原 bundle 路径；废纸篓落位移走
+        #expect(FileManager.default.fileExists(atPath: source.path))
+        #expect(!FileManager.default.fileExists(atPath: trashLoc.path))
+        // action 正确标记为 uninstallApp（非 trash）
+        let r = try #require(result.manifest.undoResults?.first)
+        #expect(r.action == .uninstallApp)
+        #expect(r.outcome == .restored)
+    }
+
+    @Test("undo uninstallApp reports item_no_longer_in_trash when trash path gone")
+    func undoUninstallAppItemNoLongerInTrash() async throws {
+        let ops = try makeTempDir("ops")
+        let work = try makeTempDir("work")
+        defer { cleanup(ops); cleanup(work) }
+        let (service, store) = makeService(ops: ops)
+
+        _ = try seedManifest(store, items: [
+            StorageManifestItem(action: .uninstallApp, sourcePath: work.appendingPathComponent("Apps/Foo.app").path, trashResultPath: work.appendingPathComponent("emptied/Foo.app").path, outcome: .succeeded),
+        ], op: "op-undo-app-2")
+
+        let result = try #require(await service.undo(request(op: "op-undo-app-2", ops: ops)))
+        let r = try #require(result.manifest.undoResults?.first)
+        #expect(r.action == .uninstallApp)
+        #expect(r.outcome == .notRestored)
+        #expect(r.reason == "item_no_longer_in_trash")
+    }
+
+    @Test("undo uninstallApp does not overwrite when source already exists")
+    func undoUninstallAppSourceAlreadyExists() async throws {
+        let ops = try makeTempDir("ops")
+        let work = try makeTempDir("work")
+        defer { cleanup(ops); cleanup(work) }
+        let (service, store) = makeService(ops: ops)
+
+        let source = work.appendingPathComponent("Apps/Foo.app")
+        let trashLoc = work.appendingPathComponent("trash/Foo.app")
+        // source 已存在（如用户已重装）→ 不覆盖
+        try FileManager.default.createDirectory(at: source, withIntermediateDirectories: true)
+        try FileManager.default.createDirectory(at: trashLoc, withIntermediateDirectories: true)
+
+        _ = try seedManifest(store, items: [
+            StorageManifestItem(action: .uninstallApp, sourcePath: source.path, trashResultPath: trashLoc.path, outcome: .succeeded),
+        ], op: "op-undo-app-3")
+
+        let result = try #require(await service.undo(request(op: "op-undo-app-3", ops: ops)))
+        let r = try #require(result.manifest.undoResults?.first)
+        #expect(r.outcome == .notRestored)
+        #expect(r.reason == "source_already_exists")
+        // 两处都保留
+        #expect(FileManager.default.fileExists(atPath: source.path))
+        #expect(FileManager.default.fileExists(atPath: trashLoc.path))
+    }
+
+    @Test("uninstallApp undo coexists with other item actions in same manifest")
+    func undoUninstallAppAlongsideOthers() async throws {
+        let ops = try makeTempDir("ops")
+        let work = try makeTempDir("work")
+        defer { cleanup(ops); cleanup(work) }
+        let (service, store) = makeService(ops: ops)
+
+        let bundleSource = work.appendingPathComponent("Apps/Foo.app")
+        let bundleTrash = work.appendingPathComponent("trash/Foo.app")
+        try FileManager.default.createDirectory(at: bundleTrash, withIntermediateDirectories: true)
+        let cacheSource = work.appendingPathComponent("Caches/com.example.foo")
+        let cacheTrash = work.appendingPathComponent("trash/com.example.foo")
+        try FileManager.default.createDirectory(at: cacheTrash, withIntermediateDirectories: true)
+        // moveItem 要求目标父目录存在 → 预建 Apps / Caches 父目录。
+        try FileManager.default.createDirectory(at: work.appendingPathComponent("Apps"), withIntermediateDirectories: true)
+        try FileManager.default.createDirectory(at: work.appendingPathComponent("Caches"), withIntermediateDirectories: true)
+
+        _ = try seedManifest(store, items: [
+            StorageManifestItem(action: .uninstallApp, sourcePath: bundleSource.path, trashResultPath: bundleTrash.path, outcome: .succeeded),
+            StorageManifestItem(action: .trash, sourcePath: cacheSource.path, trashResultPath: cacheTrash.path, outcome: .succeeded),
+        ], op: "op-undo-app-4")
+
+        let result = try #require(await service.undo(request(op: "op-undo-app-4", ops: ops)))
+        #expect(result.restored == 2)
+        #expect(FileManager.default.fileExists(atPath: bundleSource.path))
+        #expect(FileManager.default.fileExists(atPath: cacheSource.path))
+    }
+
     // MARK: - createDirectory undo
 
     @Test("undo createDirectory removes an empty directory")

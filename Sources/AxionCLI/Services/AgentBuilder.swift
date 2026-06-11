@@ -181,6 +181,23 @@ enum AgentBuilder {
                 undoer: StorageUndoService(manifestStore: manifestStore),
                 config: config.storage
             ))
+
+            // Story 39.3: App uninstall (scan = read-only; execute = side-effect, draft-first manifest,
+            // re-validated bundle/support, recoverable via system Trash — never permanent delete).
+            // Shares the same manifestStore so execute + undo read/write the same operation files.
+            let appPlanBuilder = AppUninstallPlanBuilder(
+                supportDataScanner: SupportDataScanService(),
+                appDiscoverer: AppDiscoveryService(),
+                hintReader: ExternalHintReader()
+            )
+            agentTools.append(ScanAppUninstallTool(planBuilder: appPlanBuilder))
+            agentTools.append(ExecuteAppUninstallTool(
+                executor: AppUninstallExecutor(
+                    manifestStore: manifestStore,
+                    appQuitter: AppQuitter()
+                ),
+                config: config.storage
+            ))
         }
 
         // 8b. Create review infrastructure (ReviewOrchestrator + IntelligentCurator + SkillUsageStore)

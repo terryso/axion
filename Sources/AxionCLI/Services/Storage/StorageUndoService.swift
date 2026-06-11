@@ -4,11 +4,14 @@ import AxionCore
 
 /// 撤销实现：按 manifest **逆序**恢复（后执行的先还原），逐项独立 best-effort。
 ///
-/// 恢复语义（AC #8 / #9）：
+/// 恢复语义（AC #8 / #9 / #10）：
 /// - `move`（原项 succeeded）：从 `targetPath` 移回 `sourcePath`。source 已存在 → 不覆盖；
 ///   target 缺失 → `target_missing`。
 /// - `trash`（原项 succeeded）：从 `trashResultPath` 移回 `sourcePath`。source 已存在 → 不覆盖；
 ///   `trashResultPath` 缺失（如用户已清空废纸篓）→ `item_no_longer_in_trash`。
+/// - `uninstallApp`（原项 succeeded，AC #10，39.3 起支持）：与 `trash` 同语义——从
+///   `trashResultPath`（App bundle 在废纸篓中的落位）移回 `sourcePath`（原 bundle 路径）。
+///   source 已存在 → `source_already_exists`；`trashResultPath` 缺失 → `item_no_longer_in_trash`。
 /// - `createDirectory`（原项 succeeded）：仅当目录**为空**时移除；非空 → `directory_not_empty`。
 ///   `FileManager.removeItem` **仅**用于此（空目录），永不用于其他永久删除。
 /// - `scanOnly` / 原项 `failed` / `skipped`：撤销 `skipped`（无可恢复对象）。
@@ -69,10 +72,13 @@ final class StorageUndoService: StorageUndoing, Sendable {
             return undoMove(item)
         case .trash:
             return undoTrash(item)
+        case .uninstallApp:
+            // AC #10（39.3 起）：与 trash 同语义，从废纸篓落位移回原 bundle 路径。
+            return undoUninstallApp(item)
         case .createDirectory:
             return undoCreateDirectory(item)
-        case .scanOnly, .uninstallApp:
-            // scanOnly 无副作用；uninstallApp 不属本 Story（执行阶段已拒绝）。
+        case .scanOnly:
+            // scanOnly 无副作用。
             return StorageUndoResult(sourcePath: item.sourcePath, action: item.action, outcome: .skipped)
         }
     }
@@ -101,25 +107,35 @@ final class StorageUndoService: StorageUndoing, Sendable {
     }
 
     private func undoTrash(_ item: StorageManifestItem) -> StorageUndoResult {
+        restoreFromTrash(item, action: .trash)
+    }
+
+    /// AC #10（39.3 起）：App bundle 从废纸篓恢复，与 `trash` 同语义（action 标为 `uninstallApp`）。
+    private func undoUninstallApp(_ item: StorageManifestItem) -> StorageUndoResult {
+        restoreFromTrash(item, action: .uninstallApp)
+    }
+
+    /// 从 `trashResultPath` 移回 `sourcePath` 的共享恢复逻辑（`trash` / `uninstallApp` 复用）。
+    private func restoreFromTrash(_ item: StorageManifestItem, action: StorageAction) -> StorageUndoResult {
         let source = item.sourcePath
         guard let trashResultPath = item.trashResultPath else {
-            return StorageUndoResult(sourcePath: source, action: .trash, outcome: .notRestored, reason: "item_no_longer_in_trash")
+            return StorageUndoResult(sourcePath: source, action: action, outcome: .notRestored, reason: "item_no_longer_in_trash")
         }
 
         // source 已存在 → 不覆盖
         if FileManager.default.fileExists(atPath: source) {
-            return StorageUndoResult(sourcePath: source, action: .trash, outcome: .notRestored, reason: "source_already_exists")
+            return StorageUndoResult(sourcePath: source, action: action, outcome: .notRestored, reason: "source_already_exists")
         }
-        // trashResultPath 缺失（如用户已清空废纸篓）→ 无法恢复（AC #9）
+        // trashResultPath 缺失（如用户已清空废纸篓）→ 无法恢复（AC #9 / #10）
         guard FileManager.default.fileExists(atPath: trashResultPath) else {
-            return StorageUndoResult(sourcePath: source, action: .trash, outcome: .notRestored, reason: "item_no_longer_in_trash")
+            return StorageUndoResult(sourcePath: source, action: action, outcome: .notRestored, reason: "item_no_longer_in_trash")
         }
 
         do {
             try FileManager.default.moveItem(at: URL(fileURLWithPath: trashResultPath), to: URL(fileURLWithPath: source))
-            return StorageUndoResult(sourcePath: source, action: .trash, outcome: .restored)
+            return StorageUndoResult(sourcePath: source, action: action, outcome: .restored)
         } catch {
-            return StorageUndoResult(sourcePath: source, action: .trash, outcome: .notRestored, reason: "restore_failed: \(error.localizedDescription)")
+            return StorageUndoResult(sourcePath: source, action: action, outcome: .notRestored, reason: "restore_failed: \(error.localizedDescription)")
         }
     }
 

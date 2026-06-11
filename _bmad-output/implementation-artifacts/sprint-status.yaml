@@ -1,5 +1,5 @@
 # generated: 2026-05-08
-# last_updated: 2026-06-12 (story 39-2 done: organize-folder-execute-undo)
+# last_updated: 2026-06-12 (story 39-3 done: app-uninstall-support-data-scan, code review passed)
 # project: axion
 # project_key: NOKEY
 # tracking_system: file-system
@@ -440,6 +440,6 @@ development_status:
   epic-39: in-progress
   39-1-safe-file-scan-plan-model: done
   39-2-organize-folder-execute-undo: done
-  39-3-app-uninstall-support-data-scan: backlog
+  39-3-app-uninstall-support-data-scan: done
   39-4-multi-surface-approval-adaptation: backlog
   epic-39-retrospective: optional
