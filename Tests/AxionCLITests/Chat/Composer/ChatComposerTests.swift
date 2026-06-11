@@ -166,6 +166,34 @@ struct ChatComposerTests {
         #expect(result == "hello")
     }
 
+    @Test("AC3: Bracket paste 保留已有输入 — 先输入再粘贴不覆盖")
+    func bracketPasteAppendsToExistingInput() {
+        var ctx = makeComposer(events: [
+            .printable("123"),
+            .bracketPasteStart,
+            .printable("pasted"),
+            .bracketPasteEnd,
+            .enter
+        ])
+        let result = ctx.composer.readInput(prompt: "> ", continuationPrompt: "...> ")
+        #expect(result == "123pasted")
+    }
+
+    @Test("AC3: Bracket paste 插入到光标位置（非末尾）")
+    func bracketPasteInsertsAtCursor() {
+        // 输入 "abc"，光标左移到 'b' 之后，再粘贴 "XY"
+        var ctx = makeComposer(events: [
+            .printable("abc"),
+            .left,          // cursor 从 3 → 2（在 'b' 后面）
+            .bracketPasteStart,
+            .printable("XY"),
+            .bracketPasteEnd,
+            .enter
+        ])
+        let result = ctx.composer.readInput(prompt: "> ", continuationPrompt: "...> ")
+        #expect(result == "abXYc")
+    }
+
     // MARK: - AC4: 快捷键响应（不吞键）
 
     @Test("AC4: Up 键不吞键 — 事件处理后继续")

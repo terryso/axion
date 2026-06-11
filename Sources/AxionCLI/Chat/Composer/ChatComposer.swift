@@ -284,9 +284,11 @@ struct ChatComposer {
 
             case .bracketPasteEnd:
                 inBracketPaste = false
-                let result = pasteBuffer
-                buffer = result
-                cursor = buffer.count
+                // 在光标位置插入粘贴内容（而非替换整个 buffer）
+                // 这样先输入 "123" 再粘贴时，粘贴文本追加在 "123" 之后
+                let insertIndex = buffer.index(buffer.startIndex, offsetBy: cursor)
+                buffer.insert(contentsOf: pasteBuffer, at: insertIndex)
+                cursor += pasteBuffer.count
                 // 回显粘贴内容（多行感知）
                 refreshDisplay(prompt: prompt)
                 continue
