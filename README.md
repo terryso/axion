@@ -22,11 +22,12 @@ Axion is a Swift-based AI agent that lives in your terminal. Type `axion` and st
 
 **Key highlights:**
 
-- **Interactive Coding Agent** — `axion` launches a Claude Code–like REPL with streaming output, 16 slash commands (`/help`, `/clear`, `/diff`, `/model`, `/cost`, `/copy`, …), file edit approval diffs, multiline input with CJK support, and session resume
+- **Interactive Coding Agent** — `axion` launches a Claude Code–like REPL with streaming output, 15 slash commands (`/help`, `/clear`, `/diff`, `/model`, `/cost`, `/copy`, `/status`, …), file edit approval diffs, multiline input with CJK support, and session resume
 - **Full Tool Spectrum** — Bash execution, file read/write/edit, code search (Grep/Glob), web search & fetch, LSP code intelligence — plus 21 native macOS desktop tools via MCP when you need GUI
 - **Rich Terminal Rendering** — Streaming Unicode tables, 16-language syntax highlighting, diff-colored code blocks, Markdown extensions (strikethrough, task lists, clickable links, image placeholders), file change summaries, and context progress bars
 - **Context-Aware File Editing** — Diff-based approval flow shows exactly what changes before applying. Tracks file modifications per turn with `/diff` summary
 - **Cross-run Memory** — Two complementary memory systems: App operation facts (auto-extracted from tool calls) and Universal Memory (environment knowledge + user profile)
+- **Cross-session History** — Command history persists across sessions; Up/Down and Ctrl+R search work on all past inputs
 - **Clipboard Integration** — `/copy` command copies last assistant response to clipboard (pbcopy / OSC 52 / tmux auto-fallback)
 - **SDK Skill System** — Prompt skills, recorded skills, and built-in desktop skills with dual-track lookup and skill-scoped memory
 - **Record & Replay** — Record a workflow once, replay it instantly without LLM calls
@@ -45,10 +46,12 @@ Axion is a Swift-based AI agent that lives in your terminal. Type `axion` and st
 │   ├── Streaming Markdown             ├── axion run "task"      │
 │   ├── Syntax Highlight (16 langs)    ├── MCP Tools (21)        │
 │   ├── Unicode Tables                 ├── Record & Replay       │
-│   ├── Slash Commands (16)            └── User Takeover         │
+│   ├── Slash Commands (15)            └── User Takeover         │
 │   ├── File Edit Approval                                       │
 │   ├── Clipboard (/copy)                                        │
-│   ├── Session Resume                                            │
+│   ├── Session Resume + Transcript                               │
+│   ├── Cross-session History (↑↓ + Ctrl+R)                      │
+│   ├── Prompt Bar (ctx%, cost, git branch, speed)               │
 │   └── CJK Input                                                │
 │                                                                │
 │   Core Tools: Bash · File R/W · Grep/Glob · Web · LSP         │
@@ -217,13 +220,21 @@ The default `axion` command opens a REPL with rich terminal UX:
 - **Streaming tables** — Markdown pipe tables auto-detected and rendered as Unicode box-drawing aligned tables
 - **Diff-aware code blocks** — Unified diff content in code blocks gets syntax-colored (green additions, red deletions, cyan hunk headers)
 - **Markdown extensions** — Strikethrough, task lists (☐/☑), clickable OSC 8 hyperlinks, image placeholders, H1/H2 underlines, blockquotes, italic
-- **Turn summary** — Context window progress bar (green/yellow/red) and per-turn cost estimate after each turn
+- **Turn summary** — Context window progress bar (green/yellow/red), per-turn cost estimate, and response speed analytics (TTFT + tok/s)
+- **Prompt bar** — Real-time display of context usage %, cumulative cost, turn count, git branch (with `*` for dirty tree), and configurable via `PromptDisplayConfig` in config.json
+- **Rich /status dashboard** — Session elapsed time, turn count, tool usage frequency, visual context progress bar, token breakdown, and estimated cost
 - **File change summary** — Tree-structured overview of file operations (Created/Edited/Read) at end of each turn
 - **System events** — Codex-style rendering for context compression, rate limits, and task completion notifications
-- **File edit approval** — Shows a diff preview before applying changes; approve, reject, or edit
-- **16 slash commands** — `/help`, `/clear`, `/compact`, `/model`, `/cost`, `/diff`, `/status`, `/resume`, `/config`, `/new`, `/fork`, `/archive`, `/skills`, `/copy`, `/exit`
-- **Multiline input** — Paste or compose multi-line prompts naturally
+- **Context compaction** — Visual before/after progress bars when context is compressed (auto or `/compact`)
+- **File edit approval** — Shows a color-coded diff preview before applying changes; approve, reject, or edit
+- **15 slash commands** — `/help`, `/clear`, `/compact`, `/model`, `/cost`, `/diff`, `/status`, `/resume`, `/config`, `/new`, `/fork`, `/archive`, `/skills`, `/copy`, `/exit`
+- **Slash popup completion** — Type `/` for popup menu with Tab to complete; `@` for file search
+- **Multiline input** — Paste or compose multi-line prompts naturally; `\` continuation for manual line breaks
+- **Cross-session history** — Up/Down and Ctrl+R search work across sessions; history persisted to `~/.axion/history.jsonl`
+- **Session transcript** — Full conversation (user inputs, assistant responses, tool calls) auto-saved to `~/.axion/sessions/`
 - **CJK support** — Full Chinese/Japanese/Korean input handling
+- **Startup tips** — First-run welcome message; returning users get random feature discovery tips
+- **Shimmer spinner** — Cosine-driven flowing highlight animation on status text during model thinking
 - **Session persistence** — Conversations auto-saved; resume with `/resume` or `axion resume`
 - **Context management** — `/compact` when context gets long, `/clear` to start fresh
 - **Permission modes** — `--accept-edits` for auto-approve file edits, `--dangerously-skip-permissions` for full auto
@@ -451,7 +462,13 @@ Config file located at `~/.config/axion/config.json`:
   "curatorEnabled": true,
   "curatorIntervalHours": 168,
   "curatorStaleAfterDays": 30,
-  "curatorArchiveAfterDays": 90
+  "curatorArchiveAfterDays": 90,
+  "promptDisplay": {
+    "showProgressBar": true,
+    "showTurnCount": true,
+    "showCost": true,
+    "showGitBranch": true
+  }
 }
 ```
 
@@ -482,6 +499,14 @@ Sources/
 │   │   ├── Theme/         # TranscriptRenderer, BannerRenderer, progress bars
 │   │   ├── FileChangeTracker  # Per-turn file operation summary
 │   │   ├── SystemEventRenderer # Codex-style system event display
+│   │   ├── CompactionDisplayFormatter # Context compaction visualization
+│   │   ├── ResponseSpeedTracker # TTFT + tok/s analytics
+│   │   ├── ToolUsageTracker   # Per-tool invocation counts
+│   │   ├── StatusDashboardFormatter # Rich /status dashboard
+│   │   ├── ShimmerText    # Cosine-driven flowing highlight animation
+│   │   ├── StartupTipProvider # Feature discovery tips
+│   │   ├── SessionTranscriptLogger # Session conversation logging
+│   │   ├── CommandHistoryStore # Cross-session history persistence
 │   │   └── ClipboardService   # /copy command (pbcopy/OSC 52/tmux)
 │   ├── Commands/          # CLI subcommands (chat, run, setup, server, mcp, …)
 │   ├── Tools/             # Built-in tool implementations
