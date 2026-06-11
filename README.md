@@ -10,7 +10,7 @@
 
 A full-spectrum AI agent for macOS — interactive coding, file editing, web search, shell commands, and 21 native desktop automation tools. All in one terminal.
 
-[English](#english) | [中文](./README.zh-CN.md)
+[English](#english) | [中文](./README.zh-CN.md) | [Changelog](./CHANGELOG.md)
 
 ---
 

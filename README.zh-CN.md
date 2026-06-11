@@ -10,7 +10,7 @@
 
 macOS 全能 AI Agent —— 交互式编程、文件编辑、Web 搜索、Shell 命令、21 个原生桌面自动化工具，一个终端全搞定。
 
-[English](./README.md) | [中文](#中文)
+[English](./README.md) | [中文](#中文) | [更新日志](./CHANGELOG.md)
 
 ---
 
