@@ -591,29 +591,7 @@ Sources/AxionBar/
 
 ## SDK 生态（Epic 11 — 第三方 SDK 生态）
 
-Axion 作为 OpenAgentSDK 的旗舰参考实现，ScaffoldCLI 提供项目模板和脚手架 CLI。
-
-### ScaffoldCLI（位于 OpenAgentSDK 仓库）
-
-```
-Sources/ScaffoldCLI/
-├── ScaffoldCLI.swift              # ArgumentParser CLI 入口
-├── TemplateGenerator.swift        # 文件生成逻辑
-└── Templates/
-    ├── BasicMainTemplate.swift    # basic 和 mcp-integration main.swift 模板
-    ├── ToolTemplates.swift        # HelloWorld/Calculator/SystemInfo/Config 工具模板
-    ├── HookTemplates.swift        # Hooks 安全策略示例模板
-    ├── PromptTemplates.swift      # System prompt 和 .env.example 模板
-    └── ReadmeTemplate.swift       # README.md 模板
-```
-
-**关键规则：**
-- 模板代码只使用 SDK 公共 API，不引用 Axion 特有模块
-- 工具数组类型使用 `ToolProtocol`（不是不存在的 `AnyTool`）
-- 模板字符串中的 Swift 插值需要双重转义：`\\()` 在模板源码中 → `\()` 在生成输出中
-- `defineTool` 有 4 种重载，模板应展示多种模式
-- `AgentOptions` 的字段名是 `allowedTools`/`disallowedTools`（不是 `allowed`/`disallowed`）
-- `canUseTool` 回调签名：`(ToolProtocol, Any, ToolContext) async -> CanUseToolResult?`
+Axion 作为 OpenAgentSDK 的旗舰参考实现。ScaffoldCLI（位于 OpenAgentSDK 仓库）提供项目模板和脚手架 CLI。模板代码只使用 SDK 公共 API，`defineTool` 有 4 种重载，`AgentOptions` 字段为 `allowedTools`/`disallowedTools`。
 
 ### Axion 关键模块内联文档（Story 11.3）
 
@@ -722,17 +700,6 @@ Tests/AxionCLITests/Chat/                 ~10 test files（镜像源结构）
 - `Sources/AxionCLI/Services/AgentBuilder.swift` — `AgentMode` 枚举 + `BuildConfig.forChat()` + `buildCodingSystemPrompt()` + `loadClaudeMd()`
 - `Prompts/coding-agent-system.md` — Coding agent 系统提示模板（非桌面自动化的 planner-system）
 
-### SDK 开发者文档（位于 OpenAgentSDK 仓库）
-
-| 文档 | 内容 |
-|------|------|
-| `docs/getting-started.md` | 5 分钟快速开始 |
-| `docs/tool-development-guide.md` | defineTool 4 种模式 |
-| `docs/mcp-integration-guide.md` | MCP 协议和集成 |
-| `docs/agent-customization-guide.md` | AgentOptions、PermissionMode、Hooks |
-| `docs/session-memory-guide.md` | Session 和 Memory 使用 |
-| `docs/packaging-distribution-guide.md` | SPM/Homebrew/签名/AX 权限 |
-
 ---
 
 ## 执行循环
@@ -805,125 +772,22 @@ AxionRuntime.execute(buildConfig, runOverrides) → AgentBuilder.build() → age
 
 ## Daemon 模式与持久化（Epic 16）
 
-### launchd Daemon
+### launchd Daemon / Gateway
 
-Axion server 可注册为 macOS 用户级 launchd 守护进程，实现开机自启和崩溃自动重启。
-
-**CLI 命令：**
-- `axion daemon install --host 127.0.0.1 --port 4242 [--auth-key KEY]` — 安装并启动守护进程
-- `axion daemon status` — 查看 daemon 状态（running/stopped/not_installed）、PID、端口
-- `axion daemon uninstall [--keep-logs]` — 停止并卸载守护进程
-
-**核心文件：**
-```
-Sources/AxionCLI/Services/DaemonService.swift    # plist 生成、launchctl 调用、状态查询（参数化支持 Gateway 和 daemon）
-Sources/AxionCLI/Commands/DaemonCommand.swift     # CLI 子命令入口
-```
-
-**plist 配置：**
-- Label: `dev.axion.server`
-- 路径: `~/Library/LaunchAgents/dev.axion.server.plist`
-- RunAtLoad: true（开机自启）
-- KeepAlive: Crashed=true（仅非零退出时重启）
-- ThrottleInterval: 10（崩溃后 10 秒重启）
-- auth-key 通过 EnvironmentVariables 的 `AXION_AUTH_KEY` 传递（不写入 ProgramArguments）
-- 日志: `~/.axion/server.log` + `~/.axion/server.err.log`
-
-**二进制路径解析优先级：** `AXION_BIN` 环境变量 > 当前进程路径 > `which axion`
-
-**关键设计决策：**
+- `axion daemon install --port 4242 [--auth-key KEY]` → launchd plist (`dev.axion.server`)，开机自启 + 崩溃自动重启
+- `axion gateway install` → launchd plist (`dev.axion.gateway`)，daemon 超集（HTTP API + TG + 审查 + Curator）
+- Gateway 核心文件：`GatewayCommand.swift`、`GatewayRunner.swift`(actor)、`TelegramAdapter.swift`(actor)、`ReviewScheduler.swift`(actor)、`CuratorScheduler.swift`(actor)
+- TG 体验层（Epic 32）：`TGMessageFormatter`（三重降级）、`TGStreamingController`（Edit-based 流式推送）、`TGCommandRegistry`、`TGCommandRouter`、`TGInteractiveSessionStore`、`TGErrorSanitizer`、`TGModels`
+- plist 配置：KeepAlive Crashed=true、ThrottleInterval=10、auth-key 通过 `AXION_AUTH_KEY` 环境变量传递
+- 二进制路径解析：`AXION_BIN` > 当前进程路径 > `which axion`
 - 使用 launchctl bootstrap/bootout（不使用已废弃的 load/unload）
-- DaemonService 通过注入 `@Sendable` 闭包实现 launchctl 调用的可测试性
-- ServerCommand authKey 优先级：CLI `--auth-key` > `AXION_AUTH_KEY` 环境变量 > nil
-
-### Gateway 模式（D9/D10/D11）
-
-Gateway 是 daemon 的超集：包含 HTTP API + Telegram adapter + 后台审查 + Curator 自动调度。
-
-**CLI 命令：**
-- `axion gateway` — 前台启动（开发调试）
-- `axion gateway install` — 注册为 launchd 守护进程（开机自启）
-- `axion gateway status` — 运行状态、TG 连接、上次审查/curator 时间
-- `axion gateway uninstall` — 停止并卸载
-
-**核心文件：**
-```
-Sources/AxionCLI/Commands/GatewayCommand.swift    # CLI 入口
-Sources/AxionCLI/Services/GatewayRunner.swift     # 编排器（actor）
-Sources/AxionCLI/Services/TelegramAdapter.swift   # TG Bot API 长轮询（actor）
-Sources/AxionCLI/Services/ReviewScheduler.swift   # 后台审查调度（actor）
-Sources/AxionCLI/Services/CuratorScheduler.swift  # Curator 自动调度（actor）
-```
-
-**Telegram 体验层文件（Epic 32）：**
-```
-Sources/AxionCLI/Services/Telegram/TGMessageFormatter.swift         # MarkdownV2/HTML/Plain 三重降级 + 消息分段
-Sources/AxionCLI/Services/Telegram/TGStreamingController.swift      # Edit-based 流式推送（actor）
-Sources/AxionCLI/Services/Telegram/TGCommandRegistry.swift          # 命令注册表（Sendable struct）
-Sources/AxionCLI/Services/Telegram/TGCommandRouter.swift            # 薄路由层
-Sources/AxionCLI/Services/Telegram/TGInteractiveSessionStore.swift  # Inline keyboard 交互（actor）
-Sources/AxionCLI/Services/Telegram/TGErrorSanitizer.swift           # API 错误分类 + 用户友好消息
-Sources/AxionCLI/Services/Telegram/TGModels.swift                   # TG API Codable 模型
-Sources/AxionCLI/Services/Events/AgentPausedEvent.swift             # SDK pause → EventBus 桥接事件
-```
-
-**plist 配置：**
-- Label: `dev.axion.gateway`（与 `dev.axion.server` 独立）
-- 路径: `~/Library/LaunchAgents/dev.axion.gateway.plist`
-- 日志: `~/.axion/gateway.log` + `~/.axion/gateway.err.log`
-
-**TG 安全：**
-- `AXION_TELEGRAM_BOT_TOKEN` 环境变量配置 bot token（不写入 config.json）
-- `AXION_TELEGRAM_ALLOWED_USERS` 环境变量配置用户 ID 白名单（逗号分隔）
-- 未授权消息静默丢弃
-
-**后台审查（D11）：**
-- 审查 agent 通过 `AgentBuilder.buildReviewAgent()` 创建独立实例
-- 工具白名单：只有 memory + skill 操作，无 MCP/Helper
-- 不与主任务共享 AxionRuntime 实例
-
-**Curator 自动调度：**
-- 空闲 > `curatorIdleHours`（默认 2h）+ 距上次 > `curatorIntervalHours`（默认 168h = 7d）时触发
-- 调用现有 `IntelligentCurator.execute()`
-
-**与 daemon 的关系：**
-- `axion daemon` → 仅 HTTP API（AxionBar），功能不变
-- `axion gateway` → HTTP API + TG + 自进化，是 daemon 超集
-- 两者可独立运行，但通常只需 gateway
 
 ### API 运行状态持久化
 
-daemon 模式下 server 崩溃/重启后，从磁盘恢复任务状态。
-
-**存储路径：**
-```
-~/.axion/api-runs/                    # API 持久化目录（与 CLI trace 的 runs/ 分开）
-├── {runId}/
-│   ├── api-output.json               # TrackedRun JSON（每次状态更新原子覆写）
-│   └── api-events.jsonl              # SSE 事件追加写入
-```
-
-**核心文件：**
-```
-Sources/AxionCLI/API/AxionRunPersistence.swift   # Epic 21: wraps SDK persistence for 磁盘读写
-Sources/AxionCLI/API/AxionRunRecovery.swift      # Epic 21: wraps SDK recovery for 启动恢复
-```
-
-**恢复状态映射：**
-
-| 恢复前状态 | 恢复后状态 | 说明 |
-|-----------|-----------|------|
-| queued/running/resuming/userTakeover | failed | 标记中断，error="server interrupted" |
-| intervention_needed | intervention_needed | 保持不变，等待用户处理 |
-| completed/failed/cancelled | 不变 | 已终态，无需干预 |
-
-**关键设计决策：**
-- AxionRunPersistence wraps SDK's RunPersistenceService (Sendable struct) with Axion-specific directory
-- api-output.json 使用原子写入（write-to-tmp + rename）
-- api-events.jsonl 使用追加写入（每行一个 JSON）
-- 持久化失败不阻塞主流程（catch + warning 日志）
-- SSE 订阅时内存 replay buffer miss → 自动从磁盘加载并缓存
-- PersistedSSEEvent Codable wrapper 桥接 SSEEvent enum 到 JSONL
+- 存储路径：`~/.axion/api-runs/{runId}/api-output.json`（原子覆写）+ `api-events.jsonl`（追加写入）
+- 核心文件：`AxionRunPersistence.swift`（封装 SDK RunPersistenceService）、`AxionRunRecovery.swift`（启动恢复）
+- 恢复状态映射：queued/running/resuming/userTakeover → failed；intervention_needed 保持不变；终态不干预
+- SSE replay buffer miss → 自动从磁盘加载并缓存
 
 ---
 
@@ -948,371 +812,42 @@ Sources/AxionCLI/API/AxionRunRecovery.swift      # Epic 21: wraps SDK recovery f
 
 ## Shifted Key 映射（Planner Prompt 需要）
 
-Planner 的 system prompt 必须包含符号键到基础键的映射，告诉 LLM 如何生成 hotkey 参数：
-
-| 符号 | 基础键 |
-|------|--------|
-| `!` | `shift+"1"` |
-| `@` | `shift+"2"` |
-| `#` | `shift+"3"` |
-| `$` | `shift+"4"` |
-| `%` | `shift+"5"` |
-| `^` | `shift+"6"` |
-| `&` | `shift+"7"` |
-| `*` | `shift+"8"` |
-| `(` | `shift+"9"` |
-| `)` | `shift+"0"` |
-| `_` | `shift+"-"` |
-| `+` | `shift+"="` |
-| `{` | `shift+"["` |
-| `}` | `shift+"]"` |
-| `|` | `shift+"\"` |
-| `:` | `shift+";"` |
-| `"` | `shift+"'"` |
-| `<` | `shift+","` |
-| `>` | `shift+"."` |
-| `?` | `shift+"/"` |
-| `~` | `shift+"\`"` |
-
-参考：`src/planner.ts:41-63`（SHIFTED_KEY_MAP）
+Planner 的 system prompt 必须包含符号键到基础键的映射（`!` → `shift+"1"`, `@` → `shift+"2"`, ... 全部 21 对），告诉 LLM 如何生成 hotkey 参数。完整映射表参见 `src/planner.ts:41-63`（SHIFTED_KEY_MAP）。
 
 ---
 
 ## 数据流（完整链路）
 
-```
-用户输入 "axion run '打开计算器'"
-    │
-    ▼
-RunCommand.parse()                          # ArgumentParser 解析
-    │
-    ├── (skill path: /skill-name → AxionRuntime.executeSkill())  # [Epic 27] skill also through runtime
-    │
-    ▼
-AxionRuntime(eventBus:)                     # [Epic 26] 统一执行入口
-    ├── registerHandlers(7 handlers)         # Cost, VisualDelta, SeatMonitor, Memory, Review, Notification, Trace
-    ├── startEventLoop()
-    ├── runtime.execute(buildConfig, runOverrides)
-    │       └── AgentBuilder.build() internally → agent.stream(task)
-    │                │
-    │                ├── LLM 规划 + 工具调用  # SDK Agent 自动编排
-    │                │        └── ToolExecutor → MCP tools (Helper)
-    │                │
-    │                └── EventBus emit AgentEvents
-    │                         ├── CostEventHandler → cost tracking
-    │                         ├── VisualDeltaHandler → screenshot comparison
-    │                         ├── SeatMonitorHandler → external activity detection
-    │                         ├── MemoryProcessingHandler → memory extraction
-    │                         ├── ReviewHandler → review scheduling
-    │                         ├── NotificationHandler → desktop notification
-    │                         └── TraceEventHandler → trace recording
-    │
-    ├── stopEventLoop()
-    └── SDKTerminalOutputHandler             # 实时输出到终端
-```
-
-### HTTP API Server 数据流（Epic 5 + Epic 26）
+### 主执行流（CLI）
 
 ```
-外部系统 POST /v1/runs {"task": "打开计算器"}
-    │
-    ▼
-ServerCommand (axion server --port 4242)      # Hummingbird Application
-    │
-    ├── AxionRunPersistence()                  # [Epic 21] 包装 SDK 持久化
-    ├── AxionRunTracker(persistence:)          # [Epic 21] 包装 SDK RunTracker
-    ├── AxionRunRecovery.recover()             # [Epic 21] 包装 SDK 恢复逻辑
-    ├── EventBroadcaster(persistence:)         # SSE 事件广播 + 事件持久化
-    │
-    ▼
-AxionAPI.registerRoutes()                     # 路由分发
-    │
-    ├──► AuthMiddleware (如启用 --auth-key)    # Bearer token 认证
-    │
-    ├──► ConcurrencyLimiter.tryAcquire()       # 并发槽位检查（SDK 提供）
-    │
-    ├──► AxionRunTracker.submitRun() → runId   # 生成任务 ID
-    │        └──► AxionRunPersistence.persistRecordSafely()  # 持久化
-    │
-    ├──► 返回 HTTP 202 {"run_id": "...", "status": "running"}
-    │
-    └──► server.runHandler {                   # [Epic 26] 使用 AxionRuntime
-            AxionRuntime(eventBus:)            # 创建 Runtime 实例
-            ├── registerHandlers(cost + trace) # API 只注册 2 个 handler
-            ├── EventBusBridge(eventBus:broadcaster:runId:)  # AgentEvents → SSE
-            ├── bridge.start(onComplete:)      # 终端事件时更新 RunCoordinator
-            ├── runtime.execute(buildConfig, runOverrides)    # 执行 agent
-            └── 更新 RunCoordinator + SDK tracker + broadcaster.complete()
-        }
-
-GET /v1/runs/{runId}/events (SSE)
-    │
-    ▼
-EventBroadcaster.subscribeWithReplay(runId)   # 订阅实时事件流
-    ├── 内存 replay buffer 命中 → 直接重放
-    └── 未命中 → 从 api-events.jsonl 磁盘加载
-    │
-    ▼
-ResponseBody(asyncSequence:)                   # Hummingbird 流式响应
+RunCommand.parse() → AxionRuntime(eventBus:) → AgentBuilder.build() → agent.stream(task) → SDK Agent Loop
+    │                                                    │
+    ├── registerHandlers(7: Cost, VisualDelta, SeatMonitor, Memory, Review, Notification, Trace)
+    ├── EventBus emit AgentEvents → 各 EventHandler 处理
+    └── SDKTerminalOutputHandler → 实时输出到终端
 ```
 
-### MCP Server 数据流（Epic 6）
+### HTTP API Server（Epic 5+26）
 
-```
-外部 Agent (Claude Code) stdin/stdout MCP JSON-RPC
-    │
-    ▼
-McpCommand (axion mcp)                           # CLI 子命令入口
-    │
-    ▼
-MCPServerRunner.run()                            # 编排器（使用 AgentBuilder.BuildResult）
-    │
-    ├──► AgentBuilder.build()                    # [Epic 21] 返回 BuildResult
-    ├──► agent.assembleFullToolPool()            # 连接 Helper，获取工具列表
-    ├──► RunTracker + TaskQueue                  # 任务追踪和串行化（SDK 组件）
-    │
-    └──► AgentMCPServer(name:"axion", tools:)    # SDK MCP server
-             │
-             ├── tools/list → [Helper 工具 + run_task + query_task_status]
-             ├── tool_call "run_task" → TaskQueue.enqueue() → agent.prompt(task)
-             └── tool_call "query_task_status" → RunTracker.getRun(runId)
-```
+`POST /v1/runs` → AxionAPI → AuthMiddleware → ConcurrencyLimiter → AxionRunTracker.submitRun() → AxionRuntime（仅注册 Cost + Trace handler）→ EventBusBridge → SSE 推送。崩溃恢复通过 AxionRunPersistence（原子 JSON）+ AxionRunRecovery 实现。
 
-### Gateway 数据流（D9/D10/D11）
+### MCP Server（Epic 6）
 
-```
-axion gateway (长驻进程)
-    │
-    ├── 启动 → GatewayRunner (actor)
-    │       ├── 启动 HTTP API (复用 AxionAPI + Hummingbird)
-    │       ├── 启动 TelegramAdapter (actor) → getUpdates 长轮询
-    │       ├── 启动 CuratorScheduler (actor) → 定时检查
-    │       └── 注册信号处理 (SIGTERM/SIGINT)
-    │
-    ▼ TG 消息到达
-TelegramAdapter.pollLoop() 收到 Update
-    │
-    ├── 用户白名单检查 → 未授权则静默丢弃
-    │
-    ├── 文本消息 → 提交任务到 TaskQueue (ConcurrencyLimiter=1)
-    │       │
-    │       ▼ (排队执行)
-    │   AxionRuntime.execute(buildConfig, runOverrides)
-    │       ├── AgentBuilder.build() → agent
-    │       ├── agent.stream(task) → SDK Agent Loop
-    │       │       ├── LLM 规划 + 工具调用
-    │       │       │       ├── MCP tools (Helper) → AX 桌面操作
-    │       │       │       └── Bash tool → 代码执行
-    │       │       └── EventBus emit AgentEvents
-    │       │               ├── TGEventHandler → TG 推送进展（节流 5 秒）
-    │       │               ├── EventBridge → SSE (AxionBar)
-    │       │               └── TraceEventHandler → trace 记录
-    │       │
-    │       └── 完成 → TG 推送最终结果
-    │
-    ├── /status 命令 → 查询 GatewayRunner 状态
-    └── /skills 命令 → 查询 SkillRegistry
+`axion mcp` → MCPServerRunner → AgentBuilder.build() → AgentMCPServer → tools/list + run_task + query_task_status。任务通过 TaskQueue 串行化。
 
-    ▼ run 完成后（后台审查）
-ReviewScheduler 监听 AgentCompletedEvent
-    │
-    ├── ReviewScheduleConfig.shouldReview() → 是
-    │
-    └── AgentBuilder.buildReviewAgent() → 独立 agent 实例
-            ├── 工具白名单：memory + skill（无 MCP/Helper）
-            ├── 复用 buildFullSystemPrompt()（前缀缓存共享）
-            └── 审查结果 → FactStore + SkillRegistry 写入
+### Gateway（D9/D10/D11）
 
-    ▼ 空闲时（Curator 自动调度）
-CuratorScheduler 检查：lastTaskTime + curatorIdleHours < now
-                     && lastCuratorTime + curatorIntervalHours < now
-    │
-    └── IntelligentCurator.execute()
-            ├── LLMSkillEvolver → SKILL.md 内容更新
-            ├── 合并重叠技能
-            ├── 归档长期未用技能（永不自动删除）
-            └── 结果 → .curator_state 持久化
-```
+Gateway = HTTP API + TelegramAdapter + ReviewScheduler + CuratorScheduler。TG 消息经白名单过滤后提交 TaskQueue（ConcurrencyLimiter=1），执行完毕后 ReviewScheduler 触发后台审查（工具白限 memory+skill），CuratorScheduler 在空闲时自动调度 IntelligentCurator。详见 architecture.md D9/D10/D11。
 
-### Takeover 数据流（Epic 7）
+### 其他数据流（概要）
 
-```
-Agent Loop 执行中 → 工具调用受阻
-    │
-    ▼
-Agent 调用 pause_for_human 工具 → SDK 内部 Agent.pause(reason:)
-    │
-    ▼
-SDK 发出 .system(.paused, PausedData) SDKMessage
-    │
-    ▼
-RunCommand stream 循环收到 .paused 消息
-    │
-    ├──► TakeoverIO.displayTakeoverPrompt()     # 显示阻塞原因和操作选项
-    │         │
-    │         ▼ (用户输入)
-    │    TakeoverIO.readTakeoverAction()
-    │         │
-    │    ┌────┼────┐
-    │    ▼    ▼    ▼
-    │  Enter  skip  abort
-    │    │    │     │
-    │    ▼    ▼     ▼
-    │ resume skip  interrupt()
-    │ (context:   (context:  → .cancelled
-    │  "用户已    "skip")
-    │  完成手动
-    │  操作")
-    │    │    │
-    │    ▼    ▼
-    └──► Agent 继续执行
-         │
-    (超时 5 分钟)
-         ▼
-    SDK 发出 .system(.pausedTimeout) → 任务 failed
-```
-
-### Fast Mode 数据流（Epic 7）
-
-```
-axion run "打开计算器" --fast
-    │
-    ▼
-RunCommand (fast=true)
-    │
-    ├──► buildFullSystemPrompt(fast: true)       # 追加 FAST mode 指令
-    │    "生成最小步骤(1-3步)，跳过 discovery，不调用 screenshot 验证"
-    │
-    ├──► computeEffectiveMaxSteps(fast: true)    # min(userValue, 5)
-    ├──► computeEffectiveMaxTokens(fast: true)   # 2048 (vs 标准 4096)
-    │
-    └──► createAgent + agent.stream(task)        # 标准 Agent Loop，参数调优
-         │
-         ▼ (执行结果)
-    ┌────┼────┐
-    ▼    ▼    ▼
-  成功  失败  maxTurns
-    │    │     │
-    ▼    ▼     ▼
- "Fast mode  "建议去掉  "建议去掉
-  完成。      --fast"   --fast"
-  N步,耗时
-  X秒。"
-```
-
----
-
-### 录制数据流（Epic 9）
-
-```
-axion record "打开计算器"
-    │
-    ▼
-RecordCommand.run()
-    │
-    ├── ConfigManager.loadConfig()
-    ├── HelperProcessManager.start()
-    │
-    ├── MCP call: start_recording → Helper
-    │       │
-    │       ▼
-    │   EventRecorderService.startRecording()
-    │       ├── CGEventTap.activate() (listen-only)
-    │       ├── NSWorkspace.addObserver (app switch)
-    │       └── 500ms timer: sampleWindowContext()
-    │
-    ├── "录制中... 按 Ctrl-C 结束录制"
-    │
-    └── SIGINT handler:
-            │
-            ├── MCP call: stop_recording → Helper
-            │       → [RecordedEvent] + [WindowSnapshot]
-            ├── Save ~/.axion/recordings/{name}.json
-            └── Display recording summary
-```
-
-### 技能编译数据流（Epic 9）
-
-```
-axion skill compile open_calculator [--param url]
-    │
-    ▼
-SkillCompileCommand.run()
-    │
-    ├── Load ~/.axion/recordings/open_calculator.json → Recording
-    │
-    ├── RecordingCompiler.compile(recording:paramNames:)
-    │       ├── Event → SkillStep mapping (5 types)
-    │       ├── Auto parameter detection (URL/path/long text)
-    │       ├── Manual --param override
-    │       └── Redundancy optimization (merge, dedup, remove)
-    │
-    ├── Save ~/.axion/skills/open_calculator.json → Skill JSON
-    └── Display compilation summary
-```
-
-### 技能执行数据流（Epic 9）
-
-```
-axion skill run open_calculator --param url=https://example.com
-    │
-    ▼
-SkillRunCommand.run()
-    │
-    ├── Load ~/.axion/skills/open_calculator.json → Skill
-    ├── Validate required parameters
-    │
-    ├── HelperProcessManager.start()
-    ├── HelperMCPClientAdapter(manager) → MCPClientProtocol
-    │
-    ├── SkillExecutor(client).execute(skill:paramValues:)
-    │       │
-    │       ▼ (每个 SkillStep)
-    │   resolveParams()     — {{param}} → value/default
-    │   toStringValueDict() — String → Value (.int() or .string())
-    │   MCP callTool()      — 调用 Helper 执行操作
-    │   Retry once on failure
-    │
-    ├── Update skill file (lastUsedAt, executionCount)
-    ├── HelperProcessManager.stop()
-    └── Display execution summary
-```
-
-### 菜单栏 App 数据流（Epic 10）
-
-```
-AxionBar 启动 (MenuBarExtra)
-    │
-    ├── StatusBarController.init()
-    │       ├── BackendHealthChecker.startChecking()     # 5 秒轮询 GET /v1/health
-    │       ├── ServerProcessManager.findAxionCLI()      # PATH + Homebrew + .build 查找
-    │       ├── HotkeyConfigManager.load()               # ~/.axion/hotkeys.json
-    │       └── GlobalHotkeyService.register()           # NSEvent 全局/本地监听
-    │
-    ├── MenuBarExtra → AxionBarMenuContent (SwiftUI)     # 菜单栏下拉菜单
-    │
-    ├── 用户点击 "快速执行"
-    │       ├── QuickRunWindow (NSPanel + SwiftUI)
-    │       ├── TaskSubmissionService.submit(task:)      # POST /v1/runs
-    │       └── startRunMonitoring(runId:)               # SSE 订阅进度
-    │               ├── SSEEventClient.connect()         # GET /v1/runs/{id}/events
-    │               ├── 更新 currentStep/totalSteps
-    │               └── run_completed → macOS 通知
-    │
-    ├── 用户点击 "技能列表" 菜单项
-    │       ├── SkillService.fetchSkills()               # GET /v1/skills
-    │       └── SkillService.runSkill(name:)             # POST /v1/skills/{name}/run
-    │               └── 复用 startRunMonitoring()         # 技能执行也走 SSE 管线
-    │
-    ├── 全局热键触发
-    │       ├── GlobalHotkeyService 匹配 modifiers + keyCode
-    │       └── StatusBarController.runSkill() / submitTask()
-    │
-    └── 用户点击 "任务历史"
-            ├── RunHistoryWindow (NSWindow + SwiftUI)
-            ├── RunHistoryService.fetchHistory(limit: 20) # GET /v1/runs
-            └── 点击历史任务 → TaskDetailPanel
-```
+- **Takeover（Epic 7）**：Agent 调用 pause_for_human → SDK .paused 事件 → TakeoverIO 显示选项 → Enter/skip/abort
+- **Fast Mode（Epic 7）**：maxSteps=5, maxTokens=2048, 跳过 discovery 和 screenshot 验证
+- **录制（Epic 9）**：RecordCommand → Helper start_recording（CGEventTap listen-only）→ Ctrl-C stop → 保存 JSON
+- **技能编译（Epic 9）**：RecordingCompiler.compile() → Event→SkillStep mapping + 自动参数检测 + 冗余优化
+- **技能执行（Epic 9）**：SkillExecutor → resolveParams → MCP callTool → 失败重试一次
+- **菜单栏 App（Epic 10）**：AxionBar → BackendHealthChecker → POST /v1/runs → SSE 订阅进度
 
 ---
 
