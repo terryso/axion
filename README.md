@@ -24,12 +24,6 @@ Axion is a Swift-based AI agent that lives in your terminal. Type `axion` and st
   <img src="docs/demo.gif" alt="Axion Demo" width="700">
 </p>
 
-<p align="center">
-  <a href="https://youtu.be/W--tKrHeB3g">
-    <img src="docs/demo_thumbnail.png" alt="Watch on YouTube" width="350">
-  </a>
-</p>
-
 **Key highlights:**
 
 - **Interactive Coding Agent** — `axion` launches a Claude Code–like REPL with streaming output, 15 slash commands (`/help`, `/clear`, `/diff`, `/model`, `/cost`, `/copy`, `/status`, …), file edit approval diffs, multiline input with CJK support, and session resume
