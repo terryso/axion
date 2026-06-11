@@ -11,6 +11,9 @@ xcuserdata/
 *.swp
 *~
 
+# Backup files
+*.bak
+
 # Secrets
 .env
 *.env.local
