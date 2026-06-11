@@ -153,6 +153,7 @@ axion run --no-review "打开计算器"          # 跳过运行后审查
 | **代码智能** | `LSP` | 跳转定义、查找引用、悬停信息 |
 | **记忆** | `memory` | 跨会话持久化和召回知识 |
 | **技能** | `Skill` | 调用专业化工作流技能 |
+| **存储与清理** | `storage_scan`、`propose_storage_plan`、`execute_storage_plan`、`undo_storage_op`、`scan_app_uninstall`、`execute_app_uninstall` | 安全整理目录、找大文件、卸载 App（默认移废纸篓、可撤销、执行前需确认） |
 | **桌面** | 21 个 MCP 工具 | 原生 macOS 自动化（见下文） |
 
 ### 桌面自动化（21 个 MCP 工具）

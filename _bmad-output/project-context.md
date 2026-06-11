@@ -357,6 +357,8 @@ try await withTaskCancellationHandler {
 19. **直接使用 `Task` 而非 `_Concurrency.Task`** — OpenAgentSDK 有 `Task` 类型名冲突，Gateway/Telegram 代码中必须使用 `_Concurrency.Task`
 20. **在 Chat/ 模块中使用非纯函数或直接 I/O** — Chat/ 组件必须使用纯函数或注入闭包（`readLineFn`、`isTTYFn`、`writeStdout`）；禁止逻辑类直接依赖 SDK 类型或做 I/O 操作（Epic 37 模式）
 21. **修改 `axion run` 路径代码来实现 Chat 功能** — Chat 和 desktop automation 通过 `AgentMode` 枚举隔离；Chat 功能仅修改 `ChatCommand` 和 `Chat/` 目录，`RunCommand` / `RunOrchestrator` 路径完全独立
+22. **Storage 域引入 `delete`/永久删除动作或使用 sudo** — `StorageAction` 契约层只有 `move`/`trash`/`createDirectory`/`uninstallApp`/`scanOnly`，破坏性操作一律 `FileManager.trashItem`（移废纸篓）+ 可撤销 manifest；永久删除在类型层即不可表达（Epic 39 安全红线）
+23. **`SupportDataScanService` 调用通用 `StorageExclusions.evaluate()`** — 通用排除会吃掉整个 `~/Library`；support 数据扫描必须用 bundle-id 精确路径探测，不放宽通用排除规则（Epic 39 架构约束）
 
 ---
 
@@ -702,6 +704,41 @@ Tests/AxionCLITests/Chat/                 ~10 test files（镜像源结构）
 
 ---
 
+### 文件、存储与 App 管理（Epic 39）
+
+Axion 的文件/存储/App 管理域 —— 安全、可解释、可回滚的 Mac 文件管家。所有破坏性操作先出计划、默认移废纸篓、可撤销。入口：`axion run` 与交互模式首发；Telegram 预留审批兼容。
+
+**模块归属（严格分层）：**
+- 模型在 `AxionCore/Models/Storage/`（`Storage/`、`Storage/App/`、`Storage/Approval/` 三组，纯 Codable，snake_case CodingKeys + `decodeIfPresent` 前向兼容）
+- 服务在 `Sources/AxionCLI/Services/Storage/`（含 `App/`、`Approval/` 子目录）；Agent 工具在 `Sources/AxionCLI/Tools/`
+- AxionHelper 不参与任何文件系统逻辑
+
+**安全模型（契约层不可表达危险，不靠审查纪律）：**
+- `StorageAction` 只有 `move` / `trash` / `createDirectory` / `uninstallApp` / `scanOnly` —— **没有 `delete` case**。永久删除在类型层即不可表达
+- 破坏性操作经 `FileManager.trashItem`（移废纸篓），不使用 sudo；`removeItem` 仅用于撤销时清理新建的空目录
+- 执行器纵深防御：plan 确认后、执行每个 item 前仍 re-validation（draft-first + per-item 复检），防 TOCTOU
+
+**Agent 工具（6 个，经 `AgentBuilder` 在 `!dryrun` 时注册，仅 `desktopAutomation` 模式）：**
+- 只读：`storage_scan`、`propose_storage_plan`、`scan_app_uninstall`
+- 副作用：`execute_storage_plan`、`undo_storage_op`、`execute_app_uninstall`
+
+**跨入口审批（SurfacePolicy）：**
+- 审批动作 surface 无关：`approvePlan` / `approveItem` / `rejectItem` / `cancel`（`StorageApprovalAction`），三入口共享语义
+- `SurfacePolicy.for(surface)` 表达入口差异：`run`/`chat` 全开放；`telegram` 保守（仅 `scanOnly`+`trash`，禁 typed 确认、禁高危数据）—— 高风险操作在远程入口更保守
+- `StorageApprovalDecision` 为纯函数；副作用通过 `StorageApproving` protocol 注入（`RunApprovalCollector` / `ChatApprovalCollector` / `TelegramApprovalReserve` 各一实现）
+
+**~/Library 排除/纳入张力（重要架构约束）：**
+- `StorageExclusions.evaluate()` 会排除整个 `~/Library`（保护系统库）
+- 但 `SupportDataScanService` 必须扫描 `~/Library/Application Support`、`Containers` 等 —— **刻意不调用通用排除**，改用 bundle-id 精确路径探测
+- 规则：通用保护规则与定向功能冲突时，定向功能用自己的精确匹配，**不放宽通用规则**
+
+**可撤销 manifest：**
+- `StorageManifest` 记录每项 `StorageItemOutcome`；`undo_storage_op` 从废纸篓恢复（App 卸载复用同一 `restoreFromTrash`）
+
+**卸载模式（`AppUninstallMode`，5 种）：** `scanOnly` / `uninstallAppOnly` / `uninstallWithSupportReview`（默认）/ `reviewSupportData` / `cleanApprovedSupportData`
+
+---
+
 ## 执行循环
 
 执行循环由 SDK Agent Loop 管理（非自建）。`AxionRuntime` 是 CLI 和 API 的统一执行入口（Epic 26），`AgentBuilder` 仅负责构建 `BuildResult`（agent + options + helper manager），不执行。
@@ -797,6 +834,7 @@ AxionRuntime.execute(buildConfig, runOverrides) → AgentBuilder.build() → age
 - Helper 仅通过 stdio 本地通信，不监听网络端口
 - 截图不持久化到磁盘 — 内存中处理，用完即弃
 - API Key 不出现在日志、trace、config.json 的任何位置
+- Storage 域破坏性操作只移废纸篓（`FileManager.trashItem`），契约层无 `delete` 动作、不使用 sudo；所有操作先出计划 + 可撤销 manifest（Epic 39）
 
 ---
 

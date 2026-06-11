@@ -664,6 +664,28 @@ ReviewScheduler (actor)
 
 ---
 
+### D13: Mac 文件、存储与 App 管理域（Epic 39）
+
+**决策：** 文件/存储/App 管理为独立域。模型在 `AxionCore/Models/Storage/`（`Storage/` + `App/` + `Approval/` 三组，纯 Codable），服务与 Agent 工具在 `AxionCLI/Services/Storage/`（含 `App/`、`Approval/` 子目录）与 `AxionCLI/Tools/`。AxionHelper 不参与任何文件系统逻辑（沿用 D1 硬性模块边界）。
+
+**安全模型 —— 契约层不可表达危险：**
+- `StorageAction` 仅 `move`/`trash`/`createDirectory`/`uninstallApp`/`scanOnly`，**无 `delete` case**。永久删除在类型层即不可表达，不靠审查纪律
+- 破坏性操作一律 `FileManager.trashItem`（移废纸篓）+ 可撤销 `StorageManifest`，不使用 sudo；`removeItem` 仅用于撤销时清理新建的空目录
+- 执行器纵深防御：plan 确认后、执行每个 item 前仍 re-validation（draft-first + per-item 复检），防 TOCTOU
+
+**跨入口审批 —— SurfacePolicy：**
+- 审批动作 surface 无关（`approvePlan`/`approveItem`/`rejectItem`/`cancel`），run/chat/telegram 三入口共享语义
+- `SurfacePolicy.for(surface)` 收敛入口差异：`run`/`chat` 全开放；`telegram` 保守（仅 `scanOnly`+`trash`，禁 typed 确认、禁高危数据）。高风险操作在远程入口更保守（对齐 epic 约束）
+- `StorageApprovalDecision` 为纯函数；副作用经 `StorageApproving` protocol 注入（`RunApprovalCollector`/`ChatApprovalCollector`/`TelegramApprovalReserve` 各一实现）
+
+**~/Library 排除/纳入张力：**
+- 通用 `StorageExclusions.evaluate()` 排除整个 `~/Library`（保护系统库）；但 `SupportDataScanService` 必须扫描 `~/Library/Application Support`、`Containers` 等
+- 解法：`SupportDataScanService` **不调用通用排除**，改用 bundle-id 精确路径探测。规则：通用保护与定向功能冲突时，定向功能用精确匹配，**不放宽通用规则**
+
+**6 个 Agent 工具：** 只读 `storage_scan`/`propose_storage_plan`/`scan_app_uninstall`；副作用 `execute_storage_plan`/`undo_storage_op`/`execute_app_uninstall`。经 `AgentBuilder` 在 `!dryrun` 时注册（仅 `desktopAutomation` 模式）。详见 `epic-39-retro-2026-06-12.md`。
+
+---
+
 ### 决策影响分析
 
 **实现顺序：**

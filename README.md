@@ -162,6 +162,7 @@ axion run --no-review "Open Calculator"          # skip post-run review
 | **Code Intelligence** | `LSP` | Go-to-definition, find-references, hover info |
 | **Memory** | `memory` | Persist and recall knowledge across sessions |
 | **Skills** | `Skill` | Invoke specialized workflow skills |
+| **Storage & Cleanup** | `storage_scan`, `propose_storage_plan`, `execute_storage_plan`, `undo_storage_op`, `scan_app_uninstall`, `execute_app_uninstall` | Safely organize folders, find large files, uninstall apps (trash by default, undoable, requires confirmation before acting) |
 | **Desktop** | 21 MCP tools | Native macOS automation (see below) |
 
 ### Desktop Automation (21 MCP Tools)
