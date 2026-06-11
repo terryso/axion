@@ -21,8 +21,12 @@ A full-spectrum AI agent for macOS — interactive coding, file editing, web sea
 Axion is a Swift-based AI agent that lives in your terminal. Type `axion` and start a conversation — it writes code, edits files, runs shell commands, searches the web, reads documentation, and when needed, takes control of macOS desktop apps via native accessibility APIs. Think of it as Claude Code with superpowers for GUI automation.
 
 <p align="center">
+  <img src="docs/demo.gif" alt="Axion Demo" width="700">
+</p>
+
+<p align="center">
   <a href="https://youtu.be/W--tKrHeB3g">
-    <img src="https://img.youtube.com/vi/W--tKrHeB3g/maxresdefault.jpg" alt="Axion Demo" width="700">
+    <img src="docs/demo_thumbnail.png" alt="Watch on YouTube" width="350">
   </a>
 </p>
 

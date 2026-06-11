@@ -21,8 +21,12 @@ macOS 全能 AI Agent —— 交互式编程、文件编辑、Web 搜索、Shell
 Axion 是一个基于 Swift 的终端 AI Agent。输入 `axion` 即可开始对话 —— 它能写代码、编辑文件、执行 Shell 命令、搜索网页、读取文档，需要时还能通过原生无障碍 API 直接控制 macOS 桌面应用。可以把它理解为「拥有 GUI 自动化超能力的 Claude Code」。
 
 <p align="center">
+  <img src="docs/demo.gif" alt="Axion Demo" width="700">
+</p>
+
+<p align="center">
   <a href="https://youtu.be/W--tKrHeB3g">
-    <img src="https://img.youtube.com/vi/W--tKrHeB3g/maxresdefault.jpg" alt="Axion Demo" width="700">
+    <img src="docs/demo_thumbnail.png" alt="在 YouTube 观看" width="350">
   </a>
 </p>
 
