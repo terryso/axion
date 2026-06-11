@@ -356,11 +356,13 @@ struct SlashPopupTests {
         #expect(output.contains("[skill]"), "Should contain [skill] tag")
     }
 
-    @Test("AC3: skill 描述截断超过 50 字符")
+    @Test("AC3: skill 描述折行截断含省略号")
     func skillDescriptionTruncation() {
-        let longDescSkill = SkillInfo(name: "test-skill", description: String(repeating: "A", count: 60), aliases: [])
+        // 创建一个长描述 skill，确保描述超出 2 行宽度
+        let longDesc = String(repeating: "测试描述内容", count: 20)  // 120 CJK chars → 240 display cols
+        let longDescSkill = SkillInfo(name: "test-skill", description: longDesc, aliases: [])
         let items = SlashPopup.filter(query: "/te", skills: [longDescSkill])
-        let output = SlashPopup.render(items: items, selectedIndex: -1, theme: nonTTYTheme)
+        let output = SlashPopup.render(items: items, selectedIndex: -1, theme: nonTTYTheme, termWidth: 60)
         #expect(output.contains("..."), "Long description should be truncated with ...")
     }
 

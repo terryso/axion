@@ -20,16 +20,16 @@ extension ChatComposer {
         mode = .slashPopup(query: buffer)
         selectedPopupIndex = 0
         let theme = ensureTheme()
+        let termWidth = max(1, Self.terminalColumns())
         popupItems = SlashPopup.filter(query: buffer, context: slashContext, skills: availableSkills)
-        let rendered = SlashPopup.render(items: popupItems, selectedIndex: selectedPopupIndex, theme: theme)
-        let lines = rendered.components(separatedBy: "\n")
-        popupRenderedLines = lines.count
+        let rendered = SlashPopup.render(items: popupItems, selectedIndex: selectedPopupIndex, theme: theme, termWidth: termWidth)
+        popupRenderedLines = Self.calculatePhysicalLines(rendered: rendered, termWidth: termWidth)
         // 写入弹窗内容到输入行下方
         // 注意：raw mode 关闭了 OPOST，\n 不会自动转 \r\n，
         // 必须手动确保每行 \r\n 以回到第 0 列
         let terminalRendered = rendered.replacingOccurrences(of: "\n", with: "\r\n")
         writeStdout("\r\n\(terminalRendered)")
-        // 光标移回输入行（弹窗 N 行在下方，上移 N 行）
+        // 光标移回输入行（弹窗 N 行在下方，上移 N 物理行）
         writeStdout("\u{1B}[\(popupRenderedLines)A")
         // 在输入行上写 prompt + buffer（\e[K 清除行尾残留）
         writeStdout("\r\(prompt)\(buffer)\u{1B}[K")
@@ -42,6 +42,7 @@ extension ChatComposer {
         }
         // clamp selectedPopupIndex
         let theme = ensureTheme()
+        let termWidth = max(1, Self.terminalColumns())
         popupItems = SlashPopup.filter(query: buffer, context: slashContext, skills: availableSkills)
         if popupItems.isEmpty {
             selectedPopupIndex = -1
@@ -50,8 +51,8 @@ extension ChatComposer {
         } else if selectedPopupIndex < 0 {
             selectedPopupIndex = 0
         }
-        let rendered = SlashPopup.render(items: popupItems, selectedIndex: selectedPopupIndex, theme: theme)
-        let newLines = rendered.components(separatedBy: "\n").count
+        let rendered = SlashPopup.render(items: popupItems, selectedIndex: selectedPopupIndex, theme: theme, termWidth: termWidth)
+        let newLines = Self.calculatePhysicalLines(rendered: rendered, termWidth: termWidth)
 
         // 清除旧 popup 输出
         clearPopupOutput()
@@ -68,8 +69,9 @@ extension ChatComposer {
     /// 仅重新渲染 popup 列表（选中变化时，不重新过滤）— AC6。
     mutating func refreshSlashPopupRender(prompt: String) {
         let theme = ensureTheme()
-        let rendered = SlashPopup.render(items: popupItems, selectedIndex: selectedPopupIndex, theme: theme)
-        let newLines = rendered.components(separatedBy: "\n").count
+        let termWidth = max(1, Self.terminalColumns())
+        let rendered = SlashPopup.render(items: popupItems, selectedIndex: selectedPopupIndex, theme: theme, termWidth: termWidth)
+        let newLines = Self.calculatePhysicalLines(rendered: rendered, termWidth: termWidth)
 
         clearPopupOutput()
         popupRenderedLines = newLines

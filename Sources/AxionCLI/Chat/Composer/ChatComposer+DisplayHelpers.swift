@@ -329,6 +329,22 @@ extension ChatComposer {
         return false
     }
 
+    /// 计算已渲染文本（popup / fileSearch 列表）占用的终端物理行数。
+    ///
+    /// 与 `calculateDisplayLines` 类似，但不需要 prompt 宽度偏移，
+    /// 纯粹按每行的 display width 和终端宽度计算物理行数。
+    /// 用于光标上移 `\e[N A` 的 N 值计算 — 必须用物理行数，
+    /// 否则当弹出行超宽折行时，光标上移量不足，导致重绘位置错误。
+    static func calculatePhysicalLines(rendered: String, termWidth: Int) -> Int {
+        let logicalLines = rendered.components(separatedBy: "\n")
+        var total = 0
+        for line in logicalLines {
+            let width = displayWidth(line)
+            total += max(1, (width + termWidth - 1) / termWidth)
+        }
+        return total
+    }
+
     /// 计算 prompt + buffer 占用的终端物理行数。
     ///
     /// 正确处理 buffer 中的 `\n`（如 bracket paste 多行内容）：

@@ -153,7 +153,7 @@ extension ChatComposer {
             theme: theme,
             totalMatches: totalFileMatches
         )
-        let newLines = rendered.components(separatedBy: "\n").count
+        let newLines = Self.calculatePhysicalLines(rendered: rendered, termWidth: max(1, Self.terminalColumns()))
 
         clearFileSearchOutput()
         fileSearchRenderedLines = newLines

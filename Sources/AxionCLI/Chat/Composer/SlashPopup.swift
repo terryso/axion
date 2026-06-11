@@ -142,61 +142,166 @@ struct SlashPopup {
 
     // MARK: - Render (AC1/AC3/AC6/AC8/AC9)
 
-    /// 渲染命令+skill 列表为 ANSI 终端输出。
-    static func render(items: [SlashPopupItem], selectedIndex: Int, theme: ChatTheme) -> String {
+    /// 渲染命令+skill 列表为 ANSI 终端输出（两列布局）。
+    ///
+    /// Claude Code 风格：左侧名称列 + 右侧描述列（最多 2 行，超出截断加 "..."）。
+    /// 根据 `termWidth` 自动计算列宽和描述折行，确保行宽不超终端宽度。
+    static func render(items: [SlashPopupItem], selectedIndex: Int, theme: ChatTheme, termWidth: Int = 80) -> String {
         guard !items.isEmpty else {
             return "  无匹配命令"
         }
 
-        // 计算最大名称宽度（用于对齐）
-        let maxNameWidth = items.map(\.kind.displayName.count).max() ?? 0
+        // 名称列宽度：displayName (ASCII) + optional " [skill]" tag
+        let nameColWidth = items.map { item in
+            let nameWidth = item.kind.displayName.count
+            let tagWidth = isSkillKind(item.kind) ? 9 : 0  // " [skill]"
+            return nameWidth + tagWidth
+        }.max() ?? 0
 
-        var lines: [String] = []
+        // 布局: marker(3) + numberField(4) + nameCol + gap(2) = descStartCol
+        let descStartCol = 3 + 4 + nameColWidth + 2
+        let descWidth = max(20, termWidth - descStartCol)
+
+        var resultLines: [String] = []
         for (index, item) in items.enumerated() {
             let isSelected = index == selectedIndex
             let marker = isSelected ? " \(selectedMarker) " : "   "
-            let number = "\(index + 1)."
+            let numberField = "\(index + 1).".padding(toLength: 4, withPad: " ", startingAt: 0)
 
+            // 名称（含匹配高亮）
             let displayName = item.kind.displayName
+            let namePart = buildNamePart(displayName, matchRange: item.matchRange, theme: theme)
 
-            let namePart: String
-            if let range = item.matchRange, theme.isTTY {
-                // 高亮匹配部分 — 使用 cyan + bold (AC8)
-                let before = String(displayName[displayName.startIndex..<range.lowerBound])
-                let matched = String(displayName[range])
-                let after = String(displayName[range.upperBound..<displayName.endIndex])
-                let highlight = "\u{1B}[1;36m\(matched)\u{1B}[0m"
-                namePart = before + highlight + after
-            } else {
-                namePart = displayName
-            }
+            // [skill] 标签
+            let tag = isSkillKind(item.kind) ? " [skill]" : ""
 
-            // 右侧描述部分
-            let descriptionPart: String
+            // 描述文本
+            let description: String
             switch item.kind {
-            case .command(let cmd):
-                descriptionPart = cmd.helpText
-            case .skill(let info):
-                // AC3: 描述截断超过 50 字符
-                let desc = info.description.count > 50
-                    ? String(info.description.prefix(50)) + "..."
-                    : info.description
-                descriptionPart = "[skill]  \(desc)"
+            case .command(let cmd): description = cmd.helpText
+            case .skill(let info): description = info.description
             }
 
-            let padding = String(repeating: " ", count: max(0, maxNameWidth - displayName.count))
+            // 描述折行：最多 2 行，超出截断加 "..."
+            let descLines = wrapDescription(description, maxWidth: descWidth, maxLines: 2)
 
-            // 选中行用 dim 整行标记
-            let line: String
+            // 名称列右侧 padding
+            let nameVisibleWidth = displayName.count + (isSkillKind(item.kind) ? 9 : 0)
+            let namePadding = String(repeating: " ", count: max(0, nameColWidth - nameVisibleWidth))
+
+            // 第一行: marker + number + name + tag + padding + gap + descLine0
+            let linePrefix = "\(marker)\(numberField)"
+            let firstLine: String
             if isSelected && theme.isTTY {
-                line = "\u{1B}[2m\(marker)\(number.padding(toLength: 4, withPad: " ", startingAt: 0))\(namePart)\(padding)\u{1B}[0m  \(descriptionPart)"
+                firstLine = "\u{1B}[2m\(linePrefix)\u{1B}[0m\(namePart)\u{1B}[2m\(tag)\(namePadding)\u{1B}[0m  \(descLines[0])"
             } else {
-                line = "\(marker)\(number.padding(toLength: 4, withPad: " ", startingAt: 0))\(namePart)\(padding)  \(descriptionPart)"
+                firstLine = "\(linePrefix)\(namePart)\(tag)\(namePadding)  \(descLines[0])"
             }
+            resultLines.append(firstLine)
 
-            lines.append(line)
+            // 描述续行（缩进对齐到描述列）
+            for i in 1..<descLines.count {
+                let contIndent = String(repeating: " ", count: descStartCol)
+                resultLines.append("\(contIndent)\(descLines[i])")
+            }
         }
 
-        return lines.joined(separator: "\n")
+        return resultLines.joined(separator: "\n")
+    }
+
+    // MARK: - Private: Name Helpers
+
+    private static func isSkillKind(_ kind: SlashPopupItemKind) -> Bool {
+        if case .skill = kind { return true }
+        return false
+    }
+
+    private static func buildNamePart(
+        _ displayName: String,
+        matchRange: Range<String.Index>?,
+        theme: ChatTheme
+    ) -> String {
+        guard let range = matchRange, theme.isTTY else {
+            return displayName
+        }
+        let before = String(displayName[displayName.startIndex..<range.lowerBound])
+        let matched = String(displayName[range])
+        let after = String(displayName[range.upperBound..<displayName.endIndex])
+        let highlight = "\u{1B}[1;36m\(matched)\u{1B}[0m"
+        return before + highlight + after
+    }
+
+    // MARK: - Private: Description Wrapping
+
+    /// 将描述文本按显示宽度折行，最多 `maxLines` 行，超出部分用 "..." 截断。
+    ///
+    /// 正确处理 CJK 宽字符：每个 CJK 字符占 2 列。
+    /// 按字符边界折行（CJK 天然按字符断词，英文可能在单词中间断开）。
+    private static func wrapDescription(_ text: String, maxWidth: Int, maxLines: Int = 2) -> [String] {
+        guard !text.isEmpty else { return [""] }
+        guard maxWidth > 3 else { return ["..."] }
+
+        let ellipsis = "..."
+        var lines: [String] = []
+        var idx = text.startIndex
+
+        while idx < text.endIndex && lines.count < maxLines {
+            let isLastLine = lines.count == maxLines - 1
+            let effectiveMax = isLastLine ? maxWidth - 3 : maxWidth
+
+            let lineStart = idx
+            var width = 0
+
+            while idx < text.endIndex {
+                let char = text[idx]
+                let cw = charDisplayWidth(char)
+                if width + cw > effectiveMax { break }
+                width += cw
+                idx = text.index(after: idx)
+            }
+
+            let hasMore = idx < text.endIndex
+            let line = String(text[lineStart..<idx])
+
+            if isLastLine && hasMore {
+                lines.append(line + ellipsis)
+            } else {
+                lines.append(line)
+            }
+        }
+
+        return lines.isEmpty ? [""] : lines
+    }
+
+    /// 计算单个字符的显示宽度。
+    /// CJK/wide → 2 列，default-ignorable → 0 列，其他 → 1 列。
+    private static func charDisplayWidth(_ char: Character) -> Int {
+        for scalar in char.unicodeScalars {
+            if scalar.properties.isDefaultIgnorableCodePoint { return 0 }
+            return isWideUnicodeScalar(scalar) ? 2 : 1
+        }
+        return 1
+    }
+
+    /// 判断 Unicode scalar 是否为宽字符（CJK/全角等）。
+    private static func isWideUnicodeScalar(_ scalar: Unicode.Scalar) -> Bool {
+        let v = scalar.value
+        // CJK Unified Ideographs
+        if v >= 0x4E00 && v <= 0x9FFF { return true }
+        // CJK Extension A
+        if v >= 0x3400 && v <= 0x4DBF { return true }
+        // CJK Compatibility Ideographs
+        if v >= 0xF900 && v <= 0xFAFF { return true }
+        // CJK Radicals / Kangxi
+        if v >= 0x2E80 && v <= 0x2FDF { return true }
+        // CJK Symbols, Hiragana, Katakana
+        if v >= 0x3000 && v <= 0x33FF { return true }
+        // Hangul Syllables
+        if v >= 0xAC00 && v <= 0xD7AF { return true }
+        // Fullwidth Forms
+        if v >= 0xFF01 && v <= 0xFF60 { return true }
+        // CJK Compatibility Forms
+        if v >= 0xFE30 && v <= 0xFE4F { return true }
+        return false
     }
 }
