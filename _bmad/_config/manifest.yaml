@@ -1,40 +1,40 @@
 installation:
   version: 6.8.0
   installDate: 2026-05-08T02:01:25.841Z
-  lastUpdated: 2026-05-26T01:26:27.016Z
+  lastUpdated: 2026-06-11T12:24:00.599Z
 modules:
   - name: core
     version: 6.8.0
     installDate: 2026-05-08T02:01:25.406Z
-    lastUpdated: 2026-05-26T01:26:27.013Z
+    lastUpdated: 2026-06-11T12:24:00.596Z
     source: built-in
     npmPackage: null
     repoUrl: null
   - name: bmm
     version: 6.8.0
     installDate: 2026-05-08T02:01:25.387Z
-    lastUpdated: 2026-05-26T01:26:27.013Z
+    lastUpdated: 2026-06-11T12:24:00.597Z
     source: built-in
     npmPackage: null
     repoUrl: null
   - name: tea
     version: v1.19.0
     installDate: 2026-05-08T02:01:25.747Z
-    lastUpdated: 2026-05-26T01:26:27.014Z
+    lastUpdated: 2026-06-11T12:24:00.598Z
     source: external
     npmPackage: bmad-method-test-architecture-enterprise
     repoUrl: https://github.com/bmad-code-org/bmad-method-test-architecture-enterprise
-    channel: stable
+    channel: pinned
     sha: 8734d51f24071ddbcb3617390b5fcddb4128ef77
   - name: automator
     version: main
     installDate: 2026-05-18T06:35:11.886Z
-    lastUpdated: 2026-05-26T01:26:27.016Z
+    lastUpdated: 2026-06-11T12:24:00.599Z
     source: external
     npmPackage: bmad-story-automator
     repoUrl: https://github.com/bmad-code-org/bmad-automator
     channel: next
-    sha: 1527d679da2f21c42d125daf804441fde8086129
+    sha: f332173a692ffbabb24734c31dedadfcf78b9ed1
 ides:
   - claude-code
-  - github-copilot
+  - codex

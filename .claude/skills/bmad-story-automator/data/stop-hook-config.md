@@ -89,7 +89,7 @@ For Codex, enable hooks in the target project's `.codex/config.toml`:
 
 ```toml
 [features]
-codex_hooks = true
+hooks = true
 ```
 
 Then add this to `.codex/hooks.json`:

@@ -99,7 +99,7 @@ rm -f /tmp/sa-${PROJECT_HASH}-output-*
 
 | Issue | Check |
 |-------|-------|
-| Hook not running | Valid hook config? For Codex, is `[features].codex_hooks = true` set and is the project trusted? Script executable? Session restarted? |
+| Hook not running | Valid hook config? For Codex, is `[features].hooks = true` set and is the project trusted? Script executable? Session restarted? |
 | "no such file" | BMAD installed? Path correct in the active runtime skills tree? Check each installed root, for example `.claude/skills`, `.agents/skills`, or `.codex/skills`. |
 | Premature stops | Marker exists? `storiesRemaining > 0`? v2 fix applied? |
 | Child sessions blocked | `STORY_AUTOMATOR_CHILD=true` set? Check spawn command. |

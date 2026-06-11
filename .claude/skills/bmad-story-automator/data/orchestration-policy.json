@@ -50,7 +50,6 @@
       "success": {
         "verifier": "create_story_artifact",
         "config": {
-          "glob": "_bmad-output/implementation-artifacts/{story_prefix}-*.md",
           "expectedMatches": 1
         }
       }

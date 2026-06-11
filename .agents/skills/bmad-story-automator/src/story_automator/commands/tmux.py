@@ -5,6 +5,7 @@ import shlex
 import time
 from pathlib import Path
 
+from story_automator.core.prompt_rendering import render_step_prompt
 from story_automator.core.runtime_layout import runtime_provider
 from story_automator.core.runtime_policy import PolicyError, load_runtime_policy, step_contract
 from story_automator.core.success_verifiers import resolve_success_contract, run_success_verifier
@@ -26,7 +27,6 @@ from story_automator.core.utils import (
     print_json,
     project_hash,
     project_slug,
-    read_text,
 )
 
 
@@ -208,13 +208,13 @@ def _build_cmd(args: list[str]) -> int:
         cli = "codex exec"
     quoted_prompt = shlex.quote(prompt)
     if agent == "codex" and not ai_command:
-        codex_home = f"/tmp/sa-codex-home-{project_hash(root)}"
+        codex_home_template = f"${{TMPDIR:-/tmp}}/sa-codex-home-{project_hash(root)}.XXXXXX"
         auth_src = os.path.expanduser("~/.codex/auth.json")
         model_flag = f" --model {shlex.quote(model)}" if model else ""
         print(
-            f'mkdir -p "{codex_home}"'
-            + f' && if [ -f "{auth_src}" ]; then ln -sf "{auth_src}" "{codex_home}/auth.json"; fi'
-            + f' && CODEX_HOME="{codex_home}" codex exec -s workspace-write -c \'approval_policy="never"\''
+            f'codex_home=$(mktemp -d "{codex_home_template}")'
+            + f' && if [ -f "{auth_src}" ]; then ln -sf "{auth_src}" "$codex_home/auth.json"; fi'
+            + ' && CODEX_HOME="$codex_home" codex exec -s workspace-write -c \'approval_policy="never"\''
             + f' -c \'model_reasoning_effort="high"\'{model_flag}'
             + f" --disable plugins --disable sqlite --disable shell_snapshot {quoted_prompt}"
         )
@@ -224,27 +224,16 @@ def _build_cmd(args: list[str]) -> int:
 
 
 def _render_step_prompt(contract: dict[str, object], story_id: str, story_prefix: str, extra_instruction: str) -> str:
-    prompt_cfg = contract.get("prompt") or {}
-    assets = (contract.get("assets") or {}).get("files") or {}
-    template = read_text(str(prompt_cfg.get("templatePath") or ""))
-    replacements = {
-        "{{story_id}}": story_id,
-        "{{story_prefix}}": story_prefix,
-        "{{label}}": str(contract.get("label") or ""),
-        "{{skill_line}}": _prompt_line("READ this skill first", str(assets.get("skill") or "")),
-        "{{workflow_line}}": _prompt_line("READ this workflow file next", str(assets.get("workflow") or "")),
-        "{{instructions_line}}": _prompt_line("Then read", str(assets.get("instructions") or "")),
-        "{{checklist_line}}": _prompt_line("Validate with", str(assets.get("checklist") or "")),
-        "{{template_line}}": _prompt_line("Use template", str(assets.get("template") or "")),
-        "{{extra_instruction}}": extra_instruction.strip() or str(prompt_cfg.get("defaultExtraInstruction") or ""),
-    }
-    for key, value in replacements.items():
-        template = template.replace(key, value)
-    return template
-
-
-def _prompt_line(prefix: str, value: str) -> str:
-    return f"{prefix}: {value}\n" if value else ""
+    try:
+        return render_step_prompt(
+            contract,
+            project_root=get_project_root(),
+            story_id=story_id,
+            story_prefix=story_prefix,
+            extra_instruction=extra_instruction,
+        )
+    except (OSError, ValueError) as exc:
+        raise PolicyError(str(exc)) from exc
 
 
 def cmd_heartbeat_check(args: list[str]) -> int:
@@ -286,7 +275,7 @@ def _status_check(args: list[str], codex: bool) -> int:
             continue
         idx += 1
     status = session_status(session, full=full, codex=codex, project_root=project_root, mode=runtime_mode())
-    print(",".join([status["status"], str(status["todos_done"]), str(status["todos_total"]), status["active_task"], str(status["wait_estimate"]), status["session_state"]]))
+    print(",".join(str(status[key]) for key in ["status", "todos_done", "todos_total", "active_task", "wait_estimate", "session_state"]))
     return 0 if codex else (0 if status["status"] != "error" else 1)
 
 
@@ -357,7 +346,7 @@ def cmd_monitor_session(args: list[str]) -> int:
     start = time.time()
     last_done = 0
     last_total = 0
-    for _poll in range(1, max_polls + 1):
+    for _ in range(1, max_polls + 1):
         if time.time() - start >= timeout_minutes * 60:
             return _emit_monitor(json_output, "timeout", last_done, last_total, "", f"exceeded_{timeout_minutes}m")
         status = session_status(session, full=False, codex=agent == "codex", project_root=project_root, mode=runtime_mode())
@@ -453,7 +442,7 @@ def _verify_monitor_completion(
 ) -> tuple[dict[str, object], str] | None:
     try:
         contract = resolve_success_contract(project_root, workflow, state_file=state_file)
-    except (FileNotFoundError, PolicyError):
+    except (FileNotFoundError, OSError, PolicyError, ValueError):
         return ({"verified": False, "reason": "verifier_contract_invalid"}, "")
     verifier_name = str(contract.get("verifier") or "").strip()
     if not verifier_name:
@@ -468,7 +457,7 @@ def _verify_monitor_completion(
             output_file=output_file,
             contract=contract,
         )
-    except (FileNotFoundError, IsADirectoryError, NotADirectoryError, PolicyError):
+    except (FileNotFoundError, IsADirectoryError, NotADirectoryError, OSError, PolicyError, ValueError):
         return ({"verified": False, "reason": "verifier_contract_invalid"}, verifier_name)
     return (result, verifier_name)
 
