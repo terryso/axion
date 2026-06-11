@@ -163,13 +163,24 @@ enum AgentBuilder {
             agentTools.append(MemoryTool(store: universalStore))
         }
 
-        // Storage tools (Story 39.1) — read-only scan + propose classification plan.
-        // Both are read-only (no file side effects); registered under !dryrun to match
-        // the storage-ops lifecycle. No execution happens here — execution is Story 39.2.
+        // Storage tools (Story 39.1 scan + propose [read-only]; Story 39.2 execute + undo [side-effect]).
+        // Registered under !dryrun to match the storage-ops lifecycle. Execute/undo write manifests
+        // to ~/.axion/storage-ops/ (draft-first, re-validated, recoverable via system Trash).
         if !dryrun {
             let storageScanner = StorageScanService()
             agentTools.append(StorageScanTool(scanner: storageScanner, config: config.storage))
             agentTools.append(ProposeStoragePlanTool(config: config.storage))
+
+            // Story 39.2: shared manifest store so execute + undo read/write the same operation files.
+            let manifestStore = StorageManifestStore(storageOpsDir: config.storage.storageOpsDir)
+            agentTools.append(ExecuteStoragePlanTool(
+                executor: StorageExecutor(manifestStore: manifestStore),
+                config: config.storage
+            ))
+            agentTools.append(UndoStorageOpTool(
+                undoer: StorageUndoService(manifestStore: manifestStore),
+                config: config.storage
+            ))
         }
 
         // 8b. Create review infrastructure (ReviewOrchestrator + IntelligentCurator + SkillUsageStore)
