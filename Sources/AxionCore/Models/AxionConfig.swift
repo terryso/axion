@@ -98,6 +98,8 @@ public struct AxionConfig: Equatable, Sendable {
     public var telegramTypingInterval: Double?
     public var env: [String: String]?
     public var promptDisplay: PromptDisplayConfig?
+    /// 存储整理配置（Story 39.1）。部分解码：缺失时回退到 `StorageConfig.default`。
+    public var storage: StorageConfig
 
     public static let `default` = AxionConfig(
         apiKey: nil,
@@ -132,7 +134,8 @@ public struct AxionConfig: Equatable, Sendable {
         telegramTypingEnabled: nil,
         telegramTypingInterval: nil,
         env: nil,
-        promptDisplay: nil
+        promptDisplay: nil,
+        storage: .default
     )
 
     public init(
@@ -168,7 +171,8 @@ public struct AxionConfig: Equatable, Sendable {
         telegramTypingEnabled: Bool? = nil,
         telegramTypingInterval: Double? = nil,
         env: [String: String]? = nil,
-        promptDisplay: PromptDisplayConfig? = nil
+        promptDisplay: PromptDisplayConfig? = nil,
+        storage: StorageConfig = .default
     ) {
         self.apiKey = apiKey
         self.provider = provider
@@ -203,6 +207,7 @@ public struct AxionConfig: Equatable, Sendable {
         self.telegramTypingInterval = telegramTypingInterval
         self.env = env
         self.promptDisplay = promptDisplay
+        self.storage = storage
     }
 
     public var tgTypingEnabled: Bool { telegramTypingEnabled ?? true }
@@ -218,6 +223,7 @@ extension AxionConfig: Codable {
         case gatewayEnabled, gatewayCuratorIdleHours, gatewayCuratorIntervalHours, gatewayTaskTimeoutMinutes, gatewayNotifyCuratorResults, gatewayMemoryNudgeInterval
         case telegramBotToken, telegramChatId, telegramAllowedUsers, telegramTypingEnabled, telegramTypingInterval
         case env, promptDisplay
+        case storage
     }
 
     public init(from decoder: Decoder) throws {
@@ -255,5 +261,6 @@ extension AxionConfig: Codable {
         telegramTypingInterval = try c.decodeIfPresent(Double.self, forKey: .telegramTypingInterval)
         env = try c.decodeIfPresent([String: String].self, forKey: .env)
         promptDisplay = try c.decodeIfPresent(PromptDisplayConfig.self, forKey: .promptDisplay)
+        storage = try c.decodeIfPresent(StorageConfig.self, forKey: .storage) ?? .default
     }
 }

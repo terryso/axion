@@ -163,6 +163,15 @@ enum AgentBuilder {
             agentTools.append(MemoryTool(store: universalStore))
         }
 
+        // Storage tools (Story 39.1) — read-only scan + propose classification plan.
+        // Both are read-only (no file side effects); registered under !dryrun to match
+        // the storage-ops lifecycle. No execution happens here — execution is Story 39.2.
+        if !dryrun {
+            let storageScanner = StorageScanService()
+            agentTools.append(StorageScanTool(scanner: storageScanner, config: config.storage))
+            agentTools.append(ProposeStoragePlanTool(config: config.storage))
+        }
+
         // 8b. Create review infrastructure (ReviewOrchestrator + IntelligentCurator + SkillUsageStore)
         let infra = buildReviewInfrastructure(
             config: config,
