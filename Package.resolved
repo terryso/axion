@@ -24,8 +24,8 @@
       "kind" : "remoteSourceControl",
       "location" : "https://github.com/terryso/open-agent-sdk-swift.git",
       "state" : {
-        "revision" : "d6e5e44109f16beeb8d8bcfad170322316eda6c6",
-        "version" : "0.8.1"
+        "revision" : "4506dcfa78d1d8c74de4e5c91bacf9be751cdd97",
+        "version" : "0.8.2"
       }
     },
     {
