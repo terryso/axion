@@ -5,8 +5,9 @@
         "hooks": [
           {
             "type": "command",
-            "command": "env PROJECT_ROOT=/Users/nick/CascadeProjects/axion /Users/nick/CascadeProjects/axion/.claude/skills/bmad-story-automator/scripts/story-automator stop-hook",
-            "timeout": 10
+            "command": "env PROJECT_ROOT=/Users/nick/CascadeProjects/axion /Users/nick/CascadeProjects/axion/.agents/skills/bmad-story-automator/scripts/story-automator stop-hook",
+            "timeout": 10,
+            "statusMessage": "Checking story automator state"
           }
         ]
       }

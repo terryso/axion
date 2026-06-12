@@ -1,2 +1,5 @@
 [mcp_servers.lovable]
 url = "https://mcp.lovable.dev"
+
+[features]
+hooks = true

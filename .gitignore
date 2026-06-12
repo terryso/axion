@@ -44,3 +44,4 @@ __pycache__/
 .understand-anything/
 outputs/
 webwright_outputs/
+.agents/.story-automator-active
