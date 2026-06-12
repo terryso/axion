@@ -242,14 +242,20 @@ struct AccessibilityEngineService: WindowManaging {
 
     /// Fetches the list of AX windows for a given process ID.
     /// Returns nil if AX is unavailable or the process has no windows.
-    func fetchAXWindows(pid: Int32) -> [AXUIElement]? {
+    func fetchAXWindows(pid: Int32, retries: Int = 3, delayMs: Int = 300) -> [AXUIElement]? {
         let axApp = AXUIElementCreateApplication(pid)
-        var windowsRef: AnyObject?
-        let axResult = AXUIElementCopyAttributeValue(axApp, kAXWindowsAttribute as CFString, &windowsRef)
-        guard axResult == .success, let axWindows = windowsRef as? [AXUIElement], !axWindows.isEmpty else {
-            return nil
+        for attempt in 0...retries {
+            var windowsRef: AnyObject?
+            let axResult = AXUIElementCopyAttributeValue(axApp, kAXWindowsAttribute as CFString, &windowsRef)
+            if axResult == .success, let axWindows = windowsRef as? [AXUIElement], !axWindows.isEmpty {
+                return axWindows
+            }
+            // App may have just launched — AX not ready yet; wait and retry
+            if attempt < retries {
+                usleep(UInt32(delayMs) * 1000)
+            }
         }
-        return axWindows
+        return nil
     }
 
     func parseCGBounds(_ dict: [String: Any]?) -> WindowBounds {
