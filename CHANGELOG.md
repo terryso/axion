@@ -5,6 +5,28 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.13.3] - 2026-06-13
+
+### Added
+
+- **Mac Storage/File/App 管理域** — 新增安全文件扫描、语义整理计划、执行与撤销链路
+- **App 卸载与支持数据扫描** — 支持 App 候选发现、详情分析、support data 审查与可撤销卸载
+- **多入口存储审批** — `run` / `chat` / Telegram 共用审批语义；非交互入口保守拒绝副作用
+- **/storage 与 /apps 体验** — 交互模式支持大文件扫描、目录整理、撤销和 App 候选选择
+- **Storage E2E 套件** — 覆盖工具链、审批链和端到端存储场景
+
+### Changed
+
+- 统一 system prompt 架构，移除独立 coding-agent prompt
+- 升级 OpenAgentSDK 到 0.8.3
+- 优化存储整理和 App 清理输出，支持 app detail 分析缓存
+
+### Fixed
+
+- App 列表默认隐藏路径、显示大小，并支持候选分页
+- Support data 表格显示完整路径，降低清理前误判风险
+- 新启动应用的 AX window 获取增加重试，提升可访问性就绪稳定性
+
 ## [0.13.2] - 2026-06-11
 
 ### Added
@@ -327,6 +349,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **CI** — GitHub Actions 单元测试 + 覆盖率报告
 - **Helper App Bundle** — 打包脚本 + 集成测试
 
+[0.13.3]: https://github.com/terryso/axion/releases/tag/v0.13.3
 [0.13.2]: https://github.com/terryso/axion/releases/tag/v0.13.2
 [0.13.1]: https://github.com/terryso/axion/releases/tag/v0.13.1
 [0.13.0]: https://github.com/terryso/axion/releases/tag/v0.13.0
