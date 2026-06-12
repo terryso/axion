@@ -36,7 +36,6 @@ struct AppListFormatter {
                 let absoluteIndex = safeStartIndex + index
                 let marker = numbered ? "\(absoluteIndex + 1)." : (selectedIndex == absoluteIndex ? "▶" : " ")
                 lines.append(formatItemLine(item, marker: marker, nameWidth: nameWidth, bundleWidth: bundleWidth))
-                lines.append(formatPathLine(item, terminalWidth: terminalWidth))
             }
         }
 
@@ -50,7 +49,7 @@ struct AppListFormatter {
         if !result.protectedMatches.isEmpty {
             lines.append("受保护或不可自动卸载的匹配项:")
             for item in result.protectedMatches.prefix(5) {
-                lines.append("  \(truncate(sanitize(item.displayName), width: 26))  \(sanitize(item.bundleIdentifier))  \(sanitize(item.bundlePath))")
+                lines.append("  \(truncate(sanitize(item.displayName), width: 26))  \(sanitize(item.bundleIdentifier))")
             }
         }
 
@@ -153,11 +152,6 @@ struct AppListFormatter {
         let running = item.isRunning ? "运行中" : "未运行"
         let source = sourceLabel(item.source)
         return "\(marker) \(name)  \(bundle)  \(version)  \(size)  \(running)  \(source)"
-    }
-
-    private static func formatPathLine(_ item: AppListItem, terminalWidth: Int) -> String {
-        let pathWidth = max(24, terminalWidth - 10)
-        return "    path: \(truncate(sanitize(item.bundlePath), width: pathWidth))"
     }
 
     private static func sourceLabel(_ source: AppListSource) -> String {

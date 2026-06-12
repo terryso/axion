@@ -194,10 +194,11 @@ struct AppListServiceTests {
         let output = AppListFormatter.renderList(result)
         #expect(output.contains("受保护"))
         #expect(output.contains("/apps --all"))
+        #expect(!output.contains("/Applications/Safari.app"))
     }
 
-    @Test("formatter renders candidate path")
-    func formatterRendersCandidatePath() {
+    @Test("formatter renders candidate size without path")
+    func formatterRendersCandidateSizeWithoutPath() {
         let item = AppListItem(
             displayName: "Slack",
             bundleIdentifier: "com.tinyspeck.slackmacgap",
@@ -220,7 +221,8 @@ struct AppListServiceTests {
         let output = AppListFormatter.renderList(result, selectedIndex: 0, terminalWidth: 80)
         #expect(output.contains("大小"))
         #expect(output.contains("1.0 KB"))
-        #expect(output.contains("path: /Applications/Slack.app"))
+        #expect(!output.contains("path:"))
+        #expect(!output.contains("/Applications/Slack.app"))
     }
 
     @Test("formatter renders paged window range and absolute numbering")
