@@ -153,6 +153,24 @@ struct AppListServiceTests {
         #expect(apps.first?.lastPathComponent == "Visual Studio Code.app")
     }
 
+    @Test("default size reader sums app bundle contents")
+    func defaultSizeReaderSumsAppBundleContents() throws {
+        let root = try makeTempDir("size")
+        defer { cleanup(root) }
+
+        let app = try makeApp(root: root, name: "Sized", bundleId: "com.example.sized")
+        let resources = app
+            .appendingPathComponent("Contents", isDirectory: true)
+            .appendingPathComponent("Resources", isDirectory: true)
+        try FileManager.default.createDirectory(at: resources, withIntermediateDirectories: true)
+        let payload = Data(repeating: 7, count: 4096)
+        try payload.write(to: resources.appendingPathComponent("payload.dat"))
+
+        let size = AppListService.defaultSizeReader(url: app)
+
+        #expect(size >= Int64(payload.count))
+    }
+
     @Test("formatter renders protected hint and deep search prompt")
     func formatterRendersHints() {
         let protected = AppListItem(
@@ -200,6 +218,8 @@ struct AppListServiceTests {
         )
 
         let output = AppListFormatter.renderList(result, selectedIndex: 0, terminalWidth: 80)
+        #expect(output.contains("大小"))
+        #expect(output.contains("1.0 KB"))
         #expect(output.contains("path: /Applications/Slack.app"))
     }
 

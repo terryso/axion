@@ -314,16 +314,61 @@ final class AppListService: AppListing, Sendable {
     }
 
     static func defaultSizeReader(url: URL) -> Int64 {
-        guard let rv = try? url.resourceValues(forKeys: [
+        let resolvedURL = url.resolvingSymlinksInPath()
+        guard let rv = try? resolvedURL.resourceValues(forKeys: sizeResourceKeys()) else { return 0 }
+
+        guard rv.isDirectory == true else {
+            return fileSize(resolvedURL, resourceValues: rv)
+        }
+
+        guard let enumerator = FileManager.default.enumerator(
+            at: resolvedURL,
+            includingPropertiesForKeys: Array(sizeResourceKeys()),
+            options: [],
+            errorHandler: { _, _ in true }
+        ) else {
+            return fileSize(resolvedURL, resourceValues: rv)
+        }
+
+        var total: Int64 = 0
+        for case let fileURL as URL in enumerator {
+            total += fileSize(fileURL)
+        }
+        return total
+    }
+
+    private static func fileSize(_ url: URL, resourceValues: URLResourceValues? = nil) -> Int64 {
+        let rv: URLResourceValues
+        if let resourceValues {
+            rv = resourceValues
+        } else if let values = try? url.resourceValues(forKeys: sizeResourceKeys()) {
+            rv = values
+        } else {
+            return 0
+        }
+
+        if rv.isDirectory == true || rv.isSymbolicLink == true {
+            return 0
+        }
+
+        return Int64(
+            rv.totalFileAllocatedSize
+                ?? rv.fileAllocatedSize
+                ?? rv.totalFileSize
+                ?? rv.fileSize
+                ?? 0
+        )
+    }
+
+    private static func sizeResourceKeys() -> Set<URLResourceKey> {
+        [
             .fileSizeKey,
             .totalFileSizeKey,
+            .fileAllocatedSizeKey,
+            .totalFileAllocatedSizeKey,
             .isDirectoryKey,
-        ]) else { return 0 }
-        let isDirectory = rv.isDirectory ?? false
-        if isDirectory {
-            return Int64(rv.totalFileSize ?? rv.fileSize ?? 0)
-        }
-        return Int64(rv.fileSize ?? 0)
+            .isSymbolicLinkKey,
+        ]
     }
 
     static func defaultManagedDetector(url: URL, metadata: AppBundleMetadata) -> Bool {

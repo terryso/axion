@@ -31,6 +31,7 @@ struct AppListFormatter {
         } else {
             let nameWidth = min(max(shownItems.map(\.displayName.count).max() ?? 0, 14), 26)
             let bundleWidth = min(max(shownItems.map(\.bundleIdentifier.count).max() ?? 0, 18), 34)
+            lines.append(formatHeaderLine(nameWidth: nameWidth, bundleWidth: bundleWidth))
             for (index, item) in shownItems.enumerated() {
                 let absoluteIndex = safeStartIndex + index
                 let marker = numbered ? "\(absoluteIndex + 1)." : (selectedIndex == absoluteIndex ? "▶" : " ")
@@ -134,6 +135,14 @@ struct AppListFormatter {
             return "\(Int(value)) \(units[idx])"
         }
         return String(format: "%.1f %@", value, units[idx])
+    }
+
+    private static func formatHeaderLine(nameWidth: Int, bundleWidth: Int) -> String {
+        let name = pad("名称", width: nameWidth)
+        let bundle = pad("Bundle ID", width: bundleWidth)
+        let version = pad("版本", width: 12)
+        let size = pad("大小", width: 9)
+        return "  \(name)  \(bundle)  \(version)  \(size)  状态  来源"
     }
 
     private static func formatItemLine(_ item: AppListItem, marker: String, nameWidth: Int, bundleWidth: Int) -> String {
