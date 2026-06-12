@@ -330,6 +330,10 @@ struct ChatStreamingE2ETests {
     func realMultiTurn() async throws {
         let config = try await ConfigManager.loadConfig()
         guard config.apiKey != nil, !config.apiKey!.isEmpty else { return }
+        // forChat 非 dryrun：build() 守卫要求 helper 可解析（AgentBuilder.swift:71）。
+        // swift test host 进程下 resolveHelperPath 即便 .build 有二进制也可能返回 nil
+        // （策略3 依赖进程路径含 .build）—— 不可用时优雅跳过，不硬失败。
+        guard HelperPathResolver.resolveHelperPath() != nil else { return }
 
         // Build agent with SessionStore so multi-turn context is preserved
         let sessionsDir = ConfigManager.sessionsDirectory

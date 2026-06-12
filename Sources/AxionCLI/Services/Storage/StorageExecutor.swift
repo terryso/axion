@@ -11,7 +11,7 @@ import AxionCore
 ///   非 symlink 目标；`action` 白名单只含 `move`/`trash`/`createDirectory`/`scanOnly`，遇 `uninstallApp`
 ///   或任何 `delete` 一律丢弃 + 记 `errors`，**绝不执行**。
 /// - **永不永久删除**：`FileManager.removeItem` **仅**用于撤销 `createDirectory` 的空目录（见
-///   `StorageUndoService`）；本 executor 不调用 `removeItem`。trash = 系统废纸篓（可恢复）。
+///   `StorageUndoService`）；本 executor 不调用 `removeItem`。trash 经 `trashPerformer`（生产默认系统废纸篓，可恢复；测试可注入隔离目录）。
 /// - **不覆盖**（AC #7）：`move` 遇 `target_exists` → `failed`，不调用 `moveItem`。
 /// - **逐项独立**（AC #6）：单项失败不中断整批，记 `failed` + `reason`，继续其余项。
 ///
@@ -20,11 +20,15 @@ import AxionCore
 final class StorageExecutor: StorageExecuting, Sendable {
 
     private let manifestStore: StorageManifestStore
+    /// `trash` 注入点：生产 `.system` 走系统废纸篓（可恢复）；测试可注入隔离目录闭包，避免污染真实 `~/.Trash`。
+    /// 复用 `AppUninstallExecutor.swift` 的 `TrashPerforming` 类型（同 module 可见）。
+    private let trashPerformer: TrashPerforming
     /// `StorageAction` 白名单（执行允许的动作）。
     private static let allowedActions: Set<StorageAction> = [.move, .trash, .createDirectory, .scanOnly]
 
-    init(manifestStore: StorageManifestStore) {
+    init(manifestStore: StorageManifestStore, trashPerformer: TrashPerforming = .system) {
         self.manifestStore = manifestStore
+        self.trashPerformer = trashPerformer
     }
 
     func execute(_ request: ExecuteRequest) async -> ExecuteResult {
@@ -254,18 +258,14 @@ final class StorageExecutor: StorageExecuting, Sendable {
             }
 
         case .trash:
-            // 系统废纸篓（可恢复）；必须捕获 resultingItemURL（撤销依赖它）。
-            var resultingURL: NSURL?
+            // 废纸篓（可恢复，trashPerformer 注入；生产 `.system` 走系统废纸篓，测试可注入隔离目录）。
+            // 返回的落位路径（trashResultPath）是 undo 的恢复来源。
             do {
-                try FileManager.default.trashItem(
-                    at: URL(fileURLWithPath: source),
-                    resultingItemURL: &resultingURL
-                )
-                let trashResultPath = resultingURL?.path ?? source
+                let trashResultURL = try trashPerformer.perform(URL(fileURLWithPath: source))
                 return PerformedItem(item: StorageManifestItem(
                     action: .trash,
                     sourcePath: source,
-                    trashResultPath: trashResultPath,
+                    trashResultPath: trashResultURL.path,
                     sizeBytes: size,
                     outcome: .succeeded,
                     evidence: raw.evidence,
