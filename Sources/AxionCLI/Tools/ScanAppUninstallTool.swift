@@ -15,7 +15,7 @@ import AxionCore
 final class ScanAppUninstallTool: ToolProtocol, Sendable {
 
     let name = "scan_app_uninstall"
-    let description = "扫描 App 卸载候选与 ~/Library support 数据，返回只读 AppUninstallPlan（含候选 App、support 数据项、风险分级、阻断原因、外部卸载提示）。本工具只扫描不执行；需用户确认后再用 execute_app_uninstall 执行。安全：多候选/系统保护 App/不在 Applications 目录 → blocked_reasons（不自动执行）；低置信度 support 项单列到 hint_only_support_data_items；高风险或共享目录需 typed/逐项确认。永不永久删除。参数：query(必填，App 显示名或 bundle id)、mode(可选，默认 uninstall_with_support_review：scan_only/uninstall_app_only/uninstall_with_support_review/review_support_data/clean_approved_support_data)、search_roots(可选，App 发现根，默认 [\"/Applications\", \"~/Applications\"])。"
+    let description = "扫描 App 卸载候选与 ~/Library support 数据，返回只读 AppUninstallPlan（含候选 App、support 数据项、风险分级、阻断原因、外部卸载提示）。本工具只扫描不执行；需用户确认后再用 execute_app_uninstall 执行。安全：多候选/系统保护 App/不在 Applications 目录 → blocked_reasons（不自动执行）；低置信度 support 项单列到 hint_only_support_data_items；高风险或共享目录需 typed/逐项确认。永不永久删除。展示给用户时必须逐项显示完整 support path，不要只在多列表格中截断路径。参数：query(必填，App 显示名或 bundle id)、mode(可选，默认 uninstall_with_support_review：scan_only/uninstall_app_only/uninstall_with_support_review/review_support_data/clean_approved_support_data)、search_roots(可选，App 发现根，默认 [\"/Applications\", \"~/Applications\"])。"
     nonisolated(unsafe) let inputSchema: ToolInputSchema = [
         "type": "object",
         "properties": [

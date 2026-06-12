@@ -124,4 +124,12 @@ struct ScanAppUninstallToolTests {
     func defaultSearchRootsConstant() {
         #expect(ScanAppUninstallTool.defaultSearchRoots == ["/Applications", "~/Applications"])
     }
+
+    @Test("description asks agent to show full support paths")
+    func descriptionAsksAgentToShowFullSupportPaths() {
+        let tool = makeTool(discoverer: CapturingDiscoverer(candidates: []))
+
+        #expect(tool.description.contains("完整 support path"))
+        #expect(tool.description.contains("不要只在多列表格中截断路径"))
+    }
 }

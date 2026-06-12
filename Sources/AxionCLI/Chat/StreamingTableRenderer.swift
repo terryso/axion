@@ -311,14 +311,31 @@ struct StreamingTableRenderer: Sendable {
             borderColor: borderColor, resetColor: resetColor
         ))
 
+        let pathColumnIndex = pathLikeColumnIndex(in: headerCells).flatMap { index in
+            index < columnWidths.count ? index : nil
+        }
+        let tableWidth = tableVisualWidth(columnWidths)
+
         // 表体行: │ id │ Int │
-        for row in styledBodyRows {
+        for (rowIndex, row) in styledBodyRows.enumerated() {
             let padded = padRow(row, toCount: columnCount)
             lines.append(renderStyledCellRow(
                 cells: padded, widths: columnWidths,
                 borderColor: borderColor, resetColor: resetColor,
                 cellStyleOn: "", cellStyleOff: ""
             ))
+            if let pathColumnIndex,
+               rowIndex < bodyRows.count,
+               let pathLine = renderPathContinuationIfNeeded(
+                   rawRow: bodyRows[rowIndex],
+                   columnIndex: pathColumnIndex,
+                   columnWidth: columnWidths[pathColumnIndex],
+                   tableWidth: tableWidth,
+                   borderColor: borderColor,
+                   resetColor: resetColor
+               ) {
+                lines.append(contentsOf: pathLine)
+            }
         }
 
         // 底部边框: ╰─────┴─────╯
@@ -329,6 +346,114 @@ struct StreamingTableRenderer: Sendable {
         ))
 
         return lines.joined(separator: "\n")
+    }
+
+    /// 表格存在路径列且该单元格会被终端宽度压缩时，在下一行补充完整路径。
+    private func renderPathContinuationIfNeeded(
+        rawRow: [String],
+        columnIndex: Int,
+        columnWidth: Int,
+        tableWidth: Int,
+        borderColor: String,
+        resetColor: String
+    ) -> [String]? {
+        guard columnIndex < rawRow.count else { return nil }
+        let rawPath = rawRow[columnIndex].trimmingCharacters(in: .whitespacesAndNewlines)
+        guard looksLikePath(rawPath), visualWidth(rawPath) > columnWidth else { return nil }
+
+        let contentWidth = max(1, tableWidth - 4)
+        let wrapped = wrapPathContinuation(label: "路径", path: rawPath, maxWidth: contentWidth)
+        return wrapped.map {
+            renderSpanningCellRow(
+                $0,
+                contentWidth: contentWidth,
+                borderColor: borderColor,
+                resetColor: resetColor
+            )
+        }
+    }
+
+    private func renderSpanningCellRow(
+        _ content: String,
+        contentWidth: Int,
+        borderColor: String,
+        resetColor: String
+    ) -> String {
+        let padded = padCell(content, toWidth: contentWidth)
+        return borderColor + "│" + resetColor + " " + padded + " " + borderColor + "│" + resetColor
+    }
+
+    private func pathLikeColumnIndex(in headers: [String]) -> Int? {
+        headers.firstIndex { header in
+            let normalized = stripAnsiFromCell(header)
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+                .lowercased()
+            return normalized == "path"
+                || normalized == "路径"
+                || normalized.contains(" path")
+                || normalized.contains("路径")
+        }
+    }
+
+    private func looksLikePath(_ value: String) -> Bool {
+        value.hasPrefix("/")
+            || value.hasPrefix("~/")
+            || value.contains("/Library/")
+            || value.contains("\\")
+    }
+
+    private func tableVisualWidth(_ widths: [Int]) -> Int {
+        widths.reduce(0, +) + widths.count * 2 + widths.count + 1
+    }
+
+    private func wrapPathContinuation(label: String, path: String, maxWidth: Int) -> [String] {
+        let prefix = "\(label): "
+        let firstLineWidth = max(1, maxWidth - visualWidth(prefix))
+        let chunks = wrapPath(path, firstLineWidth: firstLineWidth, nextLineWidth: maxWidth)
+        return chunks.enumerated().map { index, chunk in
+            index == 0 ? prefix + chunk : chunk
+        }
+    }
+
+    private func wrapPath(_ path: String, firstLineWidth: Int, nextLineWidth: Int) -> [String] {
+        var remaining = path
+        var maxWidth = firstLineWidth
+        var lines: [String] = []
+
+        while visualWidth(remaining) > maxWidth {
+            let cut = preferredPathBreakIndex(in: remaining, maxWidth: maxWidth)
+            lines.append(String(remaining[..<cut]))
+            remaining = String(remaining[cut...])
+            maxWidth = nextLineWidth
+        }
+
+        if !remaining.isEmpty || lines.isEmpty {
+            lines.append(remaining)
+        }
+        return lines
+    }
+
+    private func preferredPathBreakIndex(in text: String, maxWidth: Int) -> String.Index {
+        var width = 0
+        var index = text.startIndex
+        var lastSlashBreak: String.Index?
+
+        while index < text.endIndex {
+            let char = text[index]
+            let charWidth = char.isCJKCharacter ? 2 : 1
+            if width + charWidth > maxWidth {
+                if let lastSlashBreak, lastSlashBreak > text.startIndex {
+                    return lastSlashBreak
+                }
+                return index == text.startIndex ? text.index(after: index) : index
+            }
+            width += charWidth
+            index = text.index(after: index)
+            if char == "/" || char == "\\" {
+                lastSlashBreak = index
+            }
+        }
+        return text.endIndex
     }
 
     /// 渲染水平边框线。

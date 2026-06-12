@@ -13,9 +13,10 @@ struct StreamingTableRendererTests {
         _ lines: [String],
         profile: TerminalColorProfile = .trueColor,
         isTTY: Bool = true,
+        terminalWidth: Int = 0,
         flushAtEnd: Bool = false
     ) -> String {
-        var renderer = StreamingTableRenderer(profile: profile, isTTY: isTTY)
+        var renderer = StreamingTableRenderer(profile: profile, isTTY: isTTY, terminalWidth: terminalWidth)
         var output = ""
         for line in lines {
             let _ = renderer.processLine(
@@ -40,6 +41,41 @@ struct StreamingTableRendererTests {
             with: "",
             options: .regularExpression
         )
+    }
+
+    @Test("path columns render full path continuation when truncated")
+    func pathColumnRendersFullPathContinuation() {
+        let fullPath = "~/Library/Application Support/com.pvncher.SleeperX/Profiles/default/config.json"
+        let output = renderLines([
+            "| # | 类别 | 路径 | 风险 | 大小 | 默认 | 需确认 |",
+            "| --- | --- | --- | --- | --- | --- | --- |",
+            "| 1 | Application Support | \(fullPath) | 高 | 12 KB | 否 | 是 |",
+        ], profile: .unknown, isTTY: true, terminalWidth: 80, flushAtEnd: true)
+
+        let plain = stripANSI(output)
+        #expect(plain.contains("路径: ~/Library/Application Support/com.pvncher.SleeperX/Profiles/default/"))
+        #expect(plain.contains("config.json"))
+        #expect(plain.contains("Application Support"))
+        for line in plain.components(separatedBy: "\n") where !line.isEmpty {
+            let visualWidth = testVisualWidth(line)
+            #expect(visualWidth <= 80, "Line exceeds 80 cols: \(visualWidth) — '\(line)'")
+        }
+    }
+
+    @Test("dropped path columns do not crash width-constrained tables")
+    func droppedPathColumnsDoNotCrash() {
+        let output = renderLines([
+            "| A | B | C | D | E | F | 路径 |",
+            "| --- | --- | --- | --- | --- | --- | --- |",
+            "| a | b | c | d | e | f | ~/Library/Application Support/example |",
+        ], profile: .unknown, isTTY: true, terminalWidth: 18, flushAtEnd: true)
+
+        let plain = stripANSI(output)
+        #expect(plain.contains("╭"))
+        for line in plain.components(separatedBy: "\n") where !line.isEmpty {
+            let visualWidth = testVisualWidth(line)
+            #expect(visualWidth <= 18, "Line exceeds 18 cols: \(visualWidth) — '\(line)'")
+        }
     }
 
     // MARK: - Basic Table Detection

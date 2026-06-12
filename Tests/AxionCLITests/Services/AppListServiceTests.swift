@@ -424,6 +424,7 @@ struct AppListServiceTests {
         let roots = try #require(payload["search_roots"] as? [String])
 
         #expect(request.contains("不可信 App 元数据"))
+        #expect(request.contains("必须逐项显示完整路径"))
         #expect(request.contains("\"query\":\"com.example.bad\""))
         #expect(roots.contains("/opt/homebrew/Caskroom/bad/1.0"))
         #expect(!request.contains("\u{1B}"))
