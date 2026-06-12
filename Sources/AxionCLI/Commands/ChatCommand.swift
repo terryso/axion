@@ -301,22 +301,35 @@ struct ChatCommand: AsyncParsableCommand {
                 trimmed = lineTrimmed
             }
 
-            state.sessionUserMessages.append(trimmed)
-            // Persist to cross-session history file (Codex-inspired)
-            historyStore.append(text: trimmed, filePath: historyPath)
-            // Persist to session transcript (Codex-inspired session_log.rs)
-            transcriptLogger.logUserInput(trimmed, sessionId: sessionId, dirPath: sessionsDir)
+            let isAppsSlash = SlashCommand.parse(trimmed) == .apps
+            let recordUserInput: (String) -> Void = { text in
+                state.sessionUserMessages.append(text)
+                // Persist to cross-session history file (Codex-inspired)
+                historyStore.append(text: text, filePath: historyPath)
+                // Persist to session transcript (Codex-inspired session_log.rs)
+                transcriptLogger.logUserInput(text, sessionId: sessionId, dirPath: sessionsDir)
+            }
+            if !isAppsSlash {
+                recordUserInput(trimmed)
+            }
 
             // ── Slash command handling ──────────────────────────────────
 
             // taskText: 实际发给 agent 的文本
             // matchedSkillExec: SkillRegistry 匹配时使用 executeSkillStream
-            let taskText = trimmed
+            var taskText = trimmed
             var matchedSkillExec: (name: String, args: String?)?
 
             if let cmd = SlashCommand.parse(trimmed) {
                 let argument = SlashCommand.parseArgument(trimmed)
 
+                if cmd == .apps {
+                    guard let generatedTask = await handleAppsSlash(argument: argument) else {
+                        continue
+                    }
+                    taskText = generatedTask
+                    recordUserInput(generatedTask)
+                } else {
                 // AC1 (/resume 无参数): 在 REPL 中直接列出会话
                 if cmd == .resume && (argument == nil || argument!.isEmpty) {
                     state.lastResumeList = await handleResumeList(
@@ -486,6 +499,7 @@ struct ChatCommand: AsyncParsableCommand {
 
                 if action == .exit { break }
                 continue
+                }
             } else if !state.lastResumeList.isEmpty, let index = Int(trimmed), index > 0, index <= state.lastResumeList.count {
                 // Direct number input after /resume list — resume session by index
                 let targetSessionId = state.lastResumeList[index - 1].sessionId
@@ -522,7 +536,7 @@ struct ChatCommand: AsyncParsableCommand {
             let chatTheme = ChatTheme(profile: colorProfile, isTTY: isatty(STDERR_FILENO) != 0)
             let transcriptRenderer = TranscriptRenderer(theme: chatTheme)
 
-            fputs(transcriptRenderer.renderUserMessage(text: trimmed), stderr)
+            fputs(transcriptRenderer.renderUserMessage(text: taskText), stderr)
 
             composer.slashContext = SlashCommandContext(isAgentBusy: true, isSideSession: false)
 
@@ -762,5 +776,52 @@ struct ChatCommand: AsyncParsableCommand {
             ),
             stderr
         )
+    }
+
+    private func handleAppsSlash(argument: String?) async -> String? {
+        let parsed = parseAppsArgument(argument)
+        let service = AppListService()
+        var result = await listAppsForSlash(service: service, filter: parsed.filter, scope: parsed.deep ? .deep : .fast)
+
+        while true {
+            let prompt = AppSelectionPrompt(
+                isTTY: isatty(STDIN_FILENO) != 0,
+                writeOutput: { fputs($0, stderr) }
+            )
+            switch prompt.run(result: result) {
+            case .selected(let item):
+                return AppListFormatter.uninstallRequest(for: item)
+            case .requestDeepSearch:
+                result = await listAppsForSlash(service: service, filter: parsed.filter, scope: .deep)
+            case .cancelled, .nonTTYListOnly:
+                return nil
+            }
+        }
+    }
+
+    private func listAppsForSlash(service: any AppListing, filter: String?, scope: AppSearchScope) async -> AppListResult {
+        if scope == .deep {
+            fputs("[axion] 正在执行 App 深度搜索...\n", stderr)
+        }
+        let start = Date()
+        let result = await service.list(filter: filter, scope: scope)
+        if scope == .deep {
+            let elapsedMs = Int(Date().timeIntervalSince(start) * 1000)
+            let warningSuffix = result.warnings.isEmpty ? "" : "，\(result.warnings.count) 条提示"
+            fputs("[axion] App 深度搜索完成：\(result.candidates.count) 个候选，用时 \(elapsedMs)ms\(warningSuffix)\n", stderr)
+        }
+        return result
+    }
+
+    private func parseAppsArgument(_ argument: String?) -> (filter: String?, deep: Bool) {
+        let parts = (argument ?? "")
+            .split(separator: " ")
+            .map(String.init)
+        let deep = parts.contains("--all")
+        let filter = parts
+            .filter { $0 != "--all" }
+            .joined(separator: " ")
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        return (filter.isEmpty ? nil : filter, deep)
     }
 }

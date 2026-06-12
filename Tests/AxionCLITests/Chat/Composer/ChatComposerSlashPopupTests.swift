@@ -136,10 +136,10 @@ struct ChatComposerSlashPopupTests {
             keyReader: reader
         )
         let result = composer.readInput(prompt: "> ", continuationPrompt: "...> ")
-        // 默认排序第一个是 /archive，第二个是 /clear
+        // 默认排序第一个是 /apps（接受参数），第二个是 /archive
         // Down 移到第二个，tab 补全
         // 接受 args=false 的命令 → 直接提交
-        #expect(result == "/clear")
+        #expect(result == "/archive")
     }
 
     @Test("AC6: Up 在第一个位置不移动")
@@ -158,8 +158,8 @@ struct ChatComposerSlashPopupTests {
             keyReader: reader
         )
         let result = composer.readInput(prompt: "> ", continuationPrompt: "...> ")
-        // 第一个命令按字母序是 /archive
-        #expect(result == "/archive")
+        // 第一个命令按字母序是 /apps，接受参数所以保留编辑态并补空格
+        #expect(result == "/apps ")
     }
 
     // MARK: - AC7: Esc 取消恢复原始草稿

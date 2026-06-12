@@ -129,9 +129,9 @@ struct SlashCommandTests {
 
     // MARK: - allCases + helpText
 
-    @Test("allCases count == 15")
+    @Test("allCases count == 16")
     func allCasesCount() {
-        #expect(SlashCommand.allCases.count == 15)
+        #expect(SlashCommand.allCases.count == 16)
     }
 
     @Test("每个 helpText 非空且唯一")

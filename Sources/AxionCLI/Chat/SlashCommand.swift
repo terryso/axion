@@ -19,6 +19,7 @@ enum SlashCommand: String, CaseIterable, Equatable {
     case archive = "/archive"       // AC3: 归档当前会话 (38.7)
     case skills = "/skills"         // 列出可用技能
     case copy = "/copy"             // 复制最后一条 assistant 响应到剪贴板
+    case apps = "/apps"             // 列出并选择可卸载 App 候选
 
     /// 解析用户输入为 SlashCommand。非斜杠命令或未知命令返回 nil。
     static func parse(_ input: String) -> SlashCommand? {
@@ -42,6 +43,7 @@ enum SlashCommand: String, CaseIterable, Equatable {
         case "/archive": return .archive         // 38.7 AC3
         case "/skills":  return .skills
         case "/copy":    return .copy
+        case "/apps":    return .apps
         default: return nil
         }
     }
@@ -72,6 +74,7 @@ enum SlashCommand: String, CaseIterable, Equatable {
         case .archive:    return "归档当前会话"      // 38.7 AC3
         case .skills:     return "列出可用技能"
         case .copy:       return "复制最后一条 AI 响应到剪贴板"
+        case .apps:       return "列出可卸载 App 候选（/apps [filter|--all]）"
         }
     }
 
@@ -90,7 +93,7 @@ enum SlashCommand: String, CaseIterable, Equatable {
     /// `.model` 接受模型名，`.resume` 接受会话 ID，其余不接受。
     var acceptsArgs: Bool {
         switch self {
-        case .model, .resume:  return true
+        case .model, .resume, .apps:  return true
         default:               return false
         }
     }
@@ -100,7 +103,7 @@ enum SlashCommand: String, CaseIterable, Equatable {
     var availableDuringTask: Bool {
         switch self {
         case .help, .cost, .config, .clear, .copy, .exit:  return true
-        case .resume, .newSession, .fork, .archive, .skills:  return false  // AC6: 38.7
+        case .resume, .newSession, .fork, .archive, .skills, .apps:  return false  // AC6: 38.7
         default:                                     return true
         }
     }

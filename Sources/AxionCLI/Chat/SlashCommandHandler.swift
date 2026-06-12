@@ -107,6 +107,8 @@ struct SlashCommandHandler {
             fputs(handleSkills(registry: skillRegistry), stderr)
         case .copy:
             fputs(handleCopy(lastAssistantText: lastAssistantText), stderr)
+        case .apps:
+            return .none
         }
         return .none
     }
