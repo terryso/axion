@@ -279,10 +279,28 @@ struct StreamingTableRenderer: Sendable {
         }
         // 最小列宽 1
         columnWidths = columnWidths.map { max($0, 1) }
+        let naturalColumnWidths = columnWidths
+        let naturalPathColumnIndex = pathLikeColumnIndex(in: headerCells).flatMap { index in
+            index < columnWidths.count ? index : nil
+        }
 
         // 终端宽度限制：确保表格不超出终端
         if terminalWidth > 0 {
-            columnWidths = constrainColumnWidths(columnWidths, to: terminalWidth)
+            let constrainedWidths = constrainColumnWidths(columnWidths, to: terminalWidth)
+            if shouldRenderAsDetailList(
+                naturalWidths: naturalColumnWidths,
+                constrainedWidths: constrainedWidths,
+                columnCount: columnCount,
+                hasPathColumn: naturalPathColumnIndex != nil,
+                rowCount: bodyRows.count
+            ) {
+                return renderDetailList(
+                    headers: headerCells,
+                    bodyRows: bodyRows,
+                    formatPlain: formatPlain
+                )
+            }
+            columnWidths = constrainedWidths
         }
 
         let (borderColor, resetColor) = borderCodes()
@@ -311,7 +329,7 @@ struct StreamingTableRenderer: Sendable {
             borderColor: borderColor, resetColor: resetColor
         ))
 
-        let pathColumnIndex = pathLikeColumnIndex(in: headerCells).flatMap { index in
+        let pathColumnIndex = naturalPathColumnIndex.flatMap { index in
             index < columnWidths.count ? index : nil
         }
         let tableWidth = tableVisualWidth(columnWidths)
@@ -346,6 +364,140 @@ struct StreamingTableRenderer: Sendable {
         ))
 
         return lines.joined(separator: "\n")
+    }
+
+    /// 宽表在窄终端里硬压列会把多个字段都变成 `…`，比原始 Markdown 更难读。
+    /// 对非路径类的 4+ 列宽表，信息损失明显时改成逐行详情块，优先保全文本。
+    private func shouldRenderAsDetailList(
+        naturalWidths: [Int],
+        constrainedWidths: [Int],
+        columnCount: Int,
+        hasPathColumn: Bool,
+        rowCount: Int
+    ) -> Bool {
+        guard terminalWidth > 0,
+              columnCount >= 4,
+              rowCount > 0,
+              !hasPathColumn else { return false }
+
+        let naturalTableWidth = tableVisualWidth(naturalWidths)
+        guard naturalTableWidth > terminalWidth else { return false }
+
+        let naturalContentWidth = max(1, naturalWidths.reduce(0, +))
+        let lostContentWidth = zip(naturalWidths, constrainedWidths).reduce(0) { acc, pair in
+            acc + max(0, pair.0 - pair.1)
+        }
+        let lossRatio = Double(lostContentWidth) / Double(naturalContentWidth)
+        let severelyCompressed = zip(naturalWidths, constrainedWidths).contains { natural, constrained in
+            natural >= 12 && constrained <= 6
+        }
+
+        return lossRatio >= 0.45 || severelyCompressed
+    }
+
+    private func renderDetailList(
+        headers: [String],
+        bodyRows: [[String]],
+        formatPlain: @Sendable (String) -> String
+    ) -> String {
+        let maxWidth = max(30, terminalWidth)
+        var lines: [String] = []
+        lines.append("表格（\(bodyRows.count) 行，已改为详情模式显示）")
+
+        for (rowIndex, rawRow) in bodyRows.enumerated() {
+            lines.append("\(rowIndex + 1).")
+            let row = padRow(rawRow, toCount: headers.count)
+            for index in 0..<headers.count {
+                let label = headers[index].trimmingCharacters(in: .whitespacesAndNewlines)
+                let value = row[index].trimmingCharacters(in: .whitespacesAndNewlines)
+                guard !label.isEmpty || !value.isEmpty else { continue }
+                lines.append(contentsOf: wrapDetailField(
+                    label: label.isEmpty ? "列 \(index + 1)" : label,
+                    value: value.isEmpty ? "-" : value,
+                    maxWidth: maxWidth
+                ))
+            }
+        }
+
+        return lines.map { formatPlain($0) }.joined(separator: "\n")
+    }
+
+    private func wrapDetailField(label: String, value: String, maxWidth: Int) -> [String] {
+        let firstPrefix = "  \(label): "
+        let nextPrefix = "    "
+        let firstWidth = max(6, maxWidth - visualWidth(firstPrefix))
+        let nextWidth = max(6, maxWidth - visualWidth(nextPrefix))
+        let chunks = wrapText(value, firstLineWidth: firstWidth, nextLineWidth: nextWidth)
+
+        guard let first = chunks.first else {
+            return [firstPrefix]
+        }
+
+        var lines = [firstPrefix + first]
+        lines.append(contentsOf: chunks.dropFirst().map { nextPrefix + $0 })
+        return lines
+    }
+
+    private func wrapText(_ text: String, firstLineWidth: Int, nextLineWidth: Int) -> [String] {
+        var remaining = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        var maxWidth = max(1, firstLineWidth)
+        let nextWidth = max(1, nextLineWidth)
+        var lines: [String] = []
+
+        while visualWidth(remaining) > maxWidth {
+            let cut = preferredTextBreakIndex(in: remaining, maxWidth: maxWidth)
+            let piece = String(remaining[..<cut])
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+            if !piece.isEmpty {
+                lines.append(piece)
+            }
+            remaining = String(remaining[cut...])
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+            maxWidth = nextWidth
+        }
+
+        if !remaining.isEmpty || lines.isEmpty {
+            lines.append(remaining)
+        }
+        return lines
+    }
+
+    private func preferredTextBreakIndex(in text: String, maxWidth: Int) -> String.Index {
+        var width = 0
+        var index = text.startIndex
+        var lastSoftBreak: String.Index?
+
+        while index < text.endIndex {
+            let char = text[index]
+            let charWidth = char.isCJKCharacter ? 2 : 1
+            if width + charWidth > maxWidth {
+                if let lastSoftBreak, lastSoftBreak > text.startIndex {
+                    return lastSoftBreak
+                }
+                return index == text.startIndex ? text.index(after: index) : index
+            }
+            width += charWidth
+            index = text.index(after: index)
+            if isSoftBreakCharacter(char) {
+                lastSoftBreak = index
+            }
+        }
+        return text.endIndex
+    }
+
+    private func isSoftBreakCharacter(_ char: Character) -> Bool {
+        char == " "
+            || char == "/"
+            || char == "\\"
+            || char == ","
+            || char == "，"
+            || char == "、"
+            || char == ";"
+            || char == "；"
+            || char == ")"
+            || char == "）"
+            || char == "]"
+            || char == "】"
     }
 
     /// 表格存在路径列且该单元格会被终端宽度压缩时，在下一行补充完整路径。

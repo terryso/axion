@@ -77,6 +77,9 @@ struct StorageFeatureTests {
         #expect(exclusions.evaluate(path: "/Users/nick/project/Sources/main.swift").reason == "excluded_by_config")
         #expect(exclusions.evaluate(path: "/Users/nick/Downloads/.git/config").reason == "git_directory")
         #expect(exclusions.evaluate(path: "/Users/nick/Downloads/node_modules/pkg").reason == "developer_cache")
+        #expect(exclusions.developerCacheRoot(for: "/Users/nick/Downloads/node_modules/pkg") == "/Users/nick/Downloads/node_modules")
+        #expect(exclusions.isDeveloperCacheRoot("/Users/nick/Downloads/node_modules") == true)
+        #expect(exclusions.isDeveloperCacheRoot("/Users/nick/Downloads/node_modules/pkg") == false)
         #expect(exclusions.evaluate(path: "/Users/nick/Downloads/.hidden/file").reason == "hidden_entry")
         #expect(exclusions.evaluate(path: "/Users/nick/Downloads/visible.txt").included == true)
 
@@ -84,7 +87,7 @@ struct StorageFeatureTests {
         #expect(hiddenAllowed.evaluate(path: "/Users/nick/Downloads/.hidden/file").included == true)
     }
 
-    @Test("StorageScanService sorts large files, skips excluded trees, and records symlinks and bundles as entries")
+    @Test("StorageScanService sorts large files, collapses developer caches, and records symlinks and bundles")
     func scanServiceBuildsSafeSignals() async throws {
         let root = try makeTempDir()
         defer { cleanup(root) }
@@ -122,14 +125,26 @@ struct StorageFeatureTests {
         #expect(paths.contains(small.path))
         #expect(paths.contains(link.path))
         #expect(paths.contains { $0.hasSuffix("/Demo.app") })
-        #expect(!paths.contains { $0.contains("node_modules") })
+        #expect(paths.contains { $0.hasSuffix("/node_modules") })
+        #expect(!paths.contains { $0.contains("node_modules/pkg") })
         #expect(!paths.contains { $0.contains(".hidden") })
         #expect(!paths.contains(outside.path))
         #expect(!paths.contains { $0.contains("Demo.app/Contents") })
         #expect(result.largeFiles == result.largeFiles.sorted { $0.sizeBytes > $1.sizeBytes })
         #expect(result.largeFiles.first { $0.path == link.path }?.isSymbolicLink == true)
         #expect(result.largeFiles.first { $0.path.hasSuffix("/Demo.app") }?.isBundle == true)
+        #expect(result.largeFiles.first { $0.path.hasSuffix("/node_modules") }?.kind == .developerCache)
+        #expect(result.groups.contains { $0.label == FileKind.developerCache.rawValue })
         #expect(result.groups.contains { $0.count > 0 })
+
+        let directCacheResult = try await StorageScanService(homeDirectory: root.path).scan(ScanRequest(
+            roots: [root.appendingPathComponent("node_modules")],
+            minSizeBytes: 0,
+            includeHidden: false,
+            excludedPaths: [],
+            maxFilesPerGroup: 3
+        ))
+        #expect(directCacheResult.largeFiles.map(\.path).contains(root.appendingPathComponent("node_modules").path))
     }
 
     @Test("StoragePlanBuilder rejects unsafe proposals and forces safe plan defaults")
@@ -139,6 +154,8 @@ struct StorageFeatureTests {
 
         let keep = root.appendingPathComponent("invoice.pdf")
         let appDir = root.appendingPathComponent("Demo.app/Contents")
+        let cacheRoot = root.appendingPathComponent("node_modules")
+        let cacheFile = cacheRoot.appendingPathComponent("pkg/cache.bin")
         let excludedDir = root.appendingPathComponent("skip")
         let excludedFile = excludedDir.appendingPathComponent("ignored.txt")
         let outside = root.deletingLastPathComponent().appendingPathComponent("outside-\(UUID().uuidString).txt")
@@ -147,6 +164,8 @@ struct StorageFeatureTests {
         try writeFile(keep, bytes: 15)
         try FileManager.default.createDirectory(at: appDir, withIntermediateDirectories: true)
         try writeFile(appDir.appendingPathComponent("demo"), bytes: 5)
+        try FileManager.default.createDirectory(at: cacheFile.deletingLastPathComponent(), withIntermediateDirectories: true)
+        try writeFile(cacheFile, bytes: 12)
         try FileManager.default.createDirectory(at: excludedDir, withIntermediateDirectories: true)
         try writeFile(excludedFile, bytes: 10)
         try writeFile(outside, bytes: 10)
@@ -157,6 +176,8 @@ struct StorageFeatureTests {
             proposals: [
                 ProposedItem(source: keep.path, suggestedCategory: "documents", suggestedAction: .move, target: root.appendingPathComponent("Documents/invoice.pdf").path, reason: "receipt", confidence: .high),
                 ProposedItem(source: root.appendingPathComponent("Demo.app").path, suggestedCategory: "apps", suggestedAction: .uninstallApp, reason: "unused app", confidence: .medium),
+                ProposedItem(source: cacheRoot.path, suggestedCategory: "developer cache", suggestedAction: .trash, reason: "rebuildable dependency cache", confidence: .high),
+                ProposedItem(source: cacheFile.path, suggestedCategory: "developer cache child", suggestedAction: .trash, reason: "child should not bypass exclusion", confidence: .high),
                 ProposedItem(source: excludedFile.path, suggestedAction: .scanOnly, reason: "excluded"),
                 ProposedItem(source: outside.path, suggestedAction: .scanOnly, reason: "outside"),
                 ProposedItem(source: symlink.path, suggestedAction: .scanOnly, reason: "link"),
@@ -167,9 +188,11 @@ struct StorageFeatureTests {
         )
 
         #expect(plan.surface == .chat)
-        #expect(plan.items.count == 2)
+        #expect(plan.items.count == 3)
         #expect(plan.items.allSatisfy { $0.approved == false })
         #expect(plan.items.allSatisfy { $0.evidence != nil })
+        #expect(plan.items.first { $0.sourcePath == cacheRoot.path }?.dataRisk == .low)
+        #expect(plan.items.first { $0.sourcePath == cacheRoot.path }?.action == .trash)
         #expect(plan.requiresConfirmation == true)
         #expect(plan.reversible == true)
         #expect(plan.riskLevel == .high)
@@ -177,6 +200,7 @@ struct StorageFeatureTests {
         #expect(plan.excludedNotes?.contains { $0.contains("excluded") } == true)
         #expect(plan.excludedNotes?.contains { $0.contains("outside_scan_roots") } == true)
         #expect(plan.excludedNotes?.contains { $0.contains("symlink_target_not_followed") } == true)
+        #expect(plan.excludedNotes?.contains { $0.contains("developer_cache") && $0.contains("cache.bin") } == true)
     }
 
     @Test("StoragePlanFormatter renders terminal text and snake_case JSON")

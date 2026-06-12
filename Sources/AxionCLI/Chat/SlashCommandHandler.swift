@@ -109,6 +109,8 @@ struct SlashCommandHandler {
             fputs(handleCopy(lastAssistantText: lastAssistantText), stderr)
         case .apps:
             return .none
+        case .storage:
+            return .none
         }
         return .none
     }

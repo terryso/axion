@@ -54,6 +54,11 @@ struct SlashCommandTests {
         #expect(SlashCommand.parse("/quit") == .exit)
     }
 
+    @Test("parse /storage → .storage")
+    func parseStorage() {
+        #expect(SlashCommand.parse("/storage") == .storage)
+    }
+
     // MARK: - parse() 未知命令和非斜杠
 
     @Test("parse /foo → nil (未知命令)")
@@ -129,9 +134,9 @@ struct SlashCommandTests {
 
     // MARK: - allCases + helpText
 
-    @Test("allCases count == 16")
+    @Test("allCases count == 17")
     func allCasesCount() {
-        #expect(SlashCommand.allCases.count == 16)
+        #expect(SlashCommand.allCases.count == 17)
     }
 
     @Test("每个 helpText 非空且唯一")

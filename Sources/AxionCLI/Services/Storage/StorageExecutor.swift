@@ -119,9 +119,14 @@ final class StorageExecutor: StorageExecuting, Sendable {
             return "outside_scan_roots: \(item.source)"
         }
 
-        // 3. 未被排除
+        // 3. 未被排除。开发缓存根目录是例外：允许整体移入废纸篓或 scan_only，
+        // 但仍拒绝其内部子路径，避免绕过默认排除。
         let (included, rule) = exclusions.evaluate(path: source)
-        guard included else {
+        let isAllowedDeveloperCacheRoot = !included
+            && rule == "developer_cache"
+            && exclusions.isDeveloperCacheRoot(source)
+            && Self.isDeveloperCacheActionAllowed(item.action)
+        guard included || isAllowedDeveloperCacheRoot else {
             return "excluded(\(rule ?? "rule")): \(item.source)"
         }
 
@@ -138,6 +143,10 @@ final class StorageExecutor: StorageExecuting, Sendable {
         }
 
         return nil
+    }
+
+    private static func isDeveloperCacheActionAllowed(_ action: StorageAction) -> Bool {
+        action == .trash || action == .scanOnly
     }
 
     // MARK: - Execution

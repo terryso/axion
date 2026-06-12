@@ -301,7 +301,8 @@ struct ChatCommand: AsyncParsableCommand {
                 trimmed = lineTrimmed
             }
 
-            let isAppsSlash = SlashCommand.parse(trimmed) == .apps
+            let parsedSlashCommand = SlashCommand.parse(trimmed)
+            let isGeneratedTaskSlash = parsedSlashCommand == .apps || parsedSlashCommand == .storage
             let recordUserInput: (String) -> Void = { text in
                 state.sessionUserMessages.append(text)
                 // Persist to cross-session history file (Codex-inspired)
@@ -309,7 +310,7 @@ struct ChatCommand: AsyncParsableCommand {
                 // Persist to session transcript (Codex-inspired session_log.rs)
                 transcriptLogger.logUserInput(text, sessionId: sessionId, dirPath: sessionsDir)
             }
-            if !isAppsSlash {
+            if !isGeneratedTaskSlash {
                 recordUserInput(trimmed)
             }
 
@@ -320,11 +321,18 @@ struct ChatCommand: AsyncParsableCommand {
             var taskText = trimmed
             var matchedSkillExec: (name: String, args: String?)?
 
-            if let cmd = SlashCommand.parse(trimmed) {
+            if let cmd = parsedSlashCommand {
                 let argument = SlashCommand.parseArgument(trimmed)
 
                 if cmd == .apps {
                     guard let generatedTask = await handleAppsSlash(argument: argument, config: config) else {
+                        continue
+                    }
+                    taskText = generatedTask
+                    recordUserInput(generatedTask)
+                } else if cmd == .storage {
+                    guard let generatedTask = SlashCommandHandler.buildStorageTask(argument: argument) else {
+                        fputs(SlashCommandHandler.handleStorageHelp(), stderr)
                         continue
                     }
                     taskText = generatedTask

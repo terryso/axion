@@ -12,7 +12,7 @@ import AxionCore
 final class ProposeStoragePlanTool: ToolProtocol, Sendable {
 
     let name = "propose_storage_plan"
-    let description = "提交对扫描文件的语义分类整理计划，返回经安全校验的 StoragePlan（所有项 approved=false，需用户确认后才执行）。安全红线：source 必须在扫描根之下、未被排除、实际存在、非 symlink 目标；默认动作 scan_only；永不 delete；违规项会被丢弃并在 excluded_notes 中说明。本工具只产出计划，不移动/删除任何文件。参数：proposals(对象数组：source/suggested_category/suggested_action/ target?/reason/confidence)、surface(run 或 chat，默认 run)、scan_roots(与 storage_scan 一致的根路径数组，用于校验)。"
+    let description = "提交对扫描文件的语义分类整理计划，返回经安全校验的 StoragePlan（所有项 approved=false，需用户确认后才执行）。安全红线：source 必须在扫描根之下、未被排除、实际存在、非 symlink 目标；例外：storage_scan 返回的 developer_cache 根目录（如 node_modules/.build/DerivedData/.venv）可作为整体 trash 或 scan_only 候选，不能选择其内部子路径；默认动作 scan_only；永不 delete；违规项会被丢弃并在 excluded_notes 中说明。本工具只产出计划，不移动/删除任何文件。参数：proposals(对象数组：source/suggested_category/suggested_action/ target?/reason/confidence)、surface(run 或 chat，默认 run)、scan_roots(与 storage_scan 一致的根路径数组，用于校验)。"
     nonisolated(unsafe) let inputSchema: ToolInputSchema = [
         "type": "object",
         "properties": [

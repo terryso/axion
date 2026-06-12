@@ -27,11 +27,27 @@ struct CollectorsTests {
 
     // MARK: - 工具：构造请求
 
-    private func item(_ key: String, action: StorageAction = .trash, risk: RiskLevel = .low, dataRisk: DataRisk? = .low, requiresExplicit: Bool = false) -> StorageApprovalItem {
-        StorageApprovalItem(
-            key: key, action: action, sourcePath: key, targetPath: nil,
+    private func item(
+        _ key: String,
+        action: StorageAction = .trash,
+        risk: RiskLevel = .low,
+        dataRisk: DataRisk? = .low,
+        requiresExplicit: Bool = false,
+        category: String? = nil,
+        targetPath: String? = nil,
+        reason: String = "r"
+    ) -> StorageApprovalItem {
+        let evidence = category.map {
+            StorageEvidence(
+                rule: "category:\($0); kind:document; action:\(action.rawValue)",
+                source: "scan",
+                confidence: .high
+            )
+        }
+        return StorageApprovalItem(
+            key: key, action: action, sourcePath: key, targetPath: targetPath,
             sizeBytes: 100, riskLevel: risk, dataRisk: dataRisk,
-            reason: "r", requiresExplicitApproval: requiresExplicit, evidence: nil
+            reason: reason, requiresExplicitApproval: requiresExplicit, evidence: evidence
         )
     }
 
@@ -109,6 +125,40 @@ struct CollectorsTests {
         let resp = await collector.collect(request: request([item("/a"), item("/b")]), policy: SurfacePolicy.for(.chat))
         #expect(resp.action == .cancel)
         #expect(resp.approvedItemKeys.isEmpty)
+    }
+
+    @Test("ChatApprovalCollector groups items by category evidence")
+    func chatCategoryGroupApproval() async {
+        let io = ScriptedIO(inputs: ["y", "n"])
+        let collector = ChatApprovalCollector(writeStdout: { io.write($0) }, readLine: { io.read() }, now: { "t" })
+        let items = [
+            item("/tmp/invoice-a.pdf", category: "receipts"),
+            item("/tmp/invoice-b.pdf", category: "receipts"),
+            item("/tmp/archive.zip", category: "archives"),
+        ]
+
+        let resp = await collector.collect(request: request(items, surface: .chat), policy: SurfacePolicy.for(.chat))
+
+        #expect(resp.action == .approveItem)
+        #expect(resp.approvedItemKeys == ["/tmp/invoice-a.pdf", "/tmp/invoice-b.pdf"])
+        #expect(resp.rejectedItemKeys == ["/tmp/archive.zip"])
+        let output = io.outputs.joined()
+        #expect(output.contains("按分组确认"))
+        #expect(output.contains("receipts"))
+    }
+
+    @Test("ChatApprovalCollector detail keeps item prompt open")
+    func chatItemDetailThenApprove() async {
+        let io = ScriptedIO(inputs: ["d", "y"])
+        let collector = ChatApprovalCollector(writeStdout: { io.write($0) }, readLine: { io.read() }, now: { "t" })
+
+        let resp = await collector.collect(request: request([item("/tmp/a.txt", reason: "inspect before approval")], surface: .chat), policy: SurfacePolicy.for(.chat))
+
+        #expect(resp.action == .approvePlan)
+        #expect(resp.approvedItemKeys == ["/tmp/a.txt"])
+        let output = io.outputs.joined()
+        #expect(output.contains("详情"))
+        #expect(output.contains("inspect before approval"))
     }
 
     // MARK: - TelegramApprovalReserve

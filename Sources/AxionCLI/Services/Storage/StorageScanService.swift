@@ -61,6 +61,26 @@ struct StorageScanService: StorageScanning {
                 continue
             }
 
+            let rootDecision = exclusions.evaluate(path: rootPath)
+            if !rootDecision.included {
+                if rootDecision.reason == "developer_cache",
+                   exclusions.isDeveloperCacheRoot(rootPath),
+                   let signal = makeSignal(
+                    url: root,
+                    keySet: keySet,
+                    downloadsPath: downloadsPath,
+                    isoFmt: isoFmt,
+                    forcedKind: .developerCache,
+                    collapsedDirectorySize: true
+                   ) {
+                    signals.append(signal)
+                    continue
+                }
+                skippedCount += 1
+                excludedNotes.append("\(rootDecision.reason ?? "excluded"): \(rootPath)")
+                continue
+            }
+
             // .skipsPackageDescendants：bundle/package 折叠为单条目（AC #3）。
             // .skipsHiddenFiles：与 includeHidden=false 对齐（受开关控制）。
             var opts: FileManager.DirectoryEnumerationOptions = [.skipsPackageDescendants]
@@ -91,6 +111,17 @@ struct StorageScanService: StorageScanning {
                 let (included, _) = exclusions.evaluate(url: url)
                 if !included {
                     skippedCount += 1
+                    if exclusions.isDeveloperCacheRoot(path),
+                       let signal = makeSignal(
+                        url: url,
+                        keySet: keySet,
+                        downloadsPath: downloadsPath,
+                        isoFmt: isoFmt,
+                        forcedKind: .developerCache,
+                        collapsedDirectorySize: true
+                       ) {
+                        signals.append(signal)
+                    }
                     if let rv = try? url.resourceValues(forKeys: [.isDirectoryKey]), rv.isDirectory == true {
                         skipPrefix = path
                     }
@@ -136,7 +167,9 @@ struct StorageScanService: StorageScanning {
         url: URL,
         keySet: Set<URLResourceKey>,
         downloadsPath: String,
-        isoFmt: ISO8601DateFormatter
+        isoFmt: ISO8601DateFormatter,
+        forcedKind: FileKind? = nil,
+        collapsedDirectorySize: Bool = false
     ) -> FileSignal? {
         let rv: URLResourceValues
         do { rv = try url.resourceValues(forKeys: keySet) }
@@ -155,7 +188,12 @@ struct StorageScanService: StorageScanning {
 
         // 体积：symlink 取链接自身；目录/package 取递归总量；普通文件取 fileSize。
         let sizeBytes: Int64
-        if isSymbolicLink {
+        if collapsedDirectorySize && isDirectory && !isSymbolicLink {
+            sizeBytes = max(
+                Int64(rv.totalFileSize ?? rv.fileSize ?? 0),
+                Self.directoryContentSize(url: url)
+            )
+        } else if isSymbolicLink {
             sizeBytes = Int64(rv.fileSize ?? 0)
         } else if isDirectory {
             sizeBytes = Int64(rv.totalFileSize ?? rv.fileSize ?? 0)
@@ -171,7 +209,7 @@ struct StorageScanService: StorageScanning {
             && (standardizedPath == downloadsPath || standardizedPath.hasPrefix(downloadsPath + "/"))
 
         // 底层信号分类（非最终业务分类）。
-        let kind = FileKind.derive(
+        let kind = forcedKind ?? FileKind.derive(
             fileExtension: ext.isEmpty ? nil : ext,
             typeIdentifier: typeIdentifier
         )
@@ -237,6 +275,33 @@ struct StorageScanService: StorageScanning {
         if downloads > 0 { out.append("from_downloads: \(downloads)") }
         let bundles = files.filter { $0.isBundle }.count
         if bundles > 0 { out.append("bundles: \(bundles)") }
+        let developerCaches = files.filter { $0.kind == .developerCache }.count
+        if developerCaches > 0 { out.append("developer_cache_roots: \(developerCaches)") }
         return out
+    }
+
+    /// 仅用于折叠的开发缓存根目录，读取元数据累计大小，不产生逐文件信号。
+    private static func directoryContentSize(url: URL) -> Int64 {
+        let keys: [URLResourceKey] = [.fileSizeKey, .totalFileSizeKey, .isDirectoryKey, .isSymbolicLinkKey]
+        guard let enumerator = FileManager.default.enumerator(
+            at: url,
+            includingPropertiesForKeys: keys,
+            options: [.skipsPackageDescendants]
+        ) else {
+            return 0
+        }
+
+        var total: Int64 = 0
+        for case let child as URL in enumerator {
+            guard let rv = try? child.resourceValues(forKeys: Set(keys)) else { continue }
+            if rv.isSymbolicLink == true {
+                total += Int64(rv.fileSize ?? 0)
+            } else if rv.isDirectory == true {
+                continue
+            } else {
+                total += Int64(rv.totalFileSize ?? rv.fileSize ?? 0)
+            }
+        }
+        return total
     }
 }

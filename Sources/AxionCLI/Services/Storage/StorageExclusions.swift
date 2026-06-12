@@ -7,7 +7,8 @@ import AxionCore
 /// 决定给定路径是否纳入扫描，以及被排除时的原因。内置默认排除集来自
 /// Epic「安全边界」与扫描范围表：系统根级目录（`/System`、`/Library`、`/bin`、
 /// `/sbin`、`/usr`、`/private`）、`~/Library`（整目录清理禁止）、`.git`、隐藏条目
-/// 与开发缓存目录（`node_modules`、`.build`、`DerivedData` 等）。额外的绝对路径排除
+/// 与开发缓存目录（`node_modules`、`.build`、`DerivedData` 等）。开发缓存目录默认不展开内部
+/// 文件；扫描器可将其根目录折叠成单条 `developer_cache` 信号。额外的绝对路径排除
 /// （用户配置 + 当前工作目录项目源码根）通过 `excludedRoots` 传入。
 ///
 /// 判定为纯函数：不读取文件系统，不发起网络请求，相同输入恒定输出。
@@ -105,6 +106,17 @@ struct StorageExclusions: Sendable, Equatable {
         evaluate(path: url.path)
     }
 
+    /// 返回路径所属的开发缓存根目录；若路径不在开发缓存树下则返回 nil。
+    func developerCacheRoot(for rawPath: String) -> String? {
+        Self.developerCacheRoot(for: rawPath, home: homeDirectory)
+    }
+
+    /// 路径是否正好是开发缓存根目录本身，而非其内部文件。
+    func isDeveloperCacheRoot(_ rawPath: String) -> Bool {
+        let path = StorageExclusions.standardize(rawPath, home: homeDirectory)
+        return developerCacheRoot(for: path) == path
+    }
+
     // MARK: - Helpers
 
     /// `~/Library` 标准化绝对路径。
@@ -129,5 +141,22 @@ struct StorageExclusions: Sendable, Equatable {
             result.removeLast()
         }
         return result
+    }
+
+    /// 静态版本便于不持有 `StorageExclusions` 实例的校验路径复用。
+    static func developerCacheRoot(for rawPath: String, home: String) -> String? {
+        let path = StorageExclusions.standardize(rawPath, home: home)
+        let segments = path
+            .split(separator: "/", omittingEmptySubsequences: true)
+            .map(String.init)
+
+        var prefix: [String] = []
+        for segment in segments {
+            prefix.append(segment)
+            if developerCacheNames.contains(segment) {
+                return "/" + prefix.joined(separator: "/")
+            }
+        }
+        return nil
     }
 }

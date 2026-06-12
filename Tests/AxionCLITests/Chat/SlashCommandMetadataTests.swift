@@ -32,6 +32,11 @@ struct SlashCommandMetadataTests {
         #expect(SlashCommand.resume.acceptsArgs == true)
     }
 
+    @Test("/storage acceptsArgs == true")
+    func storageAcceptsArgs() {
+        #expect(SlashCommand.storage.acceptsArgs == true)
+    }
+
     @Test("其他命令 acceptsArgs == false")
     func otherCommandsNoArgs() {
         let noArgCommands: [SlashCommand] = [.help, .clear, .compact, .cost, .config, .exit, .newSession, .fork, .archive]
@@ -44,7 +49,7 @@ struct SlashCommandMetadataTests {
 
     @Test("/resume /new /fork /archive availableDuringTask == false")
     func structuralCommandsNotAvailableDuringTask() {
-        let notAvailable: [SlashCommand] = [.resume, .newSession, .fork, .archive, .apps]
+        let notAvailable: [SlashCommand] = [.resume, .newSession, .fork, .archive, .apps, .storage]
         for cmd in notAvailable {
             #expect(cmd.availableDuringTask == false, "\(cmd.rawValue) should not be available during task")
         }
@@ -87,7 +92,7 @@ struct SlashCommandMetadataTests {
 
     @Test("无别名命令 allNames 只含 rawValue")
     func noAliasCommandsAllNames() {
-        let singleNameCommands: [SlashCommand] = [.help, .clear, .compact, .model, .cost, .resume, .config, .newSession, .fork, .archive, .apps]
+        let singleNameCommands: [SlashCommand] = [.help, .clear, .compact, .model, .cost, .resume, .config, .newSession, .fork, .archive, .apps, .storage]
         for cmd in singleNameCommands {
             #expect(cmd.allNames == [cmd.rawValue], "\(cmd.rawValue) allNames should be just [rawValue]")
         }

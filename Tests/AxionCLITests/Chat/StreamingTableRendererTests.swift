@@ -728,6 +728,29 @@ struct StreamingTableRendererTests {
 
     // MARK: - Terminal Width Constraint
 
+    @Test("wide four-column content table falls back to detail list")
+    func wideContentTableFallsBackToDetailList() {
+        let output = renderLines([
+            "| 分类 | 内容 | 大小 | 建议 |",
+            "| --- | --- | --- | --- |",
+            "| 入职资料 | 入职资料包/ 保利威入职PPT、报销需知、企业文化材料、VPN说明、邮箱设置 | 660 MB | 保留，已经结构化，不建议移动或清理 |",
+            "| 旧公司资料 | 榴莲西施、秀赞、叮当、Hoge职级评定、微片等历史资料 | 520 MB | 可归档到旧公司资料目录，避免散落在根目录 |",
+        ], profile: .unknown, isTTY: true, terminalWidth: 80, flushAtEnd: true)
+
+        let plain = stripANSI(output)
+        #expect(plain.contains("表格（2 行，已改为详情模式显示）"))
+        #expect(plain.contains("分类: 入职资料"))
+        #expect(plain.contains("保利威入职PPT、报销需知"))
+        #expect(plain.contains("建议: 保留，已经结构化"))
+        #expect(!plain.contains("╭"))
+        #expect(!plain.contains("…"))
+
+        for line in plain.components(separatedBy: "\n") where !line.isEmpty {
+            let visualWidth = testVisualWidth(line)
+            #expect(visualWidth <= 80, "Line exceeds 80 cols: \(visualWidth) — '\(line)'")
+        }
+    }
+
     @Test("table respects terminal width by truncating columns")
     func testTerminalWidthConstraint() {
         // 渲染器限制 40 列宽

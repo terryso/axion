@@ -65,9 +65,14 @@ struct StoragePlanBuilder {
                 continue
             }
 
-            // 校验 2：未被排除
+            // 校验 2：未被排除。开发缓存根目录是例外：允许作为可重建目录整体清理，
+            // 但不允许其内部子路径绕过排除规则。
             let (included, reason) = exclusions.evaluate(path: standardizedSource)
-            guard included else {
+            let isAllowedDeveloperCacheRoot = !included
+                && reason == "developer_cache"
+                && exclusions.isDeveloperCacheRoot(standardizedSource)
+                && Self.isDeveloperCacheActionAllowed(proposal.suggestedAction)
+            guard included || isAllowedDeveloperCacheRoot else {
                 excludedNotes.append("excluded(\(reason ?? "rule")): \(proposal.source)")
                 continue
             }
@@ -152,10 +157,16 @@ struct StoragePlanBuilder {
         let ext = url.pathExtension.lowercased()
         let isBundle = isPackage
             || (!ext.isEmpty && StorageScanService.libraryExtensions.contains(ext))
+        let isDeveloperCacheRoot = StorageExclusions.developerCacheRoot(for: path, home: NSHomeDirectory()) == path
 
         // 与扫描服务一致的体积口径
         let sizeBytes: Int64
-        if isSymbolicLink {
+        if isDeveloperCacheRoot && isDirectory && !isSymbolicLink {
+            sizeBytes = max(
+                Int64(rv.totalFileSize ?? rv.fileSize ?? 0),
+                Self.directoryContentSize(url: url)
+            )
+        } else if isSymbolicLink {
             sizeBytes = Int64(rv.fileSize ?? 0)
         } else if isDirectory {
             sizeBytes = Int64(rv.totalFileSize ?? rv.fileSize ?? 0)
@@ -163,9 +174,38 @@ struct StoragePlanBuilder {
             sizeBytes = Int64(rv.fileSize ?? 0)
         }
 
-        let kind = FileKind.derive(fileExtension: ext.isEmpty ? nil : ext, typeIdentifier: typeIdentifier)
+        let kind: FileKind
+        if isDeveloperCacheRoot {
+            kind = .developerCache
+        } else {
+            kind = FileKind.derive(fileExtension: ext.isEmpty ? nil : ext, typeIdentifier: typeIdentifier)
+        }
 
         return PathMetadata(sizeBytes: sizeBytes, kind: kind, isBundle: isBundle, isSymbolicLink: isSymbolicLink)
+    }
+
+    private static func directoryContentSize(url: URL) -> Int64 {
+        let keys: [URLResourceKey] = [.fileSizeKey, .totalFileSizeKey, .isDirectoryKey, .isSymbolicLinkKey]
+        guard let enumerator = FileManager.default.enumerator(
+            at: url,
+            includingPropertiesForKeys: keys,
+            options: [.skipsPackageDescendants]
+        ) else {
+            return 0
+        }
+
+        var total: Int64 = 0
+        for case let child as URL in enumerator {
+            guard let rv = try? child.resourceValues(forKeys: Set(keys)) else { continue }
+            if rv.isSymbolicLink == true {
+                total += Int64(rv.fileSize ?? 0)
+            } else if rv.isDirectory == true {
+                continue
+            } else {
+                total += Int64(rv.totalFileSize ?? rv.fileSize ?? 0)
+            }
+        }
+        return total
     }
 
     // MARK: - Risk / Evidence Derivation
@@ -177,6 +217,10 @@ struct StoragePlanBuilder {
         case .move, .trash: return .medium
         case .createDirectory, .scanOnly: return .low
         }
+    }
+
+    private static func isDeveloperCacheActionAllowed(_ action: StorageAction) -> Bool {
+        action == .trash || action == .scanOnly
     }
 
     /// 数据风险（独立于操作风险；基于内容可恢复性）。

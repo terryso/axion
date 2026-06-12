@@ -18,7 +18,7 @@ import AxionCore
 final class ExecuteStoragePlanTool: ToolProtocol, Sendable {
 
     let name = "execute_storage_plan"
-    let description = "执行用户已确认的文件整理项（移动 / 移入废纸篓 / 创建目录），返回可审计的 StorageManifest（含逐项结果与摘要）。安全红线：只接受 move/trash/create_directory/scan_only；永不永久删除（不存在 delete 动作）；trash 走系统废纸篓（可恢复）；uninstall_app 属另一工具（39.3），收到即拒绝并记入 errors。执行前先写 manifest 草稿，可经 undo_storage_op 撤销。executor 会独立重校验每项 source（必须在 scan_roots 之下、未被排除、实际存在、非 symlink 目标），违规项丢弃不执行。参数：operation_id(必填，来自 propose_storage_plan)、scan_roots(必填，用于重校验 source 范围)、items(必填，对象数组：action/source/target?/size_bytes?/reason?/evidence?)、surface(run 或 chat，默认 run)、user_request(可选，原任务)。"
+    let description = "执行用户已确认的文件整理项（移动 / 移入废纸篓 / 创建目录），返回可审计的 StorageManifest（含逐项结果与摘要）。安全红线：只接受 move/trash/create_directory/scan_only；永不永久删除（不存在 delete 动作）；trash 走系统废纸篓（可恢复）；uninstall_app 属另一工具（39.3），收到即拒绝并记入 errors。执行前先写 manifest 草稿，可经 undo_storage_op 撤销。executor 会独立重校验每项 source（必须在 scan_roots 之下、未被排除、实际存在、非 symlink 目标；developer_cache 仅允许根目录整体 trash/scan_only），违规项丢弃不执行。参数：operation_id(必填，来自 propose_storage_plan)、scan_roots(必填，用于重校验 source 范围)、items(必填，对象数组：action/source/target?/size_bytes?/reason?/evidence?)、surface(run 或 chat，默认 run)、user_request(可选，原任务)。"
     nonisolated(unsafe) let inputSchema: ToolInputSchema = [
         "type": "object",
         "properties": [

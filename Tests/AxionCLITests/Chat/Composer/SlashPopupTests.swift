@@ -183,7 +183,8 @@ struct SlashPopupTests {
         let items = SlashPopup.filter(query: "/", context: ctx)
         let names = items.map(\.kind.displayName)
         #expect(!names.contains("/resume"), "/resume should be filtered when agent busy")
-        #expect(items.count == 10, "Should have 10 commands (all except /resume, /new, /fork, /archive, /skills, /apps)")
+        #expect(!names.contains("/storage"), "/storage should be filtered when agent busy")
+        #expect(items.count == 10, "Should have 10 commands (all except /resume, /new, /fork, /archive, /skills, /apps, /storage)")
     }
 
     // MARK: - Filter: matchRange

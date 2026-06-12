@@ -26,9 +26,13 @@ struct StorageExecutorTests {
         try Data(repeating: 0x61, count: bytes).write(to: url)
     }
 
-    private func makeExecutor(root: URL, ops: URL) -> (StorageExecutor, StorageManifestStore) {
+    private func makeExecutor(
+        root: URL,
+        ops: URL,
+        trashPerformer: TrashPerforming = .system
+    ) -> (StorageExecutor, StorageManifestStore) {
         let store = StorageManifestStore(storageOpsDir: ops.path, homeDirectory: root.path)
-        return (StorageExecutor(manifestStore: store), store)
+        return (StorageExecutor(manifestStore: store, trashPerformer: trashPerformer), store)
     }
 
     private func request(
@@ -189,6 +193,44 @@ struct StorageExecutorTests {
         #expect(result.manifest.errors.contains { $0.contains("git_directory") || $0.contains("excluded") })
         // Source untouched.
         #expect(FileManager.default.fileExists(atPath: gitFile.path))
+    }
+
+    @Test("execute allows trashing developer cache root but rejects child paths")
+    func executeAllowsDeveloperCacheRootTrashOnly() async throws {
+        let root = try makeTempDir("root")
+        let ops = try makeTempDir("ops")
+        defer { cleanup(root); cleanup(ops) }
+
+        let cacheRoot = root.appendingPathComponent("node_modules")
+        let cacheFile = cacheRoot.appendingPathComponent("pkg/cache.bin")
+        let trashRoot = root.appendingPathComponent("trash")
+        try writeFile(cacheFile, bytes: 11)
+
+        let trashPerformer = TrashPerforming { source in
+            try FileManager.default.createDirectory(at: trashRoot, withIntermediateDirectories: true)
+            let destination = trashRoot.appendingPathComponent(source.lastPathComponent)
+            try FileManager.default.moveItem(at: source, to: destination)
+            return destination
+        }
+
+        let (executor, _) = makeExecutor(root: root, ops: ops, trashPerformer: trashPerformer)
+        let result = await executor.execute(request(
+            op: "op-dev-cache-trash",
+            root: root,
+            items: [
+                ExecutionItem(action: .trash, source: cacheFile.path),
+                ExecutionItem(action: .trash, source: cacheRoot.path),
+            ]
+        ))
+
+        #expect(result.succeeded == 1)
+        #expect(result.manifest.errors.contains { $0.contains("developer_cache") && $0.contains("cache.bin") })
+        let item = try #require(result.manifest.items.first)
+        #expect(item.action == .trash)
+        #expect(item.sourcePath == cacheRoot.path)
+        #expect(item.outcome == .succeeded)
+        #expect(!FileManager.default.fileExists(atPath: cacheRoot.path))
+        #expect(FileManager.default.fileExists(atPath: trashRoot.appendingPathComponent("node_modules").path))
     }
 
     @Test("execute rejects missing sources")

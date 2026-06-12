@@ -14,7 +14,7 @@ import AxionCore
 final class StorageScanTool: ToolProtocol, Sendable {
 
     let name = "storage_scan"
-    let description = "扫描指定目录（默认用户目录：~/Downloads、~/Desktop、~/Documents），返回底层文件信号分组（按类型）与大文件列表，用于磁盘占用分析与整理建议。只读，不移动/删除任何文件。参数：roots(绝对路径数组，可选，默认用户目录)、min_size_mb(大文件阈值，单位 MB(十进制 10^6)，可选，缺省时回退配置阈值默认 1 GiB = 1073741824)、include_hidden(是否含隐藏文件，默认 false)、exclude_paths(额外排除路径数组，可选)。"
+    let description = "扫描指定目录（默认用户目录：~/Downloads、~/Desktop、~/Documents），返回底层文件信号分组（按类型）与大文件列表，用于磁盘占用分析与整理建议。只读，不移动/删除任何文件。开发缓存目录（node_modules/.build/DerivedData/.venv 等）会折叠为 developer_cache 根目录候选，不展开内部文件。参数：roots(绝对路径数组，可选，默认用户目录)、min_size_mb(大文件阈值，单位 MB(十进制 10^6)，可选，缺省时回退配置阈值默认 1 GiB = 1073741824)、include_hidden(是否含隐藏文件，默认 false)、exclude_paths(额外排除路径数组，可选)。"
     nonisolated(unsafe) let inputSchema: ToolInputSchema = [
         "type": "object",
         "properties": [
