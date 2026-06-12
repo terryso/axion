@@ -203,6 +203,43 @@ struct AppListServiceTests {
         #expect(output.contains("path: /Applications/Slack.app"))
     }
 
+    @Test("formatter renders paged window range and absolute numbering")
+    func formatterRendersPagedWindow() {
+        let items = (1...25).map { index in
+            AppListItem(
+                displayName: "App \(index)",
+                bundleIdentifier: "com.example.app\(index)",
+                bundlePath: "/Applications/App \(index).app",
+                version: "1.0",
+                sizeBytes: 1024,
+                isRunning: false,
+                isSystemProtected: false,
+                source: .applications
+            )
+        }
+        let result = AppListResult(
+            scope: .fast,
+            filter: nil,
+            candidates: items,
+            protectedMatches: [],
+            warnings: [],
+            deepSearchAvailable: true
+        )
+
+        let output = AppListFormatter.renderList(
+            result,
+            selectedIndex: 20,
+            maxItems: 20,
+            startIndex: 1,
+            numbered: true,
+            terminalWidth: 80
+        )
+
+        #expect(output.contains("显示 2-21"))
+        #expect(output.contains("显示 2-21 / 25"))
+        #expect(output.contains("21. App 21"))
+    }
+
     @Test("formatter hides deep search key once deep search is active")
     func formatterHidesDeepSearchKeyWhenUnavailable() {
         let item = AppListItem(

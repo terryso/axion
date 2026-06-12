@@ -61,10 +61,12 @@ struct AppSelectionPrompt {
         }
         defer { ownedReader?.restore() }
 
-        let visibleItems = Array(result.candidates.prefix(maxItems))
-        var selectedIndex = visibleItems.isEmpty ? -1 : 0
+        let allItems = result.candidates
+        let pageSize = max(1, maxItems)
+        var selectedIndex = allItems.isEmpty ? -1 : 0
+        var startIndex = 0
         var renderedLines = 0
-        render(result: result, selectedIndex: selectedIndex, renderedLines: &renderedLines)
+        render(result: result, selectedIndex: selectedIndex, startIndex: startIndex, renderedLines: &renderedLines)
 
         while true {
             guard let event = reader.readNext() else { return .cancelled }
@@ -72,19 +74,25 @@ struct AppSelectionPrompt {
             case .up:
                 if selectedIndex > 0 {
                     selectedIndex -= 1
-                    render(result: result, selectedIndex: selectedIndex, renderedLines: &renderedLines)
+                    if selectedIndex < startIndex {
+                        startIndex = selectedIndex
+                    }
+                    render(result: result, selectedIndex: selectedIndex, startIndex: startIndex, renderedLines: &renderedLines)
                 }
             case .down:
-                if selectedIndex >= 0, selectedIndex < visibleItems.count - 1 {
+                if selectedIndex >= 0, selectedIndex < allItems.count - 1 {
                     selectedIndex += 1
-                    render(result: result, selectedIndex: selectedIndex, renderedLines: &renderedLines)
+                    if selectedIndex >= startIndex + pageSize {
+                        startIndex = selectedIndex - pageSize + 1
+                    }
+                    render(result: result, selectedIndex: selectedIndex, startIndex: startIndex, renderedLines: &renderedLines)
                 }
             case .enter:
-                guard selectedIndex >= 0, selectedIndex < visibleItems.count else {
+                guard selectedIndex >= 0, selectedIndex < allItems.count else {
                     return .cancelled
                 }
                 writeOutput("\r\n")
-                return .selected(visibleItems[selectedIndex])
+                return .selected(allItems[selectedIndex])
             case .escape, .ctrl("c"), .eof:
                 writeOutput("\r\n")
                 return .cancelled
@@ -97,11 +105,12 @@ struct AppSelectionPrompt {
         }
     }
 
-    private func render(result: AppListResult, selectedIndex: Int, renderedLines: inout Int) {
+    private func render(result: AppListResult, selectedIndex: Int, startIndex: Int, renderedLines: inout Int) {
         let rendered = AppListFormatter.renderList(
             result,
             selectedIndex: selectedIndex,
             maxItems: maxItems,
+            startIndex: startIndex,
             includeControls: true,
             terminalWidth: terminalWidth
         )

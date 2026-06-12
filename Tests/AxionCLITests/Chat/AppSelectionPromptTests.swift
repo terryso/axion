@@ -56,6 +56,27 @@ struct AppSelectionPromptTests {
         #expect(output.text.contains("\r\n"))
     }
 
+    @Test("down past first page scrolls window and selects twenty first app")
+    func downPastFirstPageSelectsTwentyFirst() {
+        let output = OutputCapture()
+        let events = Array(repeating: KeyEvent.down, count: 20) + [.enter]
+        let prompt = AppSelectionPrompt(
+            isTTY: true,
+            keyReader: MockKeyReader(events),
+            writeOutput: { output.write($0) },
+            maxItems: 20
+        )
+        let items = (1...25).map { index in
+            item("App \(index)", bundleId: "com.example.app\(index)")
+        }
+
+        let selected = prompt.run(result: result(items))
+
+        #expect(selected == .selected(item("App 21", bundleId: "com.example.app21")))
+        #expect(output.text.contains("App 21"))
+        #expect(output.text.contains("显示 2-21 / 25"))
+    }
+
     @Test("escape cancels selection")
     func escapeCancels() {
         let output = OutputCapture()

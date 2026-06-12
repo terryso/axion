@@ -7,13 +7,21 @@ struct AppListFormatter {
         _ result: AppListResult,
         selectedIndex: Int? = nil,
         maxItems: Int = defaultMaxItems,
+        startIndex: Int = 0,
         includeControls: Bool = true,
         numbered: Bool = false,
         terminalWidth: Int = 100
     ) -> String {
         var lines: [String] = []
-        let shownItems = Array(result.candidates.prefix(maxItems))
-        let title = titleLine(result: result, shownCount: shownItems.count, maxItems: maxItems)
+        let pageSize = max(1, maxItems)
+        let safeStartIndex = normalizedStartIndex(startIndex, total: result.candidates.count, pageSize: pageSize)
+        let shownItems = Array(result.candidates.dropFirst(safeStartIndex).prefix(pageSize))
+        let title = titleLine(
+            result: result,
+            shownCount: shownItems.count,
+            maxItems: pageSize,
+            startIndex: safeStartIndex
+        )
         let deepControl = result.deepSearchAvailable ? " · a 深度搜索" : ""
         let controls = includeControls ? "  ↑/↓ 选择 · Enter 卸载\(deepControl) · Esc 取消" : ""
         lines.append(title + controls)
@@ -24,14 +32,18 @@ struct AppListFormatter {
             let nameWidth = min(max(shownItems.map(\.displayName.count).max() ?? 0, 14), 26)
             let bundleWidth = min(max(shownItems.map(\.bundleIdentifier.count).max() ?? 0, 18), 34)
             for (index, item) in shownItems.enumerated() {
-                let marker = numbered ? "\(index + 1)." : (selectedIndex == index ? "▶" : " ")
+                let absoluteIndex = safeStartIndex + index
+                let marker = numbered ? "\(absoluteIndex + 1)." : (selectedIndex == absoluteIndex ? "▶" : " ")
                 lines.append(formatItemLine(item, marker: marker, nameWidth: nameWidth, bundleWidth: bundleWidth))
                 lines.append(formatPathLine(item, terminalWidth: terminalWidth))
             }
         }
 
         if result.candidates.count > shownItems.count {
-            lines.append("  还有 \(result.candidates.count - shownItems.count) 个候选未显示，请输入更具体的过滤词")
+            let rangeStart = shownItems.isEmpty ? 0 : safeStartIndex + 1
+            let rangeEnd = safeStartIndex + shownItems.count
+            let actionHint = includeControls ? "继续按 ↑/↓ 翻页，或输入更具体的过滤词" : "请输入更具体的过滤词查看更多"
+            lines.append("  显示 \(rangeStart)-\(rangeEnd) / \(result.candidates.count)；\(actionHint)")
         }
 
         if !result.protectedMatches.isEmpty {
@@ -75,10 +87,13 @@ struct AppListFormatter {
         """
     }
 
-    static func titleLine(result: AppListResult, shownCount: Int, maxItems: Int) -> String {
+    static func titleLine(result: AppListResult, shownCount: Int, maxItems: Int, startIndex: Int = 0) -> String {
         let scope = result.scope == .deep ? "深度搜索" : "快速搜索"
         let filter = result.filter.map { " · 过滤: \($0)" } ?? ""
-        let shown = result.candidates.count > maxItems ? "，显示前 \(shownCount) 个" : ""
+        let pageSize = max(1, maxItems)
+        let shown = result.candidates.count > pageSize && shownCount > 0
+            ? "，显示 \(startIndex + 1)-\(startIndex + shownCount)"
+            : ""
         return "可卸载 App 候选（\(scope)，\(result.candidates.count) 个\(shown)）\(filter)"
     }
 
@@ -166,6 +181,12 @@ struct AppListFormatter {
             roots.append(parent)
         }
         return roots
+    }
+
+    private static func normalizedStartIndex(_ startIndex: Int, total: Int, pageSize: Int) -> Int {
+        guard total > 0 else { return 0 }
+        let lastStart = max(0, total - pageSize)
+        return min(max(0, startIndex), lastStart)
     }
 
     private static func compactJSON(_ payload: [String: Any]) -> String {
