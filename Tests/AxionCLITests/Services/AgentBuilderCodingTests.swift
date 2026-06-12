@@ -129,10 +129,10 @@ struct BuildConfigForChatTests {
         AxionConfig(apiKey: "sk-test")
     }
 
-    @Test("Returns codingAgent mode")
-    func test_forChat_returnsCodingAgentMode() throws {
+    @Test("Returns desktopAutomation mode (unified with run)")
+    func test_forChat_returnsDesktopAutomationMode() throws {
         let buildConfig = AgentBuilder.BuildConfig.forChat(config: makeConfig())
-        #expect(buildConfig.mode == AgentBuilder.AgentMode.codingAgent)
+        #expect(buildConfig.mode == AgentBuilder.AgentMode.desktopAutomation)
     }
 
     @Test("Returns maxTokens 131072 (128K)")
@@ -147,10 +147,10 @@ struct BuildConfigForChatTests {
         #expect(buildConfig.mode == AgentBuilder.AgentMode.desktopAutomation)
     }
 
-    @Test("forChat does not include Playwright")
-    func test_forChat_noPlaywright() throws {
+    @Test("forChat includes Playwright (unified with run)")
+    func test_forChat_includesPlaywright() throws {
         let buildConfig = AgentBuilder.BuildConfig.forChat(config: makeConfig())
-        #expect(buildConfig.includePlaywright == false)
+        #expect(buildConfig.includePlaywright == true)
     }
 
     @Test("forChat passes through optional parameters")
@@ -169,47 +169,48 @@ struct BuildConfigForChatTests {
     }
 }
 
-// MARK: - Coding Prompt Content Tests
+// MARK: - Unified Prompt Content Tests
 
-@Suite("Coding Agent Prompt Content")
-struct CodingPromptContentTests {
+@Suite("Unified System Prompt Content")
+struct UnifiedPromptContentTests {
 
-    @Test("Coding prompt template exists and loads")
-    func test_codingPromptTemplate_loads() throws {
+    @Test("Unified prompt template exists and loads")
+    func test_unifiedPromptTemplate_loads() throws {
         let promptDir = PromptBuilder.resolvePromptDirectory()
         let content = try PromptBuilder.load(
-            name: "coding-agent-system",
-            variables: ["cwd": "/tmp/test"],
+            name: "planner-system",
+            variables: ["tools": "test", "max_steps": "20", "cwd": "/tmp/test"],
             fromDirectory: promptDir
         )
         #expect(!content.isEmpty)
-        #expect(content.contains("coding agent"))
+        #expect(content.contains("general-purpose"))
     }
 
-    @Test("Coding prompt does not contain desktop automation keywords")
-    func test_codingPrompt_noDesktopAutomation() throws {
+    @Test("Unified prompt contains both coding and desktop automation capabilities")
+    func test_unifiedPrompt_hasCodingAndDesktopCapabilities() throws {
         let promptDir = PromptBuilder.resolvePromptDirectory()
         let content = try PromptBuilder.load(
-            name: "coding-agent-system",
-            variables: ["cwd": "/tmp/test"],
+            name: "planner-system",
+            variables: ["tools": "test", "max_steps": "20", "cwd": "/tmp/test"],
             fromDirectory: promptDir
         )
+        // Coding capabilities merged from the former coding-agent prompt
+        #expect(content.contains("LSP"))
+        #expect(content.contains("Working Directory"))
+        // Desktop automation capabilities (inherited from the desktop prompt)
         let lowered = content.lowercased()
-        #expect(!lowered.contains("screenshot"))
-        #expect(!lowered.contains("list_apps"))
-        #expect(!lowered.contains("accessibility_tree"))
-        #expect(!lowered.contains("click"))
-        #expect(!lowered.contains("launch_app"))
-        #expect(!lowered.contains("type_text"))
+        #expect(lowered.contains("screenshot"))
+        #expect(lowered.contains("launch_app"))
+        #expect(lowered.contains("click"))
     }
 
-    @Test("Coding prompt contains cwd variable placeholder")
-    func test_codingPrompt_hasCwdVariable() throws {
+    @Test("Unified prompt resolves cwd variable placeholder")
+    func test_unifiedPrompt_hasCwdVariable() throws {
         let promptDir = PromptBuilder.resolvePromptDirectory()
         let testCwd = "/Users/test/project"
         let content = try PromptBuilder.load(
-            name: "coding-agent-system",
-            variables: ["cwd": testCwd],
+            name: "planner-system",
+            variables: ["tools": "test", "max_steps": "20", "cwd": testCwd],
             fromDirectory: promptDir
         )
         #expect(content.contains(testCwd))
@@ -218,23 +219,21 @@ struct CodingPromptContentTests {
 
 }
 
-// MARK: - Coding Agent MCP Isolation Tests
+// MARK: - Unified Agent MCP Tests
 
-@Suite("Coding Agent MCP Isolation")
-struct CodingAgentMCPIsolationTests {
+@Suite("Unified Agent MCP Configuration")
+struct UnifiedAgentMCPTests {
 
     private func makeConfig() -> AxionConfig {
         AxionConfig(apiKey: "sk-test")
     }
 
-    @Test("forChat has no MCP servers (desktop automation excluded)")
-    func test_forChat_noMCPServers() throws {
-        // Verify that coding agent config would produce nil MCP servers
-        // by confirming mode is codingAgent and includePlaywright is false
+    @Test("forChat now loads desktop automation MCP (unified with run)")
+    func test_forChat_hasDesktopAutomation() throws {
+        // After unification, chat shares MCP with run: desktopAutomation mode + Playwright.
         let buildConfig = AgentBuilder.BuildConfig.forChat(config: makeConfig())
-        #expect(buildConfig.mode == AgentBuilder.AgentMode.codingAgent)
-        #expect(buildConfig.includePlaywright == false)
-        // The build() method uses mode == .codingAgent → mcpServers = nil
+        #expect(buildConfig.mode == AgentBuilder.AgentMode.desktopAutomation)
+        #expect(buildConfig.includePlaywright == true)
     }
 
     @Test("forCLI still has desktop automation mode")

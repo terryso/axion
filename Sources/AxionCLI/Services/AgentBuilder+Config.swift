@@ -6,10 +6,11 @@ extension AgentBuilder {
 
     // MARK: - Configuration
 
-    /// Agent operation mode — determines prompt template and tool selection.
+    /// Agent operation mode. After unification, all entry points (run, chat,
+    /// server, gateway, skill) use desktopAutomation — coding and desktop
+    /// automation are both innate capabilities of a single assistant.
     enum AgentMode: String, Sendable {
-        case desktopAutomation  // axion run — desktop automation via Helper MCP
-        case codingAgent        // axion (interactive chat) — coding-focused agent
+        case desktopAutomation
     }
 
     struct BuildConfig: Sendable {
@@ -74,7 +75,8 @@ extension AgentBuilder {
         }
 
         /// Build config for interactive chat mode (`axion` with no arguments).
-        /// Uses coding-agent system prompt, 128K max tokens, and no MCP/Playwright.
+        /// Shares the unified system prompt, MCP servers, and skills with `axion run`;
+        /// differs only in interactive session, permission model, and 128K max tokens.
         static func forChat(
             config: AxionConfig,
             noMemory: Bool = false,
@@ -91,7 +93,7 @@ extension AgentBuilder {
                 task: "",
                 noMemory: noMemory,
                 noSkills: noSkills,
-                includePlaywright: false,
+                includePlaywright: true,
                 allowForeground: false,
                 maxSteps: maxSteps,
                 maxTokens: 131_072,  // 128K
@@ -102,7 +104,7 @@ extension AgentBuilder {
                 sessionId: sessionId,
                 sessionStore: sessionStore,
                 emitTokenStream: false,
-                mode: .codingAgent,
+                mode: .desktopAutomation,
                 permissionMode: permissionMode,
                 canUseTool: canUseTool,
                 jsonOutput: false

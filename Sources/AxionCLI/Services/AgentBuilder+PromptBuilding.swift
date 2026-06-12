@@ -7,8 +7,7 @@ extension AgentBuilder {
 
     // MARK: - Memory Context
 
-    /// Builds both fact-based and universal memory contexts.
-    /// Shared between `buildSystemPrompt` and `buildCodingSystemPrompt`.
+    /// Builds both fact-based and universal memory contexts for `buildSystemPrompt`.
     static func buildMemoryContexts(
         task: String,
         memoryStore: FileBasedMemoryStore,
@@ -58,6 +57,7 @@ extension AgentBuilder {
     ) async -> String {
         let promptDir = PromptBuilder.resolvePromptDirectory()
         let mcpPrefixedToolNames = ToolNames.allToolNames.map { "mcp__axion-helper__\($0)" }
+        let cwd = FileManager.default.currentDirectoryPath
 
         // Memory context
         let (memoryContext, universalMemoryContext) = await buildMemoryContexts(
@@ -72,21 +72,29 @@ extension AgentBuilder {
             variables: [
                 "tools": PromptBuilder.buildToolListDescription(from: mcpPrefixedToolNames),
                 "max_steps": String(config.maxSteps),
+                "cwd": cwd,
             ],
             fromDirectory: promptDir
         )) ?? ""
 
         let skillsPrompt = noSkills ? "" : skillRegistry.formatSkillsForPrompt()
 
-        let prompt = buildFullSystemPrompt(
+        var prompt = buildFullSystemPrompt(
             basePrompt: baseSystemPrompt,
             memoryContext: memoryContext,
             universalMemoryContext: universalMemoryContext,
             skillsPrompt: skillsPrompt,
             includeSaveSkillGuidance: includeSaveSkillGuidance
         )
+        prompt = appendModeInstructions(to: prompt, fast: fast, dryrun: dryrun)
 
-        return appendModeInstructions(to: prompt, fast: fast, dryrun: dryrun)
+        // Append CLAUDE.md project instructions — shared by run and interactive chat
+        let claudeMdContent = loadClaudeMd(cwd: cwd)
+        if !claudeMdContent.isEmpty {
+            prompt += "\n\n\(claudeMdContent)"
+        }
+
+        return prompt
     }
 
     /// Appends fast/dryrun mode instructions to a system prompt.
@@ -183,53 +191,4 @@ extension AgentBuilder {
         return parts.joined(separator: "\n\n")
     }
 
-    /// Builds the system prompt for coding agent mode (interactive chat).
-    ///
-    /// Loads `coding-agent-system.md` template, then appends Memory context,
-    /// Skills context, and CLAUDE.md project instructions.
-    static func buildCodingSystemPrompt(
-        memoryStore: FileBasedMemoryStore,
-        memoryDir: String,
-        skillRegistry: SkillRegistry,
-        noMemory: Bool,
-        noSkills: Bool,
-        includeSaveSkillGuidance: Bool = false
-    ) async -> String {
-        let promptDir = PromptBuilder.resolvePromptDirectory()
-        let cwd = FileManager.default.currentDirectoryPath
-
-        // Memory context
-        let (memoryContext, universalMemoryContext) = await buildMemoryContexts(
-            task: "",
-            memoryStore: memoryStore,
-            memoryDir: memoryDir,
-            noMemory: noMemory
-        )
-
-        // Load coding-agent-system template
-        let baseSystemPrompt = (try? PromptBuilder.load(
-            name: "coding-agent-system",
-            variables: ["cwd": cwd],
-            fromDirectory: promptDir
-        )) ?? ""
-
-        let skillsPrompt = noSkills ? "" : skillRegistry.formatSkillsForPrompt()
-
-        // Assemble full prompt (base + memory + skills via shared builder)
-        var prompt = buildFullSystemPrompt(
-            basePrompt: baseSystemPrompt,
-            memoryContext: memoryContext,
-            universalMemoryContext: universalMemoryContext,
-            skillsPrompt: skillsPrompt,
-            includeSaveSkillGuidance: includeSaveSkillGuidance
-        )
-
-        // Append CLAUDE.md project instructions at the end
-        let claudeMdContent = loadClaudeMd(cwd: cwd)
-        if !claudeMdContent.isEmpty {
-            prompt += "\n\n\(claudeMdContent)"
-        }
-
-        return prompt
-    }
 }

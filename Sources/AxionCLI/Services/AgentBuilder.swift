@@ -68,7 +68,7 @@ enum AgentBuilder {
 
         // 2. Resolve Helper path (only required for desktop automation mode)
         let resolvedHelperPath = HelperPathResolver.resolveHelperPath()
-        guard resolvedHelperPath != nil || buildConfig.dryrun || buildConfig.mode == .codingAgent else {
+        guard resolvedHelperPath != nil || buildConfig.dryrun else {
             throw AxionError.helperNotFound(
                 suggestion: "Ensure AxionHelper.app is installed. Run 'axion doctor' to diagnose."
             )
@@ -97,35 +97,22 @@ enum AgentBuilder {
         let dryrun = buildConfig.dryrun
         let includeSaveSkillGuidance = !noMemory && !dryrun
 
-        let systemPrompt: String
-        switch buildConfig.mode {
-        case .desktopAutomation:
-            systemPrompt = await buildSystemPrompt(
-                config: config,
-                task: task,
-                memoryStore: memoryStore,
-                memoryDir: memoryDir,
-                skillRegistry: skillRegistry,
-                noMemory: noMemory,
-                noSkills: noSkills,
-                fast: buildConfig.fast,
-                dryrun: dryrun,
-                includeSaveSkillGuidance: includeSaveSkillGuidance
-            )
-        case .codingAgent:
-            systemPrompt = await buildCodingSystemPrompt(
-                memoryStore: memoryStore,
-                memoryDir: memoryDir,
-                skillRegistry: skillRegistry,
-                noMemory: noMemory,
-                noSkills: noSkills,
-                includeSaveSkillGuidance: includeSaveSkillGuidance
-            )
-        }
+        let systemPrompt = await buildSystemPrompt(
+            config: config,
+            task: task,
+            memoryStore: memoryStore,
+            memoryDir: memoryDir,
+            skillRegistry: skillRegistry,
+            noMemory: noMemory,
+            noSkills: noSkills,
+            fast: buildConfig.fast,
+            dryrun: dryrun,
+            includeSaveSkillGuidance: includeSaveSkillGuidance
+        )
 
         // 6. Configure MCP servers (skip in dryrun and coding agent — no side-effect tools allowed)
         let mcpServers: [String: McpServerConfig]?
-        if dryrun || buildConfig.mode == .codingAgent {
+        if dryrun {
             mcpServers = nil
         } else {
             mcpServers = MCPConfigResolver.resolveMCPServers(
@@ -254,7 +241,7 @@ enum AgentBuilder {
         agentOptions.eventBus = eventBus
 
         // Session resume: inject sessionId + sessionStore into SDK AgentOptions
-        // Permission: inject canUseTool from ChatCommand (codingAgent mode only).
+        // Permission: inject canUseTool from ChatCommand (interactive chat only).
         // Story 39.4: run 入口（desktopAutomation）接入存储审批门（storage execute 工具走门，其余放行）。
         if let canUseTool = buildConfig.canUseTool {
             agentOptions.canUseTool = canUseTool
@@ -268,8 +255,6 @@ enum AgentBuilder {
                 isInteractiveFn: { isatty(fileno(stdin)) != 0 },
                 jsonOutput: buildConfig.jsonOutput
             )
-        } else if buildConfig.mode == .codingAgent {
-            fputs("⚠️  [Axion] codingAgent 模式未设置 canUseTool，所有工具将无权限检查\n", stderr)
         }
         if let sid = buildConfig.sessionId {
             agentOptions.sessionId = sid
