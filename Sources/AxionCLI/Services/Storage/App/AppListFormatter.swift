@@ -68,20 +68,27 @@ struct AppListFormatter {
         return lines.joined(separator: "\n") + "\n"
     }
 
-    static func renderDetail(_ item: AppListItem, terminalWidth: Int = 100) -> String {
+    static func renderDetail(
+        _ item: AppListItem,
+        detailInfo: AppDetailInfo = .empty,
+        terminalWidth: Int = 100
+    ) -> String {
         let pathWidth = max(24, terminalWidth - 8)
-        let lines = [
+        var lines = [
             "App 详情  Enter 继续卸载流程 · b 返回列表 · Esc 取消",
             "  名称: \(sanitize(item.displayName))",
             "  Bundle ID: \(sanitize(item.bundleIdentifier))",
             "  版本: \(sanitize(item.version.isEmpty ? "-" : item.version))",
             "  大小: \(formatBytes(item.sizeBytes))",
             "  状态: \(item.isRunning ? "运行中" : "未运行")",
+            "  最后打开: \(sanitize(detailInfo.localMetadata.lastOpenedAt ?? "-"))",
+            "  添加时间: \(sanitize(detailInfo.localMetadata.addedAt ?? "-"))",
             "  来源: \(sourceLabel(item.source))",
             "  路径: \(truncate(sanitize(item.bundlePath), width: pathWidth))",
             "  用途线索: \(purposeHint(for: item))",
             "  安全提示: 继续后只会进入扫描和审批流程，不会直接移动文件。",
         ]
+        lines.append(contentsOf: renderAnalysisLines(detailInfo))
         return lines.joined(separator: "\n") + "\n"
     }
 
@@ -165,6 +172,30 @@ struct AppListFormatter {
         let vendor = vendorParts.isEmpty ? parts[0] : vendorParts.joined(separator: ".")
         let product = parts.last ?? item.displayName
         return "Bundle ID 通常包含厂商/产品线索：\(sanitize(vendor)) / \(sanitize(product))。"
+    }
+
+    private static func renderAnalysisLines(_ detailInfo: AppDetailInfo) -> [String] {
+        switch detailInfo.analysisState {
+        case .notRequested:
+            return []
+        case .analyzing:
+            return ["", "Agent 分析: 分析中，完成后会自动缓存。"]
+        case .failed(let message):
+            return ["", "Agent 分析: 暂不可用（\(sanitize(message))）"]
+        case .cached, .generated:
+            guard let analysis = detailInfo.analysis else { return [] }
+            let source = detailInfo.analysisState == .cached ? "缓存" : "新生成"
+            return [
+                "",
+                "Agent 分析（\(source)）:",
+                "  摘要: \(sanitize(analysis.summary))",
+                "  主要作用: \(sanitize(analysis.primaryUse))",
+                "  类别: \(sanitize(analysis.category))",
+                "  厂商: \(sanitize(analysis.publisher))",
+                "  置信度: \(sanitize(analysis.confidence))",
+                "  分析时间: \(sanitize(analysis.analyzedAt))",
+            ]
+        }
     }
 
     private static func pad(_ text: String, width: Int) -> String {

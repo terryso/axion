@@ -12,6 +12,18 @@ struct AppSelectionPromptTests {
         }
     }
 
+    private final class MockDetailProvider: AppDetailProviding, @unchecked Sendable {
+        let info: AppDetailInfo
+
+        init(info: AppDetailInfo) {
+            self.info = info
+        }
+
+        func detail(for item: AppListItem) async -> AppDetailInfo {
+            info
+        }
+    }
+
     private func item(_ name: String, bundleId: String = "com.example.app") -> AppListItem {
         AppListItem(
             displayName: name,
@@ -37,7 +49,7 @@ struct AppSelectionPromptTests {
     }
 
     @Test("enter opens detail before selecting app")
-    func enterOpensDetailBeforeSelecting() {
+    func enterOpensDetailBeforeSelecting() async {
         let output = OutputCapture()
         let prompt = AppSelectionPrompt(
             isTTY: true,
@@ -45,7 +57,7 @@ struct AppSelectionPromptTests {
             writeOutput: { output.write($0) }
         )
 
-        let selected = prompt.run(result: result([
+        let selected = await prompt.run(result: result([
             item("Slack", bundleId: "com.example.slack"),
             item("Zoom", bundleId: "us.zoom.xos"),
         ]))
@@ -57,8 +69,40 @@ struct AppSelectionPromptTests {
         #expect(output.text.contains("Enter 继续卸载流程"))
     }
 
+    @Test("detail provider analysis is rendered before confirmation")
+    func detailProviderAnalysisIsRendered() async {
+        let output = OutputCapture()
+        let analysis = AppAgentAnalysis(
+            summary: "Claude 是 Anthropic 的桌面 AI 助手。",
+            primaryUse: "AI 对话和任务辅助",
+            category: "AI Assistant",
+            publisher: "Anthropic",
+            confidence: "high",
+            analyzedAt: "2026-06-13T00:00:00Z"
+        )
+        let prompt = AppSelectionPrompt(
+            isTTY: true,
+            keyReader: MockKeyReader([.enter, .escape]),
+            writeOutput: { output.write($0) },
+            detailProvider: MockDetailProvider(info: AppDetailInfo(
+                localMetadata: AppDetailLocalMetadata(
+                    lastOpenedAt: "2026-06-12 10:00:00 +0000",
+                    addedAt: "2026-06-01 10:00:00 +0000"
+                ),
+                analysis: analysis,
+                analysisState: .generated
+            ))
+        )
+
+        #expect(await prompt.run(result: result([item("Claude", bundleId: "com.anthropic.claudefordesktop")])) == .cancelled)
+        #expect(output.text.contains("Agent 分析: 分析中"))
+        #expect(output.text.contains("Agent 分析（新生成）"))
+        #expect(output.text.contains("Claude 是 Anthropic 的桌面 AI 助手"))
+        #expect(output.text.contains("最后打开: 2026-06-12 10:00:00 +0000"))
+    }
+
     @Test("enter on detail selects app")
-    func enterOnDetailSelectsApp() {
+    func enterOnDetailSelectsApp() async {
         let output = OutputCapture()
         let prompt = AppSelectionPrompt(
             isTTY: true,
@@ -66,7 +110,7 @@ struct AppSelectionPromptTests {
             writeOutput: { output.write($0) }
         )
 
-        let selected = prompt.run(result: result([
+        let selected = await prompt.run(result: result([
             item("Slack", bundleId: "com.example.slack"),
             item("Zoom", bundleId: "us.zoom.xos"),
         ]))
@@ -78,7 +122,7 @@ struct AppSelectionPromptTests {
     }
 
     @Test("down past first page scrolls window and selects twenty first app")
-    func downPastFirstPageSelectsTwentyFirst() {
+    func downPastFirstPageSelectsTwentyFirst() async {
         let output = OutputCapture()
         let events = Array(repeating: KeyEvent.down, count: 20) + [.enter, .enter]
         let prompt = AppSelectionPrompt(
@@ -91,7 +135,7 @@ struct AppSelectionPromptTests {
             item("App \(index)", bundleId: "com.example.app\(index)")
         }
 
-        let selected = prompt.run(result: result(items))
+        let selected = await prompt.run(result: result(items))
 
         #expect(selected == .selected(item("App 21", bundleId: "com.example.app21")))
         #expect(output.text.contains("App 21"))
@@ -99,7 +143,7 @@ struct AppSelectionPromptTests {
     }
 
     @Test("b returns from detail to list")
-    func bReturnsFromDetailToList() {
+    func bReturnsFromDetailToList() async {
         let output = OutputCapture()
         let prompt = AppSelectionPrompt(
             isTTY: true,
@@ -107,7 +151,7 @@ struct AppSelectionPromptTests {
             writeOutput: { output.write($0) }
         )
 
-        let selected = prompt.run(result: result([
+        let selected = await prompt.run(result: result([
             item("Slack", bundleId: "com.example.slack"),
             item("Zoom", bundleId: "us.zoom.xos"),
         ]))
@@ -118,7 +162,7 @@ struct AppSelectionPromptTests {
     }
 
     @Test("escape cancels selection")
-    func escapeCancels() {
+    func escapeCancels() async {
         let output = OutputCapture()
         let prompt = AppSelectionPrompt(
             isTTY: true,
@@ -126,11 +170,11 @@ struct AppSelectionPromptTests {
             writeOutput: { output.write($0) }
         )
 
-        #expect(prompt.run(result: result([item("Slack")])) == .cancelled)
+        #expect(await prompt.run(result: result([item("Slack")])) == .cancelled)
     }
 
     @Test("a requests deep search when available")
-    func aRequestsDeepSearch() {
+    func aRequestsDeepSearch() async {
         let output = OutputCapture()
         let prompt = AppSelectionPrompt(
             isTTY: true,
@@ -138,11 +182,11 @@ struct AppSelectionPromptTests {
             writeOutput: { output.write($0) }
         )
 
-        #expect(prompt.run(result: result([item("Slack")], deepAvailable: true)) == .requestDeepSearch)
+        #expect(await prompt.run(result: result([item("Slack")], deepAvailable: true)) == .requestDeepSearch)
     }
 
     @Test("a is ignored when deep search unavailable")
-    func aIgnoredWhenDeepUnavailable() {
+    func aIgnoredWhenDeepUnavailable() async {
         let output = OutputCapture()
         let prompt = AppSelectionPrompt(
             isTTY: true,
@@ -150,11 +194,11 @@ struct AppSelectionPromptTests {
             writeOutput: { output.write($0) }
         )
 
-        #expect(prompt.run(result: result([item("Slack")], deepAvailable: false)) == .cancelled)
+        #expect(await prompt.run(result: result([item("Slack")], deepAvailable: false)) == .cancelled)
     }
 
     @Test("non-TTY renders list and returns nonTTYListOnly")
-    func nonTTYListOnly() {
+    func nonTTYListOnly() async {
         let output = OutputCapture()
         let prompt = AppSelectionPrompt(
             isTTY: false,
@@ -162,7 +206,7 @@ struct AppSelectionPromptTests {
             writeOutput: { output.write($0) }
         )
 
-        #expect(prompt.run(result: result([item("Slack")])) == .nonTTYListOnly)
+        #expect(await prompt.run(result: result([item("Slack")])) == .nonTTYListOnly)
         #expect(output.text.contains("Slack"))
         #expect(output.text.contains("1."))
         #expect(output.text.contains("非交互模式"))

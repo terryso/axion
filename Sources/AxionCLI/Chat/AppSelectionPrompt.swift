@@ -13,22 +13,25 @@ struct AppSelectionPrompt {
     let writeOutput: (String) -> Void
     let maxItems: Int
     let terminalWidth: Int
+    let detailProvider: (any AppDetailProviding)?
 
     init(
         isTTY: Bool = isatty(STDIN_FILENO) != 0,
         keyReader: (any KeyReading)? = nil,
         writeOutput: @escaping (String) -> Void,
         maxItems: Int = AppListFormatter.defaultMaxItems,
-        terminalWidth: Int = ChatComposer.terminalColumns()
+        terminalWidth: Int = ChatComposer.terminalColumns(),
+        detailProvider: (any AppDetailProviding)? = nil
     ) {
         self.isTTY = isTTY
         self.keyReader = keyReader
         self.writeOutput = writeOutput
         self.maxItems = maxItems
         self.terminalWidth = max(1, terminalWidth)
+        self.detailProvider = detailProvider
     }
 
-    func run(result: AppListResult) -> AppSelectionResult {
+    func run(result: AppListResult) async -> AppSelectionResult {
         if !isTTY {
             writeOutput(AppListFormatter.renderList(
                 result,
@@ -94,7 +97,19 @@ struct AppSelectionPrompt {
                 }
                 if !showingDetail {
                     showingDetail = true
-                    renderDetail(item: allItems[selectedIndex], renderedLines: &renderedLines)
+                    renderDetail(
+                        item: allItems[selectedIndex],
+                        detailInfo: detailProvider == nil ? .empty : .analyzing,
+                        renderedLines: &renderedLines
+                    )
+                    if let detailProvider {
+                        let detailInfo = await detailProvider.detail(for: allItems[selectedIndex])
+                        renderDetail(
+                            item: allItems[selectedIndex],
+                            detailInfo: detailInfo,
+                            renderedLines: &renderedLines
+                        )
+                    }
                     continue
                 }
                 writeOutput("\r\n")
@@ -129,8 +144,8 @@ struct AppSelectionPrompt {
         replaceRenderedContent(with: rendered, renderedLines: &renderedLines)
     }
 
-    private func renderDetail(item: AppListItem, renderedLines: inout Int) {
-        let rendered = AppListFormatter.renderDetail(item, terminalWidth: terminalWidth)
+    private func renderDetail(item: AppListItem, detailInfo: AppDetailInfo, renderedLines: inout Int) {
+        let rendered = AppListFormatter.renderDetail(item, detailInfo: detailInfo, terminalWidth: terminalWidth)
         replaceRenderedContent(with: rendered, renderedLines: &renderedLines)
     }
 

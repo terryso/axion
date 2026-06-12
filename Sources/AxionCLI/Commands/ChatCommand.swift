@@ -324,7 +324,7 @@ struct ChatCommand: AsyncParsableCommand {
                 let argument = SlashCommand.parseArgument(trimmed)
 
                 if cmd == .apps {
-                    guard let generatedTask = await handleAppsSlash(argument: argument) else {
+                    guard let generatedTask = await handleAppsSlash(argument: argument, config: config) else {
                         continue
                     }
                     taskText = generatedTask
@@ -778,17 +778,19 @@ struct ChatCommand: AsyncParsableCommand {
         )
     }
 
-    private func handleAppsSlash(argument: String?) async -> String? {
+    private func handleAppsSlash(argument: String?, config: AxionConfig) async -> String? {
         let parsed = parseAppsArgument(argument)
         let service = AppListService()
+        let detailProvider = AppDetailAnalysisService(config: config)
         var result = await listAppsForSlash(service: service, filter: parsed.filter, scope: parsed.deep ? .deep : .fast)
 
         while true {
             let prompt = AppSelectionPrompt(
                 isTTY: isatty(STDIN_FILENO) != 0,
-                writeOutput: { fputs($0, stderr) }
+                writeOutput: { fputs($0, stderr) },
+                detailProvider: detailProvider
             )
-            switch prompt.run(result: result) {
+            switch await prompt.run(result: result) {
             case .selected(let item):
                 return AppListFormatter.uninstallRequest(for: item)
             case .requestDeepSearch:

@@ -253,15 +253,127 @@ struct AppListServiceTests {
             source: .applications
         )
 
-        let output = AppListFormatter.renderDetail(item, terminalWidth: 80)
+        let output = AppListFormatter.renderDetail(
+            item,
+            detailInfo: AppDetailInfo(
+                localMetadata: AppDetailLocalMetadata(
+                    lastOpenedAt: "2026-06-12 10:00:00 +0000",
+                    addedAt: "2026-06-01 10:00:00 +0000"
+                ),
+                analysis: AppAgentAnalysis(
+                    summary: "Slack is a team messaging app.",
+                    primaryUse: "Team communication",
+                    category: "Collaboration",
+                    publisher: "Slack",
+                    confidence: "high",
+                    analyzedAt: "2026-06-13T00:00:00Z"
+                ),
+                analysisState: .cached
+            ),
+            terminalWidth: 80
+        )
 
         #expect(output.contains("App 详情"))
         #expect(output.contains("Enter 继续卸载流程"))
         #expect(output.contains("b 返回列表"))
         #expect(output.contains("Bundle ID: com.tinyspeck.slackmacgap"))
+        #expect(output.contains("最后打开: 2026-06-12 10:00:00 +0000"))
         #expect(output.contains("状态: 运行中"))
         #expect(output.contains("tinyspeck / slackmacgap"))
+        #expect(output.contains("Agent 分析（缓存）"))
+        #expect(output.contains("Team communication"))
         #expect(output.contains("不会直接移动文件"))
+    }
+
+    @Test("app detail analysis parses JSON response")
+    func appDetailAnalysisParsesJSON() throws {
+        let raw = """
+        ```json
+        {"summary":"Claude desktop app","primary_use":"AI assistant","category":"AI","publisher":"Anthropic","confidence":"high"}
+        ```
+        """
+
+        let analysis = try #require(AppDetailAnalysisService.parseAnalysis(raw, analyzedAt: "now"))
+
+        #expect(analysis.summary == "Claude desktop app")
+        #expect(analysis.primaryUse == "AI assistant")
+        #expect(analysis.category == "AI")
+        #expect(analysis.publisher == "Anthropic")
+        #expect(analysis.confidence == "high")
+        #expect(analysis.analyzedAt == "now")
+    }
+
+    @Test("app detail analysis uses cache before agent runner")
+    func appDetailAnalysisUsesCache() async throws {
+        let cacheDir = try makeTempDir("analysis-cache")
+        defer { cleanup(cacheDir) }
+        let cache = AppDetailAnalysisCache(cacheDir: cacheDir.path)
+        let item = AppListItem(
+            displayName: "Claude",
+            bundleIdentifier: "com.anthropic.claudefordesktop",
+            bundlePath: "/Applications/Claude.app",
+            version: "1.0",
+            sizeBytes: 1,
+            isRunning: false,
+            isSystemProtected: false,
+            source: .applications
+        )
+        cache.save(AppAgentAnalysis(
+            summary: "Cached Claude summary",
+            primaryUse: "AI assistant",
+            category: "AI",
+            publisher: "Anthropic",
+            confidence: "high",
+            analyzedAt: "cached"
+        ), for: item)
+        let service = AppDetailAnalysisService(
+            config: .default,
+            cache: cache,
+            localMetadataReader: { _ in AppDetailLocalMetadata(lastOpenedAt: "last", addedAt: nil) },
+            agentRunner: { _, _ in
+                throw NSError(domain: "unexpected", code: 1)
+            }
+        )
+
+        let detail = await service.detail(for: item)
+
+        #expect(detail.analysisState == .cached)
+        #expect(detail.analysis?.summary == "Cached Claude summary")
+        #expect(detail.localMetadata.lastOpenedAt == "last")
+    }
+
+    @Test("app detail analysis stores generated result")
+    func appDetailAnalysisStoresGeneratedResult() async throws {
+        let cacheDir = try makeTempDir("analysis-generated")
+        defer { cleanup(cacheDir) }
+        let cache = AppDetailAnalysisCache(cacheDir: cacheDir.path)
+        let item = AppListItem(
+            displayName: "Claude",
+            bundleIdentifier: "com.anthropic.claudefordesktop",
+            bundlePath: "/Applications/Claude.app",
+            version: "1.0",
+            sizeBytes: 1,
+            isRunning: false,
+            isSystemProtected: false,
+            source: .applications
+        )
+        let service = AppDetailAnalysisService(
+            config: .default,
+            cache: cache,
+            localMetadataReader: { _ in AppDetailLocalMetadata(lastOpenedAt: nil, addedAt: "added") },
+            agentRunner: { _, _ in
+                #"{"summary":"Claude desktop app","primary_use":"AI assistant","category":"AI","publisher":"Anthropic","confidence":"high"}"#
+            },
+            now: { Date(timeIntervalSince1970: 0) }
+        )
+
+        let detail = await service.detail(for: item)
+        let cached = cache.load(for: item)
+
+        #expect(detail.analysisState == .generated)
+        #expect(detail.analysis?.summary == "Claude desktop app")
+        #expect(detail.localMetadata.addedAt == "added")
+        #expect(cached?.publisher == "Anthropic")
     }
 
     @Test("formatter hides deep search key once deep search is active")
