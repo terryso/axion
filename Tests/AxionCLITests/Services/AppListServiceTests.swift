@@ -240,6 +240,30 @@ struct AppListServiceTests {
         #expect(output.contains("21. App 21"))
     }
 
+    @Test("formatter renders app detail with purpose hint and safety note")
+    func formatterRendersAppDetail() {
+        let item = AppListItem(
+            displayName: "Slack",
+            bundleIdentifier: "com.tinyspeck.slackmacgap",
+            bundlePath: "/Applications/Slack.app",
+            version: "4.0",
+            sizeBytes: 1024,
+            isRunning: true,
+            isSystemProtected: false,
+            source: .applications
+        )
+
+        let output = AppListFormatter.renderDetail(item, terminalWidth: 80)
+
+        #expect(output.contains("App 详情"))
+        #expect(output.contains("Enter 继续卸载流程"))
+        #expect(output.contains("b 返回列表"))
+        #expect(output.contains("Bundle ID: com.tinyspeck.slackmacgap"))
+        #expect(output.contains("状态: 运行中"))
+        #expect(output.contains("tinyspeck / slackmacgap"))
+        #expect(output.contains("不会直接移动文件"))
+    }
+
     @Test("formatter hides deep search key once deep search is active")
     func formatterHidesDeepSearchKeyWhenUnavailable() {
         let item = AppListItem(

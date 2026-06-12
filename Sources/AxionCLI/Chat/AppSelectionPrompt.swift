@@ -65,38 +65,50 @@ struct AppSelectionPrompt {
         let pageSize = max(1, maxItems)
         var selectedIndex = allItems.isEmpty ? -1 : 0
         var startIndex = 0
+        var showingDetail = false
         var renderedLines = 0
-        render(result: result, selectedIndex: selectedIndex, startIndex: startIndex, renderedLines: &renderedLines)
+        renderList(result: result, selectedIndex: selectedIndex, startIndex: startIndex, renderedLines: &renderedLines)
 
         while true {
             guard let event = reader.readNext() else { return .cancelled }
             switch event {
-            case .up:
+            case .up where !showingDetail:
                 if selectedIndex > 0 {
                     selectedIndex -= 1
                     if selectedIndex < startIndex {
                         startIndex = selectedIndex
                     }
-                    render(result: result, selectedIndex: selectedIndex, startIndex: startIndex, renderedLines: &renderedLines)
+                    renderList(result: result, selectedIndex: selectedIndex, startIndex: startIndex, renderedLines: &renderedLines)
                 }
-            case .down:
+            case .down where !showingDetail:
                 if selectedIndex >= 0, selectedIndex < allItems.count - 1 {
                     selectedIndex += 1
                     if selectedIndex >= startIndex + pageSize {
                         startIndex = selectedIndex - pageSize + 1
                     }
-                    render(result: result, selectedIndex: selectedIndex, startIndex: startIndex, renderedLines: &renderedLines)
+                    renderList(result: result, selectedIndex: selectedIndex, startIndex: startIndex, renderedLines: &renderedLines)
                 }
             case .enter:
                 guard selectedIndex >= 0, selectedIndex < allItems.count else {
                     return .cancelled
                 }
+                if !showingDetail {
+                    showingDetail = true
+                    renderDetail(item: allItems[selectedIndex], renderedLines: &renderedLines)
+                    continue
+                }
                 writeOutput("\r\n")
                 return .selected(allItems[selectedIndex])
+            case .left where showingDetail:
+                showingDetail = false
+                renderList(result: result, selectedIndex: selectedIndex, startIndex: startIndex, renderedLines: &renderedLines)
+            case .printable(let char) where showingDetail && char.lowercased() == "b":
+                showingDetail = false
+                renderList(result: result, selectedIndex: selectedIndex, startIndex: startIndex, renderedLines: &renderedLines)
             case .escape, .ctrl("c"), .eof:
                 writeOutput("\r\n")
                 return .cancelled
-            case .printable(let char) where char.lowercased() == "a" && result.deepSearchAvailable:
+            case .printable(let char) where !showingDetail && char.lowercased() == "a" && result.deepSearchAvailable:
                 writeOutput("\r\n")
                 return .requestDeepSearch
             default:
@@ -105,7 +117,7 @@ struct AppSelectionPrompt {
         }
     }
 
-    private func render(result: AppListResult, selectedIndex: Int, startIndex: Int, renderedLines: inout Int) {
+    private func renderList(result: AppListResult, selectedIndex: Int, startIndex: Int, renderedLines: inout Int) {
         let rendered = AppListFormatter.renderList(
             result,
             selectedIndex: selectedIndex,
@@ -114,6 +126,15 @@ struct AppSelectionPrompt {
             includeControls: true,
             terminalWidth: terminalWidth
         )
+        replaceRenderedContent(with: rendered, renderedLines: &renderedLines)
+    }
+
+    private func renderDetail(item: AppListItem, renderedLines: inout Int) {
+        let rendered = AppListFormatter.renderDetail(item, terminalWidth: terminalWidth)
+        replaceRenderedContent(with: rendered, renderedLines: &renderedLines)
+    }
+
+    private func replaceRenderedContent(with rendered: String, renderedLines: inout Int) {
         var output = ""
         if renderedLines > 0 {
             output += "\u{1B}[\(renderedLines)A\u{1B}[J"

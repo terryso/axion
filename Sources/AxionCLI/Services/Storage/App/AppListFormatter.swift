@@ -23,7 +23,7 @@ struct AppListFormatter {
             startIndex: safeStartIndex
         )
         let deepControl = result.deepSearchAvailable ? " · a 深度搜索" : ""
-        let controls = includeControls ? "  ↑/↓ 选择 · Enter 卸载\(deepControl) · Esc 取消" : ""
+        let controls = includeControls ? "  ↑/↓ 选择 · Enter 详情\(deepControl) · Esc 取消" : ""
         lines.append(title + controls)
 
         if shownItems.isEmpty {
@@ -65,6 +65,23 @@ struct AppListFormatter {
             lines.append("  非交互模式：仅显示候选，不进入选择器；请在交互终端中运行 /apps 或直接指定 App 名称。")
         }
 
+        return lines.joined(separator: "\n") + "\n"
+    }
+
+    static func renderDetail(_ item: AppListItem, terminalWidth: Int = 100) -> String {
+        let pathWidth = max(24, terminalWidth - 8)
+        let lines = [
+            "App 详情  Enter 继续卸载流程 · b 返回列表 · Esc 取消",
+            "  名称: \(sanitize(item.displayName))",
+            "  Bundle ID: \(sanitize(item.bundleIdentifier))",
+            "  版本: \(sanitize(item.version.isEmpty ? "-" : item.version))",
+            "  大小: \(formatBytes(item.sizeBytes))",
+            "  状态: \(item.isRunning ? "运行中" : "未运行")",
+            "  来源: \(sourceLabel(item.source))",
+            "  路径: \(truncate(sanitize(item.bundlePath), width: pathWidth))",
+            "  用途线索: \(purposeHint(for: item))",
+            "  安全提示: 继续后只会进入扫描和审批流程，不会直接移动文件。",
+        ]
         return lines.joined(separator: "\n") + "\n"
     }
 
@@ -133,6 +150,21 @@ struct AppListFormatter {
         case .spotlight: return "Spotlight"
         case .homebrewCask: return "Homebrew"
         }
+    }
+
+    private static func purposeHint(for item: AppListItem) -> String {
+        let parts = item.bundleIdentifier
+            .split(separator: ".")
+            .map(String.init)
+            .filter { !$0.isEmpty }
+        guard parts.count >= 2 else {
+            return "本地元数据不足；请结合名称和路径判断。"
+        }
+
+        let vendorParts = parts.dropFirst().dropLast()
+        let vendor = vendorParts.isEmpty ? parts[0] : vendorParts.joined(separator: ".")
+        let product = parts.last ?? item.displayName
+        return "Bundle ID 通常包含厂商/产品线索：\(sanitize(vendor)) / \(sanitize(product))。"
     }
 
     private static func pad(_ text: String, width: Int) -> String {

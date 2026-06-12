@@ -36,12 +36,33 @@ struct AppSelectionPromptTests {
         )
     }
 
-    @Test("down then enter selects second app")
-    func downThenEnterSelectsSecond() {
+    @Test("enter opens detail before selecting app")
+    func enterOpensDetailBeforeSelecting() {
         let output = OutputCapture()
         let prompt = AppSelectionPrompt(
             isTTY: true,
-            keyReader: MockKeyReader([.down, .enter]),
+            keyReader: MockKeyReader([.down, .enter, .escape]),
+            writeOutput: { output.write($0) }
+        )
+
+        let selected = prompt.run(result: result([
+            item("Slack", bundleId: "com.example.slack"),
+            item("Zoom", bundleId: "us.zoom.xos"),
+        ]))
+
+        #expect(selected == .cancelled)
+        #expect(output.text.contains("App 详情"))
+        #expect(output.text.contains("Zoom"))
+        #expect(output.text.contains("Bundle ID: us.zoom.xos"))
+        #expect(output.text.contains("Enter 继续卸载流程"))
+    }
+
+    @Test("enter on detail selects app")
+    func enterOnDetailSelectsApp() {
+        let output = OutputCapture()
+        let prompt = AppSelectionPrompt(
+            isTTY: true,
+            keyReader: MockKeyReader([.down, .enter, .enter]),
             writeOutput: { output.write($0) }
         )
 
@@ -59,7 +80,7 @@ struct AppSelectionPromptTests {
     @Test("down past first page scrolls window and selects twenty first app")
     func downPastFirstPageSelectsTwentyFirst() {
         let output = OutputCapture()
-        let events = Array(repeating: KeyEvent.down, count: 20) + [.enter]
+        let events = Array(repeating: KeyEvent.down, count: 20) + [.enter, .enter]
         let prompt = AppSelectionPrompt(
             isTTY: true,
             keyReader: MockKeyReader(events),
@@ -75,6 +96,25 @@ struct AppSelectionPromptTests {
         #expect(selected == .selected(item("App 21", bundleId: "com.example.app21")))
         #expect(output.text.contains("App 21"))
         #expect(output.text.contains("显示 2-21 / 25"))
+    }
+
+    @Test("b returns from detail to list")
+    func bReturnsFromDetailToList() {
+        let output = OutputCapture()
+        let prompt = AppSelectionPrompt(
+            isTTY: true,
+            keyReader: MockKeyReader([.enter, .printable("b"), .down, .enter, .enter]),
+            writeOutput: { output.write($0) }
+        )
+
+        let selected = prompt.run(result: result([
+            item("Slack", bundleId: "com.example.slack"),
+            item("Zoom", bundleId: "us.zoom.xos"),
+        ]))
+
+        #expect(selected == .selected(item("Zoom", bundleId: "us.zoom.xos")))
+        #expect(output.text.contains("Enter 详情"))
+        #expect(output.text.contains("App 详情"))
     }
 
     @Test("escape cancels selection")
