@@ -253,6 +253,21 @@ struct ChatOutputFormatterTests {
 @Suite("SpinnerRenderer")
 struct SpinnerRendererTests {
 
+    /// 轮询等待条件成立（默认最多 2 秒）。Spinner 动画跑在专用 `Thread` 上，
+    /// CI runner 调度抖动下固定 `Thread.sleep` 容易竞态；用轮询 + 宽超时消除该 flake。
+    private func waitFor(
+        timeoutSeconds: Double = 2.0,
+        intervalMs: Int = 20,
+        _ predicate: () -> Bool
+    ) -> Bool {
+        let deadline = Date().addingTimeInterval(timeoutSeconds)
+        while Date() < deadline {
+            if predicate() { return true }
+            Thread.sleep(forTimeInterval: Double(intervalMs) / 1000.0)
+        }
+        return predicate()
+    }
+
     @Test("非 TTY 时不输出 spinner")
     func nonTTYNoOutput() {
         let output = CaptureOutput()
@@ -307,13 +322,13 @@ struct SpinnerRendererTests {
 
         spinner.start(message: "thinking", delayMs: 200)
 
-        // 立即检查 — 延迟期间不应有输出
+        // 立即检查 — 延迟期间不应有输出（200ms 延迟 >> 50ms 检查点；慢 runner 只会让首帧更晚）
         Thread.sleep(forTimeInterval: 0.05)
         #expect(!output.captured.contains("⏳"))
 
-        // 等待延迟过期 + 至少一帧
-        Thread.sleep(forTimeInterval: 0.3)
-        #expect(output.captured.contains("⏳"))
+        // 等待延迟过期 + 首帧渲染。轮询替代固定 sleep，容忍 CI 专用线程调度抖动。
+        let rendered = waitFor { output.captured.contains("⏳") }
+        #expect(rendered)
         #expect(output.captured.contains("thinking"))
 
         spinner.stop()
@@ -339,13 +354,13 @@ struct SpinnerRendererTests {
         let spinner = SpinnerRenderer(isTTY: true, writeStderr: { output.write($0) })
 
         spinner.start(message: "loading")
-        Thread.sleep(forTimeInterval: 0.2)  // 等待几帧
+        // 等待至少一帧（轮询，容忍 CI 调度抖动）
+        let rendered = waitFor { output.captured.contains("⏳") }
 
         spinner.stop()
 
         let captured = output.captured
-        // 应包含 ⏳ 前缀和 message
-        #expect(captured.contains("⏳"))
+        #expect(rendered)
         #expect(captured.contains("loading"))
         // 应包含至少一个 braille frame
         let brailleChars = CharacterSet(charactersIn: "⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏")
@@ -358,13 +373,15 @@ struct SpinnerRendererTests {
         let spinner = SpinnerRenderer(isTTY: true, writeStderr: { output.write($0) })
 
         spinner.start(message: "thinking")
-        Thread.sleep(forTimeInterval: 0.25)  // 等待几帧
+        // 等待至少一帧（轮询，容忍 CI 调度抖动）
+        let rendered = waitFor { output.captured.contains("⏳") }
 
         spinner.stop()
 
         let captured = output.captured
         // 应包含耗时格式 "X.Xs"
         let elapsedPattern = Regex(/[0-9]+\.[0-9]s/)
+        #expect(rendered)
         #expect(captured.contains(elapsedPattern))
         #expect(captured.contains("thinking"))
     }
