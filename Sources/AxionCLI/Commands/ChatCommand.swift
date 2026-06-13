@@ -598,12 +598,17 @@ struct ChatCommand: AsyncParsableCommand {
             let outputHandler = ChatOutputFormatter(theme: chatTheme)
             outputHandler.startLLMWaiting()
             terminalTitle.setThinking()
-            // ESC 键中断监听 — agent streaming 期间并发检测 ESC 按键
-            // 与 Ctrl+C 共用 SignalHandler 中断路径：suppressInterruptError + 预填 + 不显示 summary
-            let escListener = EscapeInterruptListener {
-                SignalHandler.simulateFire()
-                currentAgent.interrupt()
-            }
+            // ESC / Ctrl+C 中断监听 — agent streaming 期间并发检测按键。
+            // raw mode 关闭 ISIG 后 Ctrl+C 不再产生 SIGINT、而作为 0x03 字节进入 stdin，
+            // 故监听器须同时捕获 0x1B(ESC) 与 0x03(Ctrl+C)，统一走 simulateFire()+interrupt()
+            // （不经 SignalHandler，避免污染 REPL 双击退出状态机；与 /apps 扫描路径同模式）。
+            let escListener = EscapeInterruptListener(
+                onEscape: {
+                    SignalHandler.simulateFire()
+                    currentAgent.interrupt()
+                },
+                interruptBytes: [0x1B, 0x03]
+            )
             escListenerRef.set(escListener)
 
             let messageStream: AsyncStream<SDKMessage>

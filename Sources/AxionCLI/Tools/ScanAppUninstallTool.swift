@@ -83,12 +83,28 @@ final class ScanAppUninstallTool: ToolProtocol, Sendable {
         let searchRoots = rootStrings.map { StorageExclusions.standardize($0, home: home) }
             .map { URL(fileURLWithPath: $0) }
 
-        let plan = await planBuilder.build(
-            query: query,
-            mode: mode,
-            homeDirectory: home,
-            searchRoots: searchRoots
-        )
+        let plan: AppUninstallPlan
+        do {
+            plan = try await planBuilder.build(
+                query: query,
+                mode: mode,
+                homeDirectory: home,
+                searchRoots: searchRoots
+            )
+        } catch is CancellationError {
+            // Agent 中断（ESC/Ctrl+C）→ discover 抛 CancellationError。_streamTask 已 cancel，
+            // turn 将以 .cancelled 结束；返回最小非 error 结果，避免误报 discover_failed。
+            return ToolResultHelper.encodeResult(toolUseId: toolUseId, isError: false) { encoder in
+                try encoder.encode(["status": "cancelled"])
+            }
+        } catch {
+            return ToolResultHelper.errorResult(
+                toolUseId: toolUseId,
+                error: "discover_failed",
+                message: "App discovery failed: \(error.localizedDescription)",
+                suggestion: "Check that the search roots are accessible directories"
+            )
+        }
 
         return ToolResultHelper.encodeResult(toolUseId: toolUseId, isError: false) { encoder in
             try encoder.encode(plan)

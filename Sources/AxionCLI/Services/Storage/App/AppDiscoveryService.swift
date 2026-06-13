@@ -16,14 +16,18 @@ final class AppDiscoveryService: AppDiscovering, Sendable {
 
     init() {}
 
-    func discover(query: String, searchRoots: [URL]) async -> [AppCandidate] {
+    func discover(query: String, searchRoots: [URL]) async throws -> [AppCandidate] {
         let fm = FileManager.default
         var candidates: [AppCandidate] = []
+        var processed = 0
 
         for root in searchRoots {
+            // 协作式取消：ESC/Ctrl+C → agent.interrupt() → _streamTask.cancel() 时抛 CancellationError。
+            try Task.checkCancellation()
             let rootPath = root.path
             guard let names = try? fm.contentsOfDirectory(atPath: rootPath) else { continue }
             for name in names where name.hasSuffix(".app") {
+                try Task.checkCancellation()
                 let appURL = root.appendingPathComponent(name)
                 guard let bundle = Bundle(url: appURL) else { continue }
                 guard let bundleId = bundle.bundleIdentifier, !bundleId.isEmpty else { continue }
@@ -50,6 +54,12 @@ final class AppDiscoveryService: AppDiscovering, Sendable {
                     isSystemProtected: Self.isSystemProtected(bundlePath: appURL.path, bundleIdentifier: bundleId),
                     matchConfidence: confidence
                 ))
+
+                // 周期性让步：每 N 个候选释放 cooperative worker，给 spinner 定时器调度窗口。
+                processed &+= 1
+                if processed.isMultiple(of: 16) {
+                    await Task.yield()
+                }
             }
         }
 

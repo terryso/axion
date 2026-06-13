@@ -102,6 +102,21 @@ final class StorageScanTool: ToolProtocol, Sendable {
         let result: ScanResult
         do {
             result = try await scanner.scan(request)
+        } catch is CancellationError {
+            // Agent 中断（ESC/Ctrl+C）→ scanner 抛 CancellationError。_streamTask 已 cancel，
+            // turn 将以 .cancelled 结束；返回最小非 error 结果，避免 agent 基于半截数据继续、
+            // 也避免误报 scan_failed。
+            return ToolResultHelper.encodeResult(toolUseId: toolUseId, isError: false) { encoder in
+                try encoder.encode(ScanResponse(
+                    status: "cancelled",
+                    roots: roots.map { $0.path },
+                    groups: [],
+                    largeFiles: [],
+                    skippedCount: 0,
+                    excludedNotes: [],
+                    summary: "Scan cancelled."
+                ))
+            }
         } catch {
             return ToolResultHelper.errorResult(
                 toolUseId: toolUseId,

@@ -11,5 +11,5 @@ import AxionCore
 /// 或精确路径/bundle id 命中）的候选，按置信度降序排列。多候选由上游 `AppUninstallPlanBuilder`
 /// 决定是否收敛为唯一目标（AC #2）。
 protocol AppDiscovering: Sendable {
-    func discover(query: String, searchRoots: [URL]) async -> [AppCandidate]
+    func discover(query: String, searchRoots: [URL]) async throws -> [AppCandidate]
 }

@@ -26,8 +26,8 @@ struct AppUninstallPlanBuilder: Sendable {
         self.hintReader = hintReader
     }
 
-    func build(query: String, mode: AppUninstallMode, homeDirectory: String, searchRoots: [URL]) async -> AppUninstallPlan {
-        let candidates = await appDiscoverer.discover(query: query, searchRoots: searchRoots)
+    func build(query: String, mode: AppUninstallMode, homeDirectory: String, searchRoots: [URL]) async throws -> AppUninstallPlan {
+        let candidates = try await appDiscoverer.discover(query: query, searchRoots: searchRoots)
 
         var blockedReasons: [String] = []
         let highConfidence = candidates.filter { $0.matchConfidence == .high }

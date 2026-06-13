@@ -9,7 +9,7 @@ import AxionCore
 final class MockAppDiscoverer: AppDiscovering, @unchecked Sendable {
     private let candidates: [AppCandidate]
     init(candidates: [AppCandidate]) { self.candidates = candidates }
-    func discover(query: String, searchRoots: [URL]) async -> [AppCandidate] { candidates }
+    func discover(query: String, searchRoots: [URL]) async throws -> [AppCandidate] { candidates }
 }
 
 final class MockSupportDataScanner: SupportDataScanning, @unchecked Sendable {

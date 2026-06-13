@@ -84,7 +84,7 @@ struct AppDiscoveryTests {
         )
         let missingRoot = root.appendingPathComponent("Missing", isDirectory: true)
 
-        let candidates = await AppDiscoveryService().discover(query: "High", searchRoots: [missingRoot, root])
+        let candidates = try await AppDiscoveryService().discover(query: "High", searchRoots: [missingRoot, root])
 
         #expect(candidates.map(\.displayName) == ["High", "Highlighter"])
         #expect(candidates.map(\.matchConfidence) == [.high, .medium])
@@ -92,6 +92,29 @@ struct AppDiscoveryTests {
         #expect(candidates.first?.version == "2.0")
         #expect(candidates.first?.teamIdentifier == "TEAM123")
         #expect(candidates.first?.isSystemProtected == false)
+    }
+
+    @Test("discover() throws CancellationError when cancelled mid-scan (cooperative)")
+    func discoverCooperativelyCancels() async throws {
+        let root = try makeTempDir("cancel")
+        defer { cleanup(root) }
+        // 足量 .app 目录确保遍历跨越多个取消检查点；无需有效 Info.plist（checkpoint 每 app 都跑）。
+        for i in 0..<2000 {
+            let app = root.appendingPathComponent("App\(i).app", isDirectory: true)
+            try FileManager.default.createDirectory(at: app, withIntermediateDirectories: true)
+        }
+        let service = AppDiscoveryService()
+
+        let task = _Concurrency.Task { try await service.discover(query: "App", searchRoots: [root]) }
+        task.cancel()
+        do {
+            _ = try await task.value
+            Issue.record("discover should throw CancellationError when cancelled, but completed")
+        } catch is CancellationError {
+            // 协作式取消生效（agent.interrupt() → _streamTask.cancel() → 此处抛出）
+        } catch {
+            Issue.record("unexpected error: \(error)")
+        }
     }
 
     // MARK: - classifyMatch

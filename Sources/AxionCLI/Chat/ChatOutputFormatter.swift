@@ -127,7 +127,13 @@ final class ChatOutputFormatter: OpenAgentSDK.SDKMessageOutputHandler, @unchecke
             }
 
         case .assistant(let data):
-            spinner.stop()
+            // 仅当没有正在执行的工具时才停 spinner：SDK 在 yield `.toolUse` 之后会紧接着 yield
+            // `.assistant`（finalize 含 tool_use 的 assistant 消息），而工具此时尚未执行完。
+            // 若无条件 stop，会把工具执行 spinner 提前关掉，导致漫长工具调用期间无任何 spinner
+            // （storage_scan 卡在首帧 0.0s 的根因）。工具 spinner 由 `.toolResult` 负责停止。
+            if toolStartTimes.isEmpty {
+                spinner.stop()
+            }
 
             // 兜底：如果 ● 前缀未被消费（极端情况如空回复），直接输出
             if let prefix = pendingAssistantPrefix {

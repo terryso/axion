@@ -324,6 +324,30 @@ struct SpinnerRendererTests {
         #expect(captured.contains(elapsedPattern))
         #expect(captured.contains("thinking"))
     }
+
+    @Test("专用 Thread 在 cooperative 池阻塞负载下持续 tick（模拟 storage_scan）")
+    func dedicatedThreadTicksUnderCooperativePoolBlockingLoad() async throws {
+        let output = CaptureOutput()
+        let spinner = SpinnerRenderer(isTTY: true, writeStderr: { output.write($0) })
+
+        spinner.start(message: "storage_scan", delayMs: 0)
+
+        // 模拟扫描：在 cooperative 池上做阻塞系统调用（usleep），触发 Swift 阻塞检测 → 池膨胀，
+        // 复现 storage_scan 饿死旧 GCD 定时器的场景。
+        await withTaskGroup(of: Void.self) { group in
+            for _ in 0..<8 {
+                group.addTask {
+                    for _ in 0..<100 { usleep(5_000) }  // 100 × 5ms 阻塞 ≈ 500ms/任务
+                }
+            }
+        }
+
+        spinner.stop()
+
+        // 每帧写一个 ⏳；若 spinner 持续 tick，⏳ 计数应 ≥ 3（工作 spinner ≈ 8 帧；饿死 = 1 帧）。
+        let frameCount = output.captured.components(separatedBy: "⏳").count - 1
+        #expect(frameCount >= 3, "spinner 在阻塞负载下冻结；帧数 = \(frameCount)")
+    }
 }
 
 // MARK: - SpinnerRenderer.formatElapsedMs Tests

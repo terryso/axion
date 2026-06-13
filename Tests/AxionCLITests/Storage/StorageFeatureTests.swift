@@ -87,6 +87,29 @@ struct StorageFeatureTests {
         #expect(hiddenAllowed.evaluate(path: "/Users/nick/Downloads/.hidden/file").included == true)
     }
 
+    @Test("scan() throws CancellationError when cancelled mid-scan (cooperative)")
+    func scanCooperativelyCancels() async throws {
+        let root = try makeTempDir()
+        defer { cleanup(root) }
+        // 足量文件确保枚举跨越多个取消检查点（耗时 >1ms），cancel() 落地时扫描仍在进行。
+        for i in 0..<2000 {
+            try writeFile(root.appendingPathComponent("file_\(i).bin"), bytes: 0)
+        }
+        let service = StorageScanService(homeDirectory: root.path)
+        let request = ScanRequest(roots: [root])
+
+        let task = _Concurrency.Task { try await service.scan(request) }
+        task.cancel()
+        do {
+            _ = try await task.value
+            Issue.record("scan should throw CancellationError when cancelled, but completed")
+        } catch is CancellationError {
+            // 协作式取消生效（agent.interrupt() → _streamTask.cancel() → 此处抛出）
+        } catch {
+            Issue.record("unexpected error: \(error)")
+        }
+    }
+
     @Test("StorageScanService sorts large files, collapses developer caches, and records symlinks and bundles")
     func scanServiceBuildsSafeSignals() async throws {
         let root = try makeTempDir()

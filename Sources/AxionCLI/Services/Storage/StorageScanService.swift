@@ -23,11 +23,18 @@ struct StorageScanService: StorageScanning {
     }
 
     func scan(_ request: ScanRequest) async throws -> ScanResult {
-        scanSync(request)
+        try await scanSync(request)
     }
 
-    /// 同步执行枚举（`FileManager` 的同步迭代器不可在 async 上下文使用，故抽出）。
-    private func scanSync(_ request: ScanRequest) -> ScanResult {
+    /// 执行枚举。`async throws` 以支持协作式取消与周期性让步（`FileManager` 的同步迭代器
+    /// 本身不可 `await`，但外层循环可插入 suspension point）。
+    ///
+    /// - 取消：每个 root 起始 + 每个文件 `try Task.checkCancellation()`。Agent 中断
+    ///   （ESC/Ctrl+C → `agent.interrupt()` → `_streamTask.cancel()`）时抛 `CancellationError`，
+    ///   由 `StorageScanTool.call()` 捕获并返回最小结果，turn 以 `.cancelled` 结束。
+    /// - 让步：每 `yieldInterval` 个文件 `await Task.yield()` 一次，释放 cooperative worker，
+    ///   避免 CPU 密集枚举长期占满核心、饿死 spinner 的 GCD 定时器（实时耗时 liveness）。
+    private func scanSync(_ request: ScanRequest) async throws -> ScanResult {
         let fm = FileManager.default
         let exclusions = StorageExclusions(
             excludedRoots: request.excludedPaths,
@@ -54,7 +61,10 @@ struct StorageScanService: StorageScanning {
         var skippedCount = 0
         var excludedNotes: [String] = []
 
+        let yieldInterval = 512  // 每 N 个文件让步一次（取消检查每个文件都做）
+
         for root in request.roots {
+            try Task.checkCancellation()
             let rootPath = root.standardizedFileURL.path
             guard fm.fileExists(atPath: rootPath) else {
                 excludedNotes.append("scan_root_missing: \(rootPath)")
@@ -96,7 +106,11 @@ struct StorageScanService: StorageScanning {
 
             // 手动剪枝被排除子树（深度优先序保证 prefix 匹配有效）。
             var skipPrefix: String? = nil
-            for case let url as URL in enumerator {
+            var processedInRoot = 0
+            // 用 `nextObject()` 而非 `for ... in`：`Sequence.makeIterator` 在 async 上下文中
+            // 不可用（阻塞 cooperative 池），手写 `while let` 便于在每次迭代间 `await Task.yield()`。
+            while let url = enumerator.nextObject() as? URL {
+                try Task.checkCancellation()
                 let path = url.standardizedFileURL.path
 
                 if let prefix = skipPrefix {
@@ -138,6 +152,11 @@ struct StorageScanService: StorageScanning {
                     continue
                 }
                 signals.append(signal)
+
+                processedInRoot &+= 1
+                if processedInRoot.isMultiple(of: yieldInterval) {
+                    await Task.yield()
+                }
             }
         }
 
@@ -282,6 +301,8 @@ struct StorageScanService: StorageScanning {
 
     /// 仅用于折叠的开发缓存根目录，读取元数据累计大小，不产生逐文件信号。
     private static func directoryContentSize(url: URL) -> Int64 {
+        // 协作式取消：开发缓存根折叠时若已取消，直接返回 0（不展开内部）。
+        if Task.isCancelled { return 0 }
         let keys: [URLResourceKey] = [.fileSizeKey, .totalFileSizeKey, .isDirectoryKey, .isSymbolicLinkKey]
         guard let enumerator = FileManager.default.enumerator(
             at: url,
