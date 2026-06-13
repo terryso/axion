@@ -209,18 +209,4 @@ struct StorageModelsTests {
         #expect(cfg.maxFilesPerGroup == 50)  // default
         #expect(cfg.excludedPaths == [])  // default
     }
-
-    @Test("AxionConfig storage falls back to default when absent")
-    func axionConfigStorageDefault() throws {
-        let json = "{\"apiKey\": \"k\"}".data(using: .utf8)!
-        let cfg = try JSONDecoder().decode(AxionConfig.self, from: json)
-        #expect(cfg.storage.largeFileThresholdBytes == 1_073_741_824)
-    }
-
-    @Test("AxionConfig storage decodes when present")
-    func axionConfigStoragePresent() throws {
-        let json = #"{"apiKey": "k", "storage": {"large_file_threshold_bytes": 200}}"#.data(using: .utf8)!
-        let cfg = try JSONDecoder().decode(AxionConfig.self, from: json)
-        #expect(cfg.storage.largeFileThresholdBytes == 200)
-    }
 }

@@ -147,7 +147,7 @@ enum ChatE2EMessages {
 
 /// Build a real Chat-mode agent using ~/.axion/config.json.
 /// Returns nil if API key is not configured (caller should skip).
-func buildRealChatAgent(maxTurns: Int = 3) async throws -> (Agent, AxionCore.AxionConfig)? {
+func buildRealChatAgent(maxTurns: Int = 3) async throws -> (Agent, AxionConfig)? {
     let config = try await ConfigManager.loadConfig()
     guard let apiKey = config.apiKey, !apiKey.isEmpty else {
         return nil

@@ -74,7 +74,7 @@ Axion is a Swift-based AI agent that lives in your terminal. Type `axion` and st
 ```
 
 - **AxionCLI** — The agent you interact with. Default mode is an interactive REPL; `axion run` for single-shot tasks. Includes the full tool suite, memory, skills, event handlers, and server modes
-- **AxionCore** — Shared model layer (RunConfig, AxionConfig, Skill) and protocol definitions
+- **AxionCore** — Shared domain models (Skill, storage models) and protocol definitions
 - **AxionHelper** — Separate MCP server process providing 21 native macOS automation tools via stdio
 
 ## Quick Start
@@ -550,9 +550,10 @@ Sources/
 │   ├── Helper/            # Helper process lifecycle (stdio)
 │   ├── Runtime/           # Event handlers (cost, notification, visual delta, …)
 │   ├── Services/          # AxionRuntime, AgentBuilder, RunOrchestrator, Gateway
+│   ├── Config/            # ConfigManager, AxionConfig
 │   └── API/               # HTTP API server, SSE bridge
 ├── AxionCore/             # Shared core layer
-│   ├── Models/            # RunConfig, AxionConfig, Skill
+│   ├── Models/            # Skill, storage models
 │   ├── Protocols/         # Service protocols
 │   ├── Errors/            # Unified AxionError
 │   └── Constants/         # ToolNames, Version

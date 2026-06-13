@@ -5,11 +5,6 @@ import Testing
 @Suite("SPM Scaffold")
 struct SPMScaffoldTests {
 
-    @Test("AxionCore module compiles")
-    func axionCoreModuleCompiles() throws {
-        let _ = AxionConfig.default
-    }
-
     @Test("MCPClientProtocol exists in AxionCore")
     func mcpClientProtocolExistsInAxionCore() throws {
         let _ = MCPClientProtocol.self
