@@ -181,8 +181,7 @@ struct HelperProcessManagerTests {
 
     @Test("start() throws when helper path not found")
     func startThrowsWhenHelperPathNotFound() async {
-        unsetenv("AXION_HELPER_PATH")
-        let manager = HelperProcessManager()
+        let manager = HelperProcessManager(resolveHelperPath: { nil })
 
         do {
             try await manager.start()

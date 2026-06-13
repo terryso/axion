@@ -104,4 +104,59 @@ struct MCPStatusFormatterTests {
         #expect(output.contains(longURL))
         #expect(!output.contains("…"))
     }
+
+    @Test("renderList 空列表显示未找到提示")
+    func renderListEmptyEntriesShowsNotFound() {
+        let output = MCPStatusFormatter.renderList(
+            [],
+            selectedIndex: nil,
+            maxItems: 15,
+            terminalWidth: 100
+        )
+
+        #expect(output.contains("MCP servers（0 ready，0 total）"))
+        #expect(output.contains("未找到 MCP server"))
+        #expect(!output.contains("Server"))
+    }
+
+    @Test("renderDetail 空详情显示占位短横")
+    func renderDetailEmptyDetailsShowsDash() {
+        let output = MCPStatusFormatter.renderDetail(
+            entry("solo", details: []),
+            terminalWidth: 100
+        )
+
+        #expect(output.contains("详情: -"))
+        #expect(!output.contains("配置:"))
+    }
+
+    @Test("renderDetail 对非 ready 或含双下划线的名字不渲染命名空间")
+    func renderDetailNamespaceDashForNonReadyAndDoubleUnderscore() {
+        let nonReady = MCPStatusFormatter.renderDetail(
+            entry("worker", state: "missing", details: []),
+            terminalWidth: 100
+        )
+        #expect(nonReady.contains("命名空间: -"))
+
+        let underscoreName = MCPStatusFormatter.renderDetail(
+            entry("bad__name", details: []),
+            terminalWidth: 100
+        )
+        #expect(underscoreName.contains("命名空间: -"))
+    }
+
+    @Test("renderList 截断超长 server 名并补省略号")
+    func renderListTruncatesLongServerName() {
+        // Name longer than the max name width (30) is truncated with an ellipsis.
+        let longName = "this-is-a-very-long-mcp-server-name-that-exceeds-thirty-chars"
+        let output = MCPStatusFormatter.renderList(
+            [entry(longName)],
+            selectedIndex: 0,
+            maxItems: 15,
+            terminalWidth: 100
+        )
+
+        #expect(output.contains("…"))
+        #expect(!output.contains(longName))
+    }
 }

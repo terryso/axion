@@ -40,9 +40,13 @@ actor HelperProcessManager {
     /// Whether the manager is currently connected.
     private var connected = false
 
+    private let resolveHelperPath: @Sendable () -> String?
+
     // MARK: - Initialization
 
-    init() {}
+    init(resolveHelperPath: @escaping @Sendable () -> String? = HelperPathResolver.resolveHelperPath) {
+        self.resolveHelperPath = resolveHelperPath
+    }
 
     /// Creates a HelperProcessManager with injected transport and client for testing.
     ///
@@ -55,6 +59,7 @@ actor HelperProcessManager {
         self.transport = transport
         self.mcpClient = client
         self.connected = true
+        self.resolveHelperPath = HelperPathResolver.resolveHelperPath
     }
 
     // MARK: - Public API
@@ -70,7 +75,7 @@ actor HelperProcessManager {
     /// - Throws: ``AxionError/helperNotRunning`` if Helper path not found.
     /// - Throws: ``AxionError/helperConnectionFailed`` if MCP handshake fails.
     func start() async throws {
-        guard let helperPath = HelperPathResolver.resolveHelperPath() else {
+        guard let helperPath = resolveHelperPath() else {
             throw AxionError.helperNotRunning
         }
 

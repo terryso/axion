@@ -1,0 +1,23 @@
+{
+  "schema_version": "0.1.0",
+  "evaluated_at": "2026-06-14T00:00:00Z",
+  "repo": "axion",
+  "target": {
+    "type": "feature",
+    "id": "mcp-config",
+    "label": "MCP Server 用户可配置化 + /mcp 状态/交互"
+  },
+  "collection_status": "COLLECTED",
+  "gate_basis": "priority_thresholds",
+  "gate_status": "PASS",
+  "rationale": "P0 coverage is 100% (7/7), P1 coverage is 100% (6/6, target 90%), and overall coverage is ~94% (minimum 80%). No critical/high/medium gaps. The single PARTIAL is a P2 item (AC5/A7 skill-path MCP omission) that does not affect the gate. Primary oracle is formal requirements (spec-mcp-config) with high confidence.",
+  "p0_status": "MET",
+  "p1_status": "MET",
+  "overall_status": "MET",
+  "critical_open": 0,
+  "links": {
+    "trace_report_path": "_bmad-output/test-artifacts/traceability-matrix-mcp-config.md",
+    "trace_report_url": "",
+    "artifact_url": ""
+  }
+}

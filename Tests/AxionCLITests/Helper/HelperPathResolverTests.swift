@@ -90,12 +90,12 @@ struct HelperPathResolverTests {
         }
     }
 
-    @Test("development mode path contains .build/AxionHelper.app")
+    @Test("development mode path contains .build helper executable")
     func resolveDevelopmentModeBuildPathFormat() async throws {
         try await withHelperEnv(nil) {
             let result = HelperPathResolver.resolveHelperPath()
             if let path = result, path.contains(".build") {
-                #expect(path.contains("AxionHelper.app"))
+                #expect(path.hasSuffix("AxionHelper"))
             }
         }
     }

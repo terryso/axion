@@ -105,10 +105,9 @@ struct AcceptanceE2ETests {
 
     @Test("acceptance: bash execution — ffmpeg")
     func testBashExecution() async throws {
-        let downloads = "/Users/nick/Downloads"
-        let contents = try FileManager.default.contentsOfDirectory(atPath: downloads)
-        guard let mp4 = contents.first(where: { $0.hasSuffix(".mp4") }) else {
-            print("[skip] No .mp4 file in Downloads — skipping bash test")
+        let downloads = URL(fileURLWithPath: "/Users/nick/Downloads", isDirectory: true)
+        guard let mp4 = try findSmallestMP4(in: downloads) else {
+            print("[skip] No .mp4 file under Downloads — skipping bash test")
             return
         }
 
@@ -124,6 +123,31 @@ struct AcceptanceE2ETests {
     }
 
     // MARK: - Helpers
+
+    private func findSmallestMP4(in downloads: URL) throws -> String? {
+        guard let enumerator = FileManager.default.enumerator(
+            at: downloads,
+            includingPropertiesForKeys: [.isRegularFileKey, .fileSizeKey],
+            options: [.skipsHiddenFiles, .skipsPackageDescendants]
+        ) else {
+            return nil
+        }
+
+        var candidates: [(relativePath: String, size: Int)] = []
+        for case let url as URL in enumerator {
+            guard url.pathExtension.lowercased() == "mp4" else { continue }
+            let values = try url.resourceValues(forKeys: [.isRegularFileKey, .fileSizeKey])
+            guard values.isRegularFile == true else { continue }
+
+            let relativePath = String(url.path.dropFirst(downloads.path.count + 1))
+            candidates.append((relativePath: relativePath, size: values.fileSize ?? Int.max))
+        }
+
+        return candidates.sorted {
+            if $0.size != $1.size { return $0.size < $1.size }
+            return $0.relativePath.localizedStandardCompare($1.relativePath) == .orderedAscending
+        }.first?.relativePath
+    }
 
     private struct AgentResult {
         let toolCalls: [String]
@@ -204,7 +228,7 @@ struct AcceptanceE2ETests {
         let promptDir = PromptBuilder.resolvePromptDirectory()
         let mcpPrefixedToolNames = ToolNames.allToolNames.map { "mcp__axion-helper__\($0)" }
 
-        let systemPrompt = (try? PromptBuilder.load(
+        let baseSystemPrompt = (try? PromptBuilder.load(
             name: "planner-system",
             variables: [
                 "tools": PromptBuilder.buildToolListDescription(from: mcpPrefixedToolNames),
@@ -212,13 +236,11 @@ struct AcceptanceE2ETests {
             ],
             fromDirectory: promptDir
         )) ?? ""
+        let systemPrompt = """
+        This is a GUI automation acceptance test. You must operate the native macOS app using the available `mcp__axion-helper__*` tools before answering. Do not answer from arithmetic alone.
 
-        let excludedToolNames: Set<String> = ["ToolSearch", "AskUser"]
-        var agentTools: [ToolProtocol] = (getAllBaseTools(tier: .core) + getAllBaseTools(tier: .specialist))
-            .filter { !excludedToolNames.contains($0.name) }
-
-        let skillRegistry = SkillRegistry()
-        agentTools.append(createSkillTool(registry: skillRegistry))
+        \(baseSystemPrompt)
+        """
 
         let options = AgentOptions(
             apiKey: apiKey,
@@ -228,13 +250,22 @@ struct AcceptanceE2ETests {
             maxTurns: maxTurns,
             maxTokens: 4096,
             permissionMode: .bypassPermissions,
-            tools: agentTools,
+            // This acceptance case measures Helper MCP automation specifically.
+            // Keep Bash/base SDK tools out of the request so the model cannot
+            // satisfy a GUI task by shelling out or doing arithmetic directly.
+            tools: nil,
             mcpServers: mcpServers,
-            skillRegistry: skillRegistry,
             logLevel: .info
         )
 
         let agent = createAgent(options: options)
+        let (availableTools, _) = await agent.assembleFullToolPool()
+        let availableToolNames = Set(availableTools.map(\.name))
+        guard availableToolNames.contains("mcp__axion-helper__launch_app") else {
+            try? await agent.close()
+            Issue.record("axion-helper MCP tools not discovered; available: \(availableToolNames.sorted())")
+            return nil
+        }
         return await collectResult(agent: agent, task: task)
     }
 

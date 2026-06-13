@@ -31,23 +31,18 @@ struct HelperPathResolver {
                 return helperPath.path
             }
 
-            // 策略 3: 开发模式回退
-            if execPath.contains(".build") {
-                if let projectRoot = findProjectRoot(from: URL(fileURLWithPath: execPath)) {
-                    // SPM raw build output (swift build)
-                    let rawBuildPath = projectRoot
-                        .appendingPathComponent(".build/arm64-apple-macosx/debug/AxionHelper")
-                    if FileManager.default.fileExists(atPath: rawBuildPath.path) {
-                        return rawBuildPath.path
-                    }
-                    // .app bundle layout (make install or manual)
-                    let appBundlePath = projectRoot
-                        .appendingPathComponent(".build/AxionHelper.app/Contents/MacOS/AxionHelper")
-                    if FileManager.default.fileExists(atPath: appBundlePath.path) {
-                        return appBundlePath.path
-                    }
-                }
+            if let projectRoot = findProjectRoot(from: URL(fileURLWithPath: execPath)),
+               let helperPath = resolveDevelopmentBuildPath(projectRoot: projectRoot) {
+                return helperPath
             }
+        }
+
+        // 策略 3: 开发/测试模式回退。swift test 的 Bundle.main 可执行路径在
+        // 不同 SwiftPM/Xcode 版本下不稳定，当前工作目录通常更可靠。
+        let cwd = URL(fileURLWithPath: FileManager.default.currentDirectoryPath, isDirectory: true)
+        if let projectRoot = findProjectRoot(from: cwd),
+           let helperPath = resolveDevelopmentBuildPath(projectRoot: projectRoot) {
+            return helperPath
         }
 
         return nil
@@ -96,6 +91,46 @@ struct HelperPathResolver {
             if current.path == "/" { break }
             current = current.deletingLastPathComponent()
         }
+        return nil
+    }
+
+    private static func resolveDevelopmentBuildPath(projectRoot: URL) -> String? {
+        let directCandidates = [
+            ".build/debug/AxionHelper",
+            ".build/release/AxionHelper",
+            ".build/AxionHelper.app/Contents/MacOS/AxionHelper",
+        ]
+
+        for relativePath in directCandidates {
+            let candidate = projectRoot.appendingPathComponent(relativePath)
+            if FileManager.default.isExecutableFile(atPath: candidate.path) {
+                return candidate.path
+            }
+        }
+
+        let buildRoot = projectRoot.appendingPathComponent(".build")
+        guard let triples = try? FileManager.default.contentsOfDirectory(
+            at: buildRoot,
+            includingPropertiesForKeys: [.isDirectoryKey],
+            options: [.skipsHiddenFiles]
+        ) else {
+            return nil
+        }
+
+        for triple in triples.sorted(by: { $0.lastPathComponent < $1.lastPathComponent }) {
+            guard (try? triple.resourceValues(forKeys: [.isDirectoryKey]).isDirectory) == true else {
+                continue
+            }
+            for configuration in ["debug", "release"] {
+                let candidate = triple
+                    .appendingPathComponent(configuration, isDirectory: true)
+                    .appendingPathComponent("AxionHelper")
+                if FileManager.default.isExecutableFile(atPath: candidate.path) {
+                    return candidate.path
+                }
+            }
+        }
+
         return nil
     }
 }

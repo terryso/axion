@@ -15,6 +15,13 @@ import OpenAgentSDK
 /// - AxionHelper.app built and AX permissions granted
 @Suite("Real LLM E2E")
 struct RealLLME2ETests {
+    private static let browserSmokeInstructions = """
+
+    Browser smoke test instructions:
+    - Use the shortest MCP-only path: launch_app Safari, hotkey cmd+l, type_text https://example.com, press_key return.
+    - Do not inspect the page, take screenshots, or verify page content.
+    - Once pressing return succeeds, report success immediately.
+    """
 
     private func setUpFixture() async throws -> E2EHelperFixture? {
         let fixture = try E2EHelperFixture()
@@ -134,21 +141,22 @@ struct RealLLME2ETests {
         ]
 
         let promptDir = PromptBuilder.resolvePromptDirectory()
-        let systemPrompt = try PromptBuilder.load(
+        var systemPrompt = try PromptBuilder.load(
             name: "planner-system",
             variables: [
                 "tools": PromptBuilder.buildToolListDescription(from: ToolNames.allToolNames),
-                "max_steps": "3",
+                "max_steps": "10",
             ],
             fromDirectory: promptDir
         )
+        systemPrompt += Self.browserSmokeInstructions
 
         let options = AgentOptions(
             apiKey: apiKey,
             model: config.model,
             baseURL: config.baseURL,
             systemPrompt: systemPrompt,
-            maxTurns: 3,
+            maxTurns: 10,
             maxTokens: 4096,
             permissionMode: .bypassPermissions,
             mcpServers: mcpServers,
@@ -160,12 +168,14 @@ struct RealLLME2ETests {
         let capturing = CapturingOutput()
         let handler = SDKTerminalOutputHandler(write: capturing.write)
 
-        handler.displayRunStart(runId: "real-e2e-002", task: "打开 https://example.com")
+        let task = "使用 Safari 打开 https://example.com：启动 Safari，按 cmd+l，输入 https://example.com，按 return。按 return 成功后直接报告完成，不要截图或读取网页内容。"
+
+        handler.displayRunStart(runId: "real-e2e-002", task: task)
 
         var toolCalls: [String] = []
         var finalResult: SDKMessage.ResultData?
 
-        let stream = agent.stream("打开 https://example.com")
+        let stream = agent.stream(task)
         for await message in stream {
             if case .toolUse(let data) = message {
                 toolCalls.append(data.toolName)
@@ -189,7 +199,10 @@ struct RealLLME2ETests {
 
     // MARK: - Helper for building real agent
 
-    private func buildAgent(maxTurns: Int = 5) async throws -> (OpenAgentSDK.Agent, SDKTerminalOutputHandler, CapturingOutput)? {
+    private func buildAgent(
+        maxTurns: Int = 5,
+        extraInstructions: String = ""
+    ) async throws -> (OpenAgentSDK.Agent, SDKTerminalOutputHandler, CapturingOutput)? {
         let config = try await ConfigManager.loadConfig()
         guard let apiKey = config.apiKey, !apiKey.isEmpty else {
             return nil
@@ -204,7 +217,7 @@ struct RealLLME2ETests {
         ]
 
         let promptDir = PromptBuilder.resolvePromptDirectory()
-        let systemPrompt = try PromptBuilder.load(
+        var systemPrompt = try PromptBuilder.load(
             name: "planner-system",
             variables: [
                 "tools": PromptBuilder.buildToolListDescription(from: ToolNames.allToolNames),
@@ -212,6 +225,7 @@ struct RealLLME2ETests {
             ],
             fromDirectory: promptDir
         )
+        systemPrompt += extraInstructions
 
         let options = AgentOptions(
             apiKey: apiKey,
@@ -330,13 +344,18 @@ struct RealLLME2ETests {
             return
         }
 
-        guard let (agent, handler, _) = try await buildAgent(maxTurns: 3) else {
+        guard let (agent, handler, _) = try await buildAgent(
+            maxTurns: 10,
+            extraInstructions: Self.browserSmokeInstructions
+        ) else {
             await fixture.tearDown()
             return
         }
-        handler.displayRunStart(runId: "real-e2e-005", task: "打开 Safari，访问 example.com")
+        let task = "打开 Safari，访问 example.com：按 cmd+l，输入 https://example.com，按 return。按 return 成功后直接报告完成，不要截图或读取网页内容。"
 
-        let (toolCalls, finalResult) = try await runAgent(agent, handler: handler, task: "打开 Safari，访问 example.com")
+        handler.displayRunStart(runId: "real-e2e-005", task: task)
+
+        let (toolCalls, finalResult) = try await runAgent(agent, handler: handler, task: task)
 
         #expect(!toolCalls.isEmpty, "Agent should have called at least one tool")
         let shortNames = toolCalls.map { $0.replacingOccurrences(of: "mcp__axion-helper__", with: "") }

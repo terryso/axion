@@ -1,0 +1,95 @@
+{
+  "schema_version": "0.1.0",
+  "snapshot_at": "2026-06-14T00:00:00Z",
+  "repo": "axion",
+  "collection_mode": "contract_static",
+  "collection_status": "COLLECTED",
+  "inventory_basis": "acceptance_criteria",
+  "gate_basis": "priority_thresholds",
+  "source_sha": "c0cba6e",
+  "target": {
+    "type": "feature",
+    "id": "mcp-config",
+    "label": "MCP Server 用户可配置化 + /mcp 状态/交互"
+  },
+  "decision_mode": "automated",
+  "evaluator": "Nick",
+  "confidence": "high",
+  "oracle": {
+    "resolution_mode": "formal_requirements",
+    "confidence": "high",
+    "sources": [
+      "_bmad-output/implementation-artifacts/spec-mcp-config.md",
+      "_bmad-output/implementation-artifacts/spec-mcp-config-manual-acceptance.md"
+    ],
+    "external_pointer_status": "not_used",
+    "synthetic": false,
+    "note": "Secondary synthetic oracle (J-01..J-08, /mcp slash-status) tracked separately at medium confidence."
+  },
+  "coverage": {
+    "inventory": {
+      "covered": 15,
+      "total": 16,
+      "pct": 94
+    },
+    "priority_breakdown": {
+      "P0": { "total": 7, "covered": 7, "pct": 100 },
+      "P1": { "total": 6, "covered": 6, "pct": 100 },
+      "P2": { "total": 3, "covered": 2, "pct": 67 },
+      "P3": { "total": 0, "covered": 0, "pct": 100 }
+    },
+    "by_level": {
+      "unit": { "tests": 49, "criteria_covered": 16 },
+      "e2e": { "tests": 9, "criteria_covered": 8 },
+      "api": { "tests": 0, "criteria_covered": 0 },
+      "component": { "tests": 0, "criteria_covered": 0 },
+      "other": { "tests": 0, "criteria_covered": 0 }
+    }
+  },
+  "tests": {
+    "files": 8,
+    "cases": 58,
+    "skipped_cases": 0,
+    "fixme_cases": 0,
+    "pending_cases": 0
+  },
+  "risk_summary": {
+    "critical_open": 0,
+    "high_open": 0,
+    "medium_open": 0,
+    "low_open": 0
+  },
+  "heuristics": {
+    "endpoint_gaps": 0,
+    "auth_negative_path_status": "present",
+    "error_path_status": "present",
+    "ui_journey_status": "present",
+    "ui_state_status": "present"
+  },
+  "blockers": [],
+  "recommendations": [
+    "Close AC5/A7: add a buildSkillAgent MCP-omission unit test (removes the only PARTIAL).",
+    "Formalize the /mcp slash-status / interactive-browser spec to raise synthetic-oracle confidence from medium to high.",
+    "Stabilize pre-existing flaky tests (ReviewSchedulerTests, TaskSerialQueueTests, HelperProcessManagerTests).",
+    "Land the in-flight E2E cases (bigModelMcp redaction, interactiveMcpList) to fully anchor J-02/J-06."
+  ],
+  "links": {
+    "trace_report_path": "_bmad-output/test-artifacts/traceability-matrix-mcp-config.md",
+    "trace_report_url": "",
+    "artifact_url": "",
+    "journey_evidence_url": ""
+  },
+  "gate_status": "PASS",
+  "gate_criteria": {
+    "p0_coverage_required": "100%",
+    "p0_coverage_actual": "100%",
+    "p0_status": "MET",
+    "p1_coverage_target": "90%",
+    "p1_coverage_minimum": "80%",
+    "p1_coverage_actual": "100%",
+    "p1_status": "MET",
+    "overall_coverage_minimum": "80%",
+    "overall_coverage_actual": "94%",
+    "overall_status": "MET"
+  }
+}

@@ -159,6 +159,22 @@ struct PromptBuilderTests {
         #expect(content.contains("Terminal.app"))
     }
 
+    @Test("planner prompt requires MCP for native GUI automation")
+    func plannerPromptRequiresMCPForNativeGUIAutomation() async throws {
+        let promptDir = PromptBuilder.resolvePromptDirectory()
+        let content = try PromptBuilder.load(
+            name: "planner-system",
+            variables: ["tools": "test", "max_steps": "20"],
+            fromDirectory: promptDir
+        )
+
+        #expect(content.contains("you MUST use `mcp__axion-helper__*` tools"))
+        #expect(content.contains("opening and interacting with that app is part of the task"))
+        #expect(content.contains("Do NOT use `Bash` to drive native GUI applications"))
+        #expect(content.contains("System Events"))
+        #expect(content.contains("analyze_image"))
+    }
+
     @Test("planner prompt mentions core SDK tools")
     func plannerPromptMentionsCoreSDKTools() async throws {
         let promptDir = PromptBuilder.resolvePromptDirectory()

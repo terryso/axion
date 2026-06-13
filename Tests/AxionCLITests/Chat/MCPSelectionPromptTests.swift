@@ -96,4 +96,54 @@ struct MCPSelectionPromptTests {
         #expect(output.text.contains("非交互模式"))
         #expect(!output.text.contains("↑/↓"))
     }
+
+    @Test("up 向上移动选择并回退到前一项")
+    func upMovesSelectionBackward() {
+        let output = OutputCapture()
+        // down→server-2, down→server-3, up→server-2, enter→detail server-2, escape
+        let prompt = MCPSelectionPrompt(
+            isTTY: true,
+            keyReader: MockKeyReader([.down, .down, .up, .enter, .escape]),
+            writeOutput: { output.write($0) },
+            maxItems: 15,
+            terminalWidth: 100
+        )
+        let result = prompt.run(entries: (1...3).map { entry("server-\($0)") })
+
+        #expect(result == .cancelled)
+        #expect(output.text.contains("名称: server-2"))
+    }
+
+    @Test("left 从详情返回列表后可继续选择")
+    func leftReturnsFromDetailToList() {
+        let output = OutputCapture()
+        // enter→detail server-1, left→back to list, down→server-2, enter→detail server-2, escape
+        let prompt = MCPSelectionPrompt(
+            isTTY: true,
+            keyReader: MockKeyReader([.enter, .left, .down, .enter, .escape]),
+            writeOutput: { output.write($0) },
+            maxItems: 15,
+            terminalWidth: 100
+        )
+        let result = prompt.run(entries: [entry("server-1"), entry("server-2")])
+
+        #expect(result == .cancelled)
+        #expect(output.text.contains("名称: server-2"))
+    }
+
+    @Test("空条目列表回退为取消并提示未找到")
+    func emptyEntriesCancelAndShowNotFound() {
+        let output = OutputCapture()
+        let prompt = MCPSelectionPrompt(
+            isTTY: true,
+            keyReader: MockKeyReader([.enter]),
+            writeOutput: { output.write($0) },
+            maxItems: 15,
+            terminalWidth: 100
+        )
+        let result = prompt.run(entries: [])
+
+        #expect(result == .cancelled)
+        #expect(output.text.contains("未找到 MCP server"))
+    }
 }

@@ -1,6 +1,8 @@
 .PHONY: test test-integration test-e2e test-e2e-real test-acceptance test-all build
 
 VERSION := $(shell cat VERSION)
+HELPER_DEBUG_PATH := $(CURDIR)/.build/debug/AxionHelper
+HELPER_APP_PATH := $(CURDIR)/.build/AxionHelper.app/Contents/MacOS/AxionHelper
 
 build:
 	swift build
@@ -18,17 +20,17 @@ test:
 	swift test --no-parallel --skip AxionHelperIntegrationTests --skip AxionCLIIntegrationTests --skip AxionE2ETests
 
 test-integration:
-	AXION_HELPER_PATH="$$(pwd)/.build/AxionHelper.app/Contents/MacOS/AxionHelper" swift test --filter AxionHelperIntegrationTests --filter AxionCLIIntegrationTests
+	AXION_HELPER_PATH="$(HELPER_DEBUG_PATH)" swift test --no-parallel --filter AxionHelperIntegrationTests --filter AxionCLIIntegrationTests
 
 test-e2e:
-	AXION_HELPER_PATH="$$(pwd)/.build/AxionHelper.app/Contents/MacOS/AxionHelper" swift test --filter AxionE2ETests
+	AXION_HELPER_PATH="$(HELPER_DEBUG_PATH)" swift test --no-parallel --filter AxionE2ETests
 
 test-e2e-real:
-	AXION_HELPER_PATH="$$(pwd)/.build/AxionHelper.app/Contents/MacOS/AxionHelper" swift test --filter AxionE2ETests.RealLLME2ETests
+	AXION_HELPER_PATH="$(HELPER_DEBUG_PATH)" swift test --no-parallel --filter AxionE2ETests.RealLLME2ETests
 
 test-acceptance:
 	bash Distribution/homebrew/build-helper-app.sh
-	AXION_HELPER_PATH="$$(pwd)/.build/AxionHelper.app/Contents/MacOS/AxionHelper" swift test --filter AxionE2ETests.AcceptanceE2E
+	AXION_HELPER_PATH="$(HELPER_APP_PATH)" swift test --no-parallel --filter AxionE2ETests.AcceptanceE2E
 
 test-all:
 	swift test
