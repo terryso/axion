@@ -3,6 +3,7 @@ import Darwin
 // MARK: - Escape Sequence Parsing
 
 extension KeyEventReader {
+    static let escapeSequenceTimeoutMilliseconds: Int32 = 30
 
     /// 解析 escape 序列 — 从 \x1B 后的第一个字节开始。
     ///
@@ -11,11 +12,14 @@ extension KeyEventReader {
     /// - SS3 序列（\x1bO...）— 应用键区箭头键、Home/End
     /// - 单独 Esc 键（无后续字节）
     func parseEscape() -> KeyEvent {
-        // 读取超时检测：如果有待读字节才继续解析 escape sequence
+        // 单独 Esc 没有后续字节；先短超时探测，避免阻塞等待 escape sequence。
+        guard hasPendingInput(timeoutMilliseconds: Self.escapeSequenceTimeoutMilliseconds) else {
+            return .escape
+        }
+
         var nextByte: UInt8 = 0
-        let bytesRead = read(STDIN_FILENO, &nextByte, 1)
+        let bytesRead = read(inputFD, &nextByte, 1)
         guard bytesRead == 1 else {
-            // 单独 Esc 键（无后续字节或读取超时）
             return .escape
         }
 
@@ -33,6 +37,12 @@ extension KeyEventReader {
         return .unknown([0x1B, nextByte])
     }
 
+    func hasPendingInput(timeoutMilliseconds: Int32) -> Bool {
+        var descriptor = pollfd(fd: inputFD, events: Int16(POLLIN), revents: 0)
+        let result = poll(&descriptor, nfds_t(1), timeoutMilliseconds)
+        return result > 0 && (descriptor.revents & Int16(POLLIN)) != 0
+    }
+
     /// 解析 CSI (Control Sequence Introducer) 序列。
     /// 格式：\x1b[ <中间字节> <终结字节>
     func parseCSI() -> KeyEvent {
@@ -41,7 +51,7 @@ extension KeyEventReader {
 
         // 读取参数字节（0x30–0x3F: 数字和分号）
         while true {
-            let bytesRead = read(STDIN_FILENO, &byte, 1)
+            let bytesRead = read(inputFD, &byte, 1)
             guard bytesRead == 1 else { return .unknown([0x1B, 0x5B]) }
 
             if byte >= 0x30 && byte <= 0x3F {
@@ -202,7 +212,7 @@ extension KeyEventReader {
     /// 解析 SS3 序列（\x1bO 终结键）
     func parseSS3() -> KeyEvent {
         var byte: UInt8 = 0
-        let bytesRead = read(STDIN_FILENO, &byte, 1)
+        let bytesRead = read(inputFD, &byte, 1)
         guard bytesRead == 1 else { return .unknown([0x1B, 0x4F]) }
 
         switch byte {

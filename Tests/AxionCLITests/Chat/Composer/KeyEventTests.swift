@@ -1,3 +1,5 @@
+import Darwin
+import Foundation
 import Testing
 @testable import AxionCLI
 
@@ -64,5 +66,45 @@ struct UTF8CharLengthTests {
     func fourByteUTF8() {
         #expect(KeyEventReader.utf8CharLength(0xF0) == 4)
         #expect(KeyEventReader.utf8CharLength(0xF4) == 4)
+    }
+}
+
+@Suite("KeyEventReader escape parsing")
+struct KeyEventReaderEscapeParsingTests {
+    @Test("standalone Esc returns escape without waiting for another byte")
+    func standaloneEscapeReturnsWithoutWaiting() throws {
+        var fds = [Int32](repeating: 0, count: 2)
+        #expect(pipe(&fds) == 0)
+        defer {
+            close(fds[0])
+            close(fds[1])
+        }
+
+        var escape: UInt8 = 0x1B
+        #expect(write(fds[1], &escape, 1) == 1)
+
+        let reader = KeyEventReader(original: termios(), inputFD: fds[0], storedTermios: false)
+        let start = Date()
+        #expect(reader.readNext() == .escape)
+        #expect(Date().timeIntervalSince(start) < 0.2)
+    }
+
+    @Test("CSI arrow sequence still parses as directional key")
+    func csiArrowSequenceParsesAsDirection() throws {
+        var fds = [Int32](repeating: 0, count: 2)
+        #expect(pipe(&fds) == 0)
+        defer {
+            close(fds[0])
+            close(fds[1])
+        }
+
+        let bytes: [UInt8] = [0x1B, 0x5B, 0x41]
+        let bytesWritten = bytes.withUnsafeBytes { buffer in
+            write(fds[1], buffer.baseAddress, buffer.count)
+        }
+        #expect(bytesWritten == bytes.count)
+
+        let reader = KeyEventReader(original: termios(), inputFD: fds[0], storedTermios: false)
+        #expect(reader.readNext() == .up)
     }
 }

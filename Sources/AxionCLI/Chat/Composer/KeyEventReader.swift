@@ -15,10 +15,12 @@ struct KeyEventReader: KeyReading, Sendable {
     /// 原始 termios 设置，用于退出时恢复
     private let originalTermios: termios
     private let storedTermios: Bool
+    let inputFD: Int32
 
-    private init(original: termios) {
+    init(original: termios, inputFD: Int32 = STDIN_FILENO, storedTermios: Bool = true) {
         self.originalTermios = original
-        self.storedTermios = true
+        self.inputFD = inputFD
+        self.storedTermios = storedTermios
     }
 
     // MARK: - Factory
@@ -54,7 +56,7 @@ struct KeyEventReader: KeyReading, Sendable {
 
     func readNext() -> KeyEvent? {
         var byte: UInt8 = 0
-        let bytesRead = read(STDIN_FILENO, &byte, 1)
+        let bytesRead = read(inputFD, &byte, 1)
 
         guard bytesRead == 1 else {
             return .eof
@@ -179,7 +181,7 @@ struct KeyEventReader: KeyReading, Sendable {
 
         for _ in 1..<expectedLen {
             var nextByte: UInt8 = 0
-            let bytesRead = read(STDIN_FILENO, &nextByte, 1)
+            let bytesRead = read(inputFD, &nextByte, 1)
             guard bytesRead == 1 else { break }
             bytes.append(nextByte)
         }
