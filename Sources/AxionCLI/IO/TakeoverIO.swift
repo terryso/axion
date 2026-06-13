@@ -74,6 +74,45 @@ final class TakeoverIO {
         return (action, input, feedback)
     }
 
+    /// 显示 chat 确认门提示（用于 `.system(.paused)`），等待用户输入并返回对应行为。
+    ///
+    /// 与 `displayTakeoverPrompt`（桌面接管，文案面向"手动操作"）不同，本方法面向
+    /// AI 调用工具后的确认 / 反馈场景。复用同一 `write` / `readLine` 闭包与 `TakeoverAction.fromInput`，
+    /// 返回与 `displayTakeoverPrompt` 同构的 `(action, userInput, feedback)` 三元组。
+    ///
+    /// - Parameters:
+    ///   - reason: 暂停 / 确认原因。
+    ///   - completedSteps: 已完成步骤数（abort 摘要展示用）。
+    /// - Returns: `(action, userInput, feedback)`。
+    func displayConfirmationPrompt(reason: String, completedSteps: Int = 0) -> (action: TakeoverAction, userInput: String?, feedback: String?) {
+        write("")
+        write("━━━ 任务暂停等待确认 ━━━")
+        write("原因: \(reason)")
+        write("")
+        write("按 Enter 继续（可选输入补充说明） / 输入 skip 跳过当前步骤 / 输入 abort 终止任务。")
+
+        let input = readLine()
+        let action = TakeoverAction.fromInput(input)
+
+        let trimmedInput = input?.trimmingCharacters(in: .whitespacesAndNewlines)
+        let feedback: String? = (action == .resume && !(trimmedInput?.isEmpty ?? true)) ? input : nil
+
+        switch action {
+        case .resume:
+            if feedback != nil {
+                write("[axion] 已收到反馈，正在恢复执行...")
+            } else {
+                write("[axion] 正在恢复执行...")
+            }
+        case .skip:
+            write("[axion] 跳过当前步骤...")
+        case .abort:
+            write("[axion] 用户终止任务。已完成 \(completedSteps) 步。")
+        }
+
+        return (action, input, feedback)
+    }
+
     /// 显示超时提示。
     func displayTimeoutPrompt() {
         write("")

@@ -24,6 +24,14 @@ private final class CurrentChatAgentReference: @unchecked Sendable {
         lock.unlock()
         agent.interrupt()
     }
+
+    /// 从 `.system(.paused)` 恢复执行，注入人类上下文。镜像 `interrupt()` 的加锁访问模式。
+    func resume(context: String) {
+        lock.lock()
+        let agent = self.agent
+        lock.unlock()
+        agent.resume(context: context)
+    }
 }
 
 /// Interactive multi-turn chat mode — `axion` with no arguments.
@@ -682,6 +690,44 @@ struct ChatCommand: AsyncParsableCommand {
                                 ),
                                 stderr
                             )
+                        }
+                    } else if data.subtype == .paused {
+                        // pause_for_human 触发：agent 挂起在 CheckedContinuation，必须 resume/interrupt 才能解除，
+                        // 否则 for await 永久阻塞 → REPL 卡死（用户既无法输入也无法取消）。
+                        guard let pausedData = data.pausedData else {
+                            // 防御：无 payload 时仍须解除挂起，避免死锁
+                            currentAgent.interrupt()
+                            break
+                        }
+                        // 边界 E：若 Ctrl+C 已在途，短路不读输入直接中断
+                        if SignalHandler.fireCount() > 0 {
+                            currentAgent.interrupt()
+                            break
+                        }
+                        // stdin 协调：暂停 ESC raw-mode 轮询 Task + 恢复 canonical mode，
+                        // 否则轮询 Task 会吞掉用户输入字节（与 PermissionHandler 权限提示同一既定模式）。
+                        let escPaused = escListener.pause()
+                        defer { if escPaused { escListener.resume() } }
+                        let takeoverIO = TakeoverIO(
+                            write: { fputs($0 + "\n", stderr); fflush(stderr) },
+                            readLine: { Swift.readLine() }
+                        )
+                        let input = takeoverIO.displayConfirmationPrompt(
+                            reason: pausedData.reason,
+                            completedSteps: sessionTurnCount
+                        )
+                        switch PausedEventDecider.decide(
+                            canResume: pausedData.canResume,
+                            action: input.action,
+                            text: input.userInput
+                        ) {
+                        case .resume(let context):
+                            currentAgent.resume(context: context)
+                        case .interrupt:
+                            // 风险 #3：pause-abort 经 readLine 触发，不经 Ctrl+C/ESC →
+                            // simulateFire 让 turn-end 逻辑当作中断（不消费队列、不显示"完成"摘要）
+                            SignalHandler.simulateFire()
+                            currentAgent.interrupt()
                         }
                     }
                 default:

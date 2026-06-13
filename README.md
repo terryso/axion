@@ -12,6 +12,8 @@ A full-spectrum AI agent for macOS — interactive coding, file editing, web sea
 
 [English](#english) | [中文](./README.zh-CN.md) | [Changelog](./CHANGELOG.md)
 
+> **GLM Ready:** All Axion features can run end-to-end with GLM models through the OpenAI Compatible provider. GLM Coding invite link: https://www.bigmodel.cn/glm-coding?ic=TVUZHTWCW9
+
 ---
 
 <a id="english"></a>

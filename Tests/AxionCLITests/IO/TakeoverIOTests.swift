@@ -318,4 +318,91 @@ struct TakeoverIOTests {
         let combined = output.joined(separator: "\n")
         #expect(combined.contains("已记录反馈"))
     }
+
+    // MARK: - displayConfirmationPrompt (chat pause / .system(.paused))
+
+    @Test("displayConfirmationPrompt renders confirmation header and reason")
+    func displayConfirmationPromptRendersHeaderAndReason() {
+        var output: [String] = []
+        let io = TakeoverIO(
+            write: { output.append($0) },
+            readLine: { "" }
+        )
+
+        let _ = io.displayConfirmationPrompt(reason: "确认清理 node_modules", completedSteps: 3)
+
+        let combined = output.joined(separator: "\n")
+        #expect(combined.contains("任务暂停等待确认"))
+        #expect(combined.contains("确认清理 node_modules"))
+        #expect(combined.contains("skip"))
+        #expect(combined.contains("abort"))
+    }
+
+    @Test("displayConfirmationPrompt empty Enter returns resume with nil feedback")
+    func displayConfirmationPromptEmptyEnterResume() {
+        let io = TakeoverIO(
+            write: { _ in },
+            readLine: { "" }
+        )
+
+        let result = io.displayConfirmationPrompt(reason: "受阻", completedSteps: 0)
+
+        #expect(result.action == .resume)
+        #expect(result.userInput == "")
+        #expect(result.feedback == nil)
+    }
+
+    @Test("displayConfirmationPrompt 'continue' returns resume with feedback")
+    func displayConfirmationPromptContinueResume() {
+        let io = TakeoverIO(
+            write: { _ in },
+            readLine: { "continue" }
+        )
+
+        let result = io.displayConfirmationPrompt(reason: "受阻", completedSteps: 0)
+
+        #expect(result.action == .resume)
+        #expect(result.feedback == "continue")
+    }
+
+    @Test("displayConfirmationPrompt descriptive feedback returned on resume")
+    func displayConfirmationPromptFeedbackOnResume() {
+        let io = TakeoverIO(
+            write: { _ in },
+            readLine: { "排除了 3 个项目" }
+        )
+
+        let result = io.displayConfirmationPrompt(reason: "受阻", completedSteps: 0)
+
+        #expect(result.action == .resume)
+        #expect(result.feedback == "排除了 3 个项目")
+    }
+
+    @Test("displayConfirmationPrompt 'skip' returns skip with nil feedback")
+    func displayConfirmationPromptSkip() {
+        let io = TakeoverIO(
+            write: { _ in },
+            readLine: { "skip" }
+        )
+
+        let result = io.displayConfirmationPrompt(reason: "受阻", completedSteps: 0)
+
+        #expect(result.action == .skip)
+        #expect(result.feedback == nil)
+    }
+
+    @Test("displayConfirmationPrompt 'abort' returns abort and shows completed steps")
+    func displayConfirmationPromptAbortShowsSteps() {
+        var output: [String] = []
+        let io = TakeoverIO(
+            write: { output.append($0) },
+            readLine: { "abort" }
+        )
+
+        let result = io.displayConfirmationPrompt(reason: "受阻", completedSteps: 7)
+
+        #expect(result.action == .abort)
+        let combined = output.joined(separator: "\n")
+        #expect(combined.contains("已完成 7 步"))
+    }
 }

@@ -12,6 +12,8 @@ macOS 全能 AI Agent —— 交互式编程、文件编辑、Web 搜索、Shell
 
 [English](./README.md) | [中文](#中文) | [更新日志](./CHANGELOG.md)
 
+> **GLM 已适配：** Axion 的所有功能都可以通过 OpenAI Compatible Provider 使用 GLM 大模型跑通。GLM Coding 邀请链接：https://www.bigmodel.cn/glm-coding?ic=TVUZHTWCW9
+
 ---
 
 <a id="中文"></a>
