@@ -20,7 +20,7 @@ struct HelperScaffoldTests {
 
     @Test("AxionHelper target compiles")
     func axionHelperTargetCompiles() {
-        #expect(true, "AxionHelper target compiles successfully")
+        #expect(Bool(true), "AxionHelper target compiles successfully")
     }
 
     @Test("ToolRegistrar type exists in AxionHelper")

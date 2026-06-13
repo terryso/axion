@@ -112,7 +112,7 @@ struct SDKAgentIntegrationTests {
 
     @Test("real terminal output handler with real MCP data")
     func realTerminalOutputHandlerWithRealMCPData() async throws {
-        guard let helperPath else { return }
+        guard helperPath != nil else { return }
 
         let manager = HelperProcessManager()
         try await manager.start()
@@ -161,7 +161,7 @@ struct SDKAgentIntegrationTests {
 
     @Test("real JSON output handler with real MCP data")
     func realJSONOutputHandlerWithRealMCPData() async throws {
-        guard let helperPath else { return }
+        guard helperPath != nil else { return }
 
         let manager = HelperProcessManager()
         try await manager.start()

@@ -1,6 +1,67 @@
 import AppKit
 import Foundation
 
+struct AppLauncherRunningApp: Equatable, Sendable {
+    let processIdentifier: Int32
+    let localizedName: String?
+    let bundleIdentifier: String?
+}
+
+protocol AppLauncherWorkspace: Sendable {
+    func runningApplications() -> [AppLauncherRunningApp]
+    func urlForApplication(withBundleIdentifier bundleIdentifier: String) -> URL?
+    func openApplication(at url: URL) async throws -> AppLauncherRunningApp
+}
+
+protocol AppLauncherFileSystem: Sendable {
+    func fileExists(atPath path: String) -> Bool
+    func contentsOfDirectory(atPath path: String) throws -> [String]
+    func appDisplayName(at appURL: URL) -> String?
+}
+
+struct NSWorkspaceAppLauncherWorkspace: AppLauncherWorkspace {
+    func runningApplications() -> [AppLauncherRunningApp] {
+        NSWorkspace.shared.runningApplications.map { app in
+            AppLauncherRunningApp(
+                processIdentifier: app.processIdentifier,
+                localizedName: app.localizedName,
+                bundleIdentifier: app.bundleIdentifier
+            )
+        }
+    }
+
+    func urlForApplication(withBundleIdentifier bundleIdentifier: String) -> URL? {
+        NSWorkspace.shared.urlForApplication(withBundleIdentifier: bundleIdentifier)
+    }
+
+    func openApplication(at url: URL) async throws -> AppLauncherRunningApp {
+        let config = NSWorkspace.OpenConfiguration()
+        config.activates = true
+        let app = try await NSWorkspace.shared.openApplication(at: url, configuration: config)
+        return AppLauncherRunningApp(
+            processIdentifier: app.processIdentifier,
+            localizedName: app.localizedName,
+            bundleIdentifier: app.bundleIdentifier
+        )
+    }
+}
+
+struct DefaultAppLauncherFileSystem: AppLauncherFileSystem {
+    func fileExists(atPath path: String) -> Bool {
+        FileManager.default.fileExists(atPath: path)
+    }
+
+    func contentsOfDirectory(atPath path: String) throws -> [String] {
+        try FileManager.default.contentsOfDirectory(atPath: path)
+    }
+
+    func appDisplayName(at appURL: URL) -> String? {
+        guard let bundle = Bundle(url: appURL) else { return nil }
+        return (bundle.object(forInfoDictionaryKey: "CFBundleDisplayName") as? String)
+            ?? (bundle.object(forInfoDictionaryKey: "CFBundleName") as? String)
+    }
+}
+
 /// Errors thrown by `AppLauncherService`.
 enum AppLauncherError: Error, LocalizedError, ToolErrorProtocol {
     case appNotFound(name: String)
@@ -40,12 +101,26 @@ struct AppLauncherService: AppLaunching {
     // MARK: - Application Search Paths
 
     /// Directories searched when resolving an application by name.
-    private let searchPaths = [
+    static let defaultSearchPaths = [
         "/Applications",
         "/System/Applications",
         "/Applications/Utilities",
         "\(NSHomeDirectory())/Applications",
     ]
+
+    private let searchPaths: [String]
+    private let workspace: any AppLauncherWorkspace
+    private let fileSystem: any AppLauncherFileSystem
+
+    init(
+        searchPaths: [String] = AppLauncherService.defaultSearchPaths,
+        workspace: any AppLauncherWorkspace = NSWorkspaceAppLauncherWorkspace(),
+        fileSystem: any AppLauncherFileSystem = DefaultAppLauncherFileSystem()
+    ) {
+        self.searchPaths = searchPaths
+        self.workspace = workspace
+        self.fileSystem = fileSystem
+    }
 
     // MARK: - Public API
 
@@ -61,15 +136,10 @@ struct AppLauncherService: AppLaunching {
 
         // Not running — launch fresh via NSWorkspace
         let appURL = try resolveAppURL(name: name)
-        let config = NSWorkspace.OpenConfiguration()
-        config.activates = true
 
-        let runningApp: NSRunningApplication
+        let runningApp: AppLauncherRunningApp
         do {
-            runningApp = try await NSWorkspace.shared.openApplication(
-                at: appURL,
-                configuration: config
-            )
+            runningApp = try await workspace.openApplication(at: appURL)
         } catch {
             throw AppLauncherError.launchFailed(name: name, reason: error.localizedDescription)
         }
@@ -82,7 +152,7 @@ struct AppLauncherService: AppLaunching {
     }
 
     func listRunningApps() -> [AppInfo] {
-        NSWorkspace.shared.runningApplications.compactMap { app in
+        workspace.runningApplications().compactMap { app in
             guard let name = app.localizedName, !name.isEmpty else { return nil }
             return AppInfo(
                 pid: app.processIdentifier,
@@ -94,9 +164,9 @@ struct AppLauncherService: AppLaunching {
 
     // MARK: - Private Helpers
 
-    private func findRunningApp(name: String) -> NSRunningApplication? {
+    private func findRunningApp(name: String) -> AppLauncherRunningApp? {
         let normalizedName = name.lowercased().replacingOccurrences(of: ".app", with: "")
-        return NSWorkspace.shared.runningApplications.first { app in
+        return workspace.runningApplications().first { app in
             if let appName = app.localizedName, appName.lowercased() == normalizedName { return true }
             if let bundleId = app.bundleIdentifier,
                let canonical = bundleId.split(separator: ".").last.map(String.init),
@@ -115,7 +185,7 @@ struct AppLauncherService: AppLaunching {
 
         // Bundle identifier lookup (e.g., "com.apple.calculator")
         if name.split(separator: ".").count >= 3 {
-            if let url = NSWorkspace.shared.urlForApplication(withBundleIdentifier: name) {
+            if let url = workspace.urlForApplication(withBundleIdentifier: name) {
                 return url
             }
         }
@@ -123,14 +193,14 @@ struct AppLauncherService: AppLaunching {
         // Exact filename match
         for dirPath in searchPaths {
             let url = URL(fileURLWithPath: dirPath).appendingPathComponent(searchName)
-            if FileManager.default.fileExists(atPath: url.path) {
+            if fileSystem.fileExists(atPath: url.path) {
                 return url
             }
         }
 
         // Case-insensitive filename match
         for dirPath in searchPaths {
-            if let contents = try? FileManager.default.contentsOfDirectory(atPath: dirPath) {
+            if let contents = try? fileSystem.contentsOfDirectory(atPath: dirPath) {
                 for item in contents {
                     if item.lowercased() == searchName.lowercased() {
                         return URL(fileURLWithPath: dirPath).appendingPathComponent(item)
@@ -152,22 +222,15 @@ struct AppLauncherService: AppLaunching {
     /// Searches a directory for an .app bundle whose display name matches the given name.
     private func findAppByDisplayName(_ name: String, in directory: String) -> URL? {
         let normalizedName = name.lowercased()
-        guard let contents = try? FileManager.default.contentsOfDirectory(atPath: directory) else {
+        guard let contents = try? fileSystem.contentsOfDirectory(atPath: directory) else {
             return nil
         }
         for item in contents where item.hasSuffix(".app") {
             let appURL = URL(fileURLWithPath: directory).appendingPathComponent(item)
-            if let displayName = appDisplayName(appURL), displayName.lowercased() == normalizedName {
+            if let displayName = fileSystem.appDisplayName(at: appURL), displayName.lowercased() == normalizedName {
                 return appURL
             }
         }
         return nil
-    }
-
-    /// Returns the localized display name for an app bundle.
-    private func appDisplayName(_ appURL: URL) -> String? {
-        guard let bundle = Bundle(url: appURL) else { return nil }
-        return (bundle.object(forInfoDictionaryKey: "CFBundleDisplayName") as? String)
-            ?? (bundle.object(forInfoDictionaryKey: "CFBundleName") as? String)
     }
 }

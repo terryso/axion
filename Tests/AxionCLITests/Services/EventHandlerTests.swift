@@ -39,7 +39,7 @@ struct EventHandlerTests {
         try await action()
         try await _Concurrency.Task.sleep(for: .milliseconds(100))
         await runtime.stopEventLoop()
-        _ = try? await loop
+        _ = await loop
     }
 
     @Test("handler subscribed to ToolCompletedEvent receives matching event")

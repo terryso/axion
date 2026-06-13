@@ -1,6 +1,25 @@
 import CoreGraphics
 import Foundation
 import ImageIO
+import ScreenCaptureKit
+
+private final class ScreenshotCaptureResultBox: @unchecked Sendable {
+    private let lock = NSLock()
+    private var result: Result<CGImage, Error>?
+
+    func set(_ result: Result<CGImage, Error>) {
+        lock.lock()
+        self.result = result
+        lock.unlock()
+    }
+
+    func get() -> Result<CGImage, Error>? {
+        lock.lock()
+        let result = self.result
+        lock.unlock()
+        return result
+    }
+}
 
 /// Errors thrown by `ScreenshotService`.
 enum ScreenshotError: Error, LocalizedError, ToolErrorProtocol {
@@ -55,31 +74,76 @@ struct ScreenshotService: ScreenshotCapturing {
     private static let maxSizeBytes = 5 * 1024 * 1024 // 5MB
 
     func captureWindow(windowId: Int) throws -> String {
-        let windowIdCG = CGWindowID(windowId)
-        guard let image = CGWindowListCreateImage(
-            .null,
-            .optionIncludingWindow,
-            windowIdCG,
-            [.bestResolution]
-        ) else {
-            throw ScreenshotError.windowCaptureFailed(windowId: windowId)
-        }
+        let image = try captureWindowImage(windowId: CGWindowID(windowId))
         return try captureWithSizeLimit(image: image)
     }
 
     func captureFullScreen() throws -> String {
-        guard let image = CGWindowListCreateImage(
-            CGDisplayBounds(CGMainDisplayID()),
-            .optionOnScreenOnly,
-            kCGNullWindowID,
-            [.bestResolution]
-        ) else {
+        guard let image = CGDisplayCreateImage(CGMainDisplayID()) else {
             throw ScreenshotError.fullScreenCaptureFailed
         }
         return try captureWithSizeLimit(image: image)
     }
 
     // MARK: - Private Helpers
+
+    private func captureWindowImage(windowId: CGWindowID) throws -> CGImage {
+        let semaphore = DispatchSemaphore(value: 0)
+        let resultBox = ScreenshotCaptureResultBox()
+
+        _Concurrency.Task {
+            do {
+                let content = try await SCShareableContent.current
+                guard let window = content.windows.first(where: { $0.windowID == windowId }) else {
+                    throw ScreenshotError.windowCaptureFailed(windowId: Int(windowId))
+                }
+                let image = try await captureWindowImage(window)
+                resultBox.set(.success(image))
+            } catch {
+                resultBox.set(.failure(error))
+            }
+            semaphore.signal()
+        }
+
+        guard semaphore.wait(timeout: .now() + 10) == .success else {
+            throw ScreenshotError.windowCaptureFailed(windowId: Int(windowId))
+        }
+
+        switch resultBox.get() {
+        case .success(let image):
+            return image
+        case .failure(let error):
+            throw error
+        case nil:
+            throw ScreenshotError.windowCaptureFailed(windowId: Int(windowId))
+        }
+    }
+
+    private func captureWindowImage(_ window: SCWindow) async throws -> CGImage {
+        try await withCheckedThrowingContinuation { continuation in
+            let windowId = window.windowID
+            let filter = SCContentFilter(desktopIndependentWindow: window)
+            let configuration = SCStreamConfiguration()
+            configuration.width = max(1, Int(window.frame.width))
+            configuration.height = max(1, Int(window.frame.height))
+            configuration.showsCursor = false
+
+            SCScreenshotManager.captureImage(
+                contentFilter: filter,
+                configuration: configuration
+            ) { image, error in
+                if let error {
+                    continuation.resume(throwing: error)
+                } else if let image {
+                    continuation.resume(returning: image)
+                } else {
+                    continuation.resume(
+                        throwing: ScreenshotError.windowCaptureFailed(windowId: Int(windowId))
+                    )
+                }
+            }
+        }
+    }
 
     private func captureWithSizeLimit(image: CGImage) throws -> String {
         // First attempt: high quality JPEG

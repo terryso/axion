@@ -560,6 +560,88 @@ struct ToolCategoryFormatterTests {
         #expect(result.contains("+1/-1"))
     }
 
+    @Test("formatStarted covers fallback summaries for edit, write, search, memory, and default")
+    func test_formatStarted_fallbackSummaryBranches() {
+        let editFallback = ToolCategoryFormatter.formatStarted(
+            toolName: "edit",
+            input: #"{"replacement":"fallback edit"}"#,
+            isTTY: false
+        )
+        let writePathOnly = ToolCategoryFormatter.formatStarted(
+            toolName: "write",
+            input: #"{"file_path":"/Users/test/output.txt"}"#,
+            isTTY: false
+        )
+        let writeFallback = ToolCategoryFormatter.formatStarted(
+            toolName: "write",
+            input: #"{"body":"fallback write"}"#,
+            isTTY: false
+        )
+        let searchFallback = ToolCategoryFormatter.formatStarted(
+            toolName: "grep",
+            input: #"{"scope":"fallback search"}"#,
+            isTTY: false
+        )
+        let memoryDomain = ToolCategoryFormatter.formatStarted(
+            toolName: "memory_add",
+            input: #"{"domain":"global"}"#,
+            isTTY: false
+        )
+        let memoryFallback = ToolCategoryFormatter.formatStarted(
+            toolName: "memory_add",
+            input: #"{"value":"fallback memory"}"#,
+            isTTY: false
+        )
+        let defaultFilePath = ToolCategoryFormatter.formatStarted(
+            toolName: "custom_tool",
+            input: #"{"file_path":"/Users/test/default.txt"}"#,
+            isTTY: false
+        )
+
+        #expect(editFallback.contains("fallback edit"))
+        #expect(writePathOnly.contains("output.txt"))
+        #expect(writeFallback.contains("fallback write"))
+        #expect(searchFallback.contains("fallback search"))
+        #expect(memoryDomain.contains("global"))
+        #expect(memoryFallback.contains("fallback memory"))
+        #expect(defaultFilePath.contains("default.txt"))
+    }
+
+    @Test("formatCompleted shell TTY handles JSON output and empty output branches")
+    func test_formatCompleted_shellTTYOutputBranches() {
+        let outputJSON = ToolCategoryFormatter.formatCompleted(
+            toolName: "bash",
+            content: #"{"exitCode":0,"output":"from output field"}"#,
+            isError: false,
+            durationMs: nil,
+            isTTY: true,
+            colorProfile: .ansi256
+        )
+        let exitCodeOnly = ToolCategoryFormatter.formatCompleted(
+            toolName: "bash",
+            content: #"{"exitCode":0}"#,
+            isError: false,
+            durationMs: nil,
+            isTTY: true,
+            colorProfile: .ansi16
+        )
+        let borderOnly = ToolCategoryFormatter.formatCompleted(
+            toolName: "bash",
+            content: "┌────┐\n└────┘",
+            isError: false,
+            durationMs: nil,
+            isTTY: true,
+            colorProfile: .unknown
+        )
+
+        #expect(outputJSON.contains("from output field"))
+        #expect(outputJSON.contains("\u{1B}[38;5;71m"))
+        #expect(exitCodeOnly.contains("completed"))
+        #expect(exitCodeOnly.contains(#"{"exitCode":0}"#))
+        #expect(borderOnly.contains("completed"))
+        #expect(borderOnly.contains("┌────┐"))
+    }
+
     // MARK: - Category Styles
 
     @Test("All categories have defined styles")

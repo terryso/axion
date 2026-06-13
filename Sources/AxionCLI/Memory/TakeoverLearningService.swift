@@ -18,6 +18,19 @@ struct TakeoverLearningService {
 
     let factStore: AxionFactStore
     let lifecycleService: OpenAgentSDK.MemoryLifecycleService
+    let logWarning: @Sendable (String) -> Void
+
+    init(
+        factStore: AxionFactStore,
+        lifecycleService: OpenAgentSDK.MemoryLifecycleService,
+        logWarning: @escaping @Sendable (String) -> Void = { message in
+            fputs("\(message)\n", stderr)
+        }
+    ) {
+        self.factStore = factStore
+        self.lifecycleService = lifecycleService
+        self.logWarning = logWarning
+    }
 
     // MARK: - Recording
 
@@ -73,7 +86,7 @@ struct TakeoverLearningService {
                 lifecycleService: lifecycleService
             )
         } catch {
-            fputs("[axion] warning: takeover learning record failed: \(error.localizedDescription)\n", stderr)
+            logWarning("[axion] warning: takeover learning record failed: \(error.localizedDescription)")
         }
     }
 }

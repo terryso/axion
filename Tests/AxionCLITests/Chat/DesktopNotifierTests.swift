@@ -191,7 +191,6 @@ struct DesktopNotifierTests {
 
     @Test("OSC 9 in tmux uses DCS passthrough wrapper")
     func osc9InTmux() {
-        var output = [String]()
         // Simulate tmux by setting TMUX env — can't easily do this in test,
         // so test with method=osc9 and inject tmux flag via direct call.
         // Instead, verify the format by checking the sanitizeForOSC static method

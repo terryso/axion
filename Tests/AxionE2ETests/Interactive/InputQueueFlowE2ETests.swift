@@ -37,9 +37,9 @@ struct InputQueueFlowE2ETests {
     @Test("FIFO: three messages in correct order")
     func fifoThree() {
         var queue = InputQueue()
-        queue.enqueue(text: "first")
-        queue.enqueue(text: "second")
-        queue.enqueue(text: "third")
+        _ = queue.enqueue(text: "first")
+        _ = queue.enqueue(text: "second")
+        _ = queue.enqueue(text: "third")
 
         #expect(queue.dequeue()?.text == "first")
         #expect(queue.dequeue()?.text == "second")
@@ -67,7 +67,7 @@ struct InputQueueFlowE2ETests {
     func customCapacity() {
         var queue = InputQueue(maxCapacity: 3)
         for i in 1...3 {
-            queue.enqueue(text: "msg\(i)")
+            _ = queue.enqueue(text: "msg\(i)")
         }
 
         let overflow = queue.enqueue(text: "msg4")
@@ -78,8 +78,8 @@ struct InputQueueFlowE2ETests {
     @Test("capacity: dequeue frees space")
     func dequeueFreesSpace() {
         var queue = InputQueue(maxCapacity: 2)
-        queue.enqueue(text: "A")
-        queue.enqueue(text: "B")
+        _ = queue.enqueue(text: "A")
+        _ = queue.enqueue(text: "B")
 
         // Full
         let full = queue.enqueue(text: "C")
@@ -99,7 +99,7 @@ struct InputQueueFlowE2ETests {
     @Test("duplicate: identical to last message is rejected")
     func duplicateRejection() {
         var queue = InputQueue()
-        queue.enqueue(text: "相同消息")
+        _ = queue.enqueue(text: "相同消息")
 
         let dup = queue.enqueue(text: "相同消息")
         #expect(dup == .duplicate(text: "相同消息"),
@@ -109,7 +109,7 @@ struct InputQueueFlowE2ETests {
     @Test("duplicate: different messages are allowed")
     func differentMessagesAllowed() {
         var queue = InputQueue()
-        queue.enqueue(text: "消息1")
+        _ = queue.enqueue(text: "消息1")
 
         let result = queue.enqueue(text: "消息2")
         #expect(result == .success(position: 2),
@@ -119,7 +119,7 @@ struct InputQueueFlowE2ETests {
     @Test("duplicate: after dequeue, same text is allowed again")
     func afterDequeueSameTextAllowed() {
         var queue = InputQueue()
-        queue.enqueue(text: "消息")
+        _ = queue.enqueue(text: "消息")
         _ = queue.dequeue()
 
         let result = queue.enqueue(text: "消息")
@@ -138,7 +138,7 @@ struct InputQueueFlowE2ETests {
     @Test("preview: single message")
     func previewSingle() {
         var queue = InputQueue()
-        queue.enqueue(text: "你好世界")
+        _ = queue.enqueue(text: "你好世界")
 
         let preview = queue.previewSummary()
         #expect(preview != nil, "Should have preview")
@@ -149,9 +149,9 @@ struct InputQueueFlowE2ETests {
     @Test("preview: multiple messages shows count and last")
     func previewMultiple() {
         var queue = InputQueue()
-        queue.enqueue(text: "第一条消息")
-        queue.enqueue(text: "第二条消息")
-        queue.enqueue(text: "最新消息")
+        _ = queue.enqueue(text: "第一条消息")
+        _ = queue.enqueue(text: "第二条消息")
+        _ = queue.enqueue(text: "最新消息")
 
         let preview = queue.previewSummary()
         #expect(preview?.contains("3条等待") == true, "Should show 3 messages waiting")
@@ -162,7 +162,7 @@ struct InputQueueFlowE2ETests {
     func previewTruncation() {
         var queue = InputQueue()
         let longMsg = String(repeating: "a", count: 60)
-        queue.enqueue(text: longMsg)
+        _ = queue.enqueue(text: longMsg)
 
         let preview = queue.previewSummary()
         #expect(preview?.contains("...") == true, "Should truncate with ...")
@@ -173,9 +173,9 @@ struct InputQueueFlowE2ETests {
     @Test("removeLast: pops from end of queue")
     func removeLastFromEnd() {
         var queue = InputQueue()
-        queue.enqueue(text: "A")
-        queue.enqueue(text: "B")
-        queue.enqueue(text: "C")
+        _ = queue.enqueue(text: "A")
+        _ = queue.enqueue(text: "B")
+        _ = queue.enqueue(text: "C")
 
         let removed = queue.removeLast()
         #expect(removed?.text == "C", "Should remove last (C)")
@@ -189,7 +189,7 @@ struct InputQueueFlowE2ETests {
     @Test("removeLast: single element queue")
     func removeLastSingle() {
         var queue = InputQueue()
-        queue.enqueue(text: "only")
+        _ = queue.enqueue(text: "only")
 
         let removed = queue.removeLast()
         #expect(removed?.text == "only", "Should remove the only element")
@@ -210,11 +210,11 @@ struct InputQueueFlowE2ETests {
         #expect(queue.isEmpty, "New queue should be empty")
         #expect(queue.count == 0, "New queue should have count 0")
 
-        queue.enqueue(text: "msg1")
+        _ = queue.enqueue(text: "msg1")
         #expect(!queue.isEmpty, "Should not be empty after enqueue")
         #expect(queue.count == 1)
 
-        queue.enqueue(text: "msg2")
+        _ = queue.enqueue(text: "msg2")
         #expect(queue.count == 2)
 
         _ = queue.dequeue()
@@ -231,7 +231,7 @@ struct InputQueueFlowE2ETests {
     func queuedMessageHasTimestamp() {
         var queue = InputQueue()
         let before = Date()
-        queue.enqueue(text: "test")
+        _ = queue.enqueue(text: "test")
         let after = Date()
 
         let msg = queue.dequeue()

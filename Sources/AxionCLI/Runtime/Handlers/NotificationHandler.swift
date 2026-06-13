@@ -35,7 +35,7 @@ actor NotificationHandler: EventHandler {
             cost = context.runCompleteContext?.totalCostUsd ?? 0
         } else if let failed = event as? AgentFailedEvent {
             elapsedSec = 0
-            summary = failed.error ?? "未知错误"
+            summary = failed.error
             cost = 0
         } else {
             elapsedSec = 0

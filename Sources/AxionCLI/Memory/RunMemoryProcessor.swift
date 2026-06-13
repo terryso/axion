@@ -82,7 +82,7 @@ struct RunMemoryProcessor {
 
         do {
             let extractor = AppMemoryExtractor()
-            let entries = try await extractor.extract(from: pairs, task: task, runId: runId)
+            let entries = extractor.extractKnowledgeEntries(from: pairs, task: task, runId: runId)
             let processedDomains = try await saveKnowledgeEntries(entries, to: memoryStore)
 
             await extractAndMergeFacts(

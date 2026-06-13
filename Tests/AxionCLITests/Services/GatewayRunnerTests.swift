@@ -62,7 +62,7 @@ struct GatewayRunnerTests {
         #expect(state == .running)
 
         await runner.stop(graceful: false)
-        _ = try? await runnerTask.result
+        _ = await runnerTask.result
     }
 
     @Test("GatewayRunner transitions to stopped after stop")
@@ -74,7 +74,7 @@ struct GatewayRunnerTests {
         try await waitForRunning(runner)
 
         await runner.stop(graceful: false)
-        _ = try? await runnerTask.result
+        _ = await runnerTask.result
 
         let state = await runner.currentState
         #expect(state == .stopped)
@@ -98,8 +98,8 @@ struct GatewayRunnerTests {
         }
 
         await runner.stop(graceful: true)
-        _ = try? await runnerTask.result
-        _ = try? await finishTask.result
+        _ = await runnerTask.result
+        _ = await finishTask.result
 
         let activeTasks = await runner.activeTaskCount
         #expect(activeTasks == 0)
@@ -114,7 +114,7 @@ struct GatewayRunnerTests {
         try await waitForRunning(runner)
 
         await runner.stop(graceful: false)
-        _ = try? await runnerTask.result
+        _ = await runnerTask.result
 
         let state = await runner.currentState
         #expect(state == .stopped)
@@ -131,7 +131,7 @@ struct GatewayRunnerTests {
         try await waitForRunning(runner)
 
         await runner.stop(graceful: false)
-        _ = try? await runnerTask.result
+        _ = await runnerTask.result
 
         let stopped = await server.wasStopCalled
         #expect(stopped)
@@ -172,7 +172,7 @@ struct GatewayRunnerTests {
         #expect(await runner.isAcceptingTasks == true)
 
         await runner.stop(graceful: true)
-        _ = try? await runnerTask.result
+        _ = await runnerTask.result
 
         #expect(await runner.isAcceptingTasks == false)
     }
@@ -186,7 +186,7 @@ struct GatewayRunnerTests {
         try await waitForRunning(runner)
 
         await runner.stop(graceful: true)
-        _ = try? await runnerTask.result
+        _ = await runnerTask.result
 
         let state = await runner.currentState
         #expect(state == .stopped)
@@ -273,7 +273,7 @@ struct GatewayRunnerTests {
         #expect(whileRunning.label == "dev.axion.gateway")
 
         await runner.stop(graceful: false)
-        _ = try? await runnerTask.result
+        _ = await runnerTask.result
     }
 
     @Test("getStatus computes uptime from startTime")
@@ -293,7 +293,7 @@ struct GatewayRunnerTests {
         #expect(whileRunning.uptimeSeconds > 0)
 
         await runner.stop(graceful: false)
-        _ = try? await runnerTask.result
+        _ = await runnerTask.result
     }
 
     // MARK: - Status Providers (Task 1.4)

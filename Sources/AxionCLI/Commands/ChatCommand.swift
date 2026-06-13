@@ -4,6 +4,28 @@ import OpenAgentSDK
 
 import AxionCore
 
+private final class CurrentChatAgentReference: @unchecked Sendable {
+    private let lock = NSLock()
+    private var agent: Agent
+
+    init(_ agent: Agent) {
+        self.agent = agent
+    }
+
+    func update(_ agent: Agent) {
+        lock.lock()
+        self.agent = agent
+        lock.unlock()
+    }
+
+    func interrupt() {
+        lock.lock()
+        let agent = self.agent
+        lock.unlock()
+        agent.interrupt()
+    }
+}
+
 /// Interactive multi-turn chat mode — `axion` with no arguments.
 ///
 /// Uses `agent.stream()` per turn for full streaming events (partial messages,
@@ -158,9 +180,9 @@ struct ChatCommand: AsyncParsableCommand {
             skillRegistry = nil
         }
 
-        // Agent reference for SIGINT handler — uses nonisolated(unsafe) to satisfy
-        // Sendable closure requirement. Agent.interrupt() is thread-safe.
-        nonisolated(unsafe) var currentAgent = state.buildResult.agent
+        // Agent reference for SIGINT handler. Session switches update the
+        // reference while the installed signal handler remains stable.
+        let currentAgent = CurrentChatAgentReference(state.buildResult.agent)
         SignalHandler.install {
             currentAgent.interrupt()
         }
@@ -219,7 +241,7 @@ struct ChatCommand: AsyncParsableCommand {
         // REPL loop: each turn calls agent.stream() for full streaming events.
         var skipNextRead = false
 
-        while true {
+        chatLoop: while true {
             SignalHandler.reset()
 
             // Story 38.5: 同步 inputQueue 到 composer
@@ -303,8 +325,29 @@ struct ChatCommand: AsyncParsableCommand {
                 trimmed = lineTrimmed
             }
 
-            let parsedSlashCommand = SlashCommand.parse(trimmed)
-            let isGeneratedTaskSlash = parsedSlashCommand == .apps || parsedSlashCommand == .storage
+            let route = ChatCommandInputRouter.route(
+                input: trimmed,
+                resumeSessionIds: state.lastResumeList.map(\.sessionId),
+                resolveSkillName: { rawSkillName in
+                    guard let registry = skillRegistry,
+                          let matchedSkill = registry.find(rawSkillName),
+                          matchedSkill.userInvocable
+                    else {
+                        return nil
+                    }
+                    return matchedSkill.name
+                }
+            )
+            if case .ignore = route {
+                continue
+            }
+
+            let isGeneratedTaskSlash: Bool = {
+                guard case .builtIn(let command, _) = route else {
+                    return false
+                }
+                return command == .apps || command == .storage
+            }()
             let recordUserInput: (String) -> Void = { text in
                 state.sessionUserMessages.append(text)
                 // Persist to cross-session history file (Codex-inspired)
@@ -324,9 +367,10 @@ struct ChatCommand: AsyncParsableCommand {
             var taskText = trimmed
             var matchedSkillExec: (name: String, args: String?)?
 
-            if let cmd = parsedSlashCommand {
-                let argument = SlashCommand.parseArgument(trimmed)
-
+            switch route {
+            case .ignore:
+                continue
+            case .builtIn(let cmd, let argument):
                 if cmd == .apps {
                     guard let generatedTask = await handleAppsSlash(argument: argument, config: config) else {
                         continue
@@ -341,202 +385,185 @@ struct ChatCommand: AsyncParsableCommand {
                     taskText = generatedTask
                     recordUserInput(generatedTask)
                 } else {
-                // AC1 (/resume 无参数): 在 REPL 中直接列出会话
-                if cmd == .resume && (argument == nil || argument!.isEmpty) {
-                    state.lastResumeList = await handleResumeList(
-                        buildConfig: state.buildConfig,
-                        sessionsDir: sessionsDir,
-                        includeArchived: false
-                    )
-                    continue
-                }
-
-                // 38.7 AC4: /resume --all
-                if cmd == .resume && argument == "--all" {
-                    state.lastResumeList = await handleResumeList(
-                        buildConfig: state.buildConfig,
-                        sessionsDir: sessionsDir,
-                        includeArchived: true
-                    )
-                    continue
-                }
-
-                // /compact
-                if cmd == .compact {
-                    fputs(
-                        await SlashCommandHandler.handleCompactNow(
-                            agent: state.buildResult.agent,
-                            contextTokens: state.contextTokens,
-                            contextWindow: state.contextWindow
-                        ),
-                        stderr
-                    )
-                    continue
-                }
-
-                // /clear — 清除对话上下文（Claude Code 风格）
-                if cmd == .clear {
-                    // 1. 清空 session store 中当前会话的消息
-                    if let store = state.buildConfig.sessionStore {
-                        let cwd = FileManager.default.currentDirectoryPath
-                        try? await store.save(
-                            sessionId: state.sessionId,
-                            messages: [],
-                            metadata: PartialSessionMetadata(
-                                cwd: cwd,
-                                model: state.buildResult.agent.model
-                            )
+                    // AC1 (/resume 无参数): 在 REPL 中直接列出会话
+                    if cmd == .resume && (argument == nil || argument!.isEmpty) {
+                        state.lastResumeList = await handleResumeList(
+                            buildConfig: state.buildConfig,
+                            sessionsDir: sessionsDir,
+                            includeArchived: false
                         )
-                    }
-                    // 2. 清空 agent 内存状态
-                    state.buildResult.agent.clear()
-                    // 3. 重置 REPL 状态
-                    state.sessionUserMessages = []
-                    state.contextTokens = 0
-                    state.sessionUsage = TokenUsage(inputTokens: 0, outputTokens: 0)
-                    state.resumedMessageBaseCount = 0
-                    // 4. 清屏
-                    fputs("\u{1B}[2J\u{1B}[H", stdout)
-                    fflush(stdout)
-                    fputs("🗑️ 对话上下文已清除\n", stderr)
-                    continue
-                }
-
-                // 38.7: /new — 创建新会话
-                if cmd == .newSession {
-                    let newSessionId = "chat-\(UUID().uuidString.prefix(8))"
-                    do {
-                        let result = try await state.switchToSession(
-                            newSessionId,
-                            params: buildParams
-                        )
-                        currentAgent = result.newAgent
-                        SignalHandler.install { currentAgent.interrupt() }
-                        fputs(SessionWorkflowHandler.formatNewSuccess(sessionId: newSessionId), stderr)
-                    } catch {
-                        fputs("[axion] ❌ 创建新会话失败: \(error.localizedDescription)\n", stderr)
-                    }
-                    continue
-                }
-
-                // 38.7: /fork — 分叉当前会话
-                if cmd == .fork {
-                    guard let store = state.buildConfig.sessionStore else {
-                        fputs("[axion] 无法访问会话存储\n", stderr)
                         continue
                     }
-                    let messageCount = state.resumedMessageBaseCount + state.sessionUserMessages.count
-                    let action = await SessionWorkflowHandler.handleFork(
-                        sessionId: state.sessionId,
-                        sessionStore: store,
-                        messageCount: messageCount
-                    )
-                    if case .forkSession(let newId, let sourceId) = action {
-                        do {
-                            let oldBaseCount = state.resumedMessageBaseCount + state.sessionUserMessages.count
-                            let result = try await state.switchToSession(
-                                newId,
-                                params: buildParams,
-                                resetBaseCount: false
+
+                    // 38.7 AC4: /resume --all
+                    if cmd == .resume && argument == "--all" {
+                        state.lastResumeList = await handleResumeList(
+                            buildConfig: state.buildConfig,
+                            sessionsDir: sessionsDir,
+                            includeArchived: true
+                        )
+                        continue
+                    }
+
+                    // /compact
+                    if cmd == .compact {
+                        fputs(
+                            await SlashCommandHandler.handleCompactNow(
+                                agent: state.buildResult.agent,
+                                contextTokens: state.contextTokens,
+                                contextWindow: state.contextWindow
+                            ),
+                            stderr
+                        )
+                        continue
+                    }
+
+                    // /clear — 清除对话上下文（Claude Code 风格）
+                    if cmd == .clear {
+                        // 1. 清空 session store 中当前会话的消息
+                        if let store = state.buildConfig.sessionStore {
+                            let cwd = FileManager.default.currentDirectoryPath
+                            try? await store.save(
+                                sessionId: state.sessionId,
+                                messages: [],
+                                metadata: PartialSessionMetadata(
+                                    cwd: cwd,
+                                    model: state.buildResult.agent.model
+                                )
                             )
-                            state.resumedMessageBaseCount = oldBaseCount
-                            currentAgent = result.newAgent
-                            SignalHandler.install { currentAgent.interrupt() }
-                            fputs(SessionWorkflowHandler.formatForkSuccess(newId: newId, sourceId: sourceId), stderr)
-                        } catch {
-                            fputs("[axion] ❌ 分叉会话恢复失败: \(error.localizedDescription)\n", stderr)
                         }
-                    }
-                    continue
-                }
-
-                // 38.7: /archive — 归档当前会话
-                if cmd == .archive {
-                    guard let store = state.buildConfig.sessionStore else {
-                        fputs("[axion] 无法访问会话存储\n", stderr)
+                        // 2. 清空 agent 内存状态
+                        state.buildResult.agent.clear()
+                        // 3. 重置 REPL 状态
+                        state.sessionUserMessages = []
+                        state.contextTokens = 0
+                        state.sessionUsage = TokenUsage(inputTokens: 0, outputTokens: 0)
+                        state.resumedMessageBaseCount = 0
+                        // 4. 清屏
+                        fputs("\u{1B}[2J\u{1B}[H", stdout)
+                        fflush(stdout)
+                        fputs("🗑️ 对话上下文已清除\n", stderr)
                         continue
                     }
-                    let messageCount = state.resumedMessageBaseCount + state.sessionUserMessages.count
-                    let action = await SessionWorkflowHandler.handleArchive(
-                        sessionId: state.sessionId,
-                        sessionStore: store,
-                        messageCount: messageCount
-                    )
-                    if case .archiveSession = action {
-                        // AC3: 归档完成 — 继续当前会话（不退出）
+
+                    // 38.7: /new — 创建新会话
+                    if cmd == .newSession {
+                        let newSessionId = "chat-\(UUID().uuidString.prefix(8))"
+                        do {
+                            let result = try await state.switchToSession(
+                                newSessionId,
+                                params: buildParams
+                            )
+                            currentAgent.update(result.newAgent)
+                            fputs(SessionWorkflowHandler.formatNewSuccess(sessionId: newSessionId), stderr)
+                        } catch {
+                            fputs("[axion] ❌ 创建新会话失败: \(error.localizedDescription)\n", stderr)
+                        }
+                        continue
                     }
-                    continue
-                }
 
-                let action = SlashCommandHandler.handle(
-                    cmd,
-                    argument: argument,
-                    agent: state.buildResult.agent,
-                    config: config,
-                    sessionUsage: state.sessionUsage,
-                    buildConfig: state.buildConfig,
-                    contextWindow: state.contextWindow,
-                    contextTokens: state.contextTokens,
-                    skillRegistry: skillRegistry,
-                    lastAssistantText: sessionLastAssistantText,
-                    sessionStartTime: sessionStartTime,
-                    sessionTurnCount: sessionTurnCount,
-                    sessionTotalTools: sessionTotalTools,
-                    sessionToolUsage: sessionToolUsage
-                )
-
-                switch action {
-                case .none:
-                    continue
-                case .exit:
-                    break
-                case .resumeSession(let rawArg):
-                    let targetSessionId = await resolveResumeTarget(
-                        rawArg: rawArg,
-                        state: &state,
-                        sessionsDir: sessionsDir
-                    )
-                    if let result = await state.resumeSession(
-                        targetSessionId: targetSessionId,
-                        params: buildParams
-                    ) {
-                        currentAgent = result.newAgent
-                        SignalHandler.install { currentAgent.interrupt() }
+                    // 38.7: /fork — 分叉当前会话
+                    if cmd == .fork {
+                        guard let store = state.buildConfig.sessionStore else {
+                            fputs("[axion] 无法访问会话存储\n", stderr)
+                            continue
+                        }
+                        let messageCount = state.resumedMessageBaseCount + state.sessionUserMessages.count
+                        let action = await SessionWorkflowHandler.handleFork(
+                            sessionId: state.sessionId,
+                            sessionStore: store,
+                            messageCount: messageCount
+                        )
+                        if case .forkSession(let newId, let sourceId) = action {
+                            do {
+                                let oldBaseCount = state.resumedMessageBaseCount + state.sessionUserMessages.count
+                                let result = try await state.switchToSession(
+                                    newId,
+                                    params: buildParams,
+                                    resetBaseCount: false
+                                )
+                                state.resumedMessageBaseCount = oldBaseCount
+                                currentAgent.update(result.newAgent)
+                                fputs(SessionWorkflowHandler.formatForkSuccess(newId: newId, sourceId: sourceId), stderr)
+                            } catch {
+                                fputs("[axion] ❌ 分叉会话恢复失败: \(error.localizedDescription)\n", stderr)
+                            }
+                        }
+                        continue
                     }
-                    continue
-                case .newSession, .forkSession, .archiveSession:
-                    continue
-                }
 
-                if action == .exit { break }
-                continue
+                    // 38.7: /archive — 归档当前会话
+                    if cmd == .archive {
+                        guard let store = state.buildConfig.sessionStore else {
+                            fputs("[axion] 无法访问会话存储\n", stderr)
+                            continue
+                        }
+                        let messageCount = state.resumedMessageBaseCount + state.sessionUserMessages.count
+                        let action = await SessionWorkflowHandler.handleArchive(
+                            sessionId: state.sessionId,
+                            sessionStore: store,
+                            messageCount: messageCount
+                        )
+                        if case .archiveSession = action {
+                            // AC3: 归档完成 — 继续当前会话（不退出）
+                        }
+                        continue
+                    }
+
+                    let action = SlashCommandHandler.handle(
+                        cmd,
+                        argument: argument,
+                        agent: state.buildResult.agent,
+                        config: config,
+                        sessionUsage: state.sessionUsage,
+                        buildConfig: state.buildConfig,
+                        contextWindow: state.contextWindow,
+                        contextTokens: state.contextTokens,
+                        skillRegistry: skillRegistry,
+                        lastAssistantText: sessionLastAssistantText,
+                        sessionStartTime: sessionStartTime,
+                        sessionTurnCount: sessionTurnCount,
+                        sessionTotalTools: sessionTotalTools,
+                        sessionToolUsage: sessionToolUsage
+                    )
+
+                    switch action {
+                    case .none:
+                        continue
+                    case .exit:
+                        break chatLoop
+                    case .resumeSession(let rawArg):
+                        let targetSessionId = await resolveResumeTarget(
+                            rawArg: rawArg,
+                            state: &state,
+                            sessionsDir: sessionsDir
+                        )
+                        if let result = await state.resumeSession(
+                            targetSessionId: targetSessionId,
+                            params: buildParams
+                        ) {
+                            currentAgent.update(result.newAgent)
+                        }
+                        continue
+                    case .newSession, .forkSession, .archiveSession:
+                        continue
+                    }
                 }
-            } else if !state.lastResumeList.isEmpty, let index = Int(trimmed), index > 0, index <= state.lastResumeList.count {
+            case .resumeListedSession(let targetSessionId):
                 // Direct number input after /resume list — resume session by index
-                let targetSessionId = state.lastResumeList[index - 1].sessionId
                 state.lastResumeList = []
                 if let result = await state.resumeSession(
                     targetSessionId: targetSessionId,
                     params: buildParams
                 ) {
-                    currentAgent = result.newAgent
-                    SignalHandler.install { currentAgent.interrupt() }
+                    currentAgent.update(result.newAgent)
                 }
                 continue
-            } else if trimmed.hasPrefix("/") {
-                // /xxx 不是内置命令 — 参考 TG 模式：直接发给 agent 执行
-                // 如果 SkillRegistry 中匹配到 skill，使用 promptTemplate（优化路径）
-                let rawSkillName = String(trimmed.split(separator: " ", maxSplits: 1)[0].dropFirst())
-                let skillArg = trimmed.split(separator: " ", maxSplits: 1).count > 1
-                    ? String(trimmed.split(separator: " ", maxSplits: 1)[1])
-                    : nil
-
-                if let registry = skillRegistry,
-                   let matchedSkill = registry.find(rawSkillName),
-                   matchedSkill.userInvocable
-                {
+            case .agentTask(let text, let matchedSkill):
+                taskText = text
+                if let matchedSkill {
                     // SkillRegistry 匹配到 — 使用 executeSkillStream（SDK 专用 skill 执行路径）
-                    matchedSkillExec = (name: matchedSkill.name, args: skillArg)
+                    matchedSkillExec = (name: matchedSkill.name, args: matchedSkill.args)
                 }
                 // 无论是否匹配 SkillRegistry，都落入 agent stream 执行
                 // agent 会通过 SkillTool 处理未知的 /xxx 输入

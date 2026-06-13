@@ -57,8 +57,6 @@ struct AccessibilityEngineServiceTests {
 
     @Test("conforms to WindowManaging protocol")
     func conformsToWindowManaging() {
-        let service = AccessibilityEngineService()
-        #expect(service is WindowManaging,
-               "AccessibilityEngineService should conform to WindowManaging protocol")
+        _ = AccessibilityEngineService() as any WindowManaging
     }
 }

@@ -1,5 +1,23 @@
 import Foundation
 
+private final class DoctorCheckResultBox: @unchecked Sendable {
+    private let lock = NSLock()
+    private var result: CheckResult?
+
+    func set(_ result: CheckResult) {
+        lock.lock()
+        self.result = result
+        lock.unlock()
+    }
+
+    func get() -> CheckResult? {
+        lock.lock()
+        let result = self.result
+        lock.unlock()
+        return result
+    }
+}
+
 // MARK: - Permission & System Diagnostic Checks
 
 extension DoctorCommand {
@@ -189,36 +207,36 @@ extension DoctorCommand {
         request.timeoutInterval = 3
 
         let sem = DispatchSemaphore(value: 0)
-        var checkResult: CheckResult?
+        let checkResult = DoctorCheckResultBox()
 
         URLSession.shared.dataTask(with: request) { _, response, error in
             if error != nil {
-                checkResult = CheckResult(
+                checkResult.set(CheckResult(
                     name: "Settings API",
                     status: .ok,
                     detail: "跳过（连接失败）",
                     fixHint: nil
-                )
+                ))
             } else if let httpResponse = response as? HTTPURLResponse, httpResponse.statusCode == 200 {
-                checkResult = CheckResult(
+                checkResult.set(CheckResult(
                     name: "Settings API",
                     status: .ok,
                     detail: "可达 (port \(defaultPort))",
                     fixHint: nil
-                )
+                ))
             } else {
-                checkResult = CheckResult(
+                checkResult.set(CheckResult(
                     name: "Settings API",
                     status: .ok,
                     detail: "跳过（非预期响应）",
                     fixHint: nil
-                )
+                ))
             }
             sem.signal()
         }.resume()
 
         _ = sem.wait(timeout: .now() + 5)
-        return checkResult ?? CheckResult(
+        return checkResult.get() ?? CheckResult(
             name: "Settings API",
             status: .ok,
             detail: "跳过（超时）",

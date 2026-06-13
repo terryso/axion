@@ -211,7 +211,8 @@ struct TakeoverLearningServiceTests {
         // Use an invalid directory path to force failure
         let service = TakeoverLearningService(
             factStore: AxionFactStore(memoryDir: "/dev/null/impossible/path"),
-            lifecycleService: OpenAgentSDK.MemoryLifecycleService()
+            lifecycleService: OpenAgentSDK.MemoryLifecycleService(),
+            logWarning: { _ in }
         )
 
         // Should not crash or throw

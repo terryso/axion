@@ -44,9 +44,7 @@ struct ScreenshotServiceTests {
 
     @Test("conforms to ScreenshotCapturing protocol")
     func screenshotServiceConformsToScreenshotCapturing() {
-        let service = ScreenshotService()
-        #expect(service is ScreenshotCapturing,
-               "ScreenshotService should conform to ScreenshotCapturing protocol")
+        _ = ScreenshotService() as any ScreenshotCapturing
     }
 
     // MARK: - Base64 Encoding Validation

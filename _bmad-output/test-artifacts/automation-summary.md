@@ -393,3 +393,81 @@ The codebase can still move toward 80%, but the next meaningful gains are no lon
 ### Recommendation
 
 The next useful coverage move is to continue extracting boundary-free collaborators from `ChatCommand` and `RunOrchestrator`, then add mock-backed tests around those collaborators. The AX helper files remain high-impact, but they need protocol seams around system APIs before they can be expanded safely under the unit-test rules.
+
+## Chat Routing and App Launcher Dependency Pass: 2026-06-13
+
+### Pre-Work Commit
+
+- User request: commit current work before continuing.
+- Commit created: `6ee1863 test: extract coverage seams`.
+- Commit-time baseline for this continuation: region coverage 72.93%, function coverage 74.53%, line coverage 73.96%.
+
+### Refactoring Scope
+
+- `Sources/AxionCLI/Chat/ChatCommandInputRouter.swift`
+  - Extracted slash command, resume-index, and skill fallback routing from the interactive `ChatCommand` loop into a pure router.
+  - Preserves built-in command precedence over matching skill names and keeps unknown `/xxx` inputs flowing to the agent task path.
+- `Sources/AxionCLI/Commands/ChatCommand.swift`
+  - Rewired the REPL loop to consume `ChatCommandInputRoute` decisions while leaving session, command-handler, and streaming behavior unchanged.
+- `Sources/AxionHelper/Services/AppLauncher.swift`
+  - Added injectable workspace and filesystem seams around `NSWorkspace`, `FileManager`, and app bundle display-name lookup.
+  - Keeps default runtime behavior backed by `NSWorkspace.shared` and `FileManager.default`.
+- `Tests/AxionCLITests/Chat/ToolCategoryFormatterTests.swift`
+  - Added coverage for fallback summary and shell/TTY output formatting branches.
+
+### Added Coverage
+
+- `Tests/AxionCLITests/Chat/ChatCommandInputRouterTests.swift`
+  - Added pure routing coverage for empty inputs, built-ins, generated task slashes, built-in-vs-skill precedence, one-based resume selection, invalid resume indexes, unknown slashes, and skill argument parsing.
+- `Tests/AxionHelperTests/Services/AppLauncherServiceTests.swift`
+  - Added mock-backed coverage for already-running apps, bundle-id lookup, exact and case-insensitive filename lookup, localized display name lookup, app-not-found, launch failure wrapping, and running-app filtering.
+- `Tests/AxionHelperTests/Services/ServicesTests.swift`
+  - Added a `Services` root suite so `--filter "AxionHelperTests.Services"` includes AppLauncher service coverage in the project-standard unit command.
+- `Tests/AxionCLITests/Chat/ToolCategoryFormatterTests.swift`
+  - Added fallback and shell/TTY branch assertions.
+
+### Validation Results
+
+- Pre-change commit:
+  - Command: `git commit -m "test: extract coverage seams"`.
+  - Result: created `6ee1863`.
+- Targeted chat router run:
+  - Command: `swift test --filter ChatCommandInputRouterTests`.
+  - Result: passed, 15 tests in 1 suite.
+- Targeted slash-regression run:
+  - Command: `swift test --filter SlashCommandTests --filter SlashCommandSkillsTests --filter SignalHandlerTests`.
+  - Result: passed, 73 tests in 4 suites.
+- Targeted app launcher run:
+  - Command: `swift test --filter AppLauncherServiceTests`.
+  - Result: passed, 16 tests in 1 suite.
+- Services filter run:
+  - Command: `swift test --filter "AxionHelperTests.Services"`.
+  - Result: passed, 16 tests in 2 suites.
+- Targeted formatter run:
+  - Command: `swift test --filter ToolCategoryFormatterTests`.
+  - Result: passed, 45 tests in 1 suite.
+- Full unit coverage run:
+  - Command: `swift test --no-parallel --enable-code-coverage --filter "AxionHelperTests.Tools" --filter "AxionHelperTests.Models" --filter "AxionHelperTests.MCP" --filter "AxionHelperTests.Services" --filter "AxionCoreTests" --filter "AxionCLITests"`.
+  - Result: passed, 3732 tests in 239 suites.
+- Swift Testing rule:
+  - `rg -l "import XCTest" Tests` returned no matches.
+- Whitespace check:
+  - `git diff --check` passed.
+
+### Coverage Delta
+
+- Continuation-pass region coverage: 72.93% -> 73.48% (+0.55 percentage points).
+- Continuation-pass line coverage: 73.96% -> 74.38% (+0.42 percentage points).
+- `ChatCommandInputRouter.swift`: 95.45% region coverage, 98.04% line coverage.
+- `ToolCategoryFormatter.swift`: 92.13% region coverage, 96.75% line coverage.
+- `AppLauncher.swift`: 80.00% region coverage, 76.84% line coverage under the combined project-standard unit coverage command.
+
+### Remaining High-Impact Gaps
+
+- `AxionCLI/Commands/ChatCommand.swift`: still the largest uncovered surface after extracting the first pure router.
+- `AxionCLI/Services/RunOrchestrator.swift`: still a high-value dependency extraction target.
+- AX/helper services remain high-impact but need deeper protocol seams before adding more unit tests under the no-real-system-dependency rule.
+
+### Recommendation
+
+Continue by carving `ChatCommand` into more pure collaborators for session workflow decisions, command side effects, and stream-result handling. After that, move to `RunOrchestrator` with explicit protocols around agent execution, notifications, and persistence so tests can assert orchestration behavior without invoking SDK or OS boundaries.

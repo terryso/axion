@@ -95,7 +95,7 @@ struct SkillCompileE2ETests {
                 windowSnapshots: []
             )
 
-            let (skill, skillData, result) = try compileAndSave(
+            let (_, _, result) = try compileAndSave(
                 recording: recording,
                 recordingsDir: recordingsDir,
                 skillsDir: skillsDir,
@@ -323,7 +323,7 @@ struct SkillCompileE2ETests {
                 windowSnapshots: []
             )
 
-            let (skill, skillData, _) = try compileAndSave(
+            let (_, skillData, _) = try compileAndSave(
                 recording: recording,
                 recordingsDir: recordingsDir,
                 skillsDir: skillsDir,

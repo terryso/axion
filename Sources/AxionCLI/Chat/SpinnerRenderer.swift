@@ -41,7 +41,7 @@ final class SpinnerRenderer {
         isStopped = false
 
         if delayMs > 0 {
-            let queue = DispatchQueue(label: "axion.spinner-delay", qos: .utility)
+            let queue = DispatchQueue(label: "axion.spinner-delay", qos: .userInitiated)
             let timer = DispatchSource.makeTimerSource(queue: queue)
             timer.schedule(deadline: .now() + .milliseconds(delayMs), repeating: .never)
             let renderer = self
@@ -76,7 +76,11 @@ final class SpinnerRenderer {
         let startTime = DispatchTime.now()
         animationStartTime = startTime
 
-        let queue = DispatchQueue(label: "axion.spinner", qos: .utility)
+        // QoS 必须为 .userInitiated：spinner 是用户正在等待的实时 UI 反馈。
+        // 早期用 .utility（低优先级），在 storage_scan 等 CPU 密集工具执行期间会被 libdispatch
+        // 饿死——仅第一帧（deadline: .now()）趁间隙渲染出 "0.0s"，之后每 100ms 的重复帧拿不到
+        // CPU，秒数永远卡在 0.0s。提升优先级后，handler 极轻（微秒级）也能稳定被调度。
+        let queue = DispatchQueue(label: "axion.spinner", qos: .userInitiated)
         let timer = DispatchSource.makeTimerSource(queue: queue)
         // 100ms 刷新间隔 — 平衡流畅度与 CPU 开销
         timer.schedule(deadline: .now(), repeating: .milliseconds(100))

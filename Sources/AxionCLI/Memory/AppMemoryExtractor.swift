@@ -62,19 +62,28 @@ struct AppMemoryExtractor {
         }
     }
 
-    /// Extract knowledge entries from a sequence of tool-use/result pairs.
-    @available(*, deprecated, message: "Use extractFacts(for:task:runId:) instead")
-    func extract(
+    /// Extract legacy knowledge entries from a sequence of tool-use/result pairs.
+    func extractKnowledgeEntries(
         from pairs: [ToolPair],
         task: String,
         runId: String
-    ) async throws -> [KnowledgeEntry] {
+    ) -> [KnowledgeEntry] {
         buildAppGroups(from: pairs).map { group in
             buildEntry(
                 pairs: group.pairs, task: task, runId: runId,
                 appName: group.appName, bundleId: group.bundleId
             )
         }
+    }
+
+    /// Extract knowledge entries from a sequence of tool-use/result pairs.
+    @available(*, deprecated, message: "Use extractFacts(from:task:runId:) or extractKnowledgeEntries(from:task:runId:) instead")
+    func extract(
+        from pairs: [ToolPair],
+        task: String,
+        runId: String
+    ) async throws -> [KnowledgeEntry] {
+        extractKnowledgeEntries(from: pairs, task: task, runId: runId)
     }
 
     // MARK: - Grouping

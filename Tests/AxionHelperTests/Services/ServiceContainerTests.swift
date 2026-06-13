@@ -10,7 +10,7 @@ struct ServiceContainerTests {
     @Test("shared is initialized")
     func sharedIsInitialized() {
         let container = ServiceContainer.shared
-        #expect(container as Any != nil, "ServiceContainer.shared should be initialized")
+        #expect(container.launchDelayNs == 1_500_000_000)
     }
 
     @Test("shared has appLauncher")

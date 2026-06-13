@@ -108,7 +108,7 @@ struct AxionRuntimeSkillTests {
         eventLoopTask.cancel()
         await runtime.stopEventLoop()
 
-        let identifier = await handler.identifier
+        let identifier = handler.identifier
         #expect(identifier == "skill-test-handler")
     }
 

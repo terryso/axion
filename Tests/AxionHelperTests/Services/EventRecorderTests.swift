@@ -27,7 +27,6 @@ struct EventRecorderTests {
 
     @Test("startRecording throws when already recording")
     func test_startRecording_throwsWhenAlreadyRecording() {
-        let service = EventRecorderService()
         // Can't easily test double-start without AX permissions in CI
         // but we can verify the error type exists
         let error = EventRecorderError.alreadyRecording

@@ -273,7 +273,7 @@ struct MemoryClearTypeTests {
         defer { try? FileManager.default.removeItem(atPath: tempDir) }
 
         do {
-            _ = try await MemoryClearCommand.validateOptions(app: "com.apple.calculator", type: "memory")
+            _ = try MemoryClearCommand.validateOptions(app: "com.apple.calculator", type: "memory")
             Issue.record("Should throw when both --app and --type provided")
         } catch {
             #expect(error is ValidationError, "Should throw ValidationError for mutual exclusion")
@@ -283,7 +283,7 @@ struct MemoryClearTypeTests {
     @Test("mutual exclusion: neither --app nor --type rejected")
     func neitherOptionRejected() async throws {
         do {
-            _ = try await MemoryClearCommand.validateOptions(app: nil, type: nil)
+            _ = try MemoryClearCommand.validateOptions(app: nil, type: nil)
             Issue.record("Should throw when neither --app nor --type provided")
         } catch {
             #expect(error is ValidationError, "Should throw ValidationError when no option provided")

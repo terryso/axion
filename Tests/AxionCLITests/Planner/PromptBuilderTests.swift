@@ -35,7 +35,7 @@ struct PromptBuilderTests {
     @Test("load missing file throws error")
     func loadMissingFileThrowsError() async throws {
         do {
-            try PromptBuilder.load(
+            _ = try PromptBuilder.load(
                 name: "nonexistent",
                 variables: [:],
                 fromDirectory: "/tmp/empty-dir-\(UUID().uuidString)"

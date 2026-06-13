@@ -193,7 +193,7 @@ struct SeatActivityMonitorTests {
 
     @Test("create() returns non-nil monitor with sampled baseline")
     func test_create_returnsNonNil() async {
-        let monitor = await SeatActivityMonitor.create()
+        let monitor = SeatActivityMonitor.create()
         #expect(monitor != nil)
     }
 }

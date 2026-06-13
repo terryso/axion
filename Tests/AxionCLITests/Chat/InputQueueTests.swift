@@ -92,9 +92,9 @@ struct InputQueueTests {
     @Test("removeLast 弹出最近一条")
     func testRemoveLast() {
         var queue = InputQueue()
-        queue.enqueue(text: "第一条")
-        queue.enqueue(text: "第二条")
-        queue.enqueue(text: "第三条")
+        _ = queue.enqueue(text: "第一条")
+        _ = queue.enqueue(text: "第二条")
+        _ = queue.enqueue(text: "第三条")
 
         let removed = queue.removeLast()
         #expect(removed?.text == "第三条")
@@ -114,11 +114,11 @@ struct InputQueueTests {
     @Test("removeLast 后继续入队")
     func testRemoveLastThenEnqueue() {
         var queue = InputQueue()
-        queue.enqueue(text: "A")
-        queue.enqueue(text: "B")
+        _ = queue.enqueue(text: "A")
+        _ = queue.enqueue(text: "B")
 
         _ = queue.removeLast()  // 移除 B
-        queue.enqueue(text: "C")
+        _ = queue.enqueue(text: "C")
 
         #expect(queue.count == 2)
         #expect(queue.dequeue()?.text == "A")
@@ -130,7 +130,7 @@ struct InputQueueTests {
     @Test("previewSummary — 1 条消息格式")
     func testPreviewSummaryOne() {
         var queue = InputQueue()
-        queue.enqueue(text: "也修复一下测试")
+        _ = queue.enqueue(text: "也修复一下测试")
 
         let summary = queue.previewSummary()
         #expect(summary == "⏳ 已排队 (1条等待): \"也修复一下测试\"")
@@ -139,9 +139,9 @@ struct InputQueueTests {
     @Test("previewSummary — 多条消息格式")
     func testPreviewSummaryMultiple() {
         var queue = InputQueue()
-        queue.enqueue(text: "做A")
-        queue.enqueue(text: "做B")
-        queue.enqueue(text: "做C")
+        _ = queue.enqueue(text: "做A")
+        _ = queue.enqueue(text: "做B")
+        _ = queue.enqueue(text: "做C")
 
         let summary = queue.previewSummary()
         #expect(summary == "⏳ 已排队 (3条等待): \"做C\"")
@@ -158,7 +158,7 @@ struct InputQueueTests {
     @Test("previewLast — 短文本不截断")
     func testPreviewLastShort() {
         var queue = InputQueue()
-        queue.enqueue(text: "短消息")
+        _ = queue.enqueue(text: "短消息")
         #expect(queue.previewLast() == "短消息")
     }
 
@@ -166,7 +166,7 @@ struct InputQueueTests {
     func testPreviewLastTruncation() {
         var queue = InputQueue()
         let longText = String(repeating: "A", count: 50)
-        queue.enqueue(text: longText)
+        _ = queue.enqueue(text: longText)
 
         let preview = queue.previewLast()
         #expect(preview != nil)
@@ -178,7 +178,7 @@ struct InputQueueTests {
     func testPreviewLastExact40() {
         var queue = InputQueue()
         let exact = String(repeating: "X", count: 40)
-        queue.enqueue(text: exact)
+        _ = queue.enqueue(text: exact)
         #expect(queue.previewLast() == exact)
     }
 
@@ -196,7 +196,7 @@ struct InputQueueTests {
         #expect(queue.isEmpty)
         #expect(queue.count == 0)
 
-        queue.enqueue(text: "msg")
+        _ = queue.enqueue(text: "msg")
         #expect(!queue.isEmpty)
         #expect(queue.count == 1)
 
@@ -211,7 +211,7 @@ struct InputQueueTests {
     func testQueuedMessageTimestamp() {
         var queue = InputQueue()
         let before = Date()
-        queue.enqueue(text: "test")
+        _ = queue.enqueue(text: "test")
         let after = Date()
 
         let msg = queue.dequeue()
@@ -233,8 +233,8 @@ struct InputQueueTests {
     func testFullCycle() {
         var queue = InputQueue(maxCapacity: 2)
 
-        queue.enqueue(text: "A")
-        queue.enqueue(text: "B")
+        _ = queue.enqueue(text: "A")
+        _ = queue.enqueue(text: "B")
         // 已满
         #expect(queue.enqueue(text: "C") == .queueFull(currentCount: 2))
 

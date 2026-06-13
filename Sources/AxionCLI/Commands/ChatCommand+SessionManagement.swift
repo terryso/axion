@@ -34,9 +34,8 @@ struct ChatREPLState: Sendable {
         let canUseTool: CanUseToolFn
     }
 
-    /// Result of a successful session switch — caller uses this to update
-    /// `currentAgent` and reinstall the signal handler (those can't live inside
-    /// the struct because `currentAgent` is `nonisolated(unsafe)`).
+    /// Result of a successful session switch — caller uses this to update the
+    /// interrupt target held by the installed signal handler.
     struct SwitchResult: Sendable {
         let newAgent: Agent
     }

@@ -62,7 +62,7 @@ struct AppMemoryExtractorTests {
             ),
         ]
 
-        let entries = try await extractor.extract(
+        let entries = extractor.extractKnowledgeEntries(
             from: toolPairs,
             task: "Open Calculator and click a button",
             runId: "20260513-test01"
@@ -94,7 +94,7 @@ struct AppMemoryExtractorTests {
             ),
         ]
 
-        let entries = try await extractor.extract(
+        let entries = extractor.extractKnowledgeEntries(
             from: toolPairs,
             task: "Open Calculator and type 17",
             runId: "20260513-test02"
@@ -118,7 +118,7 @@ struct AppMemoryExtractorTests {
             ),
         ]
 
-        let entries = try await extractor.extract(
+        let entries = extractor.extractKnowledgeEntries(
             from: toolPairs,
             task: "Open Calculator",
             runId: "20260513-test03"
@@ -143,7 +143,7 @@ struct AppMemoryExtractorTests {
             ),
         ]
 
-        let entries = try await extractor.extract(
+        let entries = extractor.extractKnowledgeEntries(
             from: toolPairs,
             task: "Open NonExistentApp",
             runId: "20260513-test04"
@@ -168,7 +168,7 @@ struct AppMemoryExtractorTests {
             ),
         ]
 
-        let entries = try await extractor.extract(
+        let entries = extractor.extractKnowledgeEntries(
             from: toolPairs,
             task: "Open Calculator",
             runId: "20260513-test05"
@@ -192,7 +192,7 @@ struct AppMemoryExtractorTests {
             ),
         ]
 
-        let entries = try await extractor.extract(
+        let entries = extractor.extractKnowledgeEntries(
             from: toolPairs,
             task: "Open Calculator",
             runId: "20260513-test06"
@@ -217,7 +217,7 @@ struct AppMemoryExtractorTests {
             ),
         ]
 
-        let entries = try await extractor.extract(
+        let entries = extractor.extractKnowledgeEntries(
             from: toolPairs,
             task: "Open Calculator",
             runId: "20260513-test07"
@@ -246,7 +246,7 @@ struct AppMemoryExtractorTests {
             ),
         ]
 
-        let entries = try await extractor.extract(
+        let entries = extractor.extractKnowledgeEntries(
             from: toolPairs,
             task: "Open Calculator and click",
             runId: "20260513-test08"
@@ -270,7 +270,7 @@ struct AppMemoryExtractorTests {
         ]
 
         let runId = "20260513-testrun"
-        let entries = try await extractor.extract(
+        let entries = extractor.extractKnowledgeEntries(
             from: toolPairs,
             task: "Open Calculator",
             runId: runId
@@ -288,7 +288,7 @@ struct AppMemoryExtractorTests {
     func extractEmptyToolPairsReturnsEmptyArray() async throws {
         let extractor = AppMemoryExtractor()
 
-        let entries = try await extractor.extract(
+        let entries = extractor.extractKnowledgeEntries(
             from: [],
             task: "Do nothing",
             runId: "20260513-empty"
@@ -308,7 +308,7 @@ struct AppMemoryExtractorTests {
             ),
         ]
 
-        let entries = try await extractor.extract(
+        let entries = extractor.extractKnowledgeEntries(
             from: toolPairs,
             task: "Click somewhere",
             runId: "20260513-noapp"
@@ -334,7 +334,7 @@ struct AppMemoryExtractorTests {
             ),
         ]
 
-        let entries = try await extractor.extract(
+        let entries = extractor.extractKnowledgeEntries(
             from: toolPairs,
             task: "Open Calculator then TextEdit",
             runId: "20260513-multi"
@@ -365,7 +365,7 @@ struct AppMemoryExtractorTests {
             ),
         ]
 
-        let entries = try await extractor.extract(
+        let entries = extractor.extractKnowledgeEntries(
             from: toolPairs,
             task: "Open Calculator and click twice",
             runId: "20260513-count"
@@ -400,7 +400,7 @@ struct AppMemoryExtractorTests {
             ),
         ]
 
-        let entries = try await extractor.extract(
+        let entries = extractor.extractKnowledgeEntries(
             from: toolPairs,
             task: "Open Calculator",
             runId: "20260513-axtree"
@@ -433,7 +433,7 @@ struct AppMemoryExtractorTests {
             ),
         ]
 
-        let entries = try await extractor.extract(
+        let entries = extractor.extractKnowledgeEntries(
             from: toolPairs,
             task: "Open Calculator",
             runId: "20260513-axtree2"
@@ -464,7 +464,7 @@ struct AppMemoryExtractorTests {
             ),
         ]
 
-        let entries = try await extractor.extract(
+        let entries = extractor.extractKnowledgeEntries(
             from: toolPairs,
             task: "Click a button in Calculator",
             runId: "20260513-fail"
@@ -497,7 +497,7 @@ struct AppMemoryExtractorTests {
             ),
         ]
 
-        let entries = try await extractor.extract(
+        let entries = extractor.extractKnowledgeEntries(
             from: toolPairs,
             task: "Click multiply in Calculator",
             runId: "20260513-workaround"
@@ -536,7 +536,7 @@ struct AppMemoryExtractorTests {
             ),
         ]
 
-        let entries = try await extractor.extract(
+        let entries = extractor.extractKnowledgeEntries(
             from: toolPairs,
             task: "Click equals in Calculator",
             runId: "20260513-prefer-same-type"
@@ -574,7 +574,7 @@ struct AppMemoryExtractorTests {
             ),
         ]
 
-        let entries = try await extractor.extract(
+        let entries = extractor.extractKnowledgeEntries(
             from: toolPairs,
             task: "Type in Calculator",
             runId: "20260513-params"
@@ -603,7 +603,7 @@ struct AppMemoryExtractorTests {
             ),
         ]
 
-        let entries = try await extractor.extract(
+        let entries = extractor.extractKnowledgeEntries(
             from: toolPairs,
             task: "Open Calculator and click",
             runId: "20260513-nofail"

@@ -45,7 +45,7 @@ struct ChatComposerFileSearchTests {
     @Test("AC1: 输入 @ 触发 fileSearch 模式")
     func atTriggersFileSearch() {
         let files = ["Package.swift", "Sources/Main.swift"]
-        let (composer, capture) = makeComposer(
+        let (composer, _) = makeComposer(
             files: files,
             events: [
                 .printable("@"),
