@@ -100,6 +100,7 @@ struct KeyHintsFormatter {
             KeyHint(key: "/diff", description: "Git diff"),
             KeyHint(key: "/status", description: "会话状态"),
             KeyHint(key: "/model", description: "切换模型"),
+            KeyHint(key: "/mcp", description: "MCP servers"),
             KeyHint(key: "/clear", description: "清屏"),
             KeyHint(key: "/exit", description: "退出（/quit 同义）"),
         ]),

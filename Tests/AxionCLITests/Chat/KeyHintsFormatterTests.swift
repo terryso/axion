@@ -138,6 +138,7 @@ struct KeyHintsFormatterTests {
         #expect(result.contains("[Ctrl+G] 外部编辑器"))
         #expect(result.contains("[Ctrl+Q] 入队消息"))
         #expect(result.contains("[/cost] Token 用量"))
+        #expect(result.contains("[/mcp] MCP servers"))
     }
 
     @Test("renderFull 自定义分组")

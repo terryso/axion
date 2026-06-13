@@ -28,21 +28,21 @@ struct SlashCommandContextTests {
         #expect(result.contains(.exit))
     }
 
-    @Test("agent 忙碌时保留 help/cost/config/clear/exit/compact/model")
+    @Test("agent 忙碌时保留 help/cost/config/clear/mcp/exit/compact/model")
     func agentBusyKeepsCoreCommands() {
         let ctx = SlashCommandContext(isAgentBusy: true, isSideSession: false)
         let result = ctx.filter(SlashCommand.allCases)
-        let expectedKept: [SlashCommand] = [.help, .clear, .compact, .model, .cost, .config, .exit]
+        let expectedKept: [SlashCommand] = [.help, .clear, .compact, .model, .cost, .config, .mcp, .exit]
         for cmd in expectedKept {
             #expect(result.contains(cmd), "\(cmd.rawValue) should be available when agent is busy")
         }
     }
 
-    @Test("agent 忙碌时过滤后只有 10 个命令")
+    @Test("agent 忙碌时过滤后只有 11 个命令")
     func agentBusyResultCount() {
         let ctx = SlashCommandContext(isAgentBusy: true, isSideSession: false)
         let result = ctx.filter(SlashCommand.allCases)
-        #expect(result.count == 10)
+        #expect(result.count == 11)
     }
 
     // MARK: - Side session filtering (all available now)
@@ -60,7 +60,7 @@ struct SlashCommandContextTests {
         let result = ctx.filter(SlashCommand.allCases)
         #expect(!result.contains(.resume))
         // 所有命令 availableInSide == true，所以 side session 不额外过滤
-        #expect(result.count == 10)
+        #expect(result.count == 11)
     }
 
     // MARK: - Empty input

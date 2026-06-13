@@ -59,6 +59,11 @@ struct SlashCommandTests {
         #expect(SlashCommand.parse("/storage") == .storage)
     }
 
+    @Test("parse /mcp → .mcp")
+    func parseMCP() {
+        #expect(SlashCommand.parse("/mcp") == .mcp)
+    }
+
     // MARK: - parse() 未知命令和非斜杠
 
     @Test("parse /foo → nil (未知命令)")
@@ -134,9 +139,9 @@ struct SlashCommandTests {
 
     // MARK: - allCases + helpText
 
-    @Test("allCases count == 17")
+    @Test("allCases count == 18")
     func allCasesCount() {
-        #expect(SlashCommand.allCases.count == 17)
+        #expect(SlashCommand.allCases.count == 18)
     }
 
     @Test("每个 helpText 非空且唯一")
@@ -202,6 +207,60 @@ struct SlashCommandTests {
         #expect(output.contains("131072"))
         #expect(output.contains("20"))
         #expect(output.contains("bypassPermissions"))
+    }
+
+    // MARK: - SlashCommandHandler.handleMCPStatus()
+
+    @Test("handleMCPStatus 输出 MCP server 并脱敏 headers/env")
+    func handleMCPStatusOutputRedactsSecrets() {
+        var config = AxionConfig.default
+        config.mcpServers = [
+            "web-search-prime": .http(
+                url: "https://open.bigmodel.cn/api/mcp/web_search_prime/mcp",
+                headers: ["Authorization": "Bearer secret-token"]
+            ),
+            "zai-mcp-server": .stdio(
+                command: "npx",
+                args: ["-y", "@z_ai/mcp-server"],
+                env: ["Z_AI_API_KEY": "secret-api-key"]
+            ),
+        ]
+        let buildConfig = AgentBuilder.BuildConfig.forChat(config: config)
+
+        let output = SlashCommandHandler.handleMCPStatus(
+            config: config,
+            buildConfig: buildConfig,
+            helperPath: "/usr/local/bin/AxionHelper",
+            playwrightResolver: { nil }
+        )
+
+        #expect(output.contains("MCP servers"))
+        #expect(output.contains("axion-helper"))
+        #expect(output.contains("playwright"))
+        #expect(output.contains("missing"))
+        #expect(output.contains("web-search-prime"))
+        #expect(output.contains("http"))
+        #expect(output.contains("headers: Authorization=<redacted>"))
+        #expect(output.contains("zai-mcp-server"))
+        #expect(output.contains("command: npx -y @z_ai/mcp-server"))
+        #expect(output.contains("env: Z_AI_API_KEY=<redacted>"))
+        #expect(!output.contains("secret-token"))
+        #expect(!output.contains("secret-api-key"))
+    }
+
+    @Test("handleMCPStatus dryrun 模式显示 MCP disabled")
+    func handleMCPStatusDryrun() {
+        let config = AxionConfig.default
+        let buildConfig = AgentBuilder.BuildConfig.forCLI(config: config, task: "", dryrun: true)
+        let output = SlashCommandHandler.handleMCPStatus(
+            config: config,
+            buildConfig: buildConfig,
+            helperPath: "/usr/local/bin/AxionHelper",
+            playwrightResolver: { nil }
+        )
+
+        #expect(output.contains("MCP disabled in dryrun mode"))
+        #expect(!output.contains("axion-helper"))
     }
 
     // MARK: - SlashCommandHandler.handleUnknown()

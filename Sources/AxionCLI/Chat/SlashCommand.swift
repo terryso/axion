@@ -19,6 +19,7 @@ enum SlashCommand: String, CaseIterable, Equatable {
     case archive = "/archive"       // AC3: 归档当前会话 (38.7)
     case skills = "/skills"         // 列出可用技能
     case copy = "/copy"             // 复制最后一条 assistant 响应到剪贴板
+    case mcp = "/mcp"               // 查看已安装/启用的 MCP server
     case apps = "/apps"             // 列出并选择可卸载 App 候选
     case storage = "/storage"       // 存储扫描、整理、大文件与撤销入口
 
@@ -44,6 +45,7 @@ enum SlashCommand: String, CaseIterable, Equatable {
         case "/archive": return .archive         // 38.7 AC3
         case "/skills":  return .skills
         case "/copy":    return .copy
+        case "/mcp":     return .mcp
         case "/apps":    return .apps
         case "/storage": return .storage
         default: return nil
@@ -76,6 +78,7 @@ enum SlashCommand: String, CaseIterable, Equatable {
         case .archive:    return "归档当前会话"      // 38.7 AC3
         case .skills:     return "列出可用技能"
         case .copy:       return "复制最后一条 AI 响应到剪贴板"
+        case .mcp:        return "查看已安装的 MCP server"
         case .apps:       return "列出可卸载 App 候选（/apps [filter|--all]）"
         case .storage:    return "存储整理入口（/storage help|scan|organize|large|undo）"
         }
@@ -105,7 +108,7 @@ enum SlashCommand: String, CaseIterable, Equatable {
     /// `.resume` 等结构性命令在 agent 忙碌时不可用。
     var availableDuringTask: Bool {
         switch self {
-        case .help, .cost, .config, .clear, .copy, .exit:  return true
+        case .help, .cost, .config, .clear, .copy, .mcp, .exit:  return true
         case .resume, .newSession, .fork, .archive, .skills, .apps, .storage:  return false  // AC6: 38.7
         default:                                     return true
         }

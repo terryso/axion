@@ -123,6 +123,7 @@ struct ChatComposerSlashPopupTests {
         let reader = MockKeyReader([
             .printable("/"),
             .printable("m"),
+            .printable("o"),
             .enter
         ])
         var composer = ChatComposer(
@@ -144,6 +145,7 @@ struct ChatComposerSlashPopupTests {
         let reader = MockKeyReader([
             .printable("/"),
             .printable("m"),
+            .printable("o"),
             .tab,  // 补全 /model → acceptsArgs=true → 留在编辑模式
             .enter  // 然后用户按 Enter 提交
         ])

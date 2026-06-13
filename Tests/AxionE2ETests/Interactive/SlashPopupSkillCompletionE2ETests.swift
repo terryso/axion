@@ -78,10 +78,21 @@ struct SlashPopupSkillCompletionE2ETests {
         #expect(hasCommands, "Should have commands in popup")
         #expect(hasSkills, "Should have skills in popup")
 
-        // 验证混合排序 — 所有 displayName 应按字母序排列
-        let displayNames = items.map(\.kind.displayName)
-        let sorted = displayNames.sorted()
-        #expect(displayNames == sorted, "Items should be sorted alphabetically")
+        // 验证混合排序 — 内置命令优先，各组内部按名称排序
+        let commandNames = items.compactMap { item -> String? in
+            if case .command(let command) = item.kind { return command.rawValue }
+            return nil
+        }
+        let popupSkillNames = items.compactMap { item -> String? in
+            if case .skill(let info) = item.kind { return "/\(info.name)" }
+            return nil
+        }
+        #expect(commandNames == commandNames.sorted(), "Commands should be sorted alphabetically")
+        #expect(popupSkillNames == popupSkillNames.sorted(), "Skills should be sorted alphabetically")
+        #expect(items.prefix(commandNames.count).allSatisfy {
+            if case .command = $0.kind { return true }
+            return false
+        }, "Commands should appear before unused skills")
     }
 
     @Test("E2E: built-in skill prefix match works end-to-end")
