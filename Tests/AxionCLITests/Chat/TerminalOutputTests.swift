@@ -38,6 +38,50 @@ struct ChatOutputFormatterTests {
         #expect(output.contains("ls -la"))
     }
 
+    @Test("toolUse: 外部 MCP 工具留下可读调用痕迹")
+    func externalMCPToolUseFormat() {
+        let (formatter, stdout, _) = makeFormatter()
+        formatter.handle(.toolUse(.init(
+            toolName: "mcp__web-search-prime__web_search_prime",
+            toolUseId: "tu-mcp",
+            input: #"{"query":"OpenAI 官网"}"#
+        )))
+
+        let output = stdout.captured
+        #expect(output.contains("mcp"))
+        #expect(output.contains("web-search-prime.web_search_prime"))
+        #expect(output.contains("OpenAI 官网"))
+    }
+
+    @Test("wide terminal keeps dense table cells readable")
+    func wideTerminalKeepsDenseTableCellsReadable() {
+        let stdout = CaptureOutput()
+        let stderr = CaptureOutput()
+        let formatter = ChatOutputFormatter(
+            writeStdout: { stdout.write($0) },
+            writeStderr: { stderr.write($0) },
+            spinner: SpinnerRenderer(isTTY: false, writeStderr: { _ in }),
+            theme: ChatTheme(profile: .unknown, isTTY: true),
+            terminalWidth: 160
+        )
+
+        formatter.handle(.partialMessage(.init(text: """
+        | 排名 | 电影名称 | 全球票房（美元） | 上映年份 |
+        | --- | --- | --- | --- |
+        | 1 | 🥇 阿凡达 (Avatar) | $29.24 亿 | 2009 |
+        | 2 | 🥈 复仇者联盟4：终局之战 (Avengers: Endgame) | $27.99 亿 | 2019 |
+        | 3 | 🥉 阿凡达：水之道 (Avatar: The Way of Water) | $23.34 亿 | 2022 |
+        """)))
+        formatter.handle(.assistant(.init(text: "", model: "test", stopReason: "end_turn")))
+
+        let output = ChatComposer.stripAnsi(stdout.captured)
+        #expect(output.contains("复仇者联盟4：终局之战 (Avengers: Endgame)"))
+        #expect(output.contains("Avatar: The Way of Water"))
+        #expect(output.contains("$27.99 亿"))
+        #expect(!output.contains("…"))
+        #expect(!output.contains("详情模式"))
+    }
+
     // MARK: - Tool Result Format (AC #1)
 
     @Test("toolResult success: 显示 ✓ 完成标记")

@@ -24,6 +24,7 @@ struct ToolCategoryFormatter {
         case fileRead    // file reading (Read, cat, head, tail)
         case search      // searching (grep, glob, search, find)
         case memory      // memory/skill operations
+        case mcp         // external MCP server tools
         case `default`   // uncategorized tools
     }
 
@@ -102,6 +103,15 @@ struct ToolCategoryFormatter {
                 ansi16: "\u{1B}[35m"
             )
         ),
+        .mcp: CategoryStyle(
+            icon: "🔌",
+            label: "mcp",
+            labelColorANSI: (
+                trueColor: "\u{1B}[38;2;56;189;248m",   // cyan-blue
+                ansi256: "\u{1B}[38;5;81m",
+                ansi16: "\u{1B}[36m"
+            )
+        ),
         .default: CategoryStyle(
             icon: "⚡",
             label: "tool",
@@ -131,7 +141,13 @@ struct ToolCategoryFormatter {
     /// - `click` / `type_text` / `press_key` / `scroll` / `launch_app` → shell
     /// - `screenshot` / `get_window_state` / `list_windows` → fileRead
     static func categorize(toolName: String) -> ToolCategory {
-        let name = toolName.lowercased()
+        let name: String
+        if let mcp = parseMCPToolName(toolName) {
+            guard mcp.server == "axion-helper" else { return .mcp }
+            name = mcp.tool.lowercased()
+        } else {
+            name = toolName.lowercased()
+        }
 
         // Shell/execution tools
         if name == "bash" || name == "shell" || name.hasSuffix("_exec") || name == "command" {
@@ -306,6 +322,10 @@ struct ToolCategoryFormatter {
         category: ToolCategory
     ) -> String {
         guard let json = parseJSONDict(from: input) else {
+            if category == .mcp, let displayName = formatMCPDisplayName(toolName) {
+                let raw = ToolOutputFormatter.truncateText(input, maxLength: 80)
+                return raw.isEmpty ? displayName : "\(displayName) \(raw)"
+            }
             return ToolOutputFormatter.truncateText(input, maxLength: 80)
         }
 
@@ -386,6 +406,13 @@ struct ToolCategoryFormatter {
             }
             return extractFirstValue(json: json)
 
+        case .mcp:
+            let displayName = formatMCPDisplayName(toolName) ?? toolName
+            if let argument = extractMCPArgument(json: json) {
+                return "\(displayName) \(argument)"
+            }
+            return "\(displayName) \(extractFirstValue(json: json))"
+
         case .default:
             // Use existing summarizeInput logic
             if let filePath = json["file_path"] as? String {
@@ -425,6 +452,8 @@ struct ToolCategoryFormatter {
             return "completed"
         case .memory:
             return "ok"
+        case .mcp:
+            return "completed"
         case .default:
             return "completed"
         }
@@ -447,6 +476,8 @@ struct ToolCategoryFormatter {
             return "search failed"
         case .memory:
             return "memory error"
+        case .mcp:
+            return "mcp failed"
         case .default:
             return "failed"
         }
@@ -466,7 +497,7 @@ struct ToolCategoryFormatter {
             return lineCount > 1 ? "\(lineCount) lines" : ""
         case .search:
             return ""  // Match count shown in label
-        case .memory, .default:
+        case .memory, .mcp, .default:
             return ToolOutputFormatter.truncateText(content, maxLength: 60)
         }
     }
@@ -611,6 +642,55 @@ struct ToolCategoryFormatter {
     private static func parseJSONDict(from input: String) -> [String: Any]? {
         guard let data = input.data(using: .utf8) else { return nil }
         return try? JSONSerialization.jsonObject(with: data) as? [String: Any]
+    }
+
+    private static func parseMCPToolName(_ toolName: String) -> (server: String, tool: String)? {
+        let parts = toolName.split(separator: "__", omittingEmptySubsequences: false).map(String.init)
+        guard parts.count >= 3, parts[0] == "mcp", !parts[1].isEmpty else { return nil }
+        let tool = parts.dropFirst(2).joined(separator: "__")
+        guard !tool.isEmpty else { return nil }
+        return (server: parts[1], tool: tool)
+    }
+
+    private static func formatMCPDisplayName(_ toolName: String) -> String? {
+        guard let parsed = parseMCPToolName(toolName) else { return nil }
+        return "\(parsed.server).\(parsed.tool)"
+    }
+
+    private static func extractMCPArgument(json: [String: Any]) -> String? {
+        let preferredKeys = [
+            "query", "q", "search_query", "searchQuery", "pattern", "url",
+            "text", "prompt", "input", "path", "file_path", "app", "location"
+        ]
+        for key in preferredKeys {
+            if let value = json[key] {
+                let summary = stringifyMCPValue(value)
+                if !summary.isEmpty {
+                    return summary
+                }
+            }
+        }
+        return nil
+    }
+
+    private static func stringifyMCPValue(_ value: Any) -> String {
+        if let string = value as? String {
+            return ToolOutputFormatter.truncateText(string, maxLength: 70)
+        }
+        if let array = value as? [Any] {
+            let joined = array
+                .prefix(3)
+                .map { ToolOutputFormatter.truncateText(String(describing: $0), maxLength: 30) }
+                .joined(separator: ", ")
+            let suffix = array.count > 3 ? ", …" : ""
+            return "[\(joined)\(suffix)]"
+        }
+        if let dict = value as? [String: Any],
+           let data = try? JSONSerialization.data(withJSONObject: dict, options: [.sortedKeys]),
+           let text = String(data: data, encoding: .utf8) {
+            return ToolOutputFormatter.truncateText(text, maxLength: 70)
+        }
+        return ToolOutputFormatter.truncateText(String(describing: value), maxLength: 70)
     }
 
     /// Extracts the first value from a JSON dict as a truncated string.

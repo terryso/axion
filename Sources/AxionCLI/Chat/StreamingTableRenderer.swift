@@ -391,8 +391,14 @@ struct StreamingTableRenderer: Sendable {
         let severelyCompressed = zip(naturalWidths, constrainedWidths).contains { natural, constrained in
             natural >= 12 && constrained <= 6
         }
+        let meaningfullyCompressedColumns = zip(naturalWidths, constrainedWidths).filter { natural, constrained in
+            natural >= 8
+                && natural - constrained >= 3
+                && Double(constrained) / Double(natural) <= 0.80
+        }.count
+        let denseWideTable = columnCount >= 5 && meaningfullyCompressedColumns >= 2
 
-        return lossRatio >= 0.45 || severelyCompressed
+        return lossRatio >= 0.45 || severelyCompressed || denseWideTable
     }
 
     private func renderDetailList(

@@ -751,6 +751,32 @@ struct StreamingTableRendererTests {
         }
     }
 
+    @Test("dense movie ranking table falls back to detail list")
+    func denseMovieRankingTableFallsBackToDetailList() {
+        let output = renderLines([
+            "| 排名 | 电影 | 导演 | 全球票房 | 北美票房 | 上映年份 |",
+            "| --- | --- | --- | --- | --- | --- |",
+            "| 1 | 🥇 阿凡达 (Avatar) | 詹姆斯·卡梅隆 | $29.23 亿 | $7.85 亿 | 2009 |",
+            "| 2 | 🥈 复仇者联盟4：终局之战 (Avengers: Endgame) | 安东尼·罗素、乔·罗素 | $27.99 亿 | $8.58 亿 | 2019 |",
+            "| 3 | 🥉 阿凡达：水之道 (Avatar: The Way of Water) | 詹姆斯·卡梅隆 | $23.20 亿 | $6.84 亿 | 2022 |",
+        ], profile: .unknown, isTTY: true, terminalWidth: 80, flushAtEnd: true)
+
+        let plain = stripANSI(output)
+        #expect(plain.contains("表格（3 行，已改为详情模式显示）"))
+        #expect(plain.contains("电影: 🥇 阿凡达 (Avatar)"))
+        #expect(plain.contains("复仇者联盟4：终局之战"))
+        #expect(plain.contains("Avengers: Endgame"))
+        #expect(plain.contains("导演: 安东尼·罗素、乔·罗素"))
+        #expect(plain.contains("全球票房: $27.99 亿"))
+        #expect(!plain.contains("╭"))
+        #expect(!plain.contains("$27.…"))
+
+        for line in plain.components(separatedBy: "\n") where !line.isEmpty {
+            let visualWidth = testVisualWidth(line)
+            #expect(visualWidth <= 80, "Line exceeds 80 cols: \(visualWidth) — '\(line)'")
+        }
+    }
+
     @Test("table respects terminal width by truncating columns")
     func testTerminalWidthConstraint() {
         // 渲染器限制 40 列宽

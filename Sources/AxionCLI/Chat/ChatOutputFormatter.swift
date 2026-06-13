@@ -41,7 +41,8 @@ final class ChatOutputFormatter: OpenAgentSDK.SDKMessageOutputHandler, @unchecke
         spinner: SpinnerRenderer? = nil,
         theme: ChatTheme? = nil,  // AC7: 可选注入，nil 时保持原有行为
         codeBlockRenderer: StreamingCodeBlockRenderer? = nil,
-        markdownFormatter: StreamingMarkdownFormatter? = nil
+        markdownFormatter: StreamingMarkdownFormatter? = nil,
+        terminalWidth: Int? = nil
     ) {
         self.writeStdout = writeStdout
         self.writeStderr = writeStderr
@@ -50,13 +51,16 @@ final class ChatOutputFormatter: OpenAgentSDK.SDKMessageOutputHandler, @unchecke
         self.transcriptRenderer = theme.map { TranscriptRenderer(theme: $0) }
         let resolvedProfile = theme?.profile ?? TerminalColorProfile.detect()
         let resolvedIsTTY = theme?.isTTY ?? (isatty(STDOUT_FILENO) != 0)
+        let resolvedTerminalWidth = max(1, terminalWidth ?? ChatComposer.terminalColumns())
         self.markdownFormatter = markdownFormatter ?? StreamingMarkdownFormatter(
             profile: resolvedProfile,
-            isTTY: resolvedIsTTY
+            isTTY: resolvedIsTTY,
+            terminalWidth: resolvedTerminalWidth
         )
         self.codeBlockRenderer = codeBlockRenderer ?? StreamingCodeBlockRenderer(
             profile: resolvedProfile,
             isTTY: resolvedIsTTY,
+            terminalWidth: resolvedTerminalWidth,
             plainTextFormatter: { [markdownFormatter = self.markdownFormatter] line in
                 markdownFormatter.formatLine(line)
             }

@@ -58,6 +58,14 @@ struct ToolCategoryFormatterTests {
         #expect(ToolCategoryFormatter.categorize(toolName: "skill_run") == .memory)
     }
 
+    @Test("External MCP tools are categorized separately")
+    func test_categorize_externalMCP() {
+        #expect(ToolCategoryFormatter.categorize(toolName: "mcp__web-search-prime__web_search_prime") == .mcp)
+        #expect(ToolCategoryFormatter.categorize(toolName: "mcp__context7__resolve_library_id") == .mcp)
+        #expect(ToolCategoryFormatter.categorize(toolName: "mcp__axion-helper__click") == .shell)
+        #expect(ToolCategoryFormatter.categorize(toolName: "mcp__axion-helper__screenshot") == .fileRead)
+    }
+
     @Test("Desktop automation tools are categorized correctly")
     func test_categorize_desktop() {
         #expect(ToolCategoryFormatter.categorize(toolName: "click") == .shell)
@@ -165,6 +173,20 @@ struct ToolCategoryFormatterTests {
         #expect(result.contains("write"))
         #expect(result.contains("new.swift"))
         #expect(result.contains("lines"))
+    }
+
+    @Test("formatStarted external MCP shows server, tool, and argument")
+    func test_formatStarted_externalMCP() {
+        let result = ToolCategoryFormatter.formatStarted(
+            toolName: "mcp__web-search-prime__web_search_prime",
+            input: #"{"query":"OpenAI 官网"}"#,
+            isTTY: false
+        )
+
+        #expect(result.contains("mcp"))
+        #expect(result.contains("web-search-prime.web_search_prime"))
+        #expect(result.contains("OpenAI 官网"))
+        #expect(result.hasSuffix("\n"))
     }
 
     @Test("formatStarted with TTY includes ANSI color codes")
@@ -306,6 +328,22 @@ struct ToolCategoryFormatterTests {
             isTTY: false
         )
         #expect(result.contains("5 results"))
+    }
+
+    @Test("formatCompleted external MCP keeps result preview")
+    func test_formatCompleted_externalMCP() {
+        let result = ToolCategoryFormatter.formatCompleted(
+            toolName: "mcp__web-search-prime__web_search_prime",
+            content: #"{"title":"Research & Deployment - OpenAI"}"#,
+            isError: false,
+            durationMs: 2234,
+            isTTY: false
+        )
+
+        #expect(result.contains("✓"))
+        #expect(result.contains("completed"))
+        #expect(result.contains("Research & Deployment"))
+        #expect(result.contains("[2.2s]"))
     }
 
     @Test("formatCompleted with nil duration omits brackets")
@@ -647,7 +685,7 @@ struct ToolCategoryFormatterTests {
     @Test("All categories have defined styles")
     func test_allCategoriesHaveStyles() {
         let categories: [ToolCategoryFormatter.ToolCategory] = [
-            .shell, .edit, .fileWrite, .fileRead, .search, .memory, .default
+            .shell, .edit, .fileWrite, .fileRead, .search, .memory, .mcp, .default
         ]
         for cat in categories {
             let style = ToolCategoryFormatter.categoryStyles[cat]
