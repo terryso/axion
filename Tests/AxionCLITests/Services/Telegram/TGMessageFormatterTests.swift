@@ -173,6 +173,97 @@ struct TGMessageFormatterTests {
         #expect(result == "> 广州明天天气")
     }
 
+    @Test("Plain format indents fenced code blocks")
+    func plainFormatIndentsFencedCodeBlocks() {
+        let input = """
+        ```swift
+        let value = 1
+        print(value)
+        ```
+        """
+
+        let (result, _) = TGMessageFormatter.formatAsPlain(input)
+
+        #expect(result == "    let value = 1\n    print(value)")
+    }
+
+    @Test("Plain format indents unclosed fenced code blocks")
+    func plainFormatIndentsUnclosedFencedCodeBlocks() {
+        let input = """
+        ```
+        line one
+        line two
+        """
+
+        let (result, _) = TGMessageFormatter.formatAsPlain(input)
+
+        #expect(result == "    line one\n    line two")
+    }
+
+    @Test("Plain format renders unordered and ordered lists")
+    func plainFormatRendersLists() {
+        let input = """
+        - **bold**
+          2. [docs](https://example.com)
+        """
+
+        let (result, _) = TGMessageFormatter.formatAsPlain(input)
+
+        #expect(result.contains("• bold"))
+        #expect(result.contains("  2. docs: https://example.com"))
+    }
+
+    @Test("Plain format renders two-column markdown table as key value rows")
+    func plainFormatRendersTwoColumnTableAsKeyValueRows() {
+        let input = """
+        | Key | Value |
+        |-----|-------|
+        | A   | **One** |
+        """
+
+        let (result, _) = TGMessageFormatter.formatAsPlain(input)
+
+        #expect(result.contains("Key: Value"))
+        #expect(result.contains("A: **One**"))
+        #expect(!result.contains("-----"))
+    }
+
+    @Test("Plain format renders box drawing tables")
+    func plainFormatRendersBoxDrawingTables() {
+        let input = """
+        ┌──────┬───────┐
+        │ Key  │ Value │
+        ├──────┼───────┤
+        │ CPU  │ 95%   │
+        └──────┴───────┘
+        """
+
+        let (result, _) = TGMessageFormatter.formatAsPlain(input)
+
+        #expect(result.contains("Key: Value"))
+        #expect(result.contains("CPU: 95%"))
+        #expect(!result.contains("┌"))
+    }
+
+    @Test("Plain format renders three-column box drawing table as aligned block")
+    func plainFormatRendersThreeColumnBoxDrawingTableAsAlignedBlock() {
+        let input = """
+        ┌──────┬───────┬────────┐
+        │ Key  │ Value │ Status │
+        ├──────┼───────┼────────┤
+        │ CPU  │ 95%   │ High   │
+        └──────┴───────┴────────┘
+        """
+
+        let (result, _) = TGMessageFormatter.formatAsPlain(input)
+
+        #expect(result.contains("    Key"))
+        #expect(result.contains("Value"))
+        #expect(result.contains("Status"))
+        #expect(result.contains("CPU"))
+        #expect(!result.contains("│"))
+    }
+
     // MARK: - Split
 
     @Test("Short text is not split")

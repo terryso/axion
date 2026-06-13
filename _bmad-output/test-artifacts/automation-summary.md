@@ -270,3 +270,62 @@ Step 3C is complete. Next step is `step-04-validate-and-summarize`.
 ### Recommendation
 
 Reaching 80% is possible, but it should be handled as a separate coverage hardening pass that either extracts more pure seams from the largest interactive/system-bound files or explicitly expands safe mock boundaries around terminal, gateway, orchestration, Telegram, and helper services.
+
+## Coverage Continuation Pass: 2026-06-13
+
+### Pre-Work Commit
+
+- User request: commit all current code before continuing coverage work.
+- Commit created: `51357bb test: improve unit coverage`.
+- Commit-time coverage baseline for the continuation pass: region coverage 72.39%, function coverage 74.18%, line coverage 73.49%.
+
+### Added Coverage
+
+- `Tests/AxionCLITests/Services/Telegram/TGEventHandlerTests.swift`
+  - Added MCP stripping edge cases for input-only starts, long prefixes, output separators, scalar payload lines, and fenced payload lines.
+- `Tests/AxionCLITests/Services/Telegram/TGAPIClientTests.swift`
+  - Added in-memory URLSession tests for update polling, send/edit message payload encoding, inline keyboards, callback answers, file metadata, file downloads, chat actions, and Telegram API error fallbacks.
+- `Tests/AxionCLITests/Services/AppListServiceTests.swift`
+  - Added pure/temp-directory coverage for Caskroom discovery, deep-list warnings, deterministic sorting, default roots, fast URL scanning, regular-file sizing, managed-app detection, and non-bundle metadata reads.
+- `Tests/AxionCLITests/Services/Telegram/TGMessageFormatterTests.swift`
+  - Added plain-format coverage for fenced code blocks, unclosed fences, markdown lists, markdown tables, and box-drawing tables.
+- `Tests/AxionCLITests/Services/AppDiscoveryTests.swift`
+  - Added temp `.app` bundle discovery coverage for plist reads, filtering, match-confidence sorting, version, and team identifier extraction.
+
+### Validation Results
+
+- Targeted Telegram API/event run:
+  - Command: `swift test --filter "TGEventHandler" --filter "TGAPIClientTests"`
+  - Result: passed, 56 tests in 2 suites.
+- Targeted app list run:
+  - Command: `swift test --filter AppListServiceTests`
+  - Result: passed, 31 tests in 1 suite.
+- Targeted formatter/discovery run:
+  - Command: `swift test --filter TGMessageFormatterTests --filter AppDiscoveryTests`
+  - Result: passed, 44 tests in 2 suites.
+- Full unit coverage run:
+  - Command: `swift test --no-parallel --enable-code-coverage --skip AxionHelperIntegrationTests --skip AxionCLIIntegrationTests --skip AxionE2ETests`
+  - Result: passed, 3865 tests in 251 suites.
+- Coverage extraction:
+  - Command: `xcrun llvm-cov report ... | tail -1`
+  - Result: region coverage 73.23%, function coverage 74.95%, line coverage 74.15%.
+
+### Coverage Delta
+
+- Continuation-pass region coverage: 72.39% -> 73.23% (+0.84 percentage points).
+- Continuation-pass line coverage: 73.49% -> 74.15% (+0.66 percentage points).
+- Overall region coverage from the original baseline: 70.08% -> 73.23% (+3.15 percentage points).
+- New tests added in this continuation pass: 32.
+
+### Remaining High-Impact Gaps
+
+- `AxionCLI/Commands/ChatCommand.swift`: 207 missed regions.
+- `AxionCLI/Chat/CJKInputHandler.swift`: 99 missed regions.
+- `AxionHelper/Services/AccessibilityEngine.swift`: 90 missed regions.
+- `AxionCLI/Commands/GatewayStartCommand+TelegramSetup.swift`: 71 missed regions.
+- `AxionCLI/Services/RunOrchestrator.swift`: 63 missed regions.
+- `AxionHelper/Services/AppLauncher.swift`: 59 missed regions.
+
+### Recommendation
+
+The codebase can still move toward 80%, but the next meaningful gains are no longer cheap pure-test additions. The remaining largest files cross terminal raw input, AX/helper behavior, gateway setup, and orchestration boundaries, so a responsible 80% push should first extract injectable collaborators or add explicit mock boundaries rather than exercising real system effects in unit tests.

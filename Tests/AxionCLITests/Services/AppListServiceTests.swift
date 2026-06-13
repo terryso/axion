@@ -190,6 +190,94 @@ struct AppListServiceTests {
         #expect(apps.first?.lastPathComponent == "Visual Studio Code.app")
     }
 
+    @Test("limitedCaskroomAppURLs includes direct cask apps and version app entries")
+    func caskroomProviderFindsDirectAndVersionAppEntries() throws {
+        let root = try makeTempDir("caskroom-direct")
+        defer { cleanup(root) }
+
+        _ = try makeApp(root: root, name: "Direct", bundleId: "com.example.direct")
+        let cask = root.appendingPathComponent("example", isDirectory: true)
+        try FileManager.default.createDirectory(at: cask, withIntermediateDirectories: true)
+        _ = try makeApp(root: cask, name: "VersionLevel", bundleId: "com.example.version")
+
+        let apps = AppListService.limitedCaskroomAppURLs(root: root)
+        let names = apps.map(\.lastPathComponent).sorted()
+
+        #expect(names == ["Direct.app", "VersionLevel.app"])
+    }
+
+    @Test("deep list warns when slow providers return no extra apps")
+    func deepListWarnsWhenSlowProvidersAreEmpty() async {
+        let service = AppListService(
+            fastRoots: [],
+            fastURLProvider: { _ in [] },
+            spotlightURLProvider: { [] },
+            homebrewURLProvider: { [] },
+            runningDetector: { _ in false },
+            sizeReader: { _ in 1 }
+        )
+
+        let result = await service.list(filter: nil, scope: .deep)
+
+        #expect(result.candidates.isEmpty)
+        #expect(result.warnings.contains("Spotlight 未返回额外 App，已保留快速搜索结果"))
+        #expect(result.warnings.contains("未发现 Homebrew Caskroom 内 App，或 Caskroom 不存在/不可读"))
+        #expect(result.deepSearchAvailable == false)
+    }
+
+    @Test("sort uses bundle identifier as tie breaker for same display name")
+    func sortUsesBundleIdentifierTieBreaker() {
+        let first = AppListItem(
+            displayName: "Same",
+            bundleIdentifier: "com.example.b",
+            bundlePath: "/Applications/B.app",
+            version: "1",
+            sizeBytes: 1,
+            isRunning: false,
+            isSystemProtected: false,
+            source: .applications
+        )
+        let second = AppListItem(
+            displayName: "Same",
+            bundleIdentifier: "com.example.a",
+            bundlePath: "/Applications/A.app",
+            version: "1",
+            sizeBytes: 1,
+            isRunning: false,
+            isSystemProtected: false,
+            source: .applications
+        )
+
+        let sorted = AppListService.sort([first, second])
+
+        #expect(sorted.map(\.bundleIdentifier) == ["com.example.a", "com.example.b"])
+    }
+
+    @Test("default fast roots expand user application directory")
+    func defaultFastRootsExpandUserApplicationDirectory() {
+        let roots = AppListService.defaultFastRoots(home: "/Users/tester").map(\.path)
+
+        #expect(roots == ["/Applications", "/Users/tester/Applications"])
+    }
+
+    @Test("default fast app provider skips missing roots and non-app entries")
+    func defaultFastAppProviderSkipsMissingRootsAndNonApps() async throws {
+        let root = try makeTempDir("fast-default-provider")
+        defer { cleanup(root) }
+
+        let visible = try makeApp(root: root, name: "Visible", bundleId: "com.example.visible")
+        _ = try makeApp(root: root, name: ".Hidden", bundleId: "com.example.hidden")
+        try FileManager.default.createDirectory(
+            at: root.appendingPathComponent("NotAnApp", isDirectory: true),
+            withIntermediateDirectories: true
+        )
+        let missing = root.appendingPathComponent("Missing", isDirectory: true)
+
+        let apps = await AppListService.defaultFastAppURLs(searchRoots: [missing, root])
+
+        #expect(apps == [visible])
+    }
+
     @Test("default size reader sums app bundle contents")
     func defaultSizeReaderSumsAppBundleContents() throws {
         let root = try makeTempDir("size")
@@ -204,6 +292,19 @@ struct AppListServiceTests {
         try payload.write(to: resources.appendingPathComponent("payload.dat"))
 
         let size = AppListService.defaultSizeReader(url: app)
+
+        #expect(size >= Int64(payload.count))
+    }
+
+    @Test("default size reader handles regular files")
+    func defaultSizeReaderHandlesRegularFiles() throws {
+        let root = try makeTempDir("size-file")
+        defer { cleanup(root) }
+        let file = root.appendingPathComponent("payload.bin")
+        let payload = Data(repeating: 3, count: 1024)
+        try payload.write(to: file)
+
+        let size = AppListService.defaultSizeReader(url: file)
 
         #expect(size >= Int64(payload.count))
     }
@@ -608,6 +709,38 @@ struct AppListServiceTests {
         #expect(AppListService.defaultManagedDetector(url: url, metadata: metadata))
     }
 
+    @Test("default managed detector matches known prefixes and app names")
+    func defaultManagedDetectorMatchesPrefixesAndPaths() {
+        let prefixed = AppBundleMetadata(
+            displayName: "Kandji",
+            bundleIdentifier: "com.kandji.agent",
+            version: "1.0"
+        )
+        let pathMatched = AppBundleMetadata(
+            displayName: "Portal",
+            bundleIdentifier: "com.example.portal",
+            version: "1.0"
+        )
+        let unmanaged = AppBundleMetadata(
+            displayName: "Regular",
+            bundleIdentifier: "com.example.regular",
+            version: "1.0"
+        )
+
+        #expect(AppListService.defaultManagedDetector(
+            url: URL(fileURLWithPath: "/Applications/Kandji.app"),
+            metadata: prefixed
+        ))
+        #expect(AppListService.defaultManagedDetector(
+            url: URL(fileURLWithPath: "/Applications/Company Portal.app"),
+            metadata: pathMatched
+        ))
+        #expect(!AppListService.defaultManagedDetector(
+            url: URL(fileURLWithPath: "/Applications/Regular.app"),
+            metadata: unmanaged
+        ))
+    }
+
     @Test("default homebrew provider includes HOMEBREW_PREFIX caskroom apps")
     func defaultHomebrewProviderIncludesEnvironmentPrefix() throws {
         let root = try makeTempDir("homebrew-prefix")
@@ -643,5 +776,15 @@ struct AppListServiceTests {
         #expect(metadata.displayName == "FallbackName")
         #expect(metadata.bundleIdentifier == "com.example.fallback")
         #expect(metadata.version == "42")
+    }
+
+    @Test("default metadata reader returns nil for non-bundles")
+    func defaultMetadataReaderReturnsNilForNonBundles() throws {
+        let root = try makeTempDir("metadata-invalid")
+        defer { cleanup(root) }
+        let app = root.appendingPathComponent("Invalid.app", isDirectory: true)
+        try FileManager.default.createDirectory(at: app, withIntermediateDirectories: true)
+
+        #expect(AppListService.defaultMetadataReader(url: app) == nil)
     }
 }

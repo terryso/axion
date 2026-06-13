@@ -312,6 +312,261 @@ struct TGAPIClientTests {
         #expect(commands[0]["command"] == "help")
         #expect(commands[0]["description"] == "guide")
     }
+
+    @Test("getUpdates encodes offset query and decodes updates")
+    func getUpdatesWithOffsetDecodesUpdates() async throws {
+        let session = MockScriptedURLSession(json: """
+        {"ok":true,"result":[{"update_id":100,"message":{"message_id":7,"chat":{"id":42,"type":"private"},"date":1,"text":"hello"}}]}
+        """)
+        let client = TGAPIClient(token: "test-token", session: session, maxRetries: 1)
+
+        let updates = try await client.getUpdates(offset: 42, timeout: 7)
+
+        #expect(updates.map(\.updateId) == [100])
+        #expect(updates.first?.message?.text == "hello")
+
+        let request = try #require(session.requests.first)
+        let url = try #require(request.url)
+        let components = try #require(URLComponents(url: url, resolvingAgainstBaseURL: false))
+        let query = Dictionary(uniqueKeysWithValues: (components.queryItems ?? []).map { ($0.name, $0.value ?? "") })
+        #expect(query["timeout"] == "7")
+        #expect(query["offset"] == "42")
+        #expect(request.timeoutInterval == 17)
+    }
+
+    @Test("sendMessage with parse mode and reply target encodes body and decodes message")
+    func sendMessageWithParseModeAndReplyTarget() async throws {
+        let session = MockScriptedURLSession(json: """
+        {"ok":true,"result":{"message_id":8,"chat":{"id":123,"type":"private"},"date":2,"text":"sent"}}
+        """)
+        let client = TGAPIClient(token: "test-token", session: session, maxRetries: 1)
+
+        let message = try await client.sendMessage(
+            chatId: 123,
+            text: "*hi*",
+            parseMode: .markdownV2,
+            replyToMessageId: 456
+        )
+
+        #expect(message.messageId == 8)
+        let request = try #require(session.requests.first)
+        #expect(request.httpMethod == "POST")
+        #expect(request.url?.absoluteString.contains("sendMessage") == true)
+
+        let body = try #require(request.httpBody)
+        let object = try JSONSerialization.jsonObject(with: body)
+        let json = try #require(object as? [String: Any])
+        #expect((json["chat_id"] as? NSNumber)?.int64Value == 123)
+        #expect(json["text"] as? String == "*hi*")
+        #expect(json["parse_mode"] as? String == "MarkdownV2")
+        #expect((json["reply_to_message_id"] as? NSNumber)?.int64Value == 456)
+    }
+
+    @Test("sendMessage with reply markup encodes inline keyboard")
+    func sendMessageWithReplyMarkupEncodesKeyboard() async throws {
+        let session = MockScriptedURLSession(json: """
+        {"ok":true,"result":{"message_id":9,"chat":{"id":123,"type":"private"},"date":2,"text":"Approve?"}}
+        """)
+        let client = TGAPIClient(token: "test-token", session: session, maxRetries: 1)
+        let markup = TGInlineKeyboardMarkup(inlineKeyboard: [
+            [TGInlineKeyboardButton(text: "Approve", callbackData: "approve")]
+        ])
+
+        let message = try await client.sendMessage(
+            chatId: 123,
+            text: "Approve?",
+            parseMode: .html,
+            replyMarkup: markup
+        )
+
+        #expect(message.messageId == 9)
+        let request = try #require(session.requests.first)
+        let body = try #require(request.httpBody)
+        let object = try JSONSerialization.jsonObject(with: body)
+        let json = try #require(object as? [String: Any])
+        let replyMarkup = try #require(json["reply_markup"] as? [String: Any])
+        let keyboard = try #require(replyMarkup["inline_keyboard"] as? [[[String: Any]]])
+        #expect(json["parse_mode"] as? String == "HTML")
+        #expect(keyboard[0][0]["text"] as? String == "Approve")
+        #expect(keyboard[0][0]["callback_data"] as? String == "approve")
+    }
+
+    @Test("editMessageText with reply markup encodes message id and keyboard")
+    func editMessageTextWithReplyMarkupEncodesBody() async throws {
+        let session = MockScriptedURLSession(json: """
+        {"ok":true,"result":{"message_id":22,"chat":{"id":123,"type":"private"},"date":3,"text":"Updated"}}
+        """)
+        let client = TGAPIClient(token: "test-token", session: session, maxRetries: 1)
+        let markup = TGInlineKeyboardMarkup(inlineKeyboard: [
+            [TGInlineKeyboardButton(text: "Open", url: "https://example.com")]
+        ])
+
+        let message = try await client.editMessageText(
+            chatId: 123,
+            messageId: 22,
+            text: "Updated",
+            parseMode: .html,
+            replyMarkup: markup
+        )
+
+        #expect(message.messageId == 22)
+        let request = try #require(session.requests.first)
+        #expect(request.url?.absoluteString.contains("editMessageText") == true)
+
+        let body = try #require(request.httpBody)
+        let object = try JSONSerialization.jsonObject(with: body)
+        let json = try #require(object as? [String: Any])
+        let replyMarkup = try #require(json["reply_markup"] as? [String: Any])
+        let keyboard = try #require(replyMarkup["inline_keyboard"] as? [[[String: Any]]])
+        #expect((json["chat_id"] as? NSNumber)?.int64Value == 123)
+        #expect((json["message_id"] as? NSNumber)?.int64Value == 22)
+        #expect(json["text"] as? String == "Updated")
+        #expect(keyboard[0][0]["url"] as? String == "https://example.com")
+    }
+
+    @Test("answerCallbackQuery encodes optional text")
+    func answerCallbackQueryEncodesText() async throws {
+        let session = MockScriptedURLSession(json: #"{"ok":true,"result":true}"#)
+        let client = TGAPIClient(token: "test-token", session: session, maxRetries: 1)
+
+        try await client.answerCallbackQuery(callbackQueryId: "callback-1", text: "Done")
+
+        let request = try #require(session.requests.first)
+        #expect(request.url?.absoluteString.contains("answerCallbackQuery") == true)
+        #expect(request.timeoutInterval == 10)
+
+        let body = try #require(request.httpBody)
+        let object = try JSONSerialization.jsonObject(with: body)
+        let json = try #require(object as? [String: Any])
+        #expect(json["callback_query_id"] as? String == "callback-1")
+        #expect(json["text"] as? String == "Done")
+    }
+
+    @Test("getFile builds endpoint and decodes Telegram file")
+    func getFileBuildsEndpointAndDecodesFile() async throws {
+        let session = MockScriptedURLSession(json: """
+        {"ok":true,"result":{"file_id":"file-1","file_path":"photos/file_1.jpg"}}
+        """)
+        let client = TGAPIClient(token: "test-token", session: session, maxRetries: 1)
+
+        let file = try await client.getFile(fileId: "file-1")
+
+        #expect(file.fileId == "file-1")
+        #expect(file.filePath == "photos/file_1.jpg")
+        let request = try #require(session.requests.first)
+        #expect(request.url?.absoluteString.contains("getFile?file_id=file-1") == true)
+    }
+
+    @Test("downloadFile returns raw data and uses file endpoint")
+    func downloadFileReturnsData() async throws {
+        let session = MockScriptedURLSession(data: Data("file-data".utf8))
+        let client = TGAPIClient(token: "test-token", session: session, maxRetries: 1)
+
+        let data = try await client.downloadFile(filePath: "photos/file_1.jpg")
+
+        #expect(String(data: data, encoding: .utf8) == "file-data")
+        let request = try #require(session.requests.first)
+        #expect(request.url?.absoluteString.contains("/file/bottest-token/photos/file_1.jpg") == true)
+        #expect(request.timeoutInterval == 60)
+    }
+
+    @Test("downloadFile throws permanent error on non-2xx response")
+    func downloadFileHTTPFailure() async {
+        let session = MockScriptedURLSession(data: Data("nope".utf8), statusCode: 500)
+        let client = TGAPIClient(token: "test-token", session: session, maxRetries: 1)
+
+        do {
+            _ = try await client.downloadFile(filePath: "photos/missing.jpg")
+            #expect(Bool(false), "Should have thrown")
+        } catch let error as TGAPIError {
+            #expect(error.errorDescription == "File download failed: HTTP 500")
+        } catch {
+            #expect(Bool(false), "Unexpected error type")
+        }
+    }
+
+    @Test("sendChatAction encodes action with short timeout")
+    func sendChatActionEncodesBody() async throws {
+        let session = MockScriptedURLSession(json: #"{"ok":true,"result":true}"#)
+        let client = TGAPIClient(token: "test-token", session: session, maxRetries: 3)
+
+        try await client.sendChatAction(chatId: 321, action: "typing")
+
+        #expect(session.requests.count == 1)
+        let request = try #require(session.requests.first)
+        #expect(request.url?.absoluteString.contains("sendChatAction") == true)
+        #expect(request.timeoutInterval == 10)
+
+        let body = try #require(request.httpBody)
+        let object = try JSONSerialization.jsonObject(with: body)
+        let json = try #require(object as? [String: Any])
+        #expect((json["chat_id"] as? NSNumber)?.int64Value == 321)
+        #expect(json["action"] as? String == "typing")
+    }
+
+    @Test("sendMessage ok false without description uses endpoint fallback")
+    func sendMessageFailureUsesEndpointFallback() async {
+        let session = MockScriptedURLSession(json: #"{"ok":false}"#)
+        let client = TGAPIClient(token: "test-token", session: session, maxRetries: 1)
+
+        do {
+            _ = try await client.sendMessage(chatId: 123, text: "hello")
+            #expect(Bool(false), "Should have thrown")
+        } catch let error as TGAPIError {
+            #expect(error.errorDescription == "sendMessage failed")
+        } catch {
+            #expect(Bool(false), "Unexpected error type")
+        }
+    }
+
+    @Test("postVoid ok false without description uses endpoint fallback")
+    func postVoidFailureUsesEndpointFallback() async {
+        let session = MockScriptedURLSession(json: #"{"ok":false}"#)
+        let client = TGAPIClient(token: "test-token", session: session, maxRetries: 1)
+
+        do {
+            try await client.answerCallbackQuery(callbackQueryId: "callback-1", text: nil)
+            #expect(Bool(false), "Should have thrown")
+        } catch let error as TGAPIError {
+            #expect(error.errorDescription == "answerCallbackQuery failed")
+        } catch {
+            #expect(Bool(false), "Unexpected error type")
+        }
+    }
+
+    @Test("get ok false without description uses endpoint fallback")
+    func getFailureUsesEndpointFallback() async {
+        let session = MockScriptedURLSession(json: #"{"ok":false}"#)
+        let client = TGAPIClient(token: "test-token", session: session, maxRetries: 1)
+
+        do {
+            _ = try await client.getFile(fileId: "file-1")
+            #expect(Bool(false), "Should have thrown")
+        } catch let error as TGAPIError {
+            #expect(error.errorDescription == "getFile?file_id=file-1 failed")
+        } catch {
+            #expect(Bool(false), "Unexpected error type")
+        }
+    }
+
+    @Test("400 with Bad Request text classifies as formatRejected")
+    func http400BadRequestFormatRejected() async {
+        let session = MockHTTPErrorURLSession(statusCode: 400, body: "Bad Request: can't parse entities")
+        let client = TGAPIClient(token: "test_token", session: session, maxRetries: 1)
+
+        do {
+            _ = try await client.getUpdates(offset: nil, timeout: 1)
+            #expect(Bool(false), "Should have thrown")
+        } catch let error as TGAPIError {
+            if case .formatRejected = error {
+                #expect(error.errorDescription?.contains("Bad Request") == true)
+            } else {
+                #expect(Bool(false), "Expected formatRejected, got \(error)")
+            }
+        } catch {
+            #expect(Bool(false), "Unexpected error type")
+        }
+    }
 }
 
 /// Mock TGAPIClient for testing TelegramAdapter
@@ -524,5 +779,44 @@ final class MockRecordingURLSession: URLSessionProtocol, @unchecked Sendable {
         let httpResp = HTTPURLResponse(url: url, statusCode: 200, httpVersion: "HTTP/1.1", headerFields: nil)!
         let body = Data("{\"ok\":true,\"result\":true}".utf8)
         return (body, httpResp)
+    }
+}
+
+final class MockScriptedURLSession: URLSessionProtocol, @unchecked Sendable {
+    struct ScriptedResponse: Sendable {
+        let data: Data
+        let statusCode: Int
+    }
+
+    private var responses: [ScriptedResponse]
+    private(set) var requests: [URLRequest] = []
+
+    convenience init(json: String, statusCode: Int = 200) {
+        self.init(data: Data(json.utf8), statusCode: statusCode)
+    }
+
+    convenience init(data: Data, statusCode: Int = 200) {
+        self.init(responses: [ScriptedResponse(data: data, statusCode: statusCode)])
+    }
+
+    init(responses: [ScriptedResponse]) {
+        self.responses = responses
+    }
+
+    func data(for request: URLRequest) async throws -> (Data, URLResponse) {
+        requests.append(request)
+        guard !responses.isEmpty else {
+            throw URLError(.badServerResponse)
+        }
+
+        let response = responses.removeFirst()
+        let url = request.url ?? URL(string: "https://example.com")!
+        let httpResp = HTTPURLResponse(
+            url: url,
+            statusCode: response.statusCode,
+            httpVersion: "HTTP/1.1",
+            headerFields: nil
+        )!
+        return (response.data, httpResp)
     }
 }

@@ -410,4 +410,89 @@ struct TGEventHandlerTests {
         #expect(!result.contains("\"cache\""))
         #expect(result.contains("[结果] 处理完成"))
     }
+
+    @Test("stripMCPRawIO detects MCP block that starts at Input header")
+    func stripMCPDetectsInputOnlyStart() {
+        let text = """
+        准备查询远程数据。
+
+        Input:
+        {"query":"weather"}
+
+        Output:
+        {"temperature":22}
+
+        This final explanation should remain visible for the user.
+        """
+
+        let result = TGEventHandler.stripMCPRawIO(from: text)
+        #expect(result.contains("准备查询远程数据。"))
+        #expect(!result.contains("Input:"))
+        #expect(!result.contains("\"temperature\""))
+        #expect(result.contains("This final explanation should remain visible for the user."))
+    }
+
+    @Test("stripMCPRawIO preserves long prose prefix before non-Zai tool marker")
+    func stripMCPPreservesLongPrefixBeforeGenericToolHeader() {
+        let text = """
+        Here is a useful explanation before Vendor Built-in Tool: lookup
+
+        Input:
+        {"id":1}
+
+        Output:
+        {"raw":true}
+
+        Final answer follows.
+        """
+
+        let result = TGEventHandler.stripMCPRawIO(from: text)
+        #expect(result.contains("Here is a useful explanation before Vendor"))
+        #expect(!result.contains("Built-in Tool"))
+        #expect(!result.contains("\"raw\""))
+        #expect(result.contains("Final answer follows."))
+    }
+
+    @Test("stripMCPRawIO keeps terminal output line after blank-separated output")
+    func stripMCPKeepsTerminalContentAfterOutputSeparator() {
+        let text = """
+        🌐 Z.ai Built-in Tool: webReader
+
+        Input:
+        {"url":"https://example.com"}
+
+        Output:
+        {"raw":true}
+
+        done
+        """
+
+        let result = TGEventHandler.stripMCPRawIO(from: text)
+        #expect(result == "done")
+    }
+
+    @Test("stripMCPRawIO removes scalar and fenced structured payload lines")
+    func stripMCPRemovesScalarAndFencedPayloadLines() {
+        let text = """
+        🌐 Z.ai Built-in Tool: webReader
+
+        Input:
+        {"url":"https://example.com"}
+
+        Output:
+        true
+        42
+        ```
+        "quoted payload"
+        ]
+
+        [结果] 清理完成
+        """
+
+        let result = TGEventHandler.stripMCPRawIO(from: text)
+        #expect(!result.contains("true"))
+        #expect(!result.contains("42"))
+        #expect(!result.contains("quoted payload"))
+        #expect(result.contains("[结果] 清理完成"))
+    }
 }

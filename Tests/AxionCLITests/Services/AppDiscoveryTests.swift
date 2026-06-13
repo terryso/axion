@@ -6,6 +6,93 @@ import AxionCore
 
 @Suite("App Discovery (pure functions)")
 struct AppDiscoveryTests {
+    private func makeTempDir(_ label: String) throws -> URL {
+        let root = URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
+            .appendingPathComponent("AppDiscoveryScratch", isDirectory: true)
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        let dir = root.appendingPathComponent("\(label)-\(UUID().uuidString)", isDirectory: true)
+        try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        return dir
+    }
+
+    private func cleanup(_ dir: URL) {
+        try? FileManager.default.removeItem(at: dir)
+    }
+
+    @discardableResult
+    private func makeApp(
+        root: URL,
+        name: String,
+        bundleId: String,
+        displayName: String? = nil,
+        version: String = "1.0",
+        applicationIdentifier: String? = nil
+    ) throws -> URL {
+        let app = root.appendingPathComponent("\(name).app", isDirectory: true)
+        let contents = app.appendingPathComponent("Contents", isDirectory: true)
+        try FileManager.default.createDirectory(at: contents, withIntermediateDirectories: true)
+        var plist: [String: Any] = [
+            "CFBundleIdentifier": bundleId,
+            "CFBundleName": displayName ?? name,
+            "CFBundleShortVersionString": version,
+            "CFBundlePackageType": "APPL",
+        ]
+        if let applicationIdentifier {
+            plist["ApplicationIdentifier"] = applicationIdentifier
+        }
+        let data = try PropertyListSerialization.data(fromPropertyList: plist, format: .xml, options: 0)
+        try data.write(to: contents.appendingPathComponent("Info.plist"))
+        return app
+    }
+
+    // MARK: - discover
+
+    @Test("discover reads app bundles, filters low matches, and sorts by confidence")
+    func discoverReadsBundlesAndSortsByConfidence() async throws {
+        let root = try makeTempDir("discover")
+        defer { cleanup(root) }
+
+        let highURL = try makeApp(
+            root: root,
+            name: "High",
+            bundleId: "com.example.high",
+            displayName: "High",
+            version: "2.0",
+            applicationIdentifier: "TEAM123.com.example.high"
+        )
+        try "payload".write(
+            to: highURL.appendingPathComponent("Contents").appendingPathComponent("payload.txt"),
+            atomically: true,
+            encoding: .utf8
+        )
+        try makeApp(
+            root: root,
+            name: "Highlighter",
+            bundleId: "com.example.highlighter",
+            displayName: "Highlighter",
+            version: "3.0"
+        )
+        try makeApp(
+            root: root,
+            name: "Other",
+            bundleId: "com.example.other",
+            displayName: "Other"
+        )
+        try FileManager.default.createDirectory(
+            at: root.appendingPathComponent("Broken.app", isDirectory: true),
+            withIntermediateDirectories: true
+        )
+        let missingRoot = root.appendingPathComponent("Missing", isDirectory: true)
+
+        let candidates = await AppDiscoveryService().discover(query: "High", searchRoots: [missingRoot, root])
+
+        #expect(candidates.map(\.displayName) == ["High", "Highlighter"])
+        #expect(candidates.map(\.matchConfidence) == [.high, .medium])
+        #expect(candidates.first?.bundleIdentifier == "com.example.high")
+        #expect(candidates.first?.version == "2.0")
+        #expect(candidates.first?.teamIdentifier == "TEAM123")
+        #expect(candidates.first?.isSystemProtected == false)
+    }
 
     // MARK: - classifyMatch
 
