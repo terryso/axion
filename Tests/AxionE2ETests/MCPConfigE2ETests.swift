@@ -74,6 +74,35 @@ struct MCPConfigE2ETests {
         #expect(!FileManager.default.fileExists(atPath: fixture.log.path))
     }
 
+    @Test("skill agent build keeps user MCP servers out of the tool pool (AC5/A7)")
+    func skillAgentBuildKeepsUserMcpServersOutOfToolPool() async throws {
+        let fixture = try makeProbeFixture(label: "skill")
+        defer { cleanup(fixture.root) }
+
+        let config = AxionConfig(
+            apiKey: "sk-test",
+            maxSteps: 1,
+            mcpServers: [
+                "acceptance-probe": .stdio(
+                    command: pythonPath,
+                    args: [fixture.script.path],
+                    env: ["AXION_MCP_ACCEPTANCE_LOG": fixture.log.path]
+                )
+            ]
+        )
+        let skill = Skill(name: "probe-skill", promptTemplate: "probe")
+
+        // buildSkillAgent hardcodes `mcpServers: nil` (AgentBuilder.swift), so a
+        // populated config.mcpServers must NOT surface as tools on the skill agent.
+        let (agent, _) = try await AgentBuilder.buildSkillAgent(config: config, skill: skill)
+        let (tools, _) = await agent.assembleFullToolPool()
+        try? await agent.close()
+
+        #expect(!tools.map(\.name).contains("mcp__acceptance-probe__acceptance_ping"))
+        // The probe process must never have been started — proving mcpServers stayed nil.
+        #expect(!FileManager.default.fileExists(atPath: fixture.log.path))
+    }
+
     @Test("bad mcpServers JSON degrades before real agent build")
     func badMcpServersJSONDegradesBeforeRealAgentBuild() async throws {
         let json = """

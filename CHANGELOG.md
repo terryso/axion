@@ -5,6 +5,26 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.13.5] - 2026-06-14
+
+### Added
+
+- **Configurable MCP servers** — `config.json` now supports additional `mcpServers` for stdio, SSE, and HTTP transports, including auth headers for remote servers
+- **`/mcp` status browser** — interactive chat can inspect enabled MCP servers, open redacted details, and print the full configuration with `/mcp --all`
+- **Remote MCP visibility** — MCP status output redacts header/env secrets while preserving useful server URL, command, and transport details
+
+### Changed
+
+- Improved external MCP tool rendering in chat output, including clearer tool categories and readable wide-table layout
+- Strengthened desktop automation prompting so native macOS GUI tasks use AxionHelper MCP tools instead of shell/AppleScript fallbacks
+- E2E and integration Makefile targets now use the debug Helper binary in source builds and run serially to avoid GUI/MCP contention
+
+### Fixed
+
+- Stabilized acceptance GUI automation by requiring Helper MCP discovery before the calculator E2E runs
+- Stabilized real Safari/URL smoke tests by using a bounded MCP-only browser flow
+- Made Helper path tests deterministic even when `.build/debug/AxionHelper` exists in the local checkout
+
 ## [0.13.4] - 2026-06-13
 
 ### Added

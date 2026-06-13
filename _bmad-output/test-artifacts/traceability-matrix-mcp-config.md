@@ -247,12 +247,12 @@ Step 2 is complete. 58 MCP-relevant tests catalogued (49 unit + 9 E2E). Next ste
 |--------|-------|
 | Total oracle items | 15 (AC1–AC5 + A0–A7 + J-01..J-08 dedup; A0/A6/J-* overlap with ACs) |
 | Distinct criteria traced | 15 |
-| FULL | 13 |
-| PARTIAL | 2 (AC5, A7 — same underlying gap) |
+| FULL | 15 |
+| PARTIAL | 0 |
 | NONE | 0 |
 | P0 FULL | 6/6 (100%) |
 | P1 FULL | 5/5 (100%) |
-| P2 FULL | 2/4 (AC5, A7 PARTIAL) |
+| P2 FULL | 4/4 (100%) |
 
 ### Detailed Mapping
 
@@ -280,12 +280,9 @@ Step 2 is complete. 58 MCP-relevant tests catalogued (49 unit + 9 E2E). Next ste
 - E2E: `MCPConfigE2ETests.badMcpServersJSONDegradesBeforeRealAgentBuild`
 - Heuristics: error-path (field-level degrade, other config preserved) fully covered.
 
-#### AC5: buildSkillAgent() → skill agent options 不加载 MCP server (P2) — PARTIAL ⚠️
+#### AC5: buildSkillAgent() → skill agent options 不加载 MCP server (P2) — FULL ✅ (closed 2026-06-14)
 
-- No test directly asserts `buildSkillAgent(...)` yields `agentOptions.mcpServers == nil` when `config.mcpServers` is populated.
-- Manual acceptance A7 explicitly defers: "当前没有稳定、低副作用的手工入口能直接观察该内部字段；此项以单元测试作为验收依据" — i.e. relied on the general unit suite passing, not a targeted regression guard.
-- `AxionRuntimeTests.swift:41` contains a `buildSkillAgent` **mock** (protocol double), not an assertion of the real invariant.
-- Risk: an accidental change wiring `config.mcpServers` into `buildSkillAgent` would not be caught by any test.
+- E2E: `MCPConfigE2ETests.skillAgentBuildKeepsUserMcpServersOutOfToolPool` — calls the real `buildSkillAgent(config:, skill:)` with a populated `config.mcpServers`, then asserts the assembled tool pool contains no `mcp__acceptance-probe__*` tool AND the probe process never started (log absent). Directly proves `mcpServers` stayed `nil` on the skill path and has passed in the MCP Config E2E suite.
 
 #### A0: 自动化基线 (P0) — FULL (meta)
 
@@ -316,9 +313,9 @@ Step 2 is complete. 58 MCP-relevant tests catalogued (49 unit + 9 E2E). Next ste
 - E2E: `dryrunBuildKeepsUserMcpServersOutOfAgentOptions` asserts `agentOptions.mcpServers == nil`.
 - Unit: `SlashCommandTests.handleMCPStatusDryrun` (status display); `SlashCommandHandlerMCPStatusTests` dryrun-adjacent state.
 
-#### A7: skill 路径 mcpServers == nil (P2) — PARTIAL ⚠️
+#### A7: skill 路径 mcpServers == nil (P2) — FULL ✅ (closed 2026-06-14)
 
-- Same underlying gap as AC5 (no targeted assertion).
+- Same invariant as AC5, now covered by `skillAgentBuildKeepsUserMcpServersOutOfToolPool` (E2E).
 
 #### J-01: /mcp status renders all servers (P0) — FULL
 
@@ -365,7 +362,7 @@ Step 2 is complete. 58 MCP-relevant tests catalogued (49 unit + 9 E2E). Next ste
 
 ### Step 3 Status
 
-Step 3 is complete. 13 FULL, 2 PARTIAL (AC5/A7), 0 NONE. Next step is `step-04-analyze-gaps`.
+Step 3 is complete. 15 FULL, 0 PARTIAL, 0 NONE (AC5/A7 closed 2026-06-14). Next step is `step-04-analyze-gaps`.
 
 ---
 
@@ -379,14 +376,12 @@ Step 3 is complete. 13 FULL, 2 PARTIAL (AC5/A7), 0 NONE. Next step is `step-04-a
 | High (P1 NONE) | 0 | — |
 | Medium (P2 NONE) | 0 | — |
 | Low (P3 NONE) | 0 | — |
-| **PARTIAL** | 1 | AC5/A7 — skill path `mcpServers == nil` has no targeted regression assertion (P2) |
+| **PARTIAL** | 0 | — (AC5/A7 closed 2026-06-14) |
 
-### Detailed Gap: AC5 / A7 (P2, PARTIAL)
+### Detailed Gap: AC5 / A7 (P2) — ✅ CLOSED 2026-06-14
 
 - **Requirement:** `buildSkillAgent()` must produce `agentOptions.mcpServers == nil` even when `config.mcpServers` is populated (skill execution path must not load user MCP servers).
-- **Current state:** Enforced by code (`AgentBuilder.buildSkillAgent` does not pass `userServers`), but **no test directly asserts** the invariant. Manual acceptance A7 explicitly defers to "the unit suite passing" rather than a targeted guard.
-- **Risk:** Low probability, medium impact. An accidental change wiring `config.mcpServers` into the skill path would not be caught.
-- **Recommended fix:** Add a Swift Testing unit test that calls `AgentBuilder.buildSkillAgent(...)` with a config carrying `mcpServers` and asserts the resulting options have `mcpServers == nil`. (Closeable via `bmad-testarch-atdd` or `bmad-testarch-automate`.)
+- **Resolution:** Added E2E test `MCPConfigE2ETests.skillAgentBuildKeepsUserMcpServersOutOfToolPool` — calls real `buildSkillAgent(config:, skill:)` with populated `config.mcpServers`, asserts the tool pool has no `mcp__acceptance-probe__*` tool and the probe process never started. The invariant is now directly guarded by the MCP Config E2E suite.
 
 ### Coverage Heuristics Findings
 
@@ -400,8 +395,8 @@ Step 3 is complete. 13 FULL, 2 PARTIAL (AC5/A7), 0 NONE. Next step is `step-04-a
 
 ### Recommendations
 
-1. **Close AC5/A7** — add a `buildSkillAgent` MCP-omission unit test (P2, non-blocking, but cheap and removes the only PARTIAL).
-2. **Formalize the `/mcp` slash-status / interactive-browser spec** — the J-01..J-08 journeys are traced against a synthetic (medium-confidence) oracle. Authoring a `spec-mcp-slash-status.md` would raise that portion to high confidence and let a future trace gate unconditionally PASS.
+1. ✅ **DONE (2026-06-14)** — Closed AC5/A7 with `skillAgentBuildKeepsUserMcpServersOutOfToolPool` (E2E). Zero PARTIAL remaining.
+2. **Formalize the `/mcp` slash-status / interactive-browser spec** — the J-01..J-08 journeys are traced against a synthetic (medium-confidence) oracle. Authoring a `spec-mcp-slash-status.md` would raise that portion to high confidence.
 3. **Stabilize pre-existing flaky tests** (carried from the automate pass) — `ReviewSchedulerTests`, `TaskSerialQueueTests`, `HelperProcessManagerTests` fail intermittently under full parallel load. Not a coverage gap, but they undermine reliable execution of the traced suite.
 4. **Land the in-flight E2E** — commit `MCPConfigE2ETests.bigModelMcpConfigRendersSlashStatusWithRedactedSecrets` + `interactiveMcpListWindowsConfiguredServersAndOpensRedactedDetail` to promote J-02/J-06 from "unit + E2E-in-flight" to fully landed.
 
@@ -411,13 +406,13 @@ Step 3 is complete. 13 FULL, 2 PARTIAL (AC5/A7), 0 NONE. Next step is `step-04-a
 - `oracle.resolution_mode`: formal_requirements · `oracle.confidence`: high (formal) / medium (synthetic J-*)
 - `collection_status`: COLLECTED · `allow_gate`: true → **gate-eligible**
 - `coverage_statistics`:
-  - total_requirements: 16 · fully_covered: 15 · partial: 1 · none: 0
-  - overall_coverage_percentage: 94 (FULL-only); 97 (PARTIAL counted half)
-  - priority_breakdown: P0 7/7=100% · P1 6/6=100% · P2 2/3=67% (1 PARTIAL) · P3 0/0=100%
+  - total_requirements: 16 · fully_covered: 16 · partial: 0 · none: 0
+  - overall_coverage_percentage: 100
+  - priority_breakdown: P0 7/7=100% · P1 6/6=100% · P2 3/3=100% · P3 0/0=100%
 
 ### Step 4 Status
 
-Step 4 is complete. Coverage matrix finalized; no critical/high/medium NONE gaps; one P2 PARTIAL (AC5/A7). Next step is `step-05-gate-decision`.
+Step 4 is complete. Coverage matrix finalized; **zero NONE / PARTIAL gaps** (AC5/A7 closed 2026-06-14). Next step is `step-05-gate-decision`.
 
 ---
 
@@ -425,7 +420,7 @@ Step 4 is complete. Coverage matrix finalized; no critical/high/medium NONE gaps
 
 ### 🚨 GATE DECISION: **PASS**
 
-**Rationale:** P0 coverage is 100% (7/7), P1 coverage is 100% (6/6, target 90%), and overall coverage is ~94% (minimum 80%). No critical/high/medium gaps. The single PARTIAL is a P2 item (AC5/A7 skill-path MCP omission) that does not affect the gate. The primary oracle is formal requirements (`spec-mcp-config`) with high confidence; the synthetic `/mcp` slash-status journeys are a secondary medium-confidence oracle, noted as a recommendation rather than a blocker.
+**Rationale:** P0 coverage is 100% (7/7), P1 coverage is 100% (6/6, target 90%), and overall coverage is **100% (16/16 FULL, minimum 80%)**. Zero PARTIAL / NONE gaps after closing AC5/A7 with the `skillAgentBuildKeepsUserMcpServersOutOfToolPool` E2E test (2026-06-14). The primary oracle is formal requirements (`spec-mcp-config`) with high confidence; the synthetic `/mcp` slash-status journeys are a secondary medium-confidence oracle, noted as a recommendation rather than a blocker.
 
 ### Gate Criteria
 
@@ -433,7 +428,7 @@ Step 4 is complete. Coverage matrix finalized; no critical/high/medium NONE gaps
 |-----------|----------|--------|--------|
 | P0 coverage | 100% | 100% (7/7) | MET |
 | P1 coverage | ≥90% (target) / ≥80% (min) | 100% (6/6) | MET |
-| Overall coverage | ≥80% | ~94% | MET |
+| Overall coverage | ≥80% | 100% (16/16) | MET |
 
 ### Risk Summary
 
@@ -441,12 +436,12 @@ Step 4 is complete. Coverage matrix finalized; no critical/high/medium NONE gaps
 |-----------|------|
 | Critical (P0) | 0 |
 | High (P1) | 0 |
-| Medium (P2) | 0 NONE (1 PARTIAL: AC5/A7) |
+| Medium (P2) | 0 |
 | Low (P3) | 0 |
 
 ### Top Recommended Actions
 
-1. Close AC5/A7 with a `buildSkillAgent` MCP-omission unit test.
+1. ✅ Closed AC5/A7 — `buildSkillAgent` MCP-omission E2E test added & passing.
 2. Formalize the `/mcp` slash-status/browser spec (raise synthetic-oracle confidence to high).
 3. Stabilize the pre-existing flaky tests (ReviewScheduler/TaskSerialQueue/HelperProcessManager).
 

@@ -26,14 +26,14 @@
   },
   "coverage_statistics": {
     "total_requirements": 16,
-    "fully_covered": 15,
-    "partial_covered": 1,
+    "fully_covered": 16,
+    "partial_covered": 0,
     "none_covered": 0,
-    "overall_coverage_percentage": 94,
+    "overall_coverage_percentage": 100,
     "priority_breakdown": {
       "P0": { "total": 7, "covered": 7, "percentage": 100 },
       "P1": { "total": 6, "covered": 6, "percentage": 100 },
-      "P2": { "total": 3, "covered": 2, "percentage": 67, "partial": 1 },
+      "P2": { "total": 3, "covered": 3, "percentage": 100 },
       "P3": { "total": 0, "covered": 0, "percentage": 100 }
     }
   },
@@ -59,19 +59,21 @@
     ]},
     { "id": "AC2", "title": "用户配 playwright stdio → 用用户配置，不自动探测", "priority": "P0", "coverage": "FULL", "tests": [
       { "title": "test_userPlaywrightStdio_overridesAutomaticDiscovery", "file": "Tests/AxionCLITests/Services/MCPConfigResolverTests.swift", "line": 73, "level": "unit" },
-      { "title": "customPlaywrightStdioConfigSurvivesCLIBuild", "file": "Tests/AxionE2ETests/MCPConfigE2ETests.swift", "line": 122, "level": "e2e" }
+      { "title": "customPlaywrightStdioConfigSurvivesCLIBuild", "file": "Tests/AxionE2ETests/MCPConfigE2ETests.swift", "line": 151, "level": "e2e" }
     ]},
     { "id": "AC3", "title": "用户配 axion-helper → 内置优先 + stderr warning", "priority": "P1", "coverage": "FULL", "tests": [
       { "title": "test_reservedAxionHelperKey_isIgnored", "file": "Tests/AxionCLITests/Services/MCPConfigResolverTests.swift", "line": 57, "level": "unit" },
       { "title": "reservedAxionHelperInConfigYieldsIgnoredEntry", "file": "Tests/AxionCLITests/Chat/SlashCommandHandlerMCPStatusTests.swift", "line": 127, "level": "unit" },
-      { "title": "reservedAxionHelperUserConfigCannotOverrideResolvedHelper", "file": "Tests/AxionE2ETests/MCPConfigE2ETests.swift", "line": 106, "level": "e2e" }
+      { "title": "reservedAxionHelperUserConfigCannotOverrideResolvedHelper", "file": "Tests/AxionE2ETests/MCPConfigE2ETests.swift", "line": 135, "level": "e2e" }
     ]},
     { "id": "AC4", "title": "任一 server 解码失败 → mcpServers=nil，其余字段保留", "priority": "P1", "coverage": "FULL", "tests": [
       { "title": "axionConfigBadMcpServersDegradesToNil", "file": "Tests/AxionCLITests/Config/AxionConfigTests.swift", "line": 422, "level": "unit" },
       { "title": "test_unknownType_throws", "file": "Tests/AxionCLITests/Models/AxionMcpServerConfigTests.swift", "line": 73, "level": "unit" },
-      { "title": "badMcpServersJSONDegradesBeforeRealAgentBuild", "file": "Tests/AxionE2ETests/MCPConfigE2ETests.swift", "line": 77, "level": "e2e" }
+      { "title": "badMcpServersJSONDegradesBeforeRealAgentBuild", "file": "Tests/AxionE2ETests/MCPConfigE2ETests.swift", "line": 106, "level": "e2e" }
     ]},
-    { "id": "AC5_A7", "title": "buildSkillAgent() → skill agent options 不加载 MCP server", "priority": "P2", "coverage": "PARTIAL", "tests": [], "gap_note": "No test directly asserts buildSkillAgent yields mcpServers==nil; manual acceptance A7 defers to the unit suite passing." },
+    { "id": "AC5_A7", "title": "buildSkillAgent() → skill agent options 不加载 MCP server", "priority": "P2", "coverage": "FULL", "tests": [
+      { "title": "skillAgentBuildKeepsUserMcpServersOutOfToolPool", "file": "Tests/AxionE2ETests/MCPConfigE2ETests.swift", "line": 77, "level": "e2e", "note": "Calls real buildSkillAgent with populated config.mcpServers; asserts tool pool has no mcp__acceptance-probe tool and the probe process never started (proving mcpServers stayed nil). Passed 2026-06-14." }
+    ]},
     { "id": "A0", "title": "自动化基线 (AxionMcpServerConfig + MCPConfigResolver + AxionConfig)", "priority": "P0", "coverage": "FULL", "tests": [
       { "title": "AxionMcpServerConfigTests (8)", "file": "Tests/AxionCLITests/Models/AxionMcpServerConfigTests.swift", "level": "unit" },
       { "title": "MCPConfigResolverTests (8)", "file": "Tests/AxionCLITests/Services/MCPConfigResolverTests.swift", "level": "unit" }
@@ -91,12 +93,12 @@
     { "id": "J-02", "title": "status redacts headers/env (NFR9)", "priority": "P0", "coverage": "FULL", "synthetic": true, "tests": [
       { "title": "sseServerHeadersAreRedactedInEntries", "file": "Tests/AxionCLITests/Chat/SlashCommandHandlerMCPStatusTests.swift", "line": 34, "level": "unit" },
       { "title": "multipleKeysAreSortedAndRedacted", "file": "Tests/AxionCLITests/Chat/SlashCommandHandlerMCPStatusTests.swift", "line": 85, "level": "unit" },
-      { "title": "bigModelMcpConfigRendersSlashStatusWithRedactedSecrets", "file": "Tests/AxionE2ETests/MCPConfigE2ETests.swift", "line": 164, "level": "e2e", "status": "in-flight" }
+      { "title": "bigModelMcpConfigRendersSlashStatusWithRedactedSecrets", "file": "Tests/AxionE2ETests/MCPConfigE2ETests.swift", "line": 193, "level": "e2e", "status": "in-flight" }
     ]},
     { "id": "J-03", "title": "sse/http auth-headers redacted (new feature)", "priority": "P0", "coverage": "FULL", "synthetic": true, "tests": [
       { "title": "sseAndHttpWithoutHeadersOmitHeadersDetail", "file": "Tests/AxionCLITests/Chat/SlashCommandHandlerMCPStatusTests.swift", "line": 266, "level": "unit" },
       { "title": "test_http_mapsHeadersToSdkConfig", "file": "Tests/AxionCLITests/Models/AxionMcpServerConfigTests.swift", "line": 99, "level": "unit" },
-      { "title": "httpMcpHeadersSurviveRealAgentBuild", "file": "Tests/AxionE2ETests/MCPConfigE2ETests.swift", "line": 144, "level": "e2e" }
+      { "title": "httpMcpHeadersSurviveRealAgentBuild", "file": "Tests/AxionE2ETests/MCPConfigE2ETests.swift", "line": 173, "level": "e2e" }
     ]},
     { "id": "J-04", "title": "reserved axion-helper status shown ignored", "priority": "P1", "coverage": "FULL", "synthetic": true, "tests": [
       { "title": "reservedAxionHelperInConfigYieldsIgnoredEntry", "file": "Tests/AxionCLITests/Chat/SlashCommandHandlerMCPStatusTests.swift", "line": 127, "level": "unit" }
@@ -110,7 +112,7 @@
       { "title": "downPastFirstPageOpensDetail", "file": "Tests/AxionCLITests/Chat/MCPSelectionPromptTests.swift", "line": 27, "level": "unit" },
       { "title": "upMovesSelectionBackward", "file": "Tests/AxionCLITests/Chat/MCPSelectionPromptTests.swift", "line": 100, "level": "unit" },
       { "title": "leftReturnsFromDetailToList", "file": "Tests/AxionCLITests/Chat/MCPSelectionPromptTests.swift", "line": 117, "level": "unit" },
-      { "title": "interactiveMcpListWindowsConfiguredServersAndOpensRedactedDetail", "file": "Tests/AxionE2ETests/MCPConfigE2ETests.swift", "line": 234, "level": "e2e", "status": "in-flight" }
+      { "title": "interactiveMcpListWindowsConfiguredServersAndOpensRedactedDetail", "file": "Tests/AxionE2ETests/MCPConfigE2ETests.swift", "line": 263, "level": "e2e", "status": "in-flight" }
     ]},
     { "id": "J-07", "title": "non-TTY numbered-list fallback", "priority": "P2", "coverage": "FULL", "synthetic": true, "tests": [
       { "title": "nonTTYRendersNumberedList", "file": "Tests/AxionCLITests/Chat/MCPSelectionPromptTests.swift", "line": 80, "level": "unit" }
@@ -125,20 +127,18 @@
     "high_gaps": [],
     "medium_gaps": [],
     "low_gaps": [],
-    "partial": [
-      { "id": "AC5_A7", "priority": "P2", "note": "buildSkillAgent mcpServers==nil invariant lacks a targeted regression test." }
-    ]
+    "partial": []
   },
   "test_inventory": {
     "summary": {
       "files": 8,
-      "cases": 58,
+      "cases": 59,
       "skipped_cases": 0,
       "fixme_cases": 0,
       "pending_cases": 0,
       "by_level": {
         "unit": { "tests": 49, "criteria_covered": 16 },
-        "e2e": { "tests": 9, "criteria_covered": 8 },
+        "e2e": { "tests": 10, "criteria_covered": 9 },
         "api": { "tests": 0, "criteria_covered": 0 },
         "component": { "tests": 0, "criteria_covered": 0 },
         "other": { "tests": 0, "criteria_covered": 0 }
@@ -147,7 +147,7 @@
     "blockers": []
   },
   "recommendations": [
-    "Close AC5/A7: add a buildSkillAgent MCP-omission unit test (removes the only PARTIAL).",
+    "CLOSED AC5/A7 (2026-06-14): skillAgentBuildKeepsUserMcpServersOutOfToolPool E2E test added and passing.",
     "Formalize the /mcp slash-status / interactive-browser spec to raise synthetic-oracle confidence from medium to high.",
     "Stabilize pre-existing flaky tests (ReviewSchedulerTests, TaskSerialQueueTests, HelperProcessManagerTests).",
     "Land the in-flight E2E cases (bigModelMcp redaction, interactiveMcpList) to fully anchor J-02/J-06."

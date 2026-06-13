@@ -28,7 +28,7 @@ Axion is a Swift-based AI agent that lives in your terminal. Type `axion` and st
 
 **Key highlights:**
 
-- **Interactive Coding Agent** — `axion` launches a Claude Code–like REPL with streaming output, 17 slash commands (`/help`, `/clear`, `/diff`, `/model`, `/cost`, `/copy`, `/storage`, `/apps`, …), file edit approval diffs, multiline input with CJK support, and session resume
+- **Interactive Coding Agent** — `axion` launches a Claude Code–like REPL with streaming output, 18 slash commands (`/help`, `/clear`, `/diff`, `/model`, `/cost`, `/copy`, `/mcp`, `/storage`, `/apps`, …), file edit approval diffs, multiline input with CJK support, and session resume
 - **Full Tool Spectrum** — Bash execution, file read/write/edit, code search (Grep/Glob), web search & fetch, LSP code intelligence — plus 21 native macOS desktop tools via MCP when you need GUI
 - **Safe Storage & App Cleanup** — Find large files, collapse rebuildable caches such as `node_modules` and `DerivedData`, organize folders through approval-backed plans, uninstall apps with support-data review, and undo storage operations
 - **Rich Terminal Rendering** — Streaming Unicode tables, 16-language syntax highlighting, diff-colored code blocks, Markdown extensions (strikethrough, task lists, clickable links, image placeholders), file change summaries, and context progress bars
@@ -53,7 +53,7 @@ Axion is a Swift-based AI agent that lives in your terminal. Type `axion` and st
 │   ├── Streaming Markdown             ├── axion run "task"      │
 │   ├── Syntax Highlight (16 langs)    ├── MCP Tools (21)        │
 │   ├── Unicode Tables                 ├── Record & Replay       │
-│   ├── Slash Commands (17)            └── User Takeover         │
+│   ├── Slash Commands (18)            └── User Takeover         │
 │   ├── File Edit Approval                                       │
 │   ├── Clipboard (/copy)                                        │
 │   ├── Session Resume + Transcript                               │
@@ -141,6 +141,7 @@ axion
 > /cost          # token usage and cost breakdown
 > /copy          # copy last response to clipboard
 > /status        # session state card
+> /mcp           # browse configured MCP servers
 ```
 
 **Single-shot mode** for scripts and CI:
@@ -261,7 +262,7 @@ The default `axion` command opens a REPL with rich terminal UX:
 - **System events** — Codex-style rendering for context compression, rate limits, and task completion notifications
 - **Context compaction** — Visual before/after progress bars when context is compressed (auto or `/compact`)
 - **File edit approval** — Shows a color-coded diff preview before applying changes; approve, reject, or edit
-- **17 slash commands** — `/help`, `/clear`, `/compact`, `/model`, `/cost`, `/diff`, `/status`, `/resume`, `/config`, `/new`, `/fork`, `/archive`, `/skills`, `/copy`, `/storage`, `/apps`, `/exit`
+- **18 slash commands** — `/help`, `/clear`, `/compact`, `/model`, `/cost`, `/diff`, `/status`, `/resume`, `/config`, `/new`, `/fork`, `/archive`, `/skills`, `/copy`, `/mcp`, `/storage`, `/apps`, `/exit`
 - **Slash popup completion** — Type `/` for popup menu with Tab to complete; `@` for file search
 - **Multiline input** — Paste or compose multi-line prompts naturally; `\` continuation for manual line breaks
 - **Cross-session history** — Up/Down navigation works across sessions; history persisted to `~/.axion/history.jsonl`
@@ -526,6 +527,8 @@ Config file located at `~/.axion/config.json`:
 ```
 
 `mcpServers` lets Axion connect to additional MCP servers when it builds its own agent. Remote `sse` and `http` servers can include optional request `headers`. The `axion-helper` key is reserved and always resolved internally; a custom `playwright` entry replaces Axion's automatic Playwright MCP discovery.
+
+In interactive chat, use `/mcp` to browse enabled servers in a compact list and open redacted details, or `/mcp --all` to print the full configuration. Header and environment secrets are redacted from MCP status output.
 
 Supports Anthropic and OpenAI Compatible providers. Config priority: defaults → config.json → environment variables → CLI flags.
 
