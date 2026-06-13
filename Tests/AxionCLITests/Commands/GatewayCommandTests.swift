@@ -260,4 +260,128 @@ struct GatewayCommandTests {
         #expect(json.contains("\"last_review_at\":null"))
         #expect(json.contains("\"last_curator_at\":null"))
     }
+
+    // MARK: - Gateway Telegram Setup Pure Helpers
+
+    @Test("GatewayStartCommand parses Telegram allowed users with trimming and empty filtering")
+    func telegramAllowedUsersParsingTrimsAndFilters() {
+        let users = GatewayStartCommand.parseTelegramAllowedUsers(" 123,456, , abc,\n789 ")
+
+        #expect(users == ["123", "456", "abc", "789"])
+        #expect(GatewayStartCommand.parseTelegramAllowedUsers(nil).isEmpty)
+        #expect(GatewayStartCommand.parseTelegramAllowedUsers("").isEmpty)
+    }
+
+    @Test("GatewayStartCommand converts numeric Telegram users to sorted chat ids")
+    func telegramChatIdsFiltersNonNumericUsersAndSorts() {
+        let ids = GatewayStartCommand.telegramChatIds(from: ["42", "abc", "-1", "7"])
+
+        #expect(ids == [-1, 7, 42])
+    }
+
+    @Test("GatewayStartCommand formats curator Telegram success messages")
+    func curatorTelegramMessageFormatsSuccessChanges() {
+        let both = CuratorResultInfo(
+            consolidations: 2,
+            prunings: 1,
+            autoTransitions: 0,
+            success: true,
+            durationMs: 100,
+            error: nil
+        )
+        let consolidationOnly = CuratorResultInfo(
+            consolidations: 3,
+            prunings: 0,
+            autoTransitions: 0,
+            success: true,
+            durationMs: 100,
+            error: nil
+        )
+
+        #expect(GatewayStartCommand.formatCuratorTelegramMessage(both) == "🔧 策展完成: 合并 2 个技能, 归档 1 个技能")
+        #expect(GatewayStartCommand.formatCuratorTelegramMessage(consolidationOnly) == "🔧 策展完成: 合并 3 个技能")
+    }
+
+    @Test("GatewayStartCommand suppresses curator Telegram message when no changes")
+    func curatorTelegramMessageSuppressesNoChangeSuccess() {
+        let info = CuratorResultInfo(
+            consolidations: 0,
+            prunings: 0,
+            autoTransitions: 0,
+            success: true,
+            durationMs: 100,
+            error: nil
+        )
+
+        #expect(GatewayStartCommand.formatCuratorTelegramMessage(info) == nil)
+    }
+
+    @Test("GatewayStartCommand formats curator Telegram failure messages")
+    func curatorTelegramMessageFormatsFailure() {
+        let explicit = CuratorResultInfo(
+            consolidations: 0,
+            prunings: 0,
+            autoTransitions: 0,
+            success: false,
+            durationMs: 0,
+            error: "network"
+        )
+        let fallback = CuratorResultInfo(
+            consolidations: 0,
+            prunings: 0,
+            autoTransitions: 0,
+            success: false,
+            durationMs: 0,
+            error: nil
+        )
+
+        #expect(GatewayStartCommand.formatCuratorTelegramMessage(explicit) == "⚠️ 后台策展失败: network")
+        #expect(GatewayStartCommand.formatCuratorTelegramMessage(fallback) == "⚠️ 后台策展失败: unknown error")
+    }
+
+    @Test("GatewayStartCommand formats review Telegram success messages")
+    func reviewTelegramMessageFormatsSuccessChanges() {
+        let both = ReviewResultEvent(
+            summary: "done",
+            memoryChanges: ["m1", "m2"],
+            skillChanges: ["s1"],
+            success: true,
+            durationMs: 100,
+            sessionId: "s1"
+        )
+        let skillOnly = ReviewResultEvent(
+            summary: "done",
+            memoryChanges: [],
+            skillChanges: ["s1", "s2"],
+            success: true,
+            durationMs: 100,
+            sessionId: "s1"
+        )
+
+        #expect(GatewayStartCommand.formatReviewTelegramMessage(both) == "📊 审查完成: 新增 2 条记忆, 更新 1 个技能")
+        #expect(GatewayStartCommand.formatReviewTelegramMessage(skillOnly) == "📊 审查完成: 更新 2 个技能")
+    }
+
+    @Test("GatewayStartCommand formats review Telegram failure and suppresses no-change success")
+    func reviewTelegramMessageFailureAndNoChange() {
+        let failure = ReviewResultEvent(
+            summary: "failed",
+            memoryChanges: [],
+            skillChanges: [],
+            success: false,
+            durationMs: 0,
+            sessionId: "s1"
+        )
+        let noChange = ReviewResultEvent(
+            summary: "done",
+            memoryChanges: [],
+            skillChanges: [],
+            success: true,
+            durationMs: 100,
+            sessionId: "s1"
+        )
+
+        #expect(GatewayStartCommand.formatReviewTelegramMessage(failure) == "⚠️ 后台审查失败")
+        #expect(GatewayStartCommand.formatReviewTelegramMessage(noChange) == nil)
+    }
 }

@@ -98,31 +98,35 @@ struct CJKInputHandler {
     // MARK: - Bracket Paste Constants
 
     /// Bracket paste start sequence: \x1b[200~
-    private static let bracketPasteStart: [UInt8] = [0x1B, 0x5B, 0x32, 0x30, 0x30, 0x7E]
+    static let bracketPasteStart: [UInt8] = [0x1B, 0x5B, 0x32, 0x30, 0x30, 0x7E]
     /// Bracket paste end sequence: \x1b[201~
-    private static let bracketPasteEnd: [UInt8] = [0x1B, 0x5B, 0x32, 0x30, 0x31, 0x7E]
+    static let bracketPasteEnd: [UInt8] = [0x1B, 0x5B, 0x32, 0x30, 0x31, 0x7E]
 
     // MARK: - Escape Sequence Matching
 
-    /// Reads subsequent bytes from stdin and compares against a target escape sequence.
+    /// Reads subsequent bytes from the provided reader and compares against a target escape sequence.
     ///
-    /// Given the first byte (0x1B), reads the remaining bytes of the target sequence
-    /// one by one, comparing each against the expected value.
+    /// Given the first byte (0x1B), reads the remaining bytes of the target sequence one by one,
+    /// comparing each against the expected value. `readRawLine` passes stdin here; tests pass an
+    /// in-memory reader so escape-sequence behavior can be verified without touching the terminal.
     ///
     /// - Parameters:
     ///   - firstByte: The initial byte (always 0x1B)
     ///   - target: The full expected sequence (including the first byte)
+    ///   - readNextByte: Provides the next input byte, or nil on EOF.
     /// - Returns: Tuple of (whether the full sequence matched, all bytes read including firstByte)
-    private static func matchEscapeSequence(
+    static func matchEscapeSequence(
         firstByte: UInt8,
-        target: [UInt8]
+        target: [UInt8],
+        readNextByte: () -> UInt8?
     ) -> (matched: Bool, bytesRead: [UInt8]) {
         var seq = [UInt8]([firstByte])
         var matched = true
         for i in 1..<target.count {
-            var nextByte: UInt8 = 0
-            let n = read(STDIN_FILENO, &nextByte, 1)
-            guard n == 1 else { matched = false; break }
+            guard let nextByte = readNextByte() else {
+                matched = false
+                break
+            }
             seq.append(nextByte)
             if nextByte != target[i] {
                 matched = false
@@ -156,11 +160,7 @@ struct CJKInputHandler {
         // 显示提示符
         writeStdout(prompt)
 
-        var buffer = [UInt8]()
-        buffer.reserveCapacity(256)
-
-        // Bracket paste 状态
-        var inBracketPaste = false
+        var processor = CJKRawLineProcessor(prompt: prompt)
 
         while true {
             var byte: UInt8 = 0
@@ -175,109 +175,200 @@ struct CJKInputHandler {
 
             guard bytesRead == 1 else {
                 // EOF
-                if !buffer.isEmpty {
-                    return String(bytes: buffer, encoding: .utf8) ?? ""
-                }
-                return nil
+                return processor.finishEOF()
             }
 
-            // Bracket paste 检测
-            if byte == 0x1B {
-                if !inBracketPaste {
-                    let (matched, _) = matchEscapeSequence(firstByte: byte, target: bracketPasteStart)
-                    if matched {
-                        inBracketPaste = true
-                        continue
-                    }
-                    // 不匹配的 escape sequence — 忽略
-                    continue
-                } else {
-                    let (matched, seq) = matchEscapeSequence(firstByte: byte, target: bracketPasteEnd)
-                    if matched {
-                        inBracketPaste = false
-                        let content = String(bytes: buffer, encoding: .utf8) ?? ""
-                        writeStdout("\r\(prompt)\(content)\u{1B}[K")
-                        continue
-                    }
-                    // 不是 paste end — 追加已读字节到 buffer
-                    buffer.append(contentsOf: seq)
-                    continue
+            let step = processor.processByte(
+                byte,
+                readNextByte: {
+                    var nextByte: UInt8 = 0
+                    return read(STDIN_FILENO, &nextByte, 1) == 1 ? nextByte : nil
                 }
+            )
+            for output in step.outputs {
+                writeStdout(output)
             }
-
-            // Enter — 完成输入（bracket paste 模式下将换行加入 buffer）
-            if byte == 0x0D || byte == 0x0A {
-                if inBracketPaste {
-                    // 在 bracket paste 中，换行符作为内容的一部分
-                    if byte == 0x0A && buffer.count < maxLineLength {
-                        buffer.append(0x0A)
-                    }
-                    continue
-                }
-                writeStdout("\r\n")
-                return String(bytes: buffer, encoding: .utf8) ?? ""
-            }
-
-            // Ctrl+C — 返回 nil（让 SignalHandler 处理）
-            if byte == 0x03 {
-                writeStdout("\r\n")
-                return nil
-            }
-
-            // Ctrl+D — buffer 空时返回 nil（EOF）
-            if byte == 0x04 {
-                if buffer.isEmpty {
-                    return nil
-                }
-                continue
-            }
-
-            // Backspace / Delete（bracket paste 模式下不处理）
-            if byte == 0x7F || byte == 0x08 {
-                if buffer.isEmpty || inBracketPaste { continue }
-                var cursorPos = buffer.count
-                buffer = processBackspace(buffer: buffer, cursorPos: &cursorPos)
-                // 回显：回车 + prompt + 当前内容 + 清除行尾
-                let content = String(bytes: buffer, encoding: .utf8) ?? ""
-                writeStdout("\r\(prompt)\(content) \u{1B}[K")
-                // 重新定位光标到内容末尾（空格清除后需要回退一个位置）
-                if buffer.isEmpty {
-                    writeStdout("\r\(prompt)\u{1B}[K")
-                }
-                continue
-            }
-
-            // 普通输入 — 追加到 buffer
-            if buffer.count < maxLineLength {
-                buffer.append(byte)
-
-                // 如果在 bracket paste 中，不逐字回显
-                if !inBracketPaste {
-                    // 回显当前字符
-                    if byte >= 0x20 && byte < 0x7F {
-                        // 可打印 ASCII
-                        let char = byte
-                        writeStdout(String(bytes: [char], encoding: .ascii) ?? "")
-                    } else if byte >= 0x80 {
-                        // UTF-8 多字节 — 等待完整字符后再回显
-                        // 检查是否已读入完整 UTF-8 字符
-                        var pos = buffer.count - 1
-                        while pos > 0 && buffer[pos] >= 0x80 && buffer[pos] <= 0xBF {
-                            pos -= 1
-                        }
-                        let leadByte = buffer[pos]
-                        let expectedLen = utf8CharLength(leadByte)
-                        let charLen = buffer.count - pos
-                        if charLen == expectedLen {
-                            // 完整字符已读入 — 回显
-                            let charBytes = Array(buffer[pos...])
-                            if let str = String(bytes: charBytes, encoding: .utf8) {
-                                writeStdout(str)
-                            }
-                        }
-                    }
-                }
+            if case .finish(let value) = step.action {
+                return value
             }
         }
+    }
+}
+
+struct CJKRawLineProcessor {
+    enum Action: Equatable {
+        case keepReading
+        case finish(String?)
+    }
+
+    struct Step: Equatable {
+        let action: Action
+        let outputs: [String]
+    }
+
+    private let prompt: String
+    private let maxLineLength: Int
+    private var buffer: [UInt8]
+    private var inBracketPaste: Bool
+
+    init(
+        prompt: String,
+        maxLineLength: Int = CJKInputHandler.maxLineLength
+    ) {
+        self.prompt = prompt
+        self.maxLineLength = maxLineLength
+        self.buffer = []
+        self.buffer.reserveCapacity(256)
+        self.inBracketPaste = false
+    }
+
+    var currentBuffer: [UInt8] {
+        buffer
+    }
+
+    var isInBracketPaste: Bool {
+        inBracketPaste
+    }
+
+    mutating func finishEOF() -> String? {
+        if !buffer.isEmpty {
+            return String(bytes: buffer, encoding: .utf8) ?? ""
+        }
+        return nil
+    }
+
+    mutating func processByte(
+        _ byte: UInt8,
+        readNextByte: () -> UInt8?
+    ) -> Step {
+        if byte == 0x1B {
+            return processEscape(readNextByte: readNextByte)
+        }
+
+        // Enter — 完成输入（bracket paste 模式下将换行加入 buffer）
+        if byte == 0x0D || byte == 0x0A {
+            if inBracketPaste {
+                // 在 bracket paste 中，换行符作为内容的一部分
+                if byte == 0x0A && buffer.count < maxLineLength {
+                    buffer.append(0x0A)
+                }
+                return Step(action: .keepReading, outputs: [])
+            }
+            return Step(
+                action: .finish(String(bytes: buffer, encoding: .utf8) ?? ""),
+                outputs: ["\r\n"]
+            )
+        }
+
+        // Ctrl+C — 返回 nil（让 SignalHandler 处理）
+        if byte == 0x03 {
+            return Step(action: .finish(nil), outputs: ["\r\n"])
+        }
+
+        // Ctrl+D — buffer 空时返回 nil（EOF）
+        if byte == 0x04 {
+            if buffer.isEmpty {
+                return Step(action: .finish(nil), outputs: [])
+            }
+            return Step(action: .keepReading, outputs: [])
+        }
+
+        // Backspace / Delete（bracket paste 模式下不处理）
+        if byte == 0x7F || byte == 0x08 {
+            guard !buffer.isEmpty, !inBracketPaste else {
+                return Step(action: .keepReading, outputs: [])
+            }
+            var cursorPos = buffer.count
+            buffer = CJKInputHandler.processBackspace(buffer: buffer, cursorPos: &cursorPos)
+            // 回显：回车 + prompt + 当前内容 + 清除行尾
+            let content = String(bytes: buffer, encoding: .utf8) ?? ""
+            var outputs = ["\r\(prompt)\(content) \u{1B}[K"]
+            // 重新定位光标到内容末尾（空格清除后需要回退一个位置）
+            if buffer.isEmpty {
+                outputs.append("\r\(prompt)\u{1B}[K")
+            }
+            return Step(action: .keepReading, outputs: outputs)
+        }
+
+        return processPrintableByte(byte)
+    }
+
+    private mutating func processEscape(readNextByte: () -> UInt8?) -> Step {
+        if !inBracketPaste {
+            let (matched, _) = CJKInputHandler.matchEscapeSequence(
+                firstByte: 0x1B,
+                target: CJKInputHandler.bracketPasteStart,
+                readNextByte: readNextByte
+            )
+            if matched {
+                inBracketPaste = true
+            }
+            // 不匹配的 escape sequence — 忽略
+            return Step(action: .keepReading, outputs: [])
+        }
+
+        let (matched, seq) = CJKInputHandler.matchEscapeSequence(
+            firstByte: 0x1B,
+            target: CJKInputHandler.bracketPasteEnd,
+            readNextByte: readNextByte
+        )
+        if matched {
+            inBracketPaste = false
+            let content = String(bytes: buffer, encoding: .utf8) ?? ""
+            return Step(action: .keepReading, outputs: ["\r\(prompt)\(content)\u{1B}[K"])
+        }
+
+        // 不是 paste end — 追加已读字节到 buffer
+        appendBytesRespectingLimit(seq)
+        return Step(action: .keepReading, outputs: [])
+    }
+
+    private mutating func processPrintableByte(_ byte: UInt8) -> Step {
+        guard buffer.count < maxLineLength else {
+            return Step(action: .keepReading, outputs: [])
+        }
+
+        buffer.append(byte)
+
+        // 如果在 bracket paste 中，不逐字回显
+        guard !inBracketPaste else {
+            return Step(action: .keepReading, outputs: [])
+        }
+
+        if byte >= 0x20 && byte < 0x7F {
+            // 可打印 ASCII
+            return Step(
+                action: .keepReading,
+                outputs: [String(bytes: [byte], encoding: .ascii) ?? ""]
+            )
+        }
+
+        if byte >= 0x80, let character = completeUTF8CharacterAtBufferEnd() {
+            return Step(action: .keepReading, outputs: [character])
+        }
+
+        return Step(action: .keepReading, outputs: [])
+    }
+
+    private mutating func appendBytesRespectingLimit(_ bytes: [UInt8]) {
+        guard buffer.count < maxLineLength else { return }
+        let remaining = maxLineLength - buffer.count
+        buffer.append(contentsOf: bytes.prefix(remaining))
+    }
+
+    private func completeUTF8CharacterAtBufferEnd() -> String? {
+        guard !buffer.isEmpty else { return nil }
+
+        var pos = buffer.count - 1
+        while pos > 0 && buffer[pos] >= 0x80 && buffer[pos] <= 0xBF {
+            pos -= 1
+        }
+        let leadByte = buffer[pos]
+        let expectedLen = CJKInputHandler.utf8CharLength(leadByte)
+        let charLen = buffer.count - pos
+        guard charLen == expectedLen else { return nil }
+
+        let charBytes = Array(buffer[pos...])
+        return String(bytes: charBytes, encoding: .utf8)
     }
 }

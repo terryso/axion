@@ -4,6 +4,33 @@ import Testing
 
 @Suite("CJKInputHandler")
 struct CJKInputHandlerTests {
+    private func feed(
+        _ processor: inout CJKRawLineProcessor,
+        bytes: [UInt8],
+        outputs: inout [String]
+    ) -> CJKRawLineProcessor.Action {
+        var index = 0
+        var lastAction = CJKRawLineProcessor.Action.keepReading
+
+        while index < bytes.count {
+            let byte = bytes[index]
+            index += 1
+
+            let step = processor.processByte(byte) {
+                guard index < bytes.count else { return nil }
+                let next = bytes[index]
+                index += 1
+                return next
+            }
+            outputs.append(contentsOf: step.outputs)
+            lastAction = step.action
+            if case .finish = step.action {
+                break
+            }
+        }
+
+        return lastAction
+    }
 
     // MARK: - utf8CharLength (Task 3.2)
 
@@ -188,5 +215,124 @@ struct CJKInputHandlerTests {
         buffer = CJKInputHandler.processBackspace(buffer: buffer, cursorPos: &cursorPos)
         #expect(buffer == [])
         #expect(cursorPos == 0)
+    }
+
+    // MARK: - CJKRawLineProcessor
+
+    @Test("raw processor completes ASCII line and returns echo output")
+    func rawProcessorCompletesASCIILineAndEchoes() {
+        var processor = CJKRawLineProcessor(prompt: "axion> ")
+        var outputs: [String] = []
+
+        let action = feed(&processor, bytes: Array("hi\n".utf8), outputs: &outputs)
+
+        #expect(action == .finish("hi"))
+        #expect(outputs == ["h", "i", "\r\n"])
+        #expect(processor.currentBuffer == Array("hi".utf8))
+    }
+
+    @Test("raw processor echoes UTF-8 character only after complete byte sequence")
+    func rawProcessorEchoesUTF8OnlyWhenComplete() {
+        var processor = CJKRawLineProcessor(prompt: "")
+        var outputs: [String] = []
+        let bytes = Array("你".utf8)
+
+        let first = feed(&processor, bytes: [bytes[0]], outputs: &outputs)
+        #expect(first == .keepReading)
+        #expect(outputs.isEmpty)
+
+        let second = feed(&processor, bytes: Array(bytes[1...]), outputs: &outputs)
+        #expect(second == .keepReading)
+        #expect(outputs == ["你"])
+    }
+
+    @Test("raw processor backspace removes full UTF-8 character and redraws")
+    func rawProcessorBackspaceRemovesFullUTF8Character() {
+        var processor = CJKRawLineProcessor(prompt: "p> ")
+        var outputs: [String] = []
+
+        _ = feed(&processor, bytes: Array("你".utf8), outputs: &outputs)
+        let action = feed(&processor, bytes: [0x7F], outputs: &outputs)
+
+        #expect(action == .keepReading)
+        #expect(processor.currentBuffer.isEmpty)
+        #expect(outputs == ["你", "\rp>  \u{1B}[K", "\rp> \u{1B}[K"])
+    }
+
+    @Test("raw processor bracket paste suppresses echo until paste end")
+    func rawProcessorBracketPasteSuppressesEchoUntilEnd() {
+        var processor = CJKRawLineProcessor(prompt: "p> ")
+        var outputs: [String] = []
+        let bytes = CJKInputHandler.bracketPasteStart
+            + Array("a\n你".utf8)
+            + CJKInputHandler.bracketPasteEnd
+            + [0x0A]
+
+        let action = feed(&processor, bytes: bytes, outputs: &outputs)
+
+        #expect(action == .finish("a\n你"))
+        #expect(outputs == ["\rp> a\n你\u{1B}[K", "\r\n"])
+        #expect(!processor.isInBracketPaste)
+    }
+
+    @Test("raw processor ignores unknown escape outside bracket paste")
+    func rawProcessorIgnoresUnknownEscapeOutsidePaste() {
+        var processor = CJKRawLineProcessor(prompt: "")
+        var outputs: [String] = []
+        let bytes: [UInt8] = [0x1B, 0x5B, 0x41, 0x0A]
+
+        let action = feed(&processor, bytes: bytes, outputs: &outputs)
+
+        #expect(action == .finish(""))
+        #expect(processor.currentBuffer.isEmpty)
+        #expect(outputs == ["\r\n"])
+    }
+
+    @Test("raw processor keeps unknown escape bytes inside bracket paste")
+    func rawProcessorKeepsUnknownEscapeInsidePaste() {
+        var processor = CJKRawLineProcessor(prompt: "")
+        var outputs: [String] = []
+        let bytes = CJKInputHandler.bracketPasteStart
+            + [0x1B, 0x5B, 0x41]
+            + CJKInputHandler.bracketPasteEnd
+            + [0x0A]
+
+        let action = feed(&processor, bytes: bytes, outputs: &outputs)
+
+        #expect(action == .finish("\u{1B}[A"))
+        #expect(outputs == ["\r\u{1B}[A\u{1B}[K", "\r\n"])
+    }
+
+    @Test("raw processor Ctrl-D finishes only when buffer is empty")
+    func rawProcessorCtrlDFinishesOnlyWhenEmpty() {
+        var emptyProcessor = CJKRawLineProcessor(prompt: "")
+        var outputs: [String] = []
+        let emptyAction = feed(&emptyProcessor, bytes: [0x04], outputs: &outputs)
+        #expect(emptyAction == .finish(nil))
+
+        var nonEmptyProcessor = CJKRawLineProcessor(prompt: "")
+        outputs = []
+        let action = feed(&nonEmptyProcessor, bytes: Array("x".utf8) + [0x04, 0x0A], outputs: &outputs)
+        #expect(action == .finish("x"))
+        #expect(outputs == ["x", "\r\n"])
+    }
+
+    @Test("raw processor enforces max line length for typed and pasted input")
+    func rawProcessorEnforcesMaxLineLength() {
+        var typedProcessor = CJKRawLineProcessor(prompt: "", maxLineLength: 2)
+        var outputs: [String] = []
+        let typedAction = feed(&typedProcessor, bytes: Array("abc\n".utf8), outputs: &outputs)
+        #expect(typedAction == .finish("ab"))
+        #expect(outputs == ["a", "b", "\r\n"])
+
+        var pastedProcessor = CJKRawLineProcessor(prompt: "", maxLineLength: 2)
+        outputs = []
+        let pastedBytes = CJKInputHandler.bracketPasteStart
+            + Array("abcd".utf8)
+            + CJKInputHandler.bracketPasteEnd
+            + [0x0A]
+        let pastedAction = feed(&pastedProcessor, bytes: pastedBytes, outputs: &outputs)
+        #expect(pastedAction == .finish("ab"))
+        #expect(outputs == ["\rab\u{1B}[K", "\r\n"])
     }
 }

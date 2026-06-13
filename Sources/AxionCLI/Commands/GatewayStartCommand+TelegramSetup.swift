@@ -28,10 +28,7 @@ extension GatewayStartCommand {
             return
         }
 
-        let allowedUsersStr = config.telegramAllowedUsers ?? ""
-        let allowedUsers = Set(allowedUsersStr.split(separator: ",").map {
-            $0.trimmingCharacters(in: .whitespaces)
-        })
+        let allowedUsers = Self.parseTelegramAllowedUsers(config.telegramAllowedUsers)
 
         let tgClient = TGAPIClient(token: tgToken)
 
@@ -105,25 +102,11 @@ extension GatewayStartCommand {
         )
 
         // Wire curator result callback for TG push
-        let tgChatIds: [Int64] = allowedUsers.compactMap { Int64($0) }
+        let tgChatIds = Self.telegramChatIds(from: allowedUsers)
         let notifyCuratorResults = config.gatewayNotifyCuratorResults ?? false
         if notifyCuratorResults {
             await curatorScheduler?.setOnCuratorResult { [weak adapter] info in
-                guard info.success else {
-                    for chatId in tgChatIds {
-                        await adapter?.sendReply("⚠️ 后台策展失败: \(info.error ?? "unknown error")", to: chatId)
-                    }
-                    return
-                }
-                guard info.consolidations > 0 || info.prunings > 0 else { return }
-                var parts: [String] = []
-                if info.consolidations > 0 {
-                    parts.append("合并 \(info.consolidations) 个技能")
-                }
-                if info.prunings > 0 {
-                    parts.append("归档 \(info.prunings) 个技能")
-                }
-                let message = "🔧 策展完成: \(parts.joined(separator: ", "))"
+                guard let message = Self.formatCuratorTelegramMessage(info) else { return }
                 for chatId in tgChatIds {
                     await adapter?.sendReply(message, to: chatId)
                 }
@@ -133,21 +116,7 @@ extension GatewayStartCommand {
         // Wire review result callback: the per-request EventBus is stopped before
         // the detached review task completes, so we use a direct callback instead.
         await reviewScheduler.setOnReviewResult { [weak adapter] event in
-            guard event.success else {
-                for chatId in tgChatIds {
-                    await adapter?.sendReply("⚠️ 后台审查失败", to: chatId)
-                }
-                return
-            }
-            guard !event.memoryChanges.isEmpty || !event.skillChanges.isEmpty else { return }
-            var parts: [String] = []
-            if !event.memoryChanges.isEmpty {
-                parts.append("新增 \(event.memoryChanges.count) 条记忆")
-            }
-            if !event.skillChanges.isEmpty {
-                parts.append("更新 \(event.skillChanges.count) 个技能")
-            }
-            let message = "📊 审查完成: \(parts.joined(separator: ", "))"
+            guard let message = Self.formatReviewTelegramMessage(event) else { return }
             for chatId in tgChatIds {
                 await adapter?.sendReply(message, to: chatId)
             }
@@ -170,5 +139,50 @@ extension GatewayStartCommand {
             await adapter.start()
         }
         fputs("[axion] Telegram adapter starting\n", stderr)
+    }
+
+    static func parseTelegramAllowedUsers(_ value: String?) -> Set<String> {
+        Set(
+            (value ?? "")
+                .split(separator: ",")
+                .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+                .filter { !$0.isEmpty }
+        )
+    }
+
+    static func telegramChatIds(from allowedUsers: Set<String>) -> [Int64] {
+        allowedUsers.compactMap(Int64.init).sorted()
+    }
+
+    static func formatCuratorTelegramMessage(_ info: CuratorResultInfo) -> String? {
+        guard info.success else {
+            return "⚠️ 后台策展失败: \(info.error ?? "unknown error")"
+        }
+        guard info.consolidations > 0 || info.prunings > 0 else { return nil }
+
+        var parts: [String] = []
+        if info.consolidations > 0 {
+            parts.append("合并 \(info.consolidations) 个技能")
+        }
+        if info.prunings > 0 {
+            parts.append("归档 \(info.prunings) 个技能")
+        }
+        return "🔧 策展完成: \(parts.joined(separator: ", "))"
+    }
+
+    static func formatReviewTelegramMessage(_ event: ReviewResultEvent) -> String? {
+        guard event.success else {
+            return "⚠️ 后台审查失败"
+        }
+        guard !event.memoryChanges.isEmpty || !event.skillChanges.isEmpty else { return nil }
+
+        var parts: [String] = []
+        if !event.memoryChanges.isEmpty {
+            parts.append("新增 \(event.memoryChanges.count) 条记忆")
+        }
+        if !event.skillChanges.isEmpty {
+            parts.append("更新 \(event.skillChanges.count) 个技能")
+        }
+        return "📊 审查完成: \(parts.joined(separator: ", "))"
     }
 }

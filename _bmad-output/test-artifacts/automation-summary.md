@@ -329,3 +329,67 @@ Reaching 80% is possible, but it should be handled as a separate coverage harden
 ### Recommendation
 
 The codebase can still move toward 80%, but the next meaningful gains are no longer cheap pure-test additions. The remaining largest files cross terminal raw input, AX/helper behavior, gateway setup, and orchestration boundaries, so a responsible 80% push should first extract injectable collaborators or add explicit mock boundaries rather than exercising real system effects in unit tests.
+
+## Dependency Extraction Coverage Pass: 2026-06-13
+
+### Pre-Work Commit
+
+- User request: commit current work before dependency extraction.
+- Commit created: `4f32d33 test: extend coverage for telegram and app services`.
+- Commit-time coverage baseline for this pass: region coverage 73.23%, function coverage 74.95%, line coverage 74.15%.
+
+### Refactoring Scope
+
+- `Sources/AxionCLI/Chat/CJKInputHandler.swift`
+  - Extracted raw-mode byte handling into `CJKRawLineProcessor`.
+  - `readRawLine` now handles terminal setup/stdin reads while delegating Enter, Ctrl-C/Ctrl-D, UTF-8 echoing, backspace, unknown escape sequences, bracket paste, and max-length behavior to the pure processor.
+  - This keeps terminal I/O at the boundary and makes the state machine testable without entering raw mode or reading real stdin.
+- `Sources/AxionCLI/Commands/GatewayStartCommand+TelegramSetup.swift`
+  - Extracted Telegram allowed-user parsing, chat-id conversion, curator notification formatting, and review notification formatting into pure static helpers.
+  - The asynchronous Telegram adapter callbacks now only select a message and send it through the adapter.
+
+### Added Coverage
+
+- `Tests/AxionCLITests/Chat/CJKInputHandlerTests.swift`
+  - Added in-memory byte-stream coverage for ASCII completion, UTF-8 echo timing, full-character backspace, bracket paste start/end, unknown escape handling, Ctrl-D, and max line length.
+- `Tests/AxionCLITests/Commands/GatewayCommandTests.swift`
+  - Added pure helper coverage for Telegram whitelist parsing, numeric chat-id filtering/sorting, curator success/failure/no-change messages, and review success/failure/no-change messages.
+
+### Validation Results
+
+- Targeted CJK run:
+  - Command: `swift test --filter CJKInputHandlerTests`
+  - Result: passed, 23 tests in 1 suite.
+- Targeted Gateway run:
+  - Command: `swift test --filter GatewayCommandTests`
+  - Result: passed, 31 tests in 1 suite.
+- Full unit coverage run:
+  - Command: `swift test --no-parallel --enable-code-coverage --skip AxionHelperIntegrationTests --skip AxionCLIIntegrationTests --skip AxionE2ETests`
+  - Result: passed, 3880 tests in 251 suites.
+- Swift Testing rule:
+  - `rg -l "import XCTest" Tests` returned no matches.
+- Coverage extraction:
+  - Command: `xcrun llvm-cov report ... | tail -1`
+  - Result: region coverage 73.86%, function coverage 75.37%, line coverage 74.67%.
+
+### Coverage Delta
+
+- Dependency-extraction pass region coverage: 73.23% -> 73.86% (+0.63 percentage points).
+- Dependency-extraction pass line coverage: 74.15% -> 74.67% (+0.52 percentage points).
+- Overall region coverage from the original baseline: 70.08% -> 73.86% (+3.78 percentage points).
+- `CJKInputHandler.swift` missed regions: 99 -> 45.
+- `GatewayStartCommand+TelegramSetup.swift` missed regions: 71 -> 49.
+
+### Remaining High-Impact Gaps
+
+- `AxionCLI/Commands/ChatCommand.swift`: 207 missed regions.
+- `AxionHelper/Services/AccessibilityEngine.swift`: 90 missed regions.
+- `AxionCLI/Services/RunOrchestrator.swift`: 63 missed regions.
+- `AxionHelper/Services/AppLauncher.swift`: 59 missed regions.
+- `AxionHelper/Services/AccessibilityEngine+AXTree.swift`: 56 missed regions.
+- `AxionCLI/Commands/GatewayStartCommand+TelegramSetup.swift`: 49 missed regions.
+- `AxionCLI/Chat/CJKInputHandler.swift`: 45 missed regions.
+
+### Recommendation
+
+The next useful coverage move is to continue extracting boundary-free collaborators from `ChatCommand` and `RunOrchestrator`, then add mock-backed tests around those collaborators. The AX helper files remain high-impact, but they need protocol seams around system APIs before they can be expanded safely under the unit-test rules.
