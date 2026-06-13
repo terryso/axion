@@ -37,9 +37,14 @@ struct SlashCommandMetadataTests {
         #expect(SlashCommand.storage.acceptsArgs == true)
     }
 
+    @Test("/mcp acceptsArgs == true")
+    func mcpAcceptsArgs() {
+        #expect(SlashCommand.mcp.acceptsArgs == true)
+    }
+
     @Test("其他命令 acceptsArgs == false")
     func otherCommandsNoArgs() {
-        let noArgCommands: [SlashCommand] = [.help, .clear, .compact, .cost, .config, .exit, .newSession, .fork, .archive, .mcp]
+        let noArgCommands: [SlashCommand] = [.help, .clear, .compact, .cost, .config, .exit, .newSession, .fork, .archive]
         for cmd in noArgCommands {
             #expect(cmd.acceptsArgs == false, "\(cmd.rawValue) should not accept args")
         }

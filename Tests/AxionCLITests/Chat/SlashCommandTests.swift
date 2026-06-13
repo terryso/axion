@@ -137,6 +137,11 @@ struct SlashCommandTests {
         #expect(SlashCommand.parseArgument("/model claude-opus-4") == "claude-opus-4")
     }
 
+    @Test("parseArgument /mcp --all → --all")
+    func parseArgumentMCPAll() {
+        #expect(SlashCommand.parseArgument("/mcp --all") == "--all")
+    }
+
     // MARK: - allCases + helpText
 
     @Test("allCases count == 18")

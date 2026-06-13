@@ -157,10 +157,11 @@ struct SlashCommandE2ETests {
         }
     }
 
-    @Test("acceptsArgs only for model and resume")
+    @Test("argument-aware commands accept args")
     func acceptsArgs() {
         #expect(SlashCommand.model.acceptsArgs == true)
         #expect(SlashCommand.resume.acceptsArgs == true)
+        #expect(SlashCommand.mcp.acceptsArgs == true)
         #expect(SlashCommand.help.acceptsArgs == false)
         #expect(SlashCommand.exit.acceptsArgs == false)
     }

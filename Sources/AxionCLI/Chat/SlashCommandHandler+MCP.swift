@@ -1,6 +1,22 @@
 import Foundation
 import OpenAgentSDK
 
+struct MCPStatusEntry: Equatable, Sendable {
+    let name: String
+    let type: String
+    let source: String
+    let state: String
+    let details: [String]
+
+    var isReady: Bool {
+        state == "ready"
+    }
+
+    var isIgnored: Bool {
+        state == "ignored"
+    }
+}
+
 extension SlashCommandHandler {
 
     static func handleMCPStatus(
@@ -17,40 +33,28 @@ extension SlashCommandHandler {
             """
         }
 
-        let userServers = config.mcpServers ?? [:]
-        let entries = makeMCPStatusEntries(
-            helperPath: helperPath,
-            includePlaywright: buildConfig.includePlaywright,
-            userServers: userServers,
-            playwrightResolver: playwrightResolver
+        return MCPStatusFormatter.renderAll(
+            mcpStatusEntries(
+                config: config,
+                buildConfig: buildConfig,
+                helperPath: helperPath,
+                playwrightResolver: playwrightResolver
+            )
         )
-
-        let enabledCount = entries.filter { $0.state != "ignored" }.count
-        var lines = ["MCP servers (\(enabledCount) enabled):", ""]
-        let nameWidth = max((entries.map(\.name.count).max() ?? 0) + 2, 16)
-        let typeWidth = 7
-        let sourceWidth = 9
-
-        for entry in entries {
-            let name = entry.name.padding(toLength: nameWidth, withPad: " ", startingAt: 0)
-            let type = entry.type.padding(toLength: typeWidth, withPad: " ", startingAt: 0)
-            let source = entry.source.padding(toLength: sourceWidth, withPad: " ", startingAt: 0)
-            lines.append("  \(name)\(type)\(source)\(entry.state)")
-            for detail in entry.details {
-                lines.append("    \(detail)")
-            }
-        }
-
-        lines.append("")
-        return lines.joined(separator: "\n") + "\n"
     }
 
-    private struct MCPStatusEntry {
-        let name: String
-        let type: String
-        let source: String
-        let state: String
-        let details: [String]
+    static func mcpStatusEntries(
+        config: AxionConfig,
+        buildConfig: AgentBuilder.BuildConfig,
+        helperPath: String? = HelperPathResolver.resolveHelperPath(),
+        playwrightResolver: () -> McpServerConfig? = MCPConfigResolver.resolvePlaywrightConfig
+    ) -> [MCPStatusEntry] {
+        makeMCPStatusEntries(
+            helperPath: helperPath,
+            includePlaywright: buildConfig.includePlaywright,
+            userServers: config.mcpServers ?? [:],
+            playwrightResolver: playwrightResolver
+        )
     }
 
     private static func makeMCPStatusEntries(

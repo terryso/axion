@@ -38,6 +38,10 @@ struct ChatCommandInputRouterTests {
                 == .builtIn(command: .apps, argument: "chrome --all")
         )
         #expect(
+            ChatCommandInputRouter.route(input: "/mcp --all", resumeSessionIds: [])
+                == .builtIn(command: .mcp, argument: "--all")
+        )
+        #expect(
             ChatCommandInputRouter.route(input: "/storage large", resumeSessionIds: [])
                 == .builtIn(command: .storage, argument: "large")
         )

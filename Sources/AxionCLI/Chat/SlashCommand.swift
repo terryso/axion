@@ -78,7 +78,7 @@ enum SlashCommand: String, CaseIterable, Equatable {
         case .archive:    return "归档当前会话"      // 38.7 AC3
         case .skills:     return "列出可用技能"
         case .copy:       return "复制最后一条 AI 响应到剪贴板"
-        case .mcp:        return "查看已安装的 MCP server"
+        case .mcp:        return "浏览 MCP servers（/mcp [--all]）"
         case .apps:       return "列出可卸载 App 候选（/apps [filter|--all]）"
         case .storage:    return "存储整理入口（/storage help|scan|organize|large|undo）"
         }
@@ -96,10 +96,10 @@ enum SlashCommand: String, CaseIterable, Equatable {
     }
 
     /// 是否接受参数。
-    /// `.model` 接受模型名，`.resume` 接受会话 ID，其余不接受。
+    /// `.model` 接受模型名，`.resume` 接受会话 ID，部分列表命令接受筛选/选项参数。
     var acceptsArgs: Bool {
         switch self {
-        case .model, .resume, .apps, .storage:  return true
+        case .model, .resume, .mcp, .apps, .storage:  return true
         default:               return false
         }
     }

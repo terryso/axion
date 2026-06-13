@@ -385,6 +385,9 @@ struct ChatCommand: AsyncParsableCommand {
                     }
                     taskText = generatedTask
                     recordUserInput(generatedTask)
+                } else if cmd == .mcp {
+                    handleMCPSlash(argument: argument, config: config, buildConfig: state.buildConfig)
+                    continue
                 } else if cmd == .storage {
                     guard let generatedTask = SlashCommandHandler.buildStorageTask(argument: argument) else {
                         fputs(SlashCommandHandler.handleStorageHelp(), stderr)
@@ -895,6 +898,30 @@ struct ChatCommand: AsyncParsableCommand {
                 return nil
             }
         }
+    }
+
+    private func handleMCPSlash(
+        argument: String?,
+        config: AxionConfig,
+        buildConfig: AgentBuilder.BuildConfig
+    ) {
+        let normalized = argument?.trimmingCharacters(in: .whitespacesAndNewlines)
+        if buildConfig.dryrun || normalized == "--all" {
+            fputs(SlashCommandHandler.handleMCPStatus(config: config, buildConfig: buildConfig), stderr)
+            return
+        }
+
+        if let normalized, !normalized.isEmpty {
+            fputs("[axion] /mcp 仅支持 --all 参数\n", stderr)
+            return
+        }
+
+        let entries = SlashCommandHandler.mcpStatusEntries(config: config, buildConfig: buildConfig)
+        let prompt = MCPSelectionPrompt(
+            isTTY: isatty(STDIN_FILENO) != 0,
+            writeOutput: { fputs($0, stderr) }
+        )
+        _ = prompt.run(entries: entries)
     }
 
     private func listAppsForSlash(service: any AppListing, filter: String?, scope: AppSearchScope) async -> AppListResult? {
