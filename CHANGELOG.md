@@ -5,6 +5,20 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.13.4] - 2026-06-13
+
+### Added
+
+- **`pause_for_human` 确认门** — Chat 模式响应 SDK 的 `.system(.paused)` 事件，挂起的 agent 可通过交互式确认门恢复 / 跳过 / 终止，避免 REPL 卡死
+- **TakeoverIO 确认提示** — 新增 `displayConfirmationPrompt`，面向 AI 工具调用后的确认 / 反馈场景，支持回车继续、可选补充说明、`skip` 跳过、`abort` 终止
+- **PausedEventDecider** — 抽取纯函数 seam，把 (canResume, 用户动作) 映射为 `resume` / `interrupt` 决策，便于单测且不依赖 `Agent` / stdin / `SignalHandler`
+- **GLM 适配说明** — README 中英文均标注 Axion 全功能可通过 OpenAI Compatible Provider 跑通 GLM 大模型
+
+### Fixed
+
+- 修复 `pause_for_human` 触发后 agent 挂起在 `CheckedContinuation` 导致 `for await` 永久阻塞、用户既无法输入也无法取消的死锁
+- pause-abort 路径（经 readLine 终止）现通过 `simulateFire` 保持中断语义，避免 turn-end 误判为正常完成
+
 ## [0.13.3] - 2026-06-13
 
 ### Added

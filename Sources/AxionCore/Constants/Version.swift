@@ -1,4 +1,4 @@
 // 与 VERSION 文件同步
 public enum AxionVersion {
-    public static let current = "0.13.3"
+    public static let current = "0.13.4"
 }
