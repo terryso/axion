@@ -66,7 +66,6 @@ struct KeyHintsFormatter {
         KeyHint(key: "Enter", description: "发送"),
         KeyHint(key: "Esc", description: "清空/取消"),
         KeyHint(key: "Ctrl+C", description: "中断"),
-        KeyHint(key: "Ctrl+R", description: "搜索历史"),
         KeyHint(key: "/help", description: "命令列表"),
     ]
 
@@ -80,7 +79,6 @@ struct KeyHintsFormatter {
         ]),
         HintGroup(label: "导航", hints: [
             KeyHint(key: "↑/↓", description: "历史导航"),
-            KeyHint(key: "Ctrl+R", description: "搜索历史"),
             KeyHint(key: "Tab", description: "文件补全"),
         ]),
         HintGroup(label: "编辑", hints: [

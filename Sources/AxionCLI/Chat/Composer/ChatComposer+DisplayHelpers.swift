@@ -233,6 +233,17 @@ extension ChatComposer {
         return Int(ws.ws_col)
     }
 
+    /// 获取终端高度（行数）。
+    ///
+    /// 使用 `ioctl(TIOCGWINSZ)` 查询，fallback 到 24 行。
+    static func terminalRows() -> Int {
+        var ws = winsize()
+        guard ioctl(STDOUT_FILENO, TIOCGWINSZ, &ws) == 0, ws.ws_row > 0 else {
+            return 24
+        }
+        return Int(ws.ws_row)
+    }
+
     /// 剥离字符串中的 ANSI 转义序列。
     ///
     /// 支持 CSI (`\e[...字母`) 和 OSC (`\e]...BEL/ST`) 序列。

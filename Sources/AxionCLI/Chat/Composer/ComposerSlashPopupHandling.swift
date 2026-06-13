@@ -19,10 +19,17 @@ extension ChatComposer {
         savedDraft = ComposerDraft.snapshot(text: "", cursor: 0)
         mode = .slashPopup(query: buffer)
         selectedPopupIndex = 0
+        popupStartIndex = 0
         let theme = ensureTheme()
         let termWidth = max(1, Self.terminalColumns())
-        popupItems = SlashPopup.filter(query: buffer, context: slashContext, skills: availableSkills)
-        let rendered = SlashPopup.render(items: popupItems, selectedIndex: selectedPopupIndex, theme: theme, termWidth: termWidth)
+        popupItems = SlashPopup.filter(
+            query: buffer,
+            context: slashContext,
+            skills: availableSkills,
+            recentUsageCounts: slashUsageCounts
+        )
+        normalizeSlashPopupWindow()
+        let rendered = renderSlashPopup(theme: theme, termWidth: termWidth)
         popupRenderedLines = Self.calculatePhysicalLines(rendered: rendered, termWidth: termWidth)
         // 写入弹窗内容到输入行下方
         // 注意：raw mode 关闭了 OPOST，\n 不会自动转 \r\n，
@@ -43,15 +50,14 @@ extension ChatComposer {
         // clamp selectedPopupIndex
         let theme = ensureTheme()
         let termWidth = max(1, Self.terminalColumns())
-        popupItems = SlashPopup.filter(query: buffer, context: slashContext, skills: availableSkills)
-        if popupItems.isEmpty {
-            selectedPopupIndex = -1
-        } else if selectedPopupIndex >= popupItems.count {
-            selectedPopupIndex = popupItems.count - 1
-        } else if selectedPopupIndex < 0 {
-            selectedPopupIndex = 0
-        }
-        let rendered = SlashPopup.render(items: popupItems, selectedIndex: selectedPopupIndex, theme: theme, termWidth: termWidth)
+        popupItems = SlashPopup.filter(
+            query: buffer,
+            context: slashContext,
+            skills: availableSkills,
+            recentUsageCounts: slashUsageCounts
+        )
+        normalizeSlashPopupWindow()
+        let rendered = renderSlashPopup(theme: theme, termWidth: termWidth)
         let newLines = Self.calculatePhysicalLines(rendered: rendered, termWidth: termWidth)
 
         // 清除旧 popup 输出
@@ -70,7 +76,8 @@ extension ChatComposer {
     mutating func refreshSlashPopupRender(prompt: String) {
         let theme = ensureTheme()
         let termWidth = max(1, Self.terminalColumns())
-        let rendered = SlashPopup.render(items: popupItems, selectedIndex: selectedPopupIndex, theme: theme, termWidth: termWidth)
+        normalizeSlashPopupWindow()
+        let rendered = renderSlashPopup(theme: theme, termWidth: termWidth)
         let newLines = Self.calculatePhysicalLines(rendered: rendered, termWidth: termWidth)
 
         clearPopupOutput()
@@ -86,12 +93,12 @@ extension ChatComposer {
 
     /// 补全选中的命令/skill — AC5。
     /// 返回补全的 SlashPopupItemKind（nil 表示无匹配）。
-    mutating func completeSelected() -> SlashPopupItemKind? {
+    mutating func completeSelected(addArgumentSpace: Bool = true) -> SlashPopupItemKind? {
         let idx = selectedPopupIndex
         guard idx >= 0 && idx < popupItems.count else { return nil }
         let kind = popupItems[idx].kind
         buffer = kind.displayName
-        if kind.acceptsArgs {
+        if addArgumentSpace && kind.acceptsArgs {
             buffer += " "
         }
         cursor = buffer.count
@@ -102,6 +109,7 @@ extension ChatComposer {
     mutating func cancelSlashPopup(prompt: String) {
         clearPopupOutput()
         popupRenderedLines = 0
+        popupStartIndex = 0
         if let draft = savedDraft {
             let restored = draft.restore()
             buffer = restored.text
@@ -115,6 +123,46 @@ extension ChatComposer {
     /// 清除 popup 渲染的终端输出（上移 + 清行）。
     func clearPopupOutput() {
         clearRenderedOutput(lineCount: popupRenderedLines)
+    }
+
+    /// Slash popup 的可视窗口大小。保留几行给 prompt 和滚动安全区，避免候选列表刷满终端。
+    static func slashPopupVisibleItemLimit() -> Int {
+        max(1, min(20, max(1, terminalRows() - 4)))
+    }
+
+    mutating func normalizeSlashPopupWindow() {
+        let pageSize = Self.slashPopupVisibleItemLimit()
+        if popupItems.isEmpty {
+            selectedPopupIndex = -1
+            popupStartIndex = 0
+            return
+        }
+
+        if selectedPopupIndex < 0 {
+            selectedPopupIndex = 0
+        } else if selectedPopupIndex >= popupItems.count {
+            selectedPopupIndex = popupItems.count - 1
+        }
+
+        if selectedPopupIndex < popupStartIndex {
+            popupStartIndex = selectedPopupIndex
+        } else if selectedPopupIndex >= popupStartIndex + pageSize {
+            popupStartIndex = selectedPopupIndex - pageSize + 1
+        }
+
+        let lastStart = max(0, popupItems.count - pageSize)
+        popupStartIndex = min(max(0, popupStartIndex), lastStart)
+    }
+
+    func renderSlashPopup(theme: ChatTheme, termWidth: Int) -> String {
+        SlashPopup.render(
+            items: popupItems,
+            selectedIndex: selectedPopupIndex,
+            theme: theme,
+            termWidth: termWidth,
+            maxItems: Self.slashPopupVisibleItemLimit(),
+            startIndex: popupStartIndex
+        )
     }
 
     // MARK: - Slash Popup Event Dispatch
@@ -155,7 +203,7 @@ extension ChatComposer {
 
         // AC5: Tab → 仅补全名称，始终留在编辑模式
         case .tab:
-            if let _ = completeSelected() {
+            if let _ = completeSelected(addArgumentSpace: true) {
                 clearPopupOutput()
                 popupRenderedLines = 0
                 mode = .normal
@@ -165,18 +213,14 @@ extension ChatComposer {
 
         // AC5: Enter → 补全选中项并执行
         case .enter:
-            if let completed = completeSelected() {
+            if let _ = completeSelected(addArgumentSpace: false) {
                 clearPopupOutput()
                 popupRenderedLines = 0
-                if completed.acceptsArgs {
-                    // 接受参数 → 留在编辑模式
-                    mode = .normal
-                    refreshDisplay(prompt: prompt)
-                } else {
-                    // 不接受参数 → 直接提交
-                    writeStdout("\r\n")
-                    return .returnInput(buffer)
-                }
+                popupStartIndex = 0
+                mode = .normal
+                refreshDisplay(prompt: prompt)
+                writeStdout("\r\n")
+                return .returnInput(buffer)
             } else if buffer.hasPrefix("/") {
                 // 无匹配命令但以 / 开头 — 可能是 skill，
                 // 提交输入让 REPL 的 skill 匹配逻辑处理

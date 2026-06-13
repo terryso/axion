@@ -90,7 +90,15 @@ final class AppListService: AppListing, Sendable {
         sources.append(contentsOf: fastURLs.map { ($0, .applications) })
 
         if scope == .deep {
+            // 协作式取消检查点：deep 的 spotlight（含 mdfind 3s 超时）与 homebrew 枚举最慢；
+            // 已被取消则放弃后续扫描返回空候选（调用方按 Task.isCancelled 丢弃结果）。
+            if Task.isCancelled {
+                return Self.finish(scope: scope, filter: normalizedFilter, candidates: [], protectedMatches: [], warnings: warnings)
+            }
             let spotlightURLs = await spotlightURLProvider()
+            if Task.isCancelled {
+                return Self.finish(scope: scope, filter: normalizedFilter, candidates: [], protectedMatches: [], warnings: warnings)
+            }
             let homebrewURLs = await homebrewURLProvider()
             if spotlightURLs.isEmpty {
                 warnings.append("Spotlight 未返回额外 App，已保留快速搜索结果")
@@ -107,6 +115,8 @@ final class AppListService: AppListing, Sendable {
         var protectedMatches: [AppListItem] = []
 
         for (url, source) in sources {
+            // 协作式取消检查点：每个 app 的元数据+体积处理前检查，中断时保留已收集候选直接返回。
+            if Task.isCancelled { break }
             let canonicalPath = canonicalPath(url)
             let dedupKey = deduplicationKey(url)
             guard seen.insert(dedupKey).inserted else { continue }
@@ -138,11 +148,22 @@ final class AppListService: AppListing, Sendable {
             }
         }
 
-        return AppListResult(
+        return Self.finish(
+            scope: scope, filter: normalizedFilter,
+            candidates: candidates, protectedMatches: protectedMatches, warnings: warnings
+        )
+    }
+
+    /// 构造扫描结果（list 正常完成与取消 early-return 复用）。
+    private static func finish(
+        scope: AppSearchScope, filter: String?, candidates: [AppListItem],
+        protectedMatches: [AppListItem], warnings: [String]
+    ) -> AppListResult {
+        AppListResult(
             scope: scope,
-            filter: normalizedFilter,
-            candidates: Self.sort(candidates),
-            protectedMatches: Self.sort(protectedMatches),
+            filter: filter,
+            candidates: sort(candidates),
+            protectedMatches: sort(protectedMatches),
             warnings: warnings,
             deepSearchAvailable: scope == .fast
         )

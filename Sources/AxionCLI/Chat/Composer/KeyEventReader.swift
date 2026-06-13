@@ -4,7 +4,7 @@ import Darwin
 ///
 /// 职责：
 /// 1. termios raw mode 进入/恢复
-/// 2. 逐字节读取 + ANSI escape sequence 解析（Up/Down/Ctrl+R 等）
+/// 2. 逐字节读取 + ANSI escape sequence 解析（Up/Down 等）
 /// 3. UTF-8 多字节字符边界处理
 /// 4. Bracket paste 序列检测
 /// 5. 非 TTY 检测（`isatty()` → 返回 `.eof`）

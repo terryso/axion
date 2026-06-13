@@ -216,7 +216,7 @@ struct ChatComposerTests {
         #expect(result == "y")
     }
 
-    @Test("AC4: Ctrl+R 不吞键")
+    @Test("Ctrl+R 未绑定时忽略并继续输入")
     func ctrlRNotSwallowed() {
         var ctx = makeComposer(events: [
             .ctrl("r"),

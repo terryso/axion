@@ -51,16 +51,18 @@ struct SlashPopup {
 
     // MARK: - Filter (AC2/AC3)
 
-    /// 过滤命令+skill 列表 — 大小写不敏感前缀匹配 + 精确匹配优先。
+    /// 过滤命令+skill 列表 — 大小写不敏感模糊匹配 + 最近使用优先。
     /// - Parameters:
     ///   - query: 用户输入（含前导 `/`，如 `"/re"`）
     ///   - context: 当前上下文（用于过滤不可用命令）
     ///   - skills: 可用 skill 列表（默认空，向后兼容）
+    ///   - recentUsageCounts: 最近 slash token 使用次数，key 为小写命令/skill 名（含 `/`）
     /// - Returns: 匹配的列表项（已排序）
     static func filter(
         query: String,
         context: SlashCommandContext = SlashCommandContext(isAgentBusy: false, isSideSession: false),
-        skills: [SkillInfo] = []
+        skills: [SkillInfo] = [],
+        recentUsageCounts: [String: Int] = [:]
     ) -> [SlashPopupItem] {
         let availableCommands = context.filter(SlashCommand.allCases)
         // AC7: agent 忙碌时 skill 不可用
@@ -69,74 +71,197 @@ struct SlashPopup {
         let searchText = String(query.dropFirst())  // 去掉前导 "/"
 
         guard !searchText.isEmpty else {
-            // 只有 "/" → 返回所有可用命令 + skill，混合按 displayName 排序
+            // 只有 "/" → 返回所有可用命令 + skill，按最近 7 天使用次数排序
             let cmdItems = availableCommands.map { SlashPopupItem(kind: .command($0), matchRange: nil) }
             let skillItems = availableSkills.map { SlashPopupItem(kind: .skill($0), matchRange: nil) }
-            return (cmdItems + skillItems).sorted { $0.kind.displayName < $1.kind.displayName }
+            return (cmdItems + skillItems).sorted {
+                compareEmptyQuery($0, $1, recentUsageCounts: recentUsageCounts)
+            }
         }
 
-        let lowerQuery = searchText.lowercased()
-        let lowerQuerySlash = "/" + lowerQuery
-        var items: [SlashPopupItem] = []
+        var scoredItems: [(item: SlashPopupItem, score: Int)] = []
 
         // 匹配命令
         for cmd in availableCommands {
-            for name in cmd.allNames {
-                guard name.lowercased().hasPrefix(lowerQuerySlash) else { continue }
-
-                if name == cmd.rawValue {
-                    // rawValue 匹配 — 计算 matchRange 用于高亮
-                    let start = cmd.rawValue.index(cmd.rawValue.startIndex, offsetBy: 1)  // skip "/"
-                    let end = cmd.rawValue.index(start, offsetBy: min(searchText.count, cmd.rawValue.count - 1))
-                    let range: Range<String.Index>? = (end <= cmd.rawValue.endIndex) ? start..<end : nil
-                    items.append(SlashPopupItem(kind: .command(cmd), matchRange: range))
-                } else {
-                    // 别名匹配 — matchRange 为 nil（别名不在 rawValue 中）
-                    items.append(SlashPopupItem(kind: .command(cmd), matchRange: nil))
-                }
-                break  // 一个名称匹配即可，避免重复添加
+            if let match = bestMatch(
+                displayName: cmd.rawValue,
+                aliases: cmd.aliases.map { "/\($0)" },
+                searchText: searchText
+            ) {
+                scoredItems.append((
+                    item: SlashPopupItem(kind: .command(cmd), matchRange: match.range),
+                    score: match.score
+                ))
             }
         }
 
-        // 匹配 skill（AC2/AC4: 前缀匹配 name + aliases）
+        // 匹配 skill（AC2/AC4: 模糊匹配 name + aliases）
         for skill in availableSkills {
             let skillDisplayName = "/\(skill.name)"
-            let allSkillNames = [skillDisplayName] + skill.aliases.map { "/\($0)" }
-
-            for name in allSkillNames {
-                guard name.lowercased().hasPrefix(lowerQuerySlash) else { continue }
-
-                if name == skillDisplayName {
-                    // name 匹配 — 计算 matchRange
-                    let start = skillDisplayName.index(skillDisplayName.startIndex, offsetBy: 1)  // skip "/"
-                    let end = skillDisplayName.index(start, offsetBy: min(searchText.count, skillDisplayName.count - 1))
-                    let range: Range<String.Index>? = (end <= skillDisplayName.endIndex) ? start..<end : nil
-                    items.append(SlashPopupItem(kind: .skill(skill), matchRange: range))
-                } else {
-                    // 别名匹配
-                    items.append(SlashPopupItem(kind: .skill(skill), matchRange: nil))
-                }
-                break  // AC4: 只添加一次，不因多别名重复
+            if let match = bestMatch(
+                displayName: skillDisplayName,
+                aliases: skill.aliases.map { "/\($0)" },
+                searchText: searchText
+            ) {
+                scoredItems.append((
+                    item: SlashPopupItem(kind: .skill(skill), matchRange: match.range),
+                    score: match.score
+                ))
             }
         }
 
-        // 排序：精确匹配优先，然后按 displayName 字母序
-        return items.sorted { a, b in
-            let aExact = exactMatch(kind: a.kind, query: lowerQuerySlash)
-            let bExact = exactMatch(kind: b.kind, query: lowerQuerySlash)
-            if aExact != bExact { return aExact }
-            return a.kind.displayName < b.kind.displayName
+        return scoredItems.sorted { a, b in
+            if a.score != b.score { return a.score > b.score }
+            let aUsage = recentUsageCount(for: a.item.kind, counts: recentUsageCounts)
+            let bUsage = recentUsageCount(for: b.item.kind, counts: recentUsageCounts)
+            if aUsage != bUsage { return aUsage > bUsage }
+            let aPriority = kindPriority(a.item.kind)
+            let bPriority = kindPriority(b.item.kind)
+            if aPriority != bPriority { return aPriority < bPriority }
+            return a.item.kind.displayName < b.item.kind.displayName
+        }.map(\.item)
+    }
+
+    private struct MatchResult {
+        let score: Int
+        let range: Range<String.Index>?
+    }
+
+    private static func bestMatch(
+        displayName: String,
+        aliases: [String],
+        searchText: String
+    ) -> MatchResult? {
+        var best: MatchResult?
+        let candidates = [(displayName, true)] + aliases.map { ($0, false) }
+
+        for (name, canHighlight) in candidates {
+            guard let match = fuzzyMatch(
+                name: name,
+                searchText: searchText,
+                highlightIn: canHighlight ? displayName : nil
+            ) else { continue }
+
+            if best == nil
+                || match.score > best!.score
+                || (match.score == best!.score && best!.range == nil && match.range != nil) {
+                best = match
+            }
+        }
+
+        return best
+    }
+
+    private static func fuzzyMatch(
+        name: String,
+        searchText: String,
+        highlightIn displayName: String?
+    ) -> MatchResult? {
+        let target = name.hasPrefix("/") ? String(name.dropFirst()) : name
+        let normalizedTarget = target.lowercased()
+        let normalizedSearch = searchText.lowercased()
+
+        guard !normalizedSearch.isEmpty else {
+            return MatchResult(score: 0, range: nil)
+        }
+
+        if normalizedTarget == normalizedSearch {
+            return MatchResult(
+                score: 400,
+                range: displayName.map { displayRange(in: $0, startOffset: 1, length: searchText.count) }
+            )
+        }
+
+        if normalizedTarget.hasPrefix(normalizedSearch) {
+            return MatchResult(
+                score: 300,
+                range: displayName.map { displayRange(in: $0, startOffset: 1, length: searchText.count) }
+            )
+        }
+
+        if let range = normalizedTarget.range(of: normalizedSearch) {
+            let startOffset = normalizedTarget.distance(from: normalizedTarget.startIndex, to: range.lowerBound) + 1
+            return MatchResult(
+                score: 200,
+                range: displayName.map { displayRange(in: $0, startOffset: startOffset, length: searchText.count) }
+            )
+        }
+
+        if let offsets = subsequenceOffsets(query: normalizedSearch, in: normalizedTarget) {
+            let length = offsets.end - offsets.start + 1
+            return MatchResult(
+                score: 100,
+                range: displayName.map { displayRange(in: $0, startOffset: offsets.start + 1, length: length) }
+            )
+        }
+
+        return nil
+    }
+
+    private static func subsequenceOffsets(query: String, in target: String) -> (start: Int, end: Int)? {
+        var queryIndex = query.startIndex
+        var firstOffset: Int?
+        var lastOffset: Int?
+
+        for (offset, char) in target.enumerated() {
+            guard queryIndex < query.endIndex, char == query[queryIndex] else {
+                continue
+            }
+            if firstOffset == nil { firstOffset = offset }
+            lastOffset = offset
+            queryIndex = query.index(after: queryIndex)
+            if queryIndex == query.endIndex {
+                break
+            }
+        }
+
+        guard queryIndex == query.endIndex,
+              let firstOffset,
+              let lastOffset
+        else { return nil }
+        return (firstOffset, lastOffset)
+    }
+
+    private static func displayRange(in displayName: String, startOffset: Int, length: Int) -> Range<String.Index> {
+        let lower = displayName.index(displayName.startIndex, offsetBy: min(startOffset, displayName.count))
+        let upperOffset = min(startOffset + length, displayName.count)
+        let upper = displayName.index(displayName.startIndex, offsetBy: upperOffset)
+        return lower..<upper
+    }
+
+    private static func compareEmptyQuery(
+        _ a: SlashPopupItem,
+        _ b: SlashPopupItem,
+        recentUsageCounts: [String: Int]
+    ) -> Bool {
+        let aUsage = recentUsageCount(for: a.kind, counts: recentUsageCounts)
+        let bUsage = recentUsageCount(for: b.kind, counts: recentUsageCounts)
+        if aUsage != bUsage { return aUsage > bUsage }
+        let aPriority = kindPriority(a.kind)
+        let bPriority = kindPriority(b.kind)
+        if aPriority != bPriority { return aPriority < bPriority }
+        return a.kind.displayName < b.kind.displayName
+    }
+
+    private static func recentUsageCount(for kind: SlashPopupItemKind, counts: [String: Int]) -> Int {
+        usageNames(for: kind).reduce(0) { total, name in
+            total + (counts[name.lowercased()] ?? 0)
         }
     }
 
-    /// 检查 kind 是否精确匹配查询
-    private static func exactMatch(kind: SlashPopupItemKind, query: String) -> Bool {
+    private static func usageNames(for kind: SlashPopupItemKind) -> [String] {
         switch kind {
         case .command(let cmd):
-            return cmd.allNames.contains { $0.lowercased() == query }
+            return cmd.allNames
         case .skill(let info):
-            let allNames = ["/\(info.name)"] + info.aliases.map { "/\($0)" }
-            return allNames.contains { $0.lowercased() == query }
+            return ["/\(info.name)"] + info.aliases.map { "/\($0)" }
+        }
+    }
+
+    private static func kindPriority(_ kind: SlashPopupItemKind) -> Int {
+        switch kind {
+        case .command: return 0
+        case .skill: return 1
         }
     }
 
@@ -146,13 +271,24 @@ struct SlashPopup {
     ///
     /// Claude Code 风格：左侧名称列 + 右侧描述列（最多 2 行，超出截断加 "..."）。
     /// 根据 `termWidth` 自动计算列宽和描述折行，确保行宽不超终端宽度。
-    static func render(items: [SlashPopupItem], selectedIndex: Int, theme: ChatTheme, termWidth: Int = 80) -> String {
+    static func render(
+        items: [SlashPopupItem],
+        selectedIndex: Int,
+        theme: ChatTheme,
+        termWidth: Int = 80,
+        maxItems: Int? = nil,
+        startIndex: Int = 0
+    ) -> String {
         guard !items.isEmpty else {
             return "  无匹配命令"
         }
 
+        let pageSize = max(1, maxItems ?? items.count)
+        let safeStartIndex = normalizedStartIndex(startIndex, total: items.count, pageSize: pageSize)
+        let shownItems = Array(items.dropFirst(safeStartIndex).prefix(pageSize))
+
         // 名称列宽度：displayName (ASCII) + optional " [skill]" tag
-        let nameColWidth = items.map { item in
+        let nameColWidth = shownItems.map { item in
             let nameWidth = item.kind.displayName.count
             let tagWidth = isSkillKind(item.kind) ? 9 : 0  // " [skill]"
             return nameWidth + tagWidth
@@ -163,10 +299,11 @@ struct SlashPopup {
         let descWidth = max(20, termWidth - descStartCol)
 
         var resultLines: [String] = []
-        for (index, item) in items.enumerated() {
-            let isSelected = index == selectedIndex
+        for (index, item) in shownItems.enumerated() {
+            let absoluteIndex = safeStartIndex + index
+            let isSelected = absoluteIndex == selectedIndex
             let marker = isSelected ? " \(selectedMarker) " : "   "
-            let numberField = "\(index + 1).".padding(toLength: 4, withPad: " ", startingAt: 0)
+            let numberField = "\(absoluteIndex + 1).".padding(toLength: 4, withPad: " ", startingAt: 0)
 
             // 名称（含匹配高亮）
             let displayName = item.kind.displayName
@@ -214,6 +351,12 @@ struct SlashPopup {
     private static func isSkillKind(_ kind: SlashPopupItemKind) -> Bool {
         if case .skill = kind { return true }
         return false
+    }
+
+    private static func normalizedStartIndex(_ startIndex: Int, total: Int, pageSize: Int) -> Int {
+        guard total > 0 else { return 0 }
+        let lastStart = max(0, total - pageSize)
+        return min(max(0, startIndex), lastStart)
     }
 
     private static func buildNamePart(

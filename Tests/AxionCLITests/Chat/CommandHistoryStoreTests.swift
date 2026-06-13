@@ -1,5 +1,5 @@
-import Testing
 import Foundation
+import Testing
 
 @testable import AxionCLI
 
@@ -33,6 +33,10 @@ struct CommandHistoryStoreTests {
         let obj: [String: String] = ["text": text, "ts": ts]
         let data = try! JSONSerialization.data(withJSONObject: obj, options: .sortedKeys)
         return String(data: data, encoding: .utf8)!
+    }
+
+    private func date(_ value: String) -> Date {
+        ISO8601DateFormatter().date(from: value)!
     }
 
     // MARK: - Load Tests
@@ -116,6 +120,46 @@ struct CommandHistoryStoreTests {
         // Should keep the most recent entries (cmd-100 through cmd-1099)
         #expect(result.first == "cmd-100")
         #expect(result.last == "cmd-1099")
+    }
+
+    // MARK: - Recent Slash Usage Counts
+
+    @Test("recentSlashUsageCounts counts raw slash entries from last 7 days")
+    func recentSlashUsageCounts_countsRecentSlashEntries() {
+        let content = [
+            makeJSONLine("/help", ts: "2026-06-12T10:00:00Z"),
+            makeJSONLine("/help", ts: "2026-06-12T11:00:00Z"),
+            makeJSONLine("/cost now", ts: "2026-06-12T12:00:00Z"),
+            makeJSONLine("normal prompt", ts: "2026-06-12T13:00:00Z"),
+            makeJSONLine("/help", ts: "2026-06-01T10:00:00Z"),
+        ].joined(separator: "\n")
+        let (store, _) = makeStore(initialContent: content)
+
+        let result = store.recentSlashUsageCounts(
+            filePath: "/dev/null",
+            now: date("2026-06-13T00:00:00Z")
+        )
+
+        #expect(result["/help"] == 2)
+        #expect(result["/cost"] == 1)
+        #expect(result["normal prompt"] == nil)
+    }
+
+    @Test("recentSlashUsageCounts normalizes built-in aliases")
+    func recentSlashUsageCounts_normalizesBuiltinAliases() {
+        let content = [
+            makeJSONLine("/quit", ts: "2026-06-12T10:00:00Z"),
+            makeJSONLine("/exit", ts: "2026-06-12T11:00:00Z"),
+        ].joined(separator: "\n")
+        let (store, _) = makeStore(initialContent: content)
+
+        let result = store.recentSlashUsageCounts(
+            filePath: "/dev/null",
+            now: date("2026-06-13T00:00:00Z")
+        )
+
+        #expect(result["/exit"] == 2)
+        #expect(result["/quit"] == nil)
     }
 
     // MARK: - Append Tests

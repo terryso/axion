@@ -41,7 +41,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **富 /status 面板** — 会话时长、回合数、工具使用、上下文进度条（绿/黄/红）、token 明细、预估成本
 - **会话累计成本** — 提示栏实时花费可见 + 80% 上下文阈值主动 /compact 建议
 - **会话日志** — 完整对话（用户输入、LLM 响应、工具调用）持久化到 `~/.axion/sessions/{id}.jsonl`
-- **跨会话命令历史** — 用户输入持久化到 `~/.axion/history.jsonl`，支持 Up/Down 和 Ctrl+R 跨会话搜索
+- **跨会话命令历史** — 用户输入持久化到 `~/.axion/history.jsonl`，支持 Up/Down 跨会话历史导航
 - **Shell 输出增强** — 多行输出内联显示（最多 4 行，dimmed，缩进）
 
 ### Fixed

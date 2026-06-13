@@ -3,7 +3,7 @@ import Foundation
 /// Cross-session command history persistence.
 ///
 /// Stores user input history in a JSONL file (`~/.axion/history.jsonl`) so that
-/// Up/Down arrow and Ctrl+R search work across sessions (Codex-inspired).
+/// Up/Down arrow history navigation works across sessions.
 ///
 /// **Format:** Each line is a JSON object: `{"text": "...", "ts": "ISO8601"}`
 ///
@@ -95,6 +95,37 @@ struct CommandHistoryStore: Sendable {
         return deduped.map(\.text)
     }
 
+    /// Count slash command/skill invocations within the recent time window.
+    ///
+    /// Unlike `load(filePath:)`, this intentionally uses raw history entries
+    /// instead of deduplicated history so ranking reflects actual usage.
+    func recentSlashUsageCounts(
+        filePath: String,
+        now: Date = Date(),
+        days: Int = 7
+    ) -> [String: Int] {
+        guard days > 0,
+              let content = readFile(filePath),
+              !content.isEmpty
+        else { return [:] }
+
+        let formatter = ISO8601DateFormatter()
+        let cutoff = now.addingTimeInterval(-Double(days) * 24 * 60 * 60)
+        var counts: [String: Int] = [:]
+
+        content.enumerateLines { line, _ in
+            guard let entry = HistoryEntry.fromJSON(line),
+                  let ts = formatter.date(from: entry.ts),
+                  ts >= cutoff,
+                  ts <= now,
+                  let token = Self.slashUsageToken(from: entry.text)
+            else { return }
+            counts[token, default: 0] += 1
+        }
+
+        return counts
+    }
+
     /// Append a new entry to the history file.
     func append(text: String, filePath: String) {
         let entry = HistoryEntry(text: text, ts: ISO8601DateFormatter().string(from: Date()))
@@ -160,5 +191,15 @@ struct CommandHistoryStore: Sendable {
             ) else { return nil }
             return String(data: data, encoding: .utf8)
         }
+    }
+
+    private static func slashUsageToken(from text: String) -> String? {
+        let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard let first = trimmed.split(separator: " ", maxSplits: 1).first else {
+            return nil
+        }
+        let token = String(first).lowercased()
+        guard token.hasPrefix("/") else { return nil }
+        return SlashCommand.parse(token)?.rawValue ?? token
     }
 }

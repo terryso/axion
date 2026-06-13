@@ -27,14 +27,22 @@ final class EscapeInterruptListener: @unchecked Sendable {
     private var task: Task<Void, Never>?
     private var isPaused: Bool = false
     private let onEscape: @Sendable () -> Void
+    /// 触发中断的原始按键字节集合。默认仅 ESC；扫描场景传入 [0x1B, 0x03]
+    /// 以同时捕获 raw mode 下的 Ctrl+C（ISIG 关闭后 Ctrl+C 作为 0x03 字节进入 stdin）。
+    private let interruptBytes: Set<UInt8>
     /// 信号量 — 确认 polling Task 已完全退出（解决与 readLine() 的竞争）
     private let taskStopped = DispatchSemaphore(value: 0)
 
-    /// 启动 ESC 监听。
+    /// 启动中断监听。
     ///
-    /// - Parameter onEscape: 检测到 ESC 时调用的闭包（调用 `agent.interrupt()`）。
-    init(onEscape: @escaping @Sendable () -> Void) {
+    /// - Parameters:
+    ///   - onEscape: 检测到 `interruptBytes` 中任一字节时调用的闭包（agent 路径调 `agent.interrupt()`）。
+    ///   - interruptBytes: 触发中断的原始按键字节。默认 `[0x1B]`（ESC）；扫描等场景可传入
+    ///     `[0x1B, 0x03]` 以同时捕获 raw mode 下的 Ctrl+C（ISIG 关闭后 Ctrl+C 不再产生 SIGINT，
+    ///     而是作为 `0x03` 字节进入 stdin，由本监听器统一捕获）。
+    init(onEscape: @escaping @Sendable () -> Void, interruptBytes: Set<UInt8> = [0x1B]) {
         self.onEscape = onEscape
+        self.interruptBytes = interruptBytes
 
         // 保存当前 termios
         var original = termios()
@@ -148,7 +156,7 @@ final class EscapeInterruptListener: @unchecked Sendable {
     /// 确保在恢复 canonical mode 前已无并发 stdin 读取。
     private func startPollingTask() -> Task<Void, Never> {
         let stopped = taskStopped
-        return Task<Void, Never> { [storedTermios, onEscape] in
+        return Task<Void, Never> { [storedTermios, onEscape, interruptBytes] in
             guard storedTermios else {
                 stopped.signal()
                 return
@@ -156,7 +164,7 @@ final class EscapeInterruptListener: @unchecked Sendable {
             var byte: UInt8 = 0
             while !Task.isCancelled {
                 let bytesRead = read(STDIN_FILENO, &byte, 1)
-                if bytesRead == 1 && byte == 0x1B {
+                if bytesRead == 1 && interruptBytes.contains(byte) {
                     onEscape()
                     stopped.signal()
                     return

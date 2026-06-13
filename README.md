@@ -32,7 +32,7 @@ Axion is a Swift-based AI agent that lives in your terminal. Type `axion` and st
 - **Rich Terminal Rendering** — Streaming Unicode tables, 16-language syntax highlighting, diff-colored code blocks, Markdown extensions (strikethrough, task lists, clickable links, image placeholders), file change summaries, and context progress bars
 - **Context-Aware File Editing** — Diff-based approval flow shows exactly what changes before applying. Tracks file modifications per turn with `/diff` summary
 - **Cross-run Memory** — Two complementary memory systems: App operation facts (auto-extracted from tool calls) and Universal Memory (environment knowledge + user profile)
-- **Cross-session History** — Command history persists across sessions; Up/Down and Ctrl+R search work on all past inputs
+- **Cross-session History** — Command history persists across sessions; Up/Down navigation works on past inputs
 - **Clipboard Integration** — `/copy` command copies last assistant response to clipboard (pbcopy / OSC 52 / tmux auto-fallback)
 - **SDK Skill System** — Prompt skills, recorded skills, and built-in desktop skills with dual-track lookup and skill-scoped memory
 - **Record & Replay** — Record a workflow once, replay it instantly without LLM calls
@@ -55,7 +55,7 @@ Axion is a Swift-based AI agent that lives in your terminal. Type `axion` and st
 │   ├── File Edit Approval                                       │
 │   ├── Clipboard (/copy)                                        │
 │   ├── Session Resume + Transcript                               │
-│   ├── Cross-session History (↑↓ + Ctrl+R)                      │
+│   ├── Cross-session History (↑↓)                               │
 │   ├── Prompt Bar (ctx%, cost, git branch, speed)               │
 │   └── CJK Input                                                │
 │                                                                │
@@ -262,7 +262,7 @@ The default `axion` command opens a REPL with rich terminal UX:
 - **17 slash commands** — `/help`, `/clear`, `/compact`, `/model`, `/cost`, `/diff`, `/status`, `/resume`, `/config`, `/new`, `/fork`, `/archive`, `/skills`, `/copy`, `/storage`, `/apps`, `/exit`
 - **Slash popup completion** — Type `/` for popup menu with Tab to complete; `@` for file search
 - **Multiline input** — Paste or compose multi-line prompts naturally; `\` continuation for manual line breaks
-- **Cross-session history** — Up/Down and Ctrl+R search work across sessions; history persisted to `~/.axion/history.jsonl`
+- **Cross-session history** — Up/Down navigation works across sessions; history persisted to `~/.axion/history.jsonl`
 - **Session transcript** — Full conversation (user inputs, assistant responses, tool calls) auto-saved to `~/.axion/sessions/`
 - **CJK support** — Full Chinese/Japanese/Korean input handling
 - **Startup tips** — First-run welcome message; returning users get random feature discovery tips

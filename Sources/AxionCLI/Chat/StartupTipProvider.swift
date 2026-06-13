@@ -118,7 +118,6 @@ struct StartupTipProvider {
         "/copy 将最后一条 AI 回复复制到剪贴板。",
         "/status 查看会话状态卡：时长、token 用量、工具调用统计。",
         "Tab 键自动补全文件路径，支持相对路径和模糊搜索。",
-        "Ctrl+R 搜索历史命令，支持跨会话持久化。",
         "/cost 查看当前会话的详细 token 用量和预估成本。",
         "/skills 列出所有可用技能 — 技能是无 LLM 的确定性自动化操作。",
         "Shift+Enter 或行末反斜杠续行 — 支持多行输入。",

@@ -671,13 +671,12 @@ Sources/AxionCLI/Chat/                    67 files (Epic 37+: 交互模式组件
 │   ├── ApprovalDiffPreview.swift         # 彩色 diff 预览（Edit/Write 审批）
 │   └── SessionAllowList.swift
 ├── Composer/                             # 输入编辑器组件（从 ChatComposer 分解）
-│   ├── ChatComposer.swift               # ~407 行核心 + 7 个 extension 文件
+│   ├── ChatComposer.swift               # 核心事件循环 + extension 文件
 │   ├── ChatComposer+Continuation.swift   # 续行读取 + 降级路径
 │   ├── ChatComposer+DisplayHelpers.swift # 多行感知重绘 + 光标定位
 │   ├── ComposerDraft.swift              # 编辑状态快照
 │   ├── ComposerMode.swift               # 模式枚举
 │   ├── ComposerFileSearchHandling.swift  # @ 文件搜索模式
-│   ├── ComposerHistorySearchHandling.swift # Ctrl+R 历史搜索模式
 │   ├── ComposerSlashPopupHandling.swift  # / 斜杠补全弹出层
 │   ├── ComposerHistoryNavigation.swift   # Up/Down 历史导航
 │   ├── ComposerQuickActions.swift        # Ctrl+E/Q/G 快捷操作
@@ -688,7 +687,6 @@ Sources/AxionCLI/Chat/                    67 files (Epic 37+: 交互模式组件
 │   ├── ExternalEditorLauncher.swift     # Ctrl+G 外部编辑器
 │   ├── FileSearcher.swift               # 文件搜索器
 │   ├── FileSearchPopup.swift            # 文件搜索弹出层
-│   └── HistorySearchSession.swift        # 历史搜索会话
 └── Theme/                                # 终端主题和颜色
     ├── ChatTheme.swift
     ├── TerminalColorProfile.swift

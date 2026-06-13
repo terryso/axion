@@ -48,7 +48,7 @@ struct SlashPopupTests {
     @Test("/re 过滤返回 /resume")
     func queryReReturnsResume() {
         let items = SlashPopup.filter(query: "/re")
-        #expect(items.count == 1)
+        #expect(!items.isEmpty)
         if case .command(let cmd) = items[0].kind {
             #expect(cmd == .resume)
         } else {
@@ -56,21 +56,23 @@ struct SlashPopupTests {
         }
     }
 
-    @Test("/c 返回 /clear, /compact, /cost, /config")
-    func queryCReturnsFour() {
+    @Test("/c 返回前缀和模糊匹配的命令")
+    func queryCReturnsPrefixAndFuzzyMatches() {
         let items = SlashPopup.filter(query: "/c")
         let names = items.map(\.kind.displayName)
+        #expect(names.contains("/archive"))
         #expect(names.contains("/clear"))
         #expect(names.contains("/compact"))
         #expect(names.contains("/cost"))
         #expect(names.contains("/config"))
-        #expect(items.count == 5)
+        #expect(names.contains("/copy"))
+        #expect(items.count == 6)
     }
 
     @Test("/h 返回 /help")
     func queryHReturnsHelp() {
         let items = SlashPopup.filter(query: "/h")
-        #expect(items.count == 1)
+        #expect(!items.isEmpty)
         if case .command(let cmd) = items[0].kind {
             #expect(cmd == .help)
         } else {
@@ -95,12 +97,26 @@ struct SlashPopupTests {
         #expect(items.isEmpty)
     }
 
+    @Test("模糊包含匹配 — /opy 返回 /copy")
+    func fuzzyContainsMatch() {
+        let items = SlashPopup.filter(query: "/opy")
+        let names = items.map(\.kind.displayName)
+        #expect(names == ["/copy"])
+    }
+
+    @Test("模糊子序列匹配 — /cnf 返回 /config")
+    func fuzzySubsequenceMatch() {
+        let items = SlashPopup.filter(query: "/cnf")
+        let names = items.map(\.kind.displayName)
+        #expect(names == ["/config"])
+    }
+
     // MARK: - Filter: 大小写不敏感
 
     @Test("/RE 大小写不敏感匹配 /resume")
     func caseInsensitive() {
         let items = SlashPopup.filter(query: "/RE")
-        #expect(items.count == 1)
+        #expect(!items.isEmpty)
         if case .command(let cmd) = items[0].kind {
             #expect(cmd == .resume)
         } else {
@@ -192,7 +208,7 @@ struct SlashPopupTests {
     @Test("前缀匹配时 matchRange 不为 nil")
     func matchRangeNotNil() {
         let items = SlashPopup.filter(query: "/he")
-        #expect(items.count == 1)
+        #expect(!items.isEmpty)
         #expect(items[0].matchRange != nil)
     }
 
@@ -270,6 +286,26 @@ struct SlashPopupTests {
         #expect(output.contains("无匹配命令"))
     }
 
+    @Test("render 大列表时只显示第一页 20 个候选，初始编号从 1 开始")
+    func renderLargeListShowsFirstPageOnly() {
+        let manySkills = (1...60).map {
+            SkillInfo(name: "skill-\($0)", description: "Skill \($0)", aliases: [])
+        }
+        let items = SlashPopup.filter(query: "/", skills: manySkills)
+        let output = SlashPopup.render(
+            items: items,
+            selectedIndex: 0,
+            theme: nonTTYTheme,
+            maxItems: 20,
+            startIndex: 0
+        )
+
+        #expect(output.contains("1."))
+        #expect(output.contains("20."))
+        #expect(!output.contains("21."))
+        #expect(!output.contains("49."))
+    }
+
     // MARK: - Performance (AC9)
 
     @Test("filter + render < 50ms（CaseIterable 遍历）")
@@ -297,12 +333,35 @@ struct SlashPopupTests {
         #expect(names.contains("/form-fill"))
     }
 
-    @Test("AC1: 空 '/' 查询命令和 skill 混合排序")
-    func mixedSorting() {
+    @Test("AC1: 空 '/' 查询未使用项时内置命令排在 skill 前面")
+    func unusedCommandsSortBeforeUnusedSkills() {
         let items = SlashPopup.filter(query: "/", skills: sampleSkills)
         let names = items.map(\.kind.displayName)
-        let sorted = names.sorted()
-        #expect(names == sorted)
+        #expect(names.prefix(SlashCommand.allCases.count).allSatisfy { name in
+            SlashCommand.allCases.contains { $0.rawValue == name }
+        })
+        #expect(Array(names.suffix(sampleSkills.count)) == ["/data-extract", "/form-fill", "/screenshot-analyze"])
+    }
+
+    @Test("空 '/' 查询按最近 7 天使用次数排序")
+    func emptyQuerySortsByRecentUsageCount() {
+        let items = SlashPopup.filter(
+            query: "/",
+            skills: sampleSkills,
+            recentUsageCounts: ["/screenshot-analyze": 3, "/help": 2, "/cost": 1]
+        )
+        let names = items.map(\.kind.displayName)
+        #expect(Array(names.prefix(3)) == ["/screenshot-analyze", "/help", "/cost"])
+    }
+
+    @Test("非空查询同匹配质量下按最近使用次数排序")
+    func querySortsByRecentUsageCountAfterMatchQuality() {
+        let items = SlashPopup.filter(
+            query: "/co",
+            recentUsageCounts: ["/copy": 4, "/cost": 2]
+        )
+        let names = items.map(\.kind.displayName)
+        #expect(Array(names.prefix(2)) == ["/copy", "/cost"])
     }
 
     // MARK: - Skill: 前缀过滤 (AC2)

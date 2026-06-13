@@ -96,6 +96,46 @@ struct ChatComposerSlashPopupTests {
         #expect(result == "/help")
     }
 
+    @Test("AC5: Enter 提交前把 /he 显示补全为 /help")
+    func enterDisplaysCompletedHelpBeforeSubmit() {
+        let capture = OutputCapture()
+        let reader = MockKeyReader([
+            .printable("/"),
+            .printable("h"),
+            .printable("e"),
+            .enter
+        ])
+        var composer = ChatComposer(
+            isTTY: true,
+            writeStdout: { capture.stdout += $0 },
+            writeStderr: { capture.stderr += $0 },
+            readLineFn: { nil },
+            keyReader: reader
+        )
+        let result = composer.readInput(prompt: "> ", continuationPrompt: "...> ")
+        #expect(result == "/help")
+        #expect(capture.stdout.contains("\r\u{1B}[J> /help\r\n"))
+    }
+
+    @Test("AC5: Enter 选中接受参数的 /model 也直接提交")
+    func enterSelectsModelAndSubmits() {
+        let capture = OutputCapture()
+        let reader = MockKeyReader([
+            .printable("/"),
+            .printable("m"),
+            .enter
+        ])
+        var composer = ChatComposer(
+            isTTY: true,
+            writeStdout: { capture.stdout += $0 },
+            writeStderr: { capture.stderr += $0 },
+            readLineFn: { nil },
+            keyReader: reader
+        )
+        let result = composer.readInput(prompt: "> ", continuationPrompt: "...> ")
+        #expect(result == "/model")
+    }
+
     // MARK: - AC5: Tab 补全 acceptsArgs=true → 留在编辑模式
 
     @Test("AC5: Tab 补全 /model 留空参数（acceptsArgs=true）")
@@ -140,6 +180,48 @@ struct ChatComposerSlashPopupTests {
         // Down 移到第二个，tab 补全
         // 接受 args=false 的命令 → 直接提交
         #expect(result == "/archive")
+    }
+
+    @Test("AC6: Down 后 Enter 执行选中的命令")
+    func downThenEnterSubmitsSelection() {
+        let capture = OutputCapture()
+        let reader = MockKeyReader([
+            .printable("/"),
+            .down,
+            .enter
+        ])
+        var composer = ChatComposer(
+            isTTY: true,
+            writeStdout: { capture.stdout += $0 },
+            writeStderr: { capture.stderr += $0 },
+            readLineFn: { nil },
+            keyReader: reader
+        )
+        let result = composer.readInput(prompt: "> ", continuationPrompt: "...> ")
+        #expect(result == "/archive")
+    }
+
+    @Test("AC6: 最近使用的 skill 可用 Enter 直接执行")
+    func recentSkillEnterSubmitsSelection() {
+        let capture = OutputCapture()
+        let reader = MockKeyReader([
+            .printable("/"),
+            .enter
+        ])
+        var composer = ChatComposer(
+            isTTY: true,
+            writeStdout: { capture.stdout += $0 },
+            writeStderr: { capture.stderr += $0 },
+            readLineFn: { nil },
+            keyReader: reader
+        )
+        composer.availableSkills = [
+            SkillInfo(name: "bmad-quick-dev", description: "Quick dev workflow", aliases: ["qd"])
+        ]
+        composer.slashUsageCounts = ["/bmad-quick-dev": 5]
+
+        let result = composer.readInput(prompt: "> ", continuationPrompt: "...> ")
+        #expect(result == "/bmad-quick-dev")
     }
 
     @Test("AC6: Up 在第一个位置不移动")

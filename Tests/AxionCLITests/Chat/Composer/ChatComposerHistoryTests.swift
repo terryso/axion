@@ -76,80 +76,6 @@ struct ChatComposerHistoryTests {
         #expect(result == "x")
     }
 
-    // MARK: - AC2/AC4: Ctrl+R 搜索 → Enter 采纳
-
-    @Test("AC2/AC4: Ctrl+R 进入搜索 → 输入 query → Enter 采纳")
-    func ctrlRSearchAndAccept() {
-        var (composer, capture) = makeHistoryComposer(
-            events: [
-                .ctrl("r"),
-                .printable("g"),
-                .printable("i"),
-                .printable("t"),
-                .enter
-            ],
-            history: ["hello world", "git commit", "git push"]
-        )
-        let result = composer.readInput(prompt: "> ", continuationPrompt: "...> ")
-        #expect(result == "git push")
-        #expect(capture.stderr.contains("reverse-i-search"))
-    }
-
-    // MARK: - AC5: Esc 取消恢复草稿
-
-    @Test("AC5: Ctrl+R 搜索 → Esc 取消恢复原始草稿")
-    func ctrlRCancelRestoreDraft() {
-        var (composer, _) = makeHistoryComposer(
-            events: [
-                .printable("a"),
-                .ctrl("r"),
-                .printable("h"),
-                .escape,
-                .backspace,
-                .enter
-            ],
-            history: ["hello"]
-        )
-        let result = composer.readInput(prompt: "> ", continuationPrompt: "...> ")
-        #expect(result == "")
-    }
-
-    // MARK: - AC3: 搜索无匹配
-
-    @Test("AC3: Ctrl+R 搜索无匹配 → 显示 no match")
-    func ctrlRNoMatch() {
-        var (composer, capture) = makeHistoryComposer(
-            events: [
-                .ctrl("r"),
-                .printable("z"),
-                .printable("z"),
-                .escape,
-                .enter               // Esc 恢复空 draft → enter 提交 ""
-            ],
-            history: ["hello world"]
-        )
-        let result = composer.readInput(prompt: "> ", continuationPrompt: "...> ")
-        #expect(result == "")
-        #expect(capture.stderr.contains("no match"))
-    }
-
-    // MARK: - AC3: Ctrl+R 翻页
-
-    @Test("AC3: Ctrl+R 翻页跳到更旧匹配")
-    func ctrlRPageOlder() {
-        var (composer, _) = makeHistoryComposer(
-            events: [
-                .ctrl("r"),
-                .printable("g"),
-                .ctrl("r"),
-                .enter
-            ],
-            history: ["git commit", "git push"]
-        )
-        let result = composer.readInput(prompt: "> ", continuationPrompt: "...> ")
-        #expect(result == "git commit")
-    }
-
     // MARK: - AC8: 非 TTY 降级
 
     @Test("AC8: 非 TTY 降级无快捷键")
@@ -162,38 +88,6 @@ struct ChatComposerHistoryTests {
         capture.queuedLines = ["user input"]
         let result = composer.readInput(prompt: "> ", continuationPrompt: "...> ")
         #expect(result == "user input")
-    }
-
-    // MARK: - AC5: Ctrl+C 取消搜索
-
-    @Test("AC5: Ctrl+R 搜索 → Ctrl+C 取消")
-    func ctrlRCancelWithCtrlC() {
-        var (composer, _) = makeHistoryComposer(
-            events: [
-                .ctrl("r"),
-                .printable("h"),
-                .ctrl("c")
-            ],
-            history: ["hello"]
-        )
-        let result = composer.readInput(prompt: "> ", continuationPrompt: "...> ")
-        #expect(result == nil)
-    }
-
-    // MARK: - AC4: Enter 采纳搜索结果
-
-    @Test("AC4: Enter 采纳搜索结果")
-    func acceptSearchResult() {
-        var (composer, _) = makeHistoryComposer(
-            events: [
-                .ctrl("r"),
-                .printable("h"),
-                .enter
-            ],
-            history: ["hello"]
-        )
-        let result = composer.readInput(prompt: "> ", continuationPrompt: "...> ")
-        #expect(result == "hello")
     }
 
     // MARK: - AC1: 编辑操作重置历史导航

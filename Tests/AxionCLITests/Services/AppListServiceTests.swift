@@ -138,6 +138,43 @@ struct AppListServiceTests {
         #expect(result.candidates.map(\.bundleIdentifier) == ["com.example.brew"])
     }
 
+    @Test("list cooperatively cancels mid-scan, returning a partial result")
+    func listRespectsCancellation() async throws {
+        // 50 个假 URL；metadataReader/sizeReader 全 mock，无真实文件 IO。
+        let urls = (1...50).map { URL(fileURLWithPath: "/Apps/App\($0).app") }
+        let service = AppListService(
+            fastRoots: [],
+            fastURLProvider: { _ in urls },
+            spotlightURLProvider: { [] },
+            homebrewURLProvider: { [] },
+            metadataReader: { url in
+                let name = url.deletingPathExtension().lastPathComponent
+                return AppBundleMetadata(
+                    displayName: name,
+                    bundleIdentifier: "com.example.\(name.lowercased())",
+                    version: "1.0"
+                )
+            },
+            runningDetector: { _ in false },
+            // 慢体积计算：每个 app ~10ms，50 个完整扫描 ~500ms
+            sizeReader: { _ in
+                Thread.sleep(forTimeInterval: 0.01)
+                return 1024
+            }
+        )
+
+        let task = Task { await service.list(filter: nil, scope: .fast) }
+        // 让任务开始处理若干 app 后再取消（Thread.sleep 不可中断，但下一 app 前的检查点会 break）
+        try await Task.sleep(nanoseconds: 30_000_000)  // 30ms
+        task.cancel()
+
+        let result = await task.value
+
+        // 取消被尊重：未跑完全部 50 个（若取消检查点失效则 == 50）
+        #expect(task.isCancelled)
+        #expect(result.candidates.count < 50)
+    }
+
     @Test("limitedCaskroomAppURLs finds apps at cask/version level only")
     func caskroomProviderFindsVersionApps() throws {
         let root = try makeTempDir("caskroom")

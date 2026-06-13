@@ -8,13 +8,12 @@ import Foundation
 /// 3. 反斜杠续行（从 MultiLineInputReader 迁移，统一 raw mode + 降级路径）
 /// 4. Bracket paste 多行粘贴
 /// 5. Esc 清空 / 模式切换 + draft 恢复
-/// 6. 快捷键响应（Up/Down/Ctrl+R 等 — 暂不实现功能，不吞键）
+/// 6. 快捷键响应（Up/Down/Ctrl+G 等）
 ///
 /// 所有输出通过注入的 `writeStdout`/`writeStderr` 闭包（纯函数 + DI 模式）。
 ///
 /// 模式处理逻辑提取到独立 extension 文件：
 /// - `ComposerSlashPopupHandling` — 斜杠命令补全弹出层
-/// - `ComposerHistorySearchHandling` — 历史搜索模式
 /// - `ComposerFileSearchHandling` — 文件搜索模式
 /// - `ComposerHistoryNavigation` — 历史上下导航
 /// - `ComposerQuickActions` — 输入排队 + 外部编辑器
@@ -56,6 +55,8 @@ struct ChatComposer {
     var popupItems: [SlashPopupItem] = []
     /// popup 列表选中索引
     var selectedPopupIndex: Int = -1
+    /// popup 当前渲染窗口起始索引
+    var popupStartIndex: Int = 0
     /// popup 渲染占用的行数（用于清除）
     var popupRenderedLines: Int = 0
     /// 颜色主题（lazy 初始化）
@@ -65,6 +66,8 @@ struct ChatComposer {
 
     /// 可用 skill 列表（从 ChatCommand 注入）
     var availableSkills: [SkillInfo] = []
+    /// 最近 7 天 slash 命令/skill 使用次数（key 含 `/`，小写）。
+    var slashUsageCounts: [String: Int] = [:]
 
     /// 外部编辑器启动器（可注入 mock，nil 时自动创建 production 实例）。
     var injectedEditorLauncher: ExternalEditorLauncher?
@@ -99,13 +102,6 @@ struct ChatComposer {
     var historyIndex: Int = -1
     /// 浏览历史前的草稿（用于 Down 回到浏览前状态）
     var preHistoryDraft: String = ""
-
-    // MARK: - History Search State (AC2/AC3/AC4/AC5)
-
-    /// 当前历史搜索会话（nil = 不在搜索模式）
-    var searchSession: HistorySearchSession?
-    /// 搜索 footer 占用的行数（用于清除）
-    var searchFooterLines: Int = 0
 
     // MARK: - Multi-line Display State
 
@@ -212,11 +208,10 @@ struct ChatComposer {
         savedDraft = nil
         popupItems = []
         selectedPopupIndex = -1
+        popupStartIndex = 0
         popupRenderedLines = 0
         historyIndex = -1
         preHistoryDraft = ""
-        searchSession = nil
-        searchFooterLines = 0
         cachedFileResults = []
         totalFileMatches = 0
         fileSearchSelectedIndex = 0
@@ -260,12 +255,6 @@ struct ChatComposer {
                 if case .returnInput(let value) = result {
                     return value
                 }
-                continue
-            }
-
-            // AC2/AC3/AC4/AC5: historySearch 模式下拦截按键
-            if case .historySearch = mode {
-                handleHistorySearchEvent(event, prompt: prompt)
                 continue
             }
 
@@ -400,12 +389,6 @@ struct ChatComposer {
                     }
                 } else if historyIndex >= 0 {
                     navigateHistory(direction: .newer, prompt: prompt)
-                }
-
-            // AC2: Ctrl+R 进入历史搜索
-            case .ctrl("r"):
-                if !history.isEmpty {
-                    enterHistorySearch(prompt: prompt)
                 }
 
             // AC6: Ctrl+G 外部编辑器

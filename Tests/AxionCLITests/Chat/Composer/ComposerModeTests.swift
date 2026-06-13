@@ -16,12 +16,6 @@ struct ComposerModeTests {
         #expect(!mode.isNormal)
     }
 
-    @Test("historySearch 模式 isNormal 为 false")
-    func historySearchNotNormal() {
-        let mode = ComposerMode.historySearch(query: "test")
-        #expect(!mode.isNormal)
-    }
-
     @Test("fileSearch 模式 isNormal 为 false")
     func fileSearchNotNormal() {
         let mode = ComposerMode.fileSearch(query: "src")

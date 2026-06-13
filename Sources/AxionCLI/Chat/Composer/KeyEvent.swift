@@ -25,7 +25,7 @@ enum KeyEvent: Equatable {
     case right
     /// Tab 键
     case tab
-    /// Ctrl 组合键（如 Ctrl+R = .ctrl("r")）
+    /// Ctrl 组合键（如 Ctrl+G = .ctrl("g")）
     case ctrl(Character)
     /// Home 键（\x1b[1~ 或 \x1bOH 或 CSI u keycode 72）
     case home

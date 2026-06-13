@@ -34,9 +34,9 @@ struct KeyHintsFormatterTests {
 
     @Test("KeyHint.colored ansi16 profile 包含基础颜色码")
     func keyHint_colored_ansi16() {
-        let hint = KeyHintsFormatter.KeyHint(key: "Ctrl+R", description: "搜索")
+        let hint = KeyHintsFormatter.KeyHint(key: "Ctrl+C", description: "中断")
         let result = hint.colored(profile: .ansi16)
-        #expect(result.contains("[Ctrl+R]"))
+        #expect(result.contains("[Ctrl+C]"))
         #expect(result.contains("\u{1B}[36m"))  // cyan for key
     }
 
@@ -67,11 +67,12 @@ struct KeyHintsFormatterTests {
         #expect(result.contains("·"))
     }
 
-    @Test("renderInline 默认使用 coreHints（5 个快捷键）")
+    @Test("renderInline 默认使用 coreHints（4 个快捷键）")
     func renderInline_defaultHints() {
         let result = KeyHintsFormatter.renderInline(isTTY: false, colorProfile: .unknown)
         let parts = result.components(separatedBy: " · ")
-        #expect(parts.count == 5)
+        #expect(parts.count == 4)
+        #expect(!result.contains("Ctrl+R"))
     }
 
     @Test("renderInline 自定义提示列表")
@@ -133,6 +134,7 @@ struct KeyHintsFormatterTests {
         let result = KeyHintsFormatter.renderFull(isTTY: false, colorProfile: .unknown)
         #expect(result.contains("[Enter] 发送消息"))
         #expect(result.contains("[↑/↓] 历史导航"))
+        #expect(!result.contains("Ctrl+R"))
         #expect(result.contains("[Ctrl+G] 外部编辑器"))
         #expect(result.contains("[Ctrl+Q] 入队消息"))
         #expect(result.contains("[/cost] Token 用量"))

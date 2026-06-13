@@ -172,6 +172,7 @@ struct ChatCommand: AsyncParsableCommand {
 
         // Compact history file on startup if it's grown too large
         historyStore.compact(filePath: historyPath)
+        var recentSlashUsageCounts = historyStore.recentSlashUsageCounts(filePath: historyPath)
 
         // Codex-inspired startup tip — first-run welcome or random feature discovery tip
         let isFirstRun = StartupTipProvider.isFirstRun(historyFilePath: historyPath)
@@ -223,6 +224,7 @@ struct ChatCommand: AsyncParsableCommand {
 
             // Story 38.5: 同步 inputQueue 到 composer
             composer.inputQueue = inputQueue
+            composer.slashUsageCounts = recentSlashUsageCounts
 
             // AC2: 动态提示符（含上下文进度条 + 回合计数 + 累计成本 + Git 分支）
             let colorProfile = TerminalColorProfile.detect()
@@ -307,6 +309,7 @@ struct ChatCommand: AsyncParsableCommand {
                 state.sessionUserMessages.append(text)
                 // Persist to cross-session history file (Codex-inspired)
                 historyStore.append(text: text, filePath: historyPath)
+                recentSlashUsageCounts = historyStore.recentSlashUsageCounts(filePath: historyPath)
                 // Persist to session transcript (Codex-inspired session_log.rs)
                 transcriptLogger.logUserInput(text, sessionId: sessionId, dirPath: sessionsDir)
             }
@@ -790,7 +793,10 @@ struct ChatCommand: AsyncParsableCommand {
         let parsed = parseAppsArgument(argument)
         let service = AppListService()
         let detailProvider = AppDetailAnalysisService(config: config)
-        var result = await listAppsForSlash(service: service, filter: parsed.filter, scope: parsed.deep ? .deep : .fast)
+        // 首次扫描被 Esc/Ctrl+C 中断 → 回提示符，不进入选择列表
+        guard var result = await listAppsForSlash(service: service, filter: parsed.filter, scope: parsed.deep ? .deep : .fast) else {
+            return nil
+        }
 
         while true {
             let prompt = AppSelectionPrompt(
@@ -802,19 +808,48 @@ struct ChatCommand: AsyncParsableCommand {
             case .selected(let item):
                 return AppListFormatter.uninstallRequest(for: item)
             case .requestDeepSearch:
-                result = await listAppsForSlash(service: service, filter: parsed.filter, scope: .deep)
+                // 深度搜索被中断 → 回提示符
+                guard let deep = await listAppsForSlash(service: service, filter: parsed.filter, scope: .deep) else {
+                    return nil
+                }
+                result = deep
             case .cancelled, .nonTTYListOnly:
                 return nil
             }
         }
     }
 
-    private func listAppsForSlash(service: any AppListing, filter: String?, scope: AppSearchScope) async -> AppListResult {
-        if scope == .deep {
-            fputs("[axion] 正在执行 App 深度搜索...\n", stderr)
+    private func listAppsForSlash(service: any AppListing, filter: String?, scope: AppSearchScope) async -> AppListResult? {
+        // 扫描期间显示 spinner（与"思考中"同一组件），非 TTY 自跳过。
+        // fast 用 200ms 延迟避免秒级扫描闪烁；deep 恒慢，立即显示。
+        let spinner = SpinnerRenderer()
+        spinner.start(
+            message: scope == .deep ? "正在深度搜索 App" : "正在扫描 App",
+            delayMs: scope == .deep ? 0 : 200
+        )
+        defer { spinner.stop() }  // 安全网：stop() 幂等
+
+        // 扫描期间监听 Esc / Ctrl+C：raw mode 下 Ctrl+C 不再产生 SIGINT 而作为 0x03 字节进入 stdin，
+        // 与 Esc(0x1B) 由同一监听器统一捕获。任一中断字节 → 取消扫描 Task，放弃结果、回提示符。
+        // 不经 SignalHandler，故不污染 REPL 的中断计数/双击退出状态机。
+        let scanTask: _Concurrency.Task<AppListResult, Never> = _Concurrency.Task {
+            await service.list(filter: filter, scope: scope)
         }
+        let listener = EscapeInterruptListener(
+            onEscape: { scanTask.cancel() },
+            interruptBytes: [0x1B, 0x03]
+        )
+        defer { listener.cancel() }  // 恢复 termios + tcflush 清残留中断字节
+
         let start = Date()
-        let result = await service.list(filter: filter, scope: scope)
+        let result = await scanTask.value
+        // service.list 已在取消检查点快速 break（partial）；此处丢弃结果、回提示符。
+        if scanTask.isCancelled { return nil }
+
+        // 必须先 stop() 清行，再写完成摘要——动画帧用 \r 回行首覆写，
+        // 否则摘要与下一帧交错写到同一行会错位/残影。
+        spinner.stop()
+
         if scope == .deep {
             let elapsedMs = Int(Date().timeIntervalSince(start) * 1000)
             let warningSuffix = result.warnings.isEmpty ? "" : "，\(result.warnings.count) 条提示"
