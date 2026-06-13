@@ -140,8 +140,10 @@ struct AppListServiceTests {
 
     @Test("list cooperatively cancels mid-scan, returning a partial result")
     func listRespectsCancellation() async throws {
-        // 50 个假 URL；metadataReader/sizeReader 全 mock，无真实文件 IO。
-        let urls = (1...50).map { URL(fileURLWithPath: "/Apps/App\($0).app") }
+        // 300 个假 URL；metadataReader/sizeReader 全 mock，无真实文件 IO。
+        // 规模足够大：并行负载下 Task.sleep 可能被延迟数秒，但 300×0.02s=6s 的全量扫描
+        // 不可能在 cancel 前完成，确保 count < total（消除时序 flaky）。
+        let urls = (1...300).map { URL(fileURLWithPath: "/Apps/App\($0).app") }
         let service = AppListService(
             fastRoots: [],
             fastURLProvider: { _ in urls },
@@ -156,23 +158,24 @@ struct AppListServiceTests {
                 )
             },
             runningDetector: { _ in false },
-            // 慢体积计算：每个 app ~10ms，50 个完整扫描 ~500ms
+            // 慢体积计算：每个 app ~20ms。
             sizeReader: { _ in
-                Thread.sleep(forTimeInterval: 0.01)
+                Thread.sleep(forTimeInterval: 0.02)
                 return 1024
             }
         )
 
         let task = Task { await service.list(filter: nil, scope: .fast) }
         // 让任务开始处理若干 app 后再取消（Thread.sleep 不可中断，但下一 app 前的检查点会 break）
-        try await Task.sleep(nanoseconds: 30_000_000)  // 30ms
+        try await Task.sleep(nanoseconds: 50_000_000)  // 50ms
         task.cancel()
 
         let result = await task.value
 
-        // 取消被尊重：未跑完全部 50 个（若取消检查点失效则 == 50）
+        // 取消被尊重：count < 300（300 个全跑需 6s，cancel 在 ~50ms 后；即使 Task.sleep 并行下
+        // 延迟数秒，task 也不可能在 cancel 前跑完全部）。
         #expect(task.isCancelled)
-        #expect(result.candidates.count < 50)
+        #expect(result.candidates.count < 300)
     }
 
     @Test("limitedCaskroomAppURLs finds apps at cask/version level only")

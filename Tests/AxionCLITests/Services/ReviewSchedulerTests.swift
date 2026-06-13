@@ -595,10 +595,11 @@ struct ReviewSchedulerTests {
 
         let receivedEvent = eventBox.wait(timeout: 3)
         #expect(receivedEvent != nil)
-        #expect(receivedEvent!.success == true)
-        #expect(receivedEvent!.summary == "Review done")
-        #expect(receivedEvent!.memoryChanges == ["created memory"])
-        #expect(receivedEvent!.sessionId == "test-session")
+        guard let receivedEvent else { return }
+        #expect(receivedEvent.success == true)
+        #expect(receivedEvent.summary == "Review done")
+        #expect(receivedEvent.memoryChanges == ["created memory"])
+        #expect(receivedEvent.sessionId == "test-session")
 
         listenerTask.cancel()
     }
@@ -642,8 +643,9 @@ struct ReviewSchedulerTests {
 
         let receivedEvent = eventBox.wait(timeout: 3)
         #expect(receivedEvent != nil)
-        #expect(receivedEvent!.success == false)
-        #expect(receivedEvent!.memoryChanges.isEmpty)
+        guard let receivedEvent else { return }
+        #expect(receivedEvent.success == false)
+        #expect(receivedEvent.memoryChanges.isEmpty)
 
         listenerTask.cancel()
     }
@@ -732,8 +734,9 @@ struct ReviewSchedulerTests {
 
         let summary = scheduler.lastReviewSummaryValue
         #expect(summary != nil)
-        #expect(summary!.contains("1 条记忆"))
-        #expect(summary!.contains("1 个技能"))
+        guard let summary else { return }
+        #expect(summary.contains("1 条记忆"))
+        #expect(summary.contains("1 个技能"))
     }
 
     // MARK: - onReviewResult callback
@@ -776,9 +779,10 @@ struct ReviewSchedulerTests {
 
         let received = callbackBox.wait(timeout: 3)
         #expect(received != nil)
-        #expect(received!.success == true)
-        #expect(received!.memoryChanges == ["mem-1"])
-        #expect(received!.sessionId == "test-session")
+        guard let received else { return }
+        #expect(received.success == true)
+        #expect(received.memoryChanges == ["mem-1"])
+        #expect(received.sessionId == "test-session")
     }
 
     @Test("onReviewResult callback is invoked on review failure")
@@ -814,8 +818,9 @@ struct ReviewSchedulerTests {
 
         let received = callbackBox.wait(timeout: 3)
         #expect(received != nil)
-        #expect(received!.success == false)
-        #expect(received!.memoryChanges.isEmpty)
+        guard let received else { return }
+        #expect(received.success == false)
+        #expect(received.memoryChanges.isEmpty)
     }
 
     @Test("setOnReviewResult updates callback after init")
@@ -857,7 +862,9 @@ struct ReviewSchedulerTests {
 
         let callbackResult = callbackBox.wait(timeout: 3)
         #expect(callbackResult != nil)
-        #expect(callbackResult!.success == true)
+        // guard 避免 force-unwrap：回调超时（并行负载下偶发）会 fatalError 中断整个 test run。
+        guard let callbackResult else { return }
+        #expect(callbackResult.success == true)
     }
 
     private func makeContextWithEventBus(
