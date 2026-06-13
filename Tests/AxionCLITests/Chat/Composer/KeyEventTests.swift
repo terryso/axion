@@ -71,6 +71,23 @@ struct UTF8CharLengthTests {
 
 @Suite("KeyEventReader escape parsing")
 struct KeyEventReaderEscapeParsingTests {
+    private func readEvent(from bytes: [UInt8]) throws -> KeyEvent? {
+        var fds = [Int32](repeating: 0, count: 2)
+        #expect(pipe(&fds) == 0)
+        defer {
+            close(fds[0])
+            close(fds[1])
+        }
+
+        let bytesWritten = bytes.withUnsafeBytes { buffer in
+            write(fds[1], buffer.baseAddress, buffer.count)
+        }
+        #expect(bytesWritten == bytes.count)
+
+        let reader = KeyEventReader(original: termios(), inputFD: fds[0], storedTermios: false)
+        return reader.readNext()
+    }
+
     @Test("standalone Esc returns escape without waiting for another byte")
     func standaloneEscapeReturnsWithoutWaiting() throws {
         var fds = [Int32](repeating: 0, count: 2)
@@ -106,5 +123,56 @@ struct KeyEventReaderEscapeParsingTests {
 
         let reader = KeyEventReader(original: termios(), inputFD: fds[0], storedTermios: false)
         #expect(reader.readNext() == .up)
+    }
+
+    @Test("CSI tilde sequences parse navigation and bracket paste keys")
+    func csiTildeSequencesParseKnownKeys() throws {
+        #expect(try readEvent(from: [0x1B, 0x5B] + Array("1~".utf8)) == .home)
+        #expect(try readEvent(from: [0x1B, 0x5B] + Array("3~".utf8)) == .delete)
+        #expect(try readEvent(from: [0x1B, 0x5B] + Array("4~".utf8)) == .end)
+        #expect(try readEvent(from: [0x1B, 0x5B] + Array("200~".utf8)) == .bracketPasteStart)
+        #expect(try readEvent(from: [0x1B, 0x5B] + Array("201~".utf8)) == .bracketPasteEnd)
+    }
+
+    @Test("Unknown CSI tilde sequence preserves bytes")
+    func unknownCsiTildeSequencePreservesBytes() throws {
+        let bytes = [UInt8](arrayLiteral: 0x1B, 0x5B) + Array("999~".utf8)
+        #expect(try readEvent(from: bytes) == .unknown(bytes))
+    }
+
+    @Test("SS3 sequences parse application cursor keys")
+    func ss3SequencesParseApplicationCursorKeys() throws {
+        #expect(try readEvent(from: [0x1B, 0x4F, 0x41]) == .up)
+        #expect(try readEvent(from: [0x1B, 0x4F, 0x42]) == .down)
+        #expect(try readEvent(from: [0x1B, 0x4F, 0x43]) == .right)
+        #expect(try readEvent(from: [0x1B, 0x4F, 0x44]) == .left)
+        #expect(try readEvent(from: [0x1B, 0x4F, 0x48]) == .home)
+        #expect(try readEvent(from: [0x1B, 0x4F, 0x46]) == .end)
+    }
+
+    @Test("Unknown SS3 sequence preserves bytes")
+    func unknownSS3SequencePreservesBytes() throws {
+        #expect(try readEvent(from: [0x1B, 0x4F, 0x58]) == .unknown([0x1B, 0x4F, 0x58]))
+    }
+
+    @Test("CSI-u sequences parse printable, control, enter, and unicode keys")
+    func csiUSequencesParseKittyKeyboardProtocol() throws {
+        #expect(try readEvent(from: [0x1B, 0x5B] + Array("13u".utf8)) == .enter)
+        #expect(try readEvent(from: [0x1B, 0x5B] + Array("114;4u".utf8)) == .ctrl("r"))
+        #expect(try readEvent(from: [0x1B, 0x5B] + Array("97u".utf8)) == .printable("a"))
+        #expect(try readEvent(from: [0x1B, 0x5B] + Array("32u".utf8)) == .printable(" "))
+        #expect(try readEvent(from: [0x1B, 0x5B] + Array("20320u".utf8)) == .printable("你"))
+    }
+
+    @Test("CSI-u release event is ignored as unknown")
+    func csiUReleaseEventReturnsUnknown() throws {
+        let bytes = [UInt8](arrayLiteral: 0x1B, 0x5B) + Array("97;3;0u".utf8)
+        #expect(try readEvent(from: bytes) == .unknown(bytes))
+    }
+
+    @Test("Unknown CSI final byte preserves full sequence")
+    func unknownCsiFinalBytePreservesBytes() throws {
+        let bytes = [UInt8](arrayLiteral: 0x1B, 0x5B) + Array("12z".utf8)
+        #expect(try readEvent(from: bytes) == .unknown(bytes))
     }
 }

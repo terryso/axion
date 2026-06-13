@@ -467,6 +467,91 @@ struct TGMessageFormatterTableTests {
         #expect(result.contains("4"))
         #expect(result.contains("D"))
     }
+
+    // MARK: - Box Drawing Tables
+
+    @Test("[P1] Box drawing table rows are parsed into cells")
+    func boxDrawingRowsParseIntoCells() {
+        let cells = TGMessageFormatter.parseBoxDrawingRow("│ 名称 │ 值 │ 状态 │")
+
+        #expect(cells == ["名称", "值", "状态"])
+        #expect(TGMessageFormatter.isBoxDrawingRow("│ 名称 │ 值 │"))
+        #expect(TGMessageFormatter.isBoxDrawingRow("┃ 名称 ┃ 值 ┃"))
+        #expect(TGMessageFormatter.isBoxDrawingRow("║ 名称 ║ 值 ║"))
+        #expect(!TGMessageFormatter.isBoxDrawingRow("│ missing suffix"))
+    }
+
+    @Test("[P1] Box drawing table detection skips borders and separators")
+    func boxDrawingTableDetectionSkipsBordersAndSeparators() throws {
+        let lines = [
+            "┌──────┬──────┐",
+            "│ Name │ Val  │",
+            "├──────┼──────┤",
+            "│ CPU  │ 95%  │",
+            "│ Mem  │ 2GB  │",
+            "└──────┴──────┘",
+            "after",
+        ]
+
+        let block = try #require(TGMessageFormatter.detectBoxDrawingTable(lines: lines, startIndex: 0))
+
+        #expect(block.rows == [["Name", "Val"], ["CPU", "95%"], ["Mem", "2GB"]])
+        #expect(block.endIndex == 6)
+        #expect(TGMessageFormatter.isBoxDrawingBorder("┌────┐"))
+        #expect(TGMessageFormatter.isBoxDrawingSeparator("├────┤"))
+        #expect(TGMessageFormatter.isBoxDrawingSeparator("╠════╣"))
+    }
+
+    @Test("[P1] Box drawing table detection tolerates leading blank lines")
+    func boxDrawingTableDetectionToleratesLeadingBlanks() throws {
+        let lines = [
+            "",
+            "┌──────┬──────┐",
+            "│ A    │ B    │",
+            "│ 1    │ 2    │",
+        ]
+
+        let block = try #require(TGMessageFormatter.detectBoxDrawingTable(lines: lines, startIndex: 0))
+
+        #expect(block.rows == [["A", "B"], ["1", "2"]])
+        #expect(block.endIndex == 4)
+    }
+
+    @Test("[P1] Box drawing table detection rejects single data row")
+    func boxDrawingTableDetectionRejectsSingleRow() {
+        let lines = [
+            "┌──────┬──────┐",
+            "│ Only │ Row  │",
+            "└──────┴──────┘",
+        ]
+
+        #expect(TGMessageFormatter.detectBoxDrawingTable(lines: lines, startIndex: 0) == nil)
+    }
+
+    @Test("[P1] Display width covers CJK, kana, hangul, fullwidth, emoji, and ignorable scalars")
+    func displayWidthCoversWideScalarRanges() {
+        #expect(TGMessageFormatter.displayWidth("A") == 1)
+        #expect(TGMessageFormatter.displayWidth("你") == 2)
+        #expect(TGMessageFormatter.displayWidth("あ") == 2)
+        #expect(TGMessageFormatter.displayWidth("한") == 2)
+        #expect(TGMessageFormatter.displayWidth("Ａ") == 2)
+        #expect(TGMessageFormatter.displayWidth("😀") == 2)
+        #expect(TGMessageFormatter.displayWidth("A\u{200D}") == 1)
+    }
+
+    @Test("[P2] renderTableBlock handles empty rows and HTML escaping")
+    func renderTableBlockHandlesEmptyRowsAndHTMLEscaping() {
+        #expect(TGMessageFormatter.renderTableBlock(rows: [], mode: .plain).isEmpty)
+
+        let html = TGMessageFormatter.renderTableBlock(
+            rows: [["Name", "Value"], ["A&B", "<tag>"]],
+            mode: .html
+        )
+
+        #expect(html.contains("<pre><code>"))
+        #expect(html.contains("A&amp;B"))
+        #expect(html.contains("&lt;tag&gt;"))
+    }
 }
 
 // MARK: - Test Helpers

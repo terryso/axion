@@ -109,6 +109,101 @@ struct TGStreamingControllerTests {
         #expect(log.sentMessages[0].text == #"💻 Bash: `curl -s "wttr.in/Guangzhou?format=j1"`"#)
     }
 
+    @Test("Tool preview emoji mapping covers known categories")
+    func toolPreviewEmojiMappingCoversKnownCategories() {
+        #expect(TGStreamingController.toolEmoji("WebSearch") == "🔍")
+        #expect(TGStreamingController.toolEmoji("TerminalShell") == "💻")
+        #expect(TGStreamingController.toolEmoji("WebReader") == "🌐")
+        #expect(TGStreamingController.toolEmoji("ReadFile") == "📖")
+        #expect(TGStreamingController.toolEmoji("WriteFile") == "✍️")
+        #expect(TGStreamingController.toolEmoji("VisionImage") == "👁️")
+        #expect(TGStreamingController.toolEmoji("EditFile") == "📝")
+        #expect(TGStreamingController.toolEmoji("Screenshot") == "📸")
+        #expect(TGStreamingController.toolEmoji("UnknownTool") == "⚙️")
+    }
+
+    @Test("Tool preview extracts category-specific JSON fields")
+    func toolPreviewExtractsCategorySpecificJSONFields() {
+        #expect(TGStreamingController.extractToolPreview(
+            toolName: "WebSearch",
+            input: #"{"q":"广州天气"}"#
+        ) == "广州天气")
+        #expect(TGStreamingController.extractToolPreview(
+            toolName: "Bash",
+            input: #"{"command":"swift test"}"#
+        ) == "swift test")
+        #expect(TGStreamingController.extractToolPreview(
+            toolName: "ReadFile",
+            input: #"{"file_path":"/tmp/a.txt"}"#
+        ) == "/tmp/a.txt")
+        #expect(TGStreamingController.extractToolPreview(
+            toolName: "FetchUrl",
+            input: #"{"url":"https://example.com"}"#
+        ) == "https://example.com")
+        #expect(TGStreamingController.extractToolPreview(
+            toolName: "VisionAnalyze",
+            input: #"{"prompt":"0123456789012345678901234567890123456789-extra"}"#
+        ) == "0123456789012345678901234567890123456789")
+    }
+
+    @Test("Tool preview falls back for generic or invalid inputs")
+    func toolPreviewFallsBackForGenericOrInvalidInputs() {
+        #expect(TGStreamingController.extractToolPreview(
+            toolName: "OtherTool",
+            input: #"{"z":"","a":"first value","b":"second value"}"#
+        ) == "first value")
+        #expect(TGStreamingController.extractToolPreview(
+            toolName: "OtherTool",
+            input: #"not-json-0123456789012345678901234567890123456789-extra"#
+        ) == "not-json-0123456789012345678901234567890")
+        #expect(TGStreamingController.extractToolPreview(toolName: "OtherTool", input: nil) == nil)
+        #expect(TGStreamingController.extractToolPreview(toolName: "OtherTool", input: "") == nil)
+        #expect(TGStreamingController.extractToolPreview(
+            toolName: "OtherTool",
+            input: #"{"empty":""}"#
+        ) == nil)
+    }
+
+    @Test("Tool preview formats arguments by category")
+    func toolPreviewFormatsArgumentsByCategory() {
+        #expect(TGStreamingController.formatToolArgument(
+            toolName: "Bash",
+            input: #"{"command":"ls -la"}"#
+        ) == "`ls -la`")
+        #expect(TGStreamingController.formatToolArgument(
+            toolName: "WebSearch",
+            input: #"{"query":"coverage"}"#
+        ) == "query: coverage")
+        #expect(TGStreamingController.formatToolArgument(
+            toolName: "WebReader",
+            input: #"{"url":"https://example.com"}"#
+        ) == "url: https://example.com")
+        #expect(TGStreamingController.formatToolArgument(
+            toolName: "EditFile",
+            input: #"{"path":"Sources/App.swift"}"#
+        ) == "path: Sources/App.swift")
+        #expect(TGStreamingController.formatToolArgument(
+            toolName: "OtherTool",
+            input: #"{"value":"plain"}"#
+        ) == "plain")
+        #expect(TGStreamingController.formatToolArgument(
+            toolName: "OtherTool",
+            input: #"{"value":"   "}"#
+        ) == nil)
+    }
+
+    @Test("Tool preview step message omits empty argument")
+    func toolPreviewStepMessageOmitsEmptyArgument() {
+        #expect(TGStreamingController.formatToolStepMessage(
+            toolName: "OtherTool",
+            input: #"{"value":"plain"}"#
+        ) == "⚙️ OtherTool: plain")
+        #expect(TGStreamingController.formatToolStepMessage(
+            toolName: "OtherTool",
+            input: nil
+        ) == "⚙️ OtherTool")
+    }
+
     @Test("Tool streaming output is suppressed")
     func toolStreamingSuppressed() async {
         let log = CallLog()

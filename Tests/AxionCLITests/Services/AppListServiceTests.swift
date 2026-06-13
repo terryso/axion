@@ -435,6 +435,111 @@ struct AppListServiceTests {
         #expect(cached?.publisher == "Anthropic")
     }
 
+    @Test("app detail analysis reports parse failures without caching")
+    func appDetailAnalysisReportsParseFailure() async throws {
+        let cacheDir = try makeTempDir("analysis-parse-failure")
+        defer { cleanup(cacheDir) }
+        let cache = AppDetailAnalysisCache(cacheDir: cacheDir.path)
+        let item = AppListItem(
+            displayName: "Mystery",
+            bundleIdentifier: "com.example.mystery",
+            bundlePath: "/Applications/Mystery.app",
+            version: "1.0",
+            sizeBytes: 1,
+            isRunning: false,
+            isSystemProtected: false,
+            source: .applications
+        )
+        let service = AppDetailAnalysisService(
+            config: .default,
+            cache: cache,
+            localMetadataReader: { _ in AppDetailLocalMetadata(lastOpenedAt: nil, addedAt: nil) },
+            agentRunner: { _, _ in "not json" }
+        )
+
+        let detail = await service.detail(for: item)
+
+        #expect(detail.analysis == nil)
+        #expect(detail.analysisState == .failed("模型未返回可解析的 JSON"))
+        #expect(cache.load(for: item) == nil)
+    }
+
+    @Test("app detail analysis reports runner failures")
+    func appDetailAnalysisReportsRunnerFailure() async throws {
+        struct RunnerError: LocalizedError {
+            var errorDescription: String? { "runner failed" }
+        }
+
+        let cacheDir = try makeTempDir("analysis-runner-failure")
+        defer { cleanup(cacheDir) }
+        let item = AppListItem(
+            displayName: "Broken",
+            bundleIdentifier: "com.example.broken",
+            bundlePath: "/Applications/Broken.app",
+            version: "1.0",
+            sizeBytes: 1,
+            isRunning: false,
+            isSystemProtected: false,
+            source: .applications
+        )
+        let service = AppDetailAnalysisService(
+            config: .default,
+            cache: AppDetailAnalysisCache(cacheDir: cacheDir.path),
+            localMetadataReader: { _ in AppDetailLocalMetadata(lastOpenedAt: "last", addedAt: "added") },
+            agentRunner: { _, _ in throw RunnerError() }
+        )
+
+        let detail = await service.detail(for: item)
+
+        #expect(detail.analysis == nil)
+        #expect(detail.analysisState == .failed("runner failed"))
+        #expect(detail.localMetadata.lastOpenedAt == "last")
+        #expect(detail.localMetadata.addedAt == "added")
+    }
+
+    @Test("app detail analysis parses JSON embedded in prose and rejects invalid JSON")
+    func appDetailAnalysisParsesEmbeddedJSONAndRejectsInvalidJSON() throws {
+        let embedded = """
+        here is the result:
+        {"summary":"App","primary_use":"Work","category":"Productivity","publisher":"Vendor","confidence":"medium"}
+        thanks
+        """
+
+        let analysis = try #require(AppDetailAnalysisService.parseAnalysis(embedded, analyzedAt: "now"))
+
+        #expect(analysis.summary == "App")
+        #expect(analysis.primaryUse == "Work")
+        #expect(analysis.category == "Productivity")
+        #expect(AppDetailAnalysisService.parseAnalysis("{}", analyzedAt: "now") == nil)
+        #expect(AppDetailAnalysisService.parseAnalysis("no json", analyzedAt: "now") == nil)
+    }
+
+    @Test("app detail prompt sanitizes untrusted metadata")
+    func appDetailPromptSanitizesUntrustedMetadata() {
+        let item = AppListItem(
+            displayName: "Bad\nApp\u{1B}[31m",
+            bundleIdentifier: "com.example.bad",
+            bundlePath: "/Applications/Bad.app\rInjected",
+            version: "1.0\n2.0",
+            sizeBytes: 1,
+            isRunning: true,
+            isSystemProtected: false,
+            source: .spotlight
+        )
+
+        let prompt = AppDetailAnalysisService.prompt(
+            for: item,
+            localMetadata: AppDetailLocalMetadata(lastOpenedAt: "last", addedAt: nil)
+        )
+
+        #expect(prompt.contains("display_name: Bad App"))
+        #expect(prompt.contains("path: /Applications/Bad.app Injected"))
+        #expect(prompt.contains("running: true"))
+        #expect(prompt.contains("added_at: unknown"))
+        #expect(!prompt.contains("Bad\nApp"))
+        #expect(!prompt.contains("\u{1B}"))
+    }
+
     @Test("formatter hides deep search key once deep search is active")
     func formatterHidesDeepSearchKeyWhenUnavailable() {
         let item = AppListItem(
@@ -501,5 +606,42 @@ struct AppListServiceTests {
         )
         let url = URL(fileURLWithPath: "/Applications/Self Service.app")
         #expect(AppListService.defaultManagedDetector(url: url, metadata: metadata))
+    }
+
+    @Test("default homebrew provider includes HOMEBREW_PREFIX caskroom apps")
+    func defaultHomebrewProviderIncludesEnvironmentPrefix() throws {
+        let root = try makeTempDir("homebrew-prefix")
+        defer { cleanup(root) }
+        let version = root
+            .appendingPathComponent("Caskroom", isDirectory: true)
+            .appendingPathComponent("example", isDirectory: true)
+            .appendingPathComponent("1.0", isDirectory: true)
+        let app = try makeApp(root: version, name: "EnvApp", bundleId: "com.example.env")
+
+        let apps = AppListService.defaultHomebrewCaskAppURLs(environment: ["HOMEBREW_PREFIX": root.path])
+
+        #expect(apps.contains(app))
+    }
+
+    @Test("default metadata reader falls back to bundle version and path name")
+    func defaultMetadataReaderUsesFallbacks() throws {
+        let root = try makeTempDir("metadata")
+        defer { cleanup(root) }
+        let app = root.appendingPathComponent("FallbackName.app", isDirectory: true)
+        let contents = app.appendingPathComponent("Contents", isDirectory: true)
+        try FileManager.default.createDirectory(at: contents, withIntermediateDirectories: true)
+        let plist: [String: Any] = [
+            "CFBundleIdentifier": "com.example.fallback",
+            "CFBundleVersion": "42",
+            "CFBundlePackageType": "APPL",
+        ]
+        let data = try PropertyListSerialization.data(fromPropertyList: plist, format: .xml, options: 0)
+        try data.write(to: contents.appendingPathComponent("Info.plist"))
+
+        let metadata = try #require(AppListService.defaultMetadataReader(url: app))
+
+        #expect(metadata.displayName == "FallbackName")
+        #expect(metadata.bundleIdentifier == "com.example.fallback")
+        #expect(metadata.version == "42")
     }
 }

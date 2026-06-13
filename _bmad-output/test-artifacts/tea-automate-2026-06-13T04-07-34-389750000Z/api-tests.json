@@ -1,0 +1,15 @@
+{
+  "success": true,
+  "subagent": "api-tests",
+  "tests": [],
+  "fixture_needs": [],
+  "knowledge_fragments_used": [
+    "api-request",
+    "data-factories",
+    "selective-testing"
+  ],
+  "provider_scrutiny": "not_applicable",
+  "provider_files_read": [],
+  "test_count": 0,
+  "summary": "No API endpoint tests generated because Step 2 selected terminal/backend unit coverage for the recent slash command UX changes."
+}

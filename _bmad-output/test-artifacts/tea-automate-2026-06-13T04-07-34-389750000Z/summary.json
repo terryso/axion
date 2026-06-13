@@ -1,0 +1,38 @@
+{
+  "detected_stack": "backend",
+  "total_tests": 4,
+  "api_tests": 0,
+  "e2e_tests": 0,
+  "backend_tests": 4,
+  "fixtures_created": 0,
+  "fixture_needs_reused": [
+    "OutputCapture",
+    "MockKeyReader",
+    "in-memory CommandHistoryStore file I/O"
+  ],
+  "api_test_files": 0,
+  "e2e_test_files": 0,
+  "backend_test_files": 3,
+  "generated_files": [
+    "Tests/AxionCLITests/Chat/Composer/SlashPopupWindowTests.swift",
+    "Tests/AxionCLITests/Chat/Composer/ChatComposerSlashPopupPagingTests.swift",
+    "Tests/AxionCLITests/Chat/CommandHistoryStoreRecentUsageWindowTests.swift"
+  ],
+  "priority_coverage": {
+    "P0": 2,
+    "P1": 2,
+    "P2": 0,
+    "P3": 0
+  },
+  "knowledge_fragments_used": [
+    "api-request",
+    "data-factories",
+    "selective-testing",
+    "test-levels-framework",
+    "test-priorities-matrix",
+    "test-quality"
+  ],
+  "subagent_execution": "SEQUENTIAL (API worker then backend worker)",
+  "performance_gain": "baseline (no parallel speedup)",
+  "timestamp": "2026-06-13T04-07-34-389750000Z"
+}

@@ -1,0 +1,60 @@
+{
+  "subagentType": "backend",
+  "testsGenerated": [
+    {
+      "file": "Tests/AxionCLITests/Chat/Composer/SlashPopupWindowTests.swift",
+      "content": "import Testing\n@testable import AxionCLI\n\n@Suite(\"SlashPopup windowing\")\nstruct SlashPopupWindowTests {\n    private var nonTTYTheme: ChatTheme {\n        ChatTheme(profile: .unknown, isTTY: false)\n    }\n\n    @Test(\"P0: scrolled render window keeps absolute candidate numbering\")\n    func scrolledRenderWindowKeepsAbsoluteNumbering() {\n        let items = (1...60).map { index in\n            SlashPopupItem(\n                kind: .skill(SkillInfo(name: \"skill-\\(index)\", description: \"Skill \\(index)\", aliases: [])),\n                matchRange: nil\n            )\n        }\n\n        let output = SlashPopup.render(\n            items: items,\n            selectedIndex: 24,\n            theme: nonTTYTheme,\n            termWidth: 80,\n            maxItems: 20,\n            startIndex: 5\n        )\n        let lines = output.split(separator: \"\\n\").map(String.init)\n\n        #expect(lines.count == 20)\n        #expect(lines.first?.contains(\"6.\") == true)\n        #expect(lines.last?.contains(\"25.\") == true)\n        #expect(lines.contains { line in\n            line.contains(SlashPopup.selectedMarker)\n                && line.contains(\"25.\")\n                && line.contains(\"/skill-25\")\n        })\n    }\n\n    @Test(\"P1: empty query ranking includes skill alias recent usage\")\n    func emptyQueryRankingIncludesSkillAliasRecentUsage() {\n        let skill = SkillInfo(name: \"bmad-quick-dev\", description: \"Quick dev workflow\", aliases: [\"qd\"])\n        let items = SlashPopup.filter(\n            query: \"/\",\n            skills: [skill],\n            recentUsageCounts: [\"/qd\": 10]\n        )\n\n        #expect(items.first?.kind.displayName == \"/bmad-quick-dev\")\n    }\n}\n",
+      "description": "Unit tests for slash popup rendering windows and skill alias usage ranking",
+      "priority_coverage": {
+        "P0": 1,
+        "P1": 1,
+        "P2": 0,
+        "P3": 0
+      }
+    },
+    {
+      "file": "Tests/AxionCLITests/Chat/Composer/ChatComposerSlashPopupPagingTests.swift",
+      "content": "import Testing\n@testable import AxionCLI\n\n@Suite(\"ChatComposer slash popup paging\")\nstruct ChatComposerSlashPopupPagingTests {\n    @Test(\"P0: Down beyond first popup page and Enter submits selected absolute item\")\n    func downBeyondFirstPageEnterSubmitsAbsoluteSelection() {\n        let skills = (1...60).map { index in\n            SkillInfo(name: \"skill-\\(index)\", description: \"Skill \\(index)\", aliases: [])\n        }\n        let expectedItems = SlashPopup.filter(query: \"/\", skills: skills)\n        let expected = expectedItems[20].kind.displayName\n        let capture = OutputCapture()\n        let reader = MockKeyReader(\n            [.printable(\"/\")] + Array(repeating: KeyEvent.down, count: 20) + [.enter]\n        )\n        var composer = ChatComposer(\n            isTTY: true,\n            writeStdout: { capture.stdout += $0 },\n            writeStderr: { capture.stderr += $0 },\n            readLineFn: { nil },\n            keyReader: reader\n        )\n        composer.availableSkills = skills\n\n        let result = composer.readInput(prompt: \"> \", continuationPrompt: \"...> \")\n\n        #expect(result == expected)\n        #expect(capture.stdout.contains(\"21.\"))\n        #expect(capture.stdout.contains(expected))\n    }\n}\n",
+      "description": "Unit test for slash popup paging selection through ChatComposer",
+      "priority_coverage": {
+        "P0": 1,
+        "P1": 0,
+        "P2": 0,
+        "P3": 0
+      }
+    },
+    {
+      "file": "Tests/AxionCLITests/Chat/CommandHistoryStoreRecentUsageWindowTests.swift",
+      "content": "import Foundation\nimport Testing\n@testable import AxionCLI\n\n@Suite(\"CommandHistoryStore recent slash usage window\")\nstruct CommandHistoryStoreRecentUsageWindowTests {\n    final class RecentUsageMockFile: @unchecked Sendable {\n        var content: String?\n        init(content: String?) {\n            self.content = content\n        }\n    }\n\n    private func makeStore(initialContent: String?) -> CommandHistoryStore {\n        let mock = RecentUsageMockFile(content: initialContent)\n        return CommandHistoryStore(\n            readFile: { _ in mock.content },\n            appendFile: { _, line in mock.content = (mock.content ?? \"\") + line + \"\\n\" },\n            writeFile: { _, content in mock.content = content }\n        )\n    }\n\n    private func makeJSONLine(_ text: String, ts: String) -> String {\n        let obj: [String: String] = [\"text\": text, \"ts\": ts]\n        let data = try! JSONSerialization.data(withJSONObject: obj, options: .sortedKeys)\n        return String(data: data, encoding: .utf8)!\n    }\n\n    private func date(_ value: String) -> Date {\n        ISO8601DateFormatter().date(from: value)!\n    }\n\n    @Test(\"P1: usage counts include exact cutoff and exclude old or future entries\")\n    func recentSlashUsageCountsRespectsSevenDayWindow() {\n        let content = [\n            makeJSONLine(\"/help\", ts: \"2026-06-06T00:00:00Z\"),\n            makeJSONLine(\"/help\", ts: \"2026-06-05T23:59:59Z\"),\n            makeJSONLine(\"/cost\", ts: \"2026-06-13T00:00:01Z\"),\n            makeJSONLine(\"/model sonnet\", ts: \"2026-06-13T00:00:00Z\")\n        ].joined(separator: \"\\n\")\n        let store = makeStore(initialContent: content)\n\n        let result = store.recentSlashUsageCounts(\n            filePath: \"/dev/null\",\n            now: date(\"2026-06-13T00:00:00Z\"),\n            days: 7\n        )\n\n        #expect(result[\"/help\"] == 1)\n        #expect(result[\"/model\"] == 1)\n        #expect(result[\"/cost\"] == nil)\n    }\n}\n",
+      "description": "Unit test for seven-day slash usage counting window boundaries",
+      "priority_coverage": {
+        "P0": 0,
+        "P1": 1,
+        "P2": 0,
+        "P3": 0
+      }
+    }
+  ],
+  "coverageSummary": {
+    "totalTests": 4,
+    "testLevels": [
+      "unit"
+    ],
+    "fixtureNeeds": [
+      "OutputCapture",
+      "MockKeyReader",
+      "in-memory CommandHistoryStore file I/O"
+    ]
+  },
+  "status": "complete",
+  "success": true,
+  "subagent": "backend-tests",
+  "knowledge_fragments_used": [
+    "test-levels-framework",
+    "test-priorities-matrix",
+    "data-factories",
+    "test-quality",
+    "selective-testing"
+  ],
+  "summary": "Generated 4 Swift Testing unit tests for slash popup paging, render numbering, skill alias usage sorting, and recent usage time-window boundaries."
+}

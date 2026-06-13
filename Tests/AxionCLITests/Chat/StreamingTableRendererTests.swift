@@ -876,6 +876,75 @@ struct StreamingTableRendererTests {
         }
     }
 
+    @Test("detail list wraps long values on soft breaks")
+    func detailListWrapsLongValuesOnSoftBreaks() {
+        let output = renderLines([
+            "| 分类 | 内容 | 大小 | 建议 |",
+            "| --- | --- | --- | --- |",
+            "| 文档 | alpha/beta/gamma delta,epsilon;zeta，需要在窄终端里折行 | 1 MB | 保留，等待人工确认后再处理 |",
+            "| 说明 | 没有软断点的超长中文内容需要强制折行避免溢出 | 2 MB | 暂缓 |",
+        ], profile: .unknown, isTTY: true, terminalWidth: 36, flushAtEnd: true)
+
+        let plain = stripANSI(output)
+        #expect(plain.contains("表格（2 行，已改为详情模式显示）"))
+        #expect(plain.contains("分类: 文档"))
+        #expect(plain.contains("alpha/beta/gamma"))
+        #expect(plain.contains("epsilon;zeta"))
+        #expect(!plain.contains("╭"))
+
+        for line in plain.components(separatedBy: "\n") where !line.isEmpty {
+            let visualWidth = testVisualWidth(line)
+            #expect(visualWidth <= 36, "Line exceeds 36 cols: \(visualWidth) — '\(line)'")
+        }
+    }
+
+    @Test("styled ANSI and OSC cells use visible width for truncation")
+    func styledANSIAndOSCCellsUseVisibleWidthForTruncation() {
+        var renderer = StreamingTableRenderer(profile: .unknown, isTTY: true, terminalWidth: 34)
+        var output = ""
+
+        let format: @Sendable (String) -> String = { value in
+            switch value {
+            case "CSI":
+                return "\u{1B}[31mCSI-styled-long-cell\u{1B}[0m"
+            case "OSC":
+                return "\u{1B}]8;;https://example.com\u{07}OSC-styled-long-cell\u{1B}]8;;\u{07}"
+            case "ESC":
+                return "\u{1B}7ESC-styled-long-cell"
+            default:
+                return value
+            }
+        }
+
+        let _ = renderer.processLine(
+            "| A | B | C |",
+            write: { output += $0 },
+            formatPlain: format
+        )
+        let _ = renderer.processLine(
+            "| --- | --- | --- |",
+            write: { output += $0 },
+            formatPlain: format
+        )
+        let _ = renderer.processLine(
+            "| CSI | OSC | ESC |",
+            write: { output += $0 },
+            formatPlain: format
+        )
+        renderer.flush(write: { output += $0 }, formatPlain: format)
+
+        let plain = stripControlSequences(output)
+        #expect(plain.contains("CSI"))
+        #expect(plain.contains("OSC"))
+        #expect(plain.contains("ESC"))
+        #expect(plain.contains("…"))
+
+        for line in plain.components(separatedBy: "\n") where !line.isEmpty {
+            let visualWidth = testVisualWidth(line)
+            #expect(visualWidth <= 34, "Line exceeds 34 cols: \(visualWidth) — '\(line)'")
+        }
+    }
+
     // MARK: - Test Helpers
 
     /// 计算视觉宽度（CJK = 2，其余 = 1）
@@ -893,5 +962,24 @@ struct StreamingTableRendererTests {
             w += isWide ? 2 : 1
         }
         return w
+    }
+
+    private func stripControlSequences(_ s: String) -> String {
+        s
+            .replacingOccurrences(
+                of: "\u{1B}\\[[0-9;?]*[ -/]*[@-~]",
+                with: "",
+                options: .regularExpression
+            )
+            .replacingOccurrences(
+                of: "\u{1B}\\].*?(\u{07}|\u{1B}\\\\)",
+                with: "",
+                options: .regularExpression
+            )
+            .replacingOccurrences(
+                of: "\u{1B}.",
+                with: "",
+                options: .regularExpression
+            )
     }
 }

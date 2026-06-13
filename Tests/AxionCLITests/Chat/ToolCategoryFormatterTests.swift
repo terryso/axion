@@ -321,6 +321,18 @@ struct ToolCategoryFormatterTests {
         #expect(!result.contains("ms"))
     }
 
+    @Test("formatCompleted formats second durations")
+    func test_formatCompleted_secondDuration() {
+        let result = ToolCategoryFormatter.formatCompleted(
+            toolName: "bash",
+            content: "",
+            isError: false,
+            durationMs: 1250,
+            isTTY: false
+        )
+        #expect(result.contains("[1.2s]"))
+    }
+
     @Test("formatCompleted with TTY includes color codes")
     func test_formatCompleted_tty() {
         let result = ToolCategoryFormatter.formatCompleted(
@@ -346,6 +358,206 @@ struct ToolCategoryFormatterTests {
             colorProfile: .trueColor
         )
         #expect(result.contains("\u{1B}[38;2;244;67;54m"))  // red for error
+    }
+
+    @Test("formatStarted TTY supports ANSI256 and ANSI16 category colors")
+    func test_formatStarted_ttyColorProfiles() {
+        let input = """
+        {"command": "ls"}
+        """
+        let ansi256 = ToolCategoryFormatter.formatStarted(
+            toolName: "bash",
+            input: input,
+            isTTY: true,
+            colorProfile: .ansi256
+        )
+        let ansi16 = ToolCategoryFormatter.formatStarted(
+            toolName: "bash",
+            input: input,
+            isTTY: true,
+            colorProfile: .ansi16
+        )
+        let unknown = ToolCategoryFormatter.formatStarted(
+            toolName: "bash",
+            input: input,
+            isTTY: true,
+            colorProfile: .unknown
+        )
+
+        #expect(ansi256.contains("\u{1B}[38;5;176m"))
+        #expect(ansi16.contains("\u{1B}[35m"))
+        #expect(!unknown.contains("\u{1B}[38;"))
+    }
+
+    @Test("formatCompleted TTY supports ANSI256, ANSI16, and unknown status colors")
+    func test_formatCompleted_ttyStatusColorProfiles() {
+        let ansi256 = ToolCategoryFormatter.formatCompleted(
+            toolName: "bash",
+            content: "",
+            isError: false,
+            durationMs: nil,
+            isTTY: true,
+            colorProfile: .ansi256
+        )
+        let ansi16Error = ToolCategoryFormatter.formatCompleted(
+            toolName: "bash",
+            content: "error",
+            isError: true,
+            durationMs: nil,
+            isTTY: true,
+            colorProfile: .ansi16
+        )
+        let unknown = ToolCategoryFormatter.formatCompleted(
+            toolName: "bash",
+            content: "",
+            isError: false,
+            durationMs: nil,
+            isTTY: true,
+            colorProfile: .unknown
+        )
+
+        #expect(ansi256.contains("\u{1B}[38;5;71m"))
+        #expect(ansi16Error.contains("\u{1B}[31m"))
+        #expect(!unknown.contains("\u{1B}[38;"))
+    }
+
+    @Test("formatCompleted shell TTY renders inline output and truncation")
+    func test_formatCompleted_shellTTYRendersOutputBlock() {
+        let content = """
+        alpha
+        beta
+        gamma
+        delta
+        epsilon
+        """
+        let result = ToolCategoryFormatter.formatCompleted(
+            toolName: "bash",
+            content: content,
+            isError: false,
+            durationMs: 1250,
+            isTTY: true,
+            colorProfile: .ansi16
+        )
+
+        #expect(result.contains("completed [1.2s]\n"))
+        #expect(result.contains("alpha"))
+        #expect(result.contains("delta"))
+        #expect(result.contains("1 more lines"))
+    }
+
+    @Test("formatCompleted shell TTY extracts stdout from JSON wrapper")
+    func test_formatCompleted_shellTTYExtractsJSONStdout() {
+        let content = """
+        {"exitCode":0,"stdout":"one\\ntwo"}
+        """
+        let result = ToolCategoryFormatter.formatCompleted(
+            toolName: "bash",
+            content: content,
+            isError: false,
+            durationMs: nil,
+            isTTY: true,
+            colorProfile: .unknown
+        )
+
+        #expect(result.contains("one"))
+        #expect(result.contains("two"))
+        #expect(!result.contains("stdout"))
+    }
+
+    @Test("formatCompleted shell TTY filters ANSI and box drawing output")
+    func test_formatCompleted_shellTTYFiltersNoise() {
+        let content = "\u{1B}[31mred\u{1B}[0m\n┌────┐\nvalue"
+        let result = ToolCategoryFormatter.formatCompleted(
+            toolName: "bash",
+            content: content,
+            isError: false,
+            durationMs: nil,
+            isTTY: true,
+            colorProfile: .unknown
+        )
+
+        #expect(result.contains("red"))
+        #expect(result.contains("value"))
+        #expect(!result.contains("31mred"))
+        #expect(!result.contains("┌────┐"))
+    }
+
+    @Test("formatCompleted search counts matches field and grep-like lines")
+    func test_formatCompleted_searchMatchCountVariants() {
+        let json = ToolCategoryFormatter.formatCompleted(
+            toolName: "grep",
+            content: #"{"matches":1}"#,
+            isError: false,
+            durationMs: nil,
+            isTTY: false
+        )
+        let lines = ToolCategoryFormatter.formatCompleted(
+            toolName: "grep",
+            content: "a.swift:10:TODO\nb.swift:20:FIXME",
+            isError: false,
+            durationMs: nil,
+            isTTY: false
+        )
+        let noCount = ToolCategoryFormatter.formatCompleted(
+            toolName: "grep",
+            content: "plain output",
+            isError: false,
+            durationMs: nil,
+            isTTY: false
+        )
+
+        #expect(json.contains("1 result"))
+        #expect(lines.contains("2 results"))
+        #expect(noCount.contains("completed"))
+    }
+
+    @Test("formatCompleted category-specific success and error labels")
+    func test_formatCompleted_categoryLabels() {
+        #expect(ToolCategoryFormatter.formatCompleted(toolName: "read", content: "", isError: true, durationMs: nil, isTTY: false).contains("read failed"))
+        #expect(ToolCategoryFormatter.formatCompleted(toolName: "write", content: "", isError: true, durationMs: nil, isTTY: false).contains("write failed"))
+        #expect(ToolCategoryFormatter.formatCompleted(toolName: "edit", content: "", isError: true, durationMs: nil, isTTY: false).contains("edit failed"))
+        #expect(ToolCategoryFormatter.formatCompleted(toolName: "grep", content: "", isError: true, durationMs: nil, isTTY: false).contains("search failed"))
+        #expect(ToolCategoryFormatter.formatCompleted(toolName: "memory_add", content: "saved", isError: false, durationMs: nil, isTTY: false).contains("ok"))
+        #expect(ToolCategoryFormatter.formatCompleted(toolName: "memory_add", content: "denied", isError: true, durationMs: nil, isTTY: false).contains("memory error"))
+        #expect(ToolCategoryFormatter.formatCompleted(toolName: "custom", content: "done", isError: false, durationMs: nil, isTTY: false).contains("completed"))
+        #expect(ToolCategoryFormatter.formatCompleted(toolName: "custom", content: "bad", isError: true, durationMs: nil, isTTY: false).contains("failed"))
+    }
+
+    @Test("formatStarted memory and default inputs use category-specific summaries")
+    func test_formatStarted_memoryAndDefaultSummaries() {
+        let memory = ToolCategoryFormatter.formatStarted(
+            toolName: "memory_add",
+            input: #"{"action":"add","domain":"global"}"#,
+            isTTY: false
+        )
+        let defaultPath = ToolCategoryFormatter.formatStarted(
+            toolName: "custom_tool",
+            input: #"{"path":"/Users/test/project/file.swift"}"#,
+            isTTY: false
+        )
+        let firstValue = ToolCategoryFormatter.formatStarted(
+            toolName: "custom_tool",
+            input: #"{"message":"hello"}"#,
+            isTTY: false
+        )
+
+        #expect(memory.contains("memory"))
+        #expect(memory.contains("add"))
+        #expect(defaultPath.contains("file.swift"))
+        #expect(firstValue.contains("hello"))
+    }
+
+    @Test("formatStarted edit counts empty old/new strings as single-line replacement")
+    func test_formatStarted_editEmptyStringsCountAsSingleLine() {
+        let input = """
+        {"file_path": "/Users/test/main.swift", "old_string": "", "new_string": ""}
+        """
+        let result = ToolCategoryFormatter.formatStarted(
+            toolName: "edit",
+            input: input,
+            isTTY: false
+        )
+        #expect(result.contains("+1/-1"))
     }
 
     // MARK: - Category Styles
