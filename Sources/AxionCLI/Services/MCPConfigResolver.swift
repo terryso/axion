@@ -11,16 +11,52 @@ enum MCPConfigResolver {
     ///   - helperPath: Resolved path to AxionHelper.app executable.
     ///   - includePlaywright: Whether to include the Playwright MCP server.
     /// - Returns: Dictionary of MCP server configs keyed by name.
-    static func resolveMCPServers(helperPath: String, includePlaywright: Bool) -> [String: McpServerConfig] {
+    static func resolveMCPServers(
+        helperPath: String,
+        includePlaywright: Bool,
+        userServers: [String: AxionMcpServerConfig]? = nil,
+        writeWarning: (String) -> Void = { message in
+            fputs("[axion] warning: \(message)\n", stderr)
+        }
+    ) -> [String: McpServerConfig] {
         var mcpServers: [String: McpServerConfig] = [
             "axion-helper": .stdio(McpStdioConfig(command: helperPath)),
         ]
-        if includePlaywright {
+
+        if userServers?["axion-helper"] != nil {
+            writeWarning("mcpServers.axion-helper is reserved and was ignored")
+        }
+
+        if let playwrightConfig = userServers?["playwright"] {
+            switch playwrightConfig {
+            case .stdio:
+                mcpServers["playwright"] = playwrightConfig.toSdkConfig()
+            case .sse, .http:
+                writeWarning("mcpServers.playwright must use type \"stdio\" and was ignored")
+            }
+        } else if includePlaywright {
             if let playwrightConfig = resolvePlaywrightConfig() {
                 mcpServers["playwright"] = playwrightConfig
             }
         }
+
+        for (name, config) in userServers ?? [:] {
+            guard name != "axion-helper", name != "playwright" else { continue }
+            guard isValidServerName(name) else {
+                writeWarning("mcpServers.\(name) has an invalid server name and was ignored")
+                continue
+            }
+            mcpServers[name] = config.toSdkConfig()
+        }
+
         return mcpServers
+    }
+
+    /// SDK MCP tools are exposed as `mcp__{serverName}__{toolName}`; `__`
+    /// inside the server name makes that namespace ambiguous and can trap.
+    static func isValidServerName(_ name: String) -> Bool {
+        !name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+            && !name.contains("__")
     }
 
     /// Resolves the Playwright MCP server configuration.

@@ -383,4 +383,72 @@ struct AxionConfigTests {
         let cfg = try JSONDecoder().decode(AxionConfig.self, from: json)
         #expect(cfg.storage.largeFileThresholdBytes == 200)
     }
+
+    // MARK: - MCP Server Config
+
+    @Test("AxionConfig mcpServers defaults to nil when absent")
+    func axionConfigMcpServersAbsentDefaultsToNil() throws {
+        let cfg = try JSONDecoder().decode(AxionConfig.self, from: Data(#"{"model":"custom"}"#.utf8))
+
+        #expect(cfg.model == "custom")
+        #expect(cfg.mcpServers == nil)
+    }
+
+    @Test("AxionConfig mcpServers decodes when present")
+    func axionConfigMcpServersDecodesWhenPresent() throws {
+        let json = """
+        {
+          "model": "custom",
+          "mcpServers": {
+            "my-server": {
+              "type": "stdio",
+              "command": "node",
+              "args": ["server.js"],
+              "env": {"FOO": "bar"}
+            }
+          }
+        }
+        """
+        let cfg = try JSONDecoder().decode(AxionConfig.self, from: Data(json.utf8))
+
+        #expect(cfg.model == "custom")
+        #expect(cfg.mcpServers?["my-server"] == .stdio(
+            command: "node",
+            args: ["server.js"],
+            env: ["FOO": "bar"]
+        ))
+    }
+
+    @Test("AxionConfig bad mcpServers degrades to nil and preserves other config")
+    func axionConfigBadMcpServersDegradesToNil() throws {
+        let json = """
+        {
+          "model": "custom",
+          "maxSteps": 42,
+          "mcpServers": {
+            "bad": {"type": "stdio"}
+          }
+        }
+        """
+        let cfg = try JSONDecoder().decode(AxionConfig.self, from: Data(json.utf8))
+
+        #expect(cfg.model == "custom")
+        #expect(cfg.maxSteps == 42)
+        #expect(cfg.mcpServers == nil)
+    }
+
+    @Test("AxionConfig mcpServers codable round trip")
+    func axionConfigMcpServersCodableRoundTrip() throws {
+        let config = AxionConfig(
+            apiKey: "key",
+            mcpServers: [
+                "sse-server": .sse(url: "http://localhost:8080/sse")
+            ]
+        )
+
+        let data = try JSONEncoder().encode(config)
+        let decoded = try JSONDecoder().decode(AxionConfig.self, from: data)
+
+        #expect(decoded.mcpServers == config.mcpServers)
+    }
 }

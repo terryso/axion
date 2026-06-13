@@ -117,7 +117,8 @@ enum AgentBuilder {
         } else {
             mcpServers = MCPConfigResolver.resolveMCPServers(
                 helperPath: helperPath,
-                includePlaywright: buildConfig.includePlaywright
+                includePlaywright: buildConfig.includePlaywright,
+                userServers: config.mcpServers
             )
         }
 

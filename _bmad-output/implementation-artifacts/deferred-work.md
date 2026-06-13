@@ -57,3 +57,7 @@
 - `SpinnerRenderer.startAnimation(message:)` 入口未 guard `isStopped` — 延迟启动（delayMs>0）路径下，若 `stop()` 在延迟 handler 已 dispatch 但未执行之间被调用，晚到的 handler 会无条件 `startAnimation` 复活一个空转的 animationTimer（每帧被 `isStopped` 拦截不写屏，但定时器已复活）。当前 `/apps` 调用方被 `defer { spinner.stop() }` 安全网完全掩盖，无可观测 bug。修复：在 `startAnimation` 首行加 `guard !isStopped else { return }`。共享组件，也保护"思考中" spinner（同样用 delayMs:500）。
 - ~~App 扫描中途不可取消 — Ctrl+C 中断深度扫描（含 mdfind 3s 超时 + homebrew 枚举）时，`AppListService.list()` 内部不检查取消、不抛错，spinner 会持续动画直到扫描自然结束。预存在的扫描不可取消性，加了 spinner 后更明显。修复需动 `service.list`（本 spec 明确 Never），建议独立 story：用 `withTaskCancellationHandler` 包裹或检查 `Task.isCancelled` 提前 break。~~ **【已解决 2026-06-13，见 spec-apps-cancel-scan：list() 加协作式取消检查点 + 扫描期间 EscapeInterruptListener 统一捕获 Esc(0x1B)/Ctrl+C(0x03)】**
 - （次要/外观）`listAppsForSlash` 中 `let start = Date()` 在 fast 路径是死代码（仅 deep 块使用）— 可移入 `if scope == .deep` 块。预存在、非本 story 引入。
+
+## Deferred from: MCP Server 用户可配置化 review (2026-06-13)
+
+- Remote MCP auth headers — `AxionMcpServerConfig.sse/http` currently accept only `url`, so authenticated SSE/HTTP MCP servers cannot be declared in `~/.axion/config.json`. Add optional `headers: [String: String]` to remote config cases and docs in a focused follow-up.

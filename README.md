@@ -480,7 +480,7 @@ AxionHelper can run as a standalone MCP server for any MCP client:
 
 ## Configuration
 
-Config file located at `~/.config/axion/config.json`:
+Config file located at `~/.axion/config.json`:
 
 ```json
 {
@@ -502,9 +502,27 @@ Config file located at `~/.config/axion/config.json`:
     "showTurnCount": true,
     "showCost": true,
     "showGitBranch": true
+  },
+  "mcpServers": {
+    "linear": {
+      "type": "stdio",
+      "command": "npx",
+      "args": ["-y", "@linear/mcp"]
+    },
+    "docs": {
+      "type": "sse",
+      "url": "http://localhost:8080/sse"
+    },
+    "playwright": {
+      "type": "stdio",
+      "command": "/usr/local/bin/node",
+      "args": ["/path/to/@playwright/mcp/cli.js", "--headless=false"]
+    }
   }
 }
 ```
+
+`mcpServers` lets Axion connect to additional MCP servers when it builds its own agent. The `axion-helper` key is reserved and always resolved internally; a custom `playwright` entry replaces Axion's automatic Playwright MCP discovery.
 
 Supports Anthropic and OpenAI Compatible providers. Config priority: defaults → config.json → environment variables → CLI flags.
 

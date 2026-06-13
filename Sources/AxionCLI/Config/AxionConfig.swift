@@ -1,3 +1,5 @@
+import Foundation
+
 import AxionCore
 
 public enum LLMProvider: String, Sendable, Equatable, Codable {
@@ -102,6 +104,7 @@ public struct AxionConfig: Equatable, Sendable {
     public var promptDisplay: PromptDisplayConfig?
     /// 存储整理配置（Story 39.1）。部分解码：缺失时回退到 `StorageConfig.default`。
     public var storage: StorageConfig
+    public var mcpServers: [String: AxionMcpServerConfig]?
 
     public static let `default` = AxionConfig(
         apiKey: nil,
@@ -137,7 +140,8 @@ public struct AxionConfig: Equatable, Sendable {
         telegramTypingInterval: nil,
         env: nil,
         promptDisplay: nil,
-        storage: .default
+        storage: .default,
+        mcpServers: nil
     )
 
     public init(
@@ -174,7 +178,8 @@ public struct AxionConfig: Equatable, Sendable {
         telegramTypingInterval: Double? = nil,
         env: [String: String]? = nil,
         promptDisplay: PromptDisplayConfig? = nil,
-        storage: StorageConfig = .default
+        storage: StorageConfig = .default,
+        mcpServers: [String: AxionMcpServerConfig]? = nil
     ) {
         self.apiKey = apiKey
         self.provider = provider
@@ -210,6 +215,7 @@ public struct AxionConfig: Equatable, Sendable {
         self.env = env
         self.promptDisplay = promptDisplay
         self.storage = storage
+        self.mcpServers = mcpServers
     }
 
     public var tgTypingEnabled: Bool { telegramTypingEnabled ?? true }
@@ -225,7 +231,7 @@ extension AxionConfig: Codable {
         case gatewayEnabled, gatewayCuratorIdleHours, gatewayCuratorIntervalHours, gatewayTaskTimeoutMinutes, gatewayNotifyCuratorResults, gatewayMemoryNudgeInterval
         case telegramBotToken, telegramChatId, telegramAllowedUsers, telegramTypingEnabled, telegramTypingInterval
         case env, promptDisplay
-        case storage
+        case storage, mcpServers
     }
 
     public init(from decoder: Decoder) throws {
@@ -264,5 +270,15 @@ extension AxionConfig: Codable {
         env = try c.decodeIfPresent([String: String].self, forKey: .env)
         promptDisplay = try c.decodeIfPresent(PromptDisplayConfig.self, forKey: .promptDisplay)
         storage = try c.decodeIfPresent(StorageConfig.self, forKey: .storage) ?? .default
+        if c.contains(.mcpServers) {
+            do {
+                mcpServers = try c.decodeIfPresent([String: AxionMcpServerConfig].self, forKey: .mcpServers)
+            } catch {
+                fputs("[axion] warning: mcpServers 解析失败已忽略: \(error.localizedDescription)\n", stderr)
+                mcpServers = nil
+            }
+        } else {
+            mcpServers = nil
+        }
     }
 }
