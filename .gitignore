@@ -37,6 +37,9 @@ default.profdata
 *.profdata
 coverage/
 
+# Test scratch directories
+StorageTestScratch/
+
 # Python bytecode
 __pycache__/
 *.pyc

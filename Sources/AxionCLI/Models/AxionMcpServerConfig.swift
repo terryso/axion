@@ -2,17 +2,17 @@ import OpenAgentSDK
 
 public enum AxionMcpServerConfig: Equatable, Sendable {
     case stdio(command: String, args: [String]?, env: [String: String]?)
-    case sse(url: String)
-    case http(url: String)
+    case sse(url: String, headers: [String: String]? = nil)
+    case http(url: String, headers: [String: String]? = nil)
 
     public func toSdkConfig() -> McpServerConfig {
         switch self {
         case let .stdio(command, args, env):
             return .stdio(McpStdioConfig(command: command, args: args, env: env))
-        case let .sse(url):
-            return .sse(McpSseConfig(url: url))
-        case let .http(url):
-            return .http(McpHttpConfig(url: url))
+        case let .sse(url, headers):
+            return .sse(McpSseConfig(url: url, headers: headers))
+        case let .http(url, headers):
+            return .http(McpHttpConfig(url: url, headers: headers))
         }
     }
 }
@@ -24,6 +24,7 @@ extension AxionMcpServerConfig: Codable {
         case args
         case env
         case url
+        case headers
     }
 
     private enum ServerType: String, Codable {
@@ -44,10 +45,12 @@ extension AxionMcpServerConfig: Codable {
             self = .stdio(command: command, args: args, env: env)
         case .sse:
             let url = try container.decode(String.self, forKey: .url)
-            self = .sse(url: url)
+            let headers = try container.decodeIfPresent([String: String].self, forKey: .headers)
+            self = .sse(url: url, headers: headers)
         case .http:
             let url = try container.decode(String.self, forKey: .url)
-            self = .http(url: url)
+            let headers = try container.decodeIfPresent([String: String].self, forKey: .headers)
+            self = .http(url: url, headers: headers)
         }
     }
 
@@ -60,12 +63,14 @@ extension AxionMcpServerConfig: Codable {
             try container.encode(command, forKey: .command)
             try container.encodeIfPresent(args, forKey: .args)
             try container.encodeIfPresent(env, forKey: .env)
-        case let .sse(url):
+        case let .sse(url, headers):
             try container.encode(ServerType.sse, forKey: .type)
             try container.encode(url, forKey: .url)
-        case let .http(url):
+            try container.encodeIfPresent(headers, forKey: .headers)
+        case let .http(url, headers):
             try container.encode(ServerType.http, forKey: .type)
             try container.encode(url, forKey: .url)
+            try container.encodeIfPresent(headers, forKey: .headers)
         }
     }
 }

@@ -41,7 +41,7 @@ context:
 |----------|---------------|----------------------------|----------------|
 | 无 mcpServers | config.json 不含该字段 | 行为与改造前一致：helper + 自动 Playwright（取决于 includePlaywright） | N/A |
 | 合法 stdio server | `{"mcpServers":{"my-server":{"type":"stdio","command":"node","args":["x.js"]}}}` | resolver 返回 `my-server` stdio 配置并透传给 AgentOptions | server 启动失败沿用 SDK 路径 |
-| 合法 sse/http server | `type` 为 `sse` 或 `http`，含 `url` | resolver 返回对应远程 MCP 配置 | SDK 连接失败沿用现有路径 |
+| 合法 sse/http server | `type` 为 `sse` 或 `http`，含 `url`，可选 `headers` | resolver 返回对应远程 MCP 配置并透传 headers | SDK 连接失败沿用现有路径 |
 | 自定义 Playwright | 用户配置 key 为 `playwright` 且类型为 `stdio` | 使用用户配置，跳过 nvm 探测 | N/A |
 | Playwright 类型错误 | 用户配置 key 为 `playwright` 但类型为 `sse`/`http` | 不启用 Playwright，也不回退自动探测 | stderr warning |
 | 保留 key 冲突 | 用户配置 key 为 `axion-helper` | 忽略用户值，继续使用内置 helperPath | stderr warning |
@@ -55,7 +55,7 @@ context:
 ## Code Map
 
 - `Sources/AxionCLI/Config/AxionConfig.swift` -- 当前 Codable 配置模型；需要新增 `mcpServers` 字段、默认值、init 参数、CodingKeys 和局部降级解码。
-- `Sources/AxionCLI/Models/AxionMcpServerConfig.swift` -- 新增用户配置包装类型；手写扁平 `{type,...}` Codable，并提供 SDK mapper。
+- `Sources/AxionCLI/Models/AxionMcpServerConfig.swift` -- 新增用户配置包装类型；手写扁平 `{type,...}` Codable，并提供 SDK mapper；remote `sse`/`http` 支持可选 `headers`。
 - `Sources/AxionCLI/Services/MCPConfigResolver.swift` -- 当前硬编码 helper/playwright；需要合并用户 server、保护保留 key、处理 Playwright 覆盖。
 - `Sources/AxionCLI/Services/AgentBuilder.swift` -- `build()` 第 6 步创建 AgentOptions.mcpServers；需要传入 `config.mcpServers`，dryrun 和 `buildSkillAgent()` 保持 nil。
 - `Sources/AxionCLI/Services/AgentBuilder+Config.swift` -- 确认 `includePlaywright` 入口语义：CLI/chat 为 true，API/MCP/skill 为 false。
@@ -68,7 +68,7 @@ context:
 ## Tasks & Acceptance
 
 **Execution:**
-- [x] `Sources/AxionCLI/Models/AxionMcpServerConfig.swift` -- 新建 `AxionMcpServerConfig` enum，支持 `stdio(command,args,env)`、`sse(url)`、`http(url)`，手写扁平 Codable 与 `toSdkConfig()` mapper。
+- [x] `Sources/AxionCLI/Models/AxionMcpServerConfig.swift` -- 新建 `AxionMcpServerConfig` enum，支持 `stdio(command,args,env)`、`sse(url,headers)`、`http(url,headers)`，手写扁平 Codable 与 `toSdkConfig()` mapper。
 - [x] `Sources/AxionCLI/Config/AxionConfig.swift` -- 新增 `mcpServers: [String: AxionMcpServerConfig]?`，在默认值和 init 中置 nil，在 `init(from:)` 中对该字段单独 do/catch 降级并 warning。
 - [x] `Sources/AxionCLI/Services/MCPConfigResolver.swift` -- 新增 `userServers` 参数，按 helper、Playwright、其余用户 server 的顺序合并；保留旧调用的默认参数兼容；跳过会破坏 SDK MCP namespace 的非法 server name。
 - [x] `Sources/AxionCLI/Services/AgentBuilder.swift` -- `build()` 调 resolver 时传 `config.mcpServers`；确认 `dryrun` 仍直接 nil、`buildSkillAgent()` 不改。
@@ -96,17 +96,21 @@ SDK `McpServerConfig` 不应直接放进 `AxionConfig`：它不是 Codable，且
 {
   "mcpServers": {
     "linear": { "type": "stdio", "command": "npx", "args": ["-y", "@linear/mcp"] },
-    "docs": { "type": "sse", "url": "http://localhost:8080/sse" }
+    "docs": { "type": "sse", "url": "http://localhost:8080/sse", "headers": { "Authorization": "Bearer <token>" } }
   }
 }
 ```
 
 ## Verification
 
+**Manual Acceptance:**
+- [`spec-mcp-config-manual-acceptance.md`](./spec-mcp-config-manual-acceptance.md) -- 手工验收清单，覆盖合法 stdio、自定义 Playwright、reserved key、坏配置整体降级和 dryrun 不加载 MCP。
+
 **Commands:**
 - `swift build` -- expected: 编译通过。
 - `swift test --filter "AxionMcpServerConfigTests"` -- expected: 新包装类型 Codable 测试通过。
 - `swift test --filter "MCPConfigResolver" --filter "AxionConfig"` -- expected: resolver 合并矩阵与配置解码回归通过。
+- `swift test --filter "MCPConfigE2ETests"` -- expected: E2E 覆盖通过；真实 `AgentBuilder` + SDK MCP tool discovery 能消费用户 stdio MCP 配置。
 - `swift test --filter "AxionHelperTests.Tools" --filter "AxionHelperTests.Models" --filter "AxionHelperTests.MCP" --filter "AxionHelperTests.Services" --filter "AxionCoreTests" --filter "AxionCLITests"` -- expected: 单元测试集合通过；不运行 Integration/AxionE2ETests。
 
 ## Suggested Review Order
@@ -146,5 +150,11 @@ SDK `McpServerConfig` 不应直接放进 `AxionConfig`：它不是 Codable，且
 - Codable tests pin the flat JSON contract.
   [`AxionMcpServerConfigTests.swift:11`](../../Tests/AxionCLITests/Models/AxionMcpServerConfigTests.swift#L11)
 
+- E2E verifies real AgentBuilder output is consumed by SDK MCP discovery.
+  [`MCPConfigE2ETests.swift:7`](../../Tests/AxionE2ETests/MCPConfigE2ETests.swift#L7)
+
 - README shows `~/.axion/config.json` and custom MCP examples.
   [`README.md:483`](../../README.md#L483)
+
+- Manual acceptance checklist covers runtime-visible MCP config behavior.
+  [`spec-mcp-config-manual-acceptance.md`](./spec-mcp-config-manual-acceptance.md)

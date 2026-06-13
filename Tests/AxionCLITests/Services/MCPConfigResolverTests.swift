@@ -43,13 +43,15 @@ struct MCPConfigResolverTests {
             helperPath: "/real/helper",
             includePlaywright: false,
             userServers: [
-                "sse-server": .sse(url: "http://localhost:8080/sse"),
-                "http-server": .http(url: "http://localhost:8080/mcp"),
+                "sse-server": .sse(url: "http://localhost:8080/sse", headers: ["X-SSE": "1"]),
+                "http-server": .http(url: "http://localhost:8080/mcp", headers: ["Authorization": "Bearer token"]),
             ]
         )
 
         #expect(sseConfig(servers["sse-server"])?.url == "http://localhost:8080/sse")
+        #expect(sseConfig(servers["sse-server"])?.headers == ["X-SSE": "1"])
         #expect(httpConfig(servers["http-server"])?.url == "http://localhost:8080/mcp")
+        #expect(httpConfig(servers["http-server"])?.headers == ["Authorization": "Bearer token"])
     }
 
     @Test("reserved axion helper key is ignored")

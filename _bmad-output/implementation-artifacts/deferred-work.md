@@ -60,4 +60,4 @@
 
 ## Deferred from: MCP Server 用户可配置化 review (2026-06-13)
 
-- Remote MCP auth headers — `AxionMcpServerConfig.sse/http` currently accept only `url`, so authenticated SSE/HTTP MCP servers cannot be declared in `~/.axion/config.json`. Add optional `headers: [String: String]` to remote config cases and docs in a focused follow-up.
+- ~~Remote MCP auth headers — `AxionMcpServerConfig.sse/http` currently accept only `url`, so authenticated SSE/HTTP MCP servers cannot be declared in `~/.axion/config.json`. Add optional `headers: [String: String]` to remote config cases and docs in a focused follow-up.~~ **【已解决 2026-06-13：remote `sse`/`http` 配置支持 `headers` 并透传到 SDK `McpTransportConfig`】**
