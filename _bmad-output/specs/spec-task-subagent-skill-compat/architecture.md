@@ -35,7 +35,7 @@ flowchart TD
 
 ### 1. Agent/Task Subagent Launcher Alias
 
-Expose `Task` as an alias of the SDK `Agent` launcher. Both public tool names use the same input shape and execution body:
+Expose `Task` as an alias of the SDK `Agent` launcher. In `open-agent-sdk-swift` 0.10.0 this is provided by `createTaskTool()`; Axion should consume that API rather than adding a local wrapper. Both public tool names use the same input shape and execution body:
 
 ```swift
 struct TaskToolInput: Codable {
@@ -57,16 +57,10 @@ Required behavior:
 - If no spawner exists, return a clear tool error naming the missing registration.
 - The result includes the child agent text and tool names used if SDK exposes them.
 
-Preferred implementation:
+SDK implementation:
 
 - Refactor SDK `AgentTool` internals into a shared subagent launcher factory, then expose both `createAgentTool()` and `createTaskTool()`.
 - Keep `Agent` for SDK-native/current Claude naming and `Task` for older Claude Code skill compatibility.
-
-Fallback implementation if SDK change is too broad:
-
-- Add an Axion-local `TaskCompatibilityTool` using `defineTool`.
-- Register SDK `createAgentTool()` alongside it so current SDK spawner detection succeeds.
-- Track an SDK follow-up to let spawner detection work for `Task` directly.
 
 ### 2. Spawner Detection and Child Tool Filtering
 
@@ -105,7 +99,7 @@ Required behavior:
 - Normal chat and direct skill execution start from the same configured tool universe: SDK core tools, specialist tools where configured, Axion domain tools, `Skill`, `Agent`, `Task`, Web tools, MCP resource tools, and connected MCP tools.
 - Dry-run removes side-effect tools such as `Bash`, `Write`, `Edit`, `Skill`, `Agent`, `Task`, storage execute tools, app uninstall execute tools, and non-read-only MCP tools.
 - `--no-skills` disables `/skill-name` routing and `Skill` tool, but does not automatically disable generic `Agent`/`Task` subagents.
-- `ToolSearch` is not globally impossible. Axion may keep it disabled by default for providers where it degrades reasoning, but this must be a config/provider policy and skill/subagent declarations must be able to request it.
+- `ToolSearch` is not globally impossible. Axion may keep it disabled by default for providers where it degrades reasoning, and provider/config policy is authoritative. Skill/subagent declarations may request `ToolSearch`, but they must not override user config, provider policy, dry-run, permission, or safety constraints.
 - MCP servers from config are available to skill agents when the normal agent would have them, subject to permission mode and explicit MCP disable flags.
 - Subagent `tools` and skill `allowed-tools` filter the assembled pool after deduplication, including MCP namespaced tools such as `mcp__server__tool`.
 - Unknown `allowed-tools` entries are reported as unsupported entries; they must not silently turn the restriction into `nil`.
@@ -128,7 +122,7 @@ The child agent must inherit a working `Skill` tool from the parent tool pool. T
 - Axion registers `createSkillTool(registry:)` in the parent tool pool.
 - `DefaultSubAgentSpawner` copies parent tools except subagent launchers.
 
-If future SDK changes make `SkillTool` depend on `AgentOptions.skillRegistry` instead of closure-captured registry, `DefaultSubAgentSpawner` must also receive and pass the parent `SkillRegistry`.
+In SDK 0.10.0, `DefaultSubAgentSpawner` receives and passes the parent `AgentOptions.skillRegistry`. Axion must set that option to the full discovered registry, not only the currently executing skill.
 
 ### 5. Direct Skill Package Context
 
@@ -164,7 +158,7 @@ Normal interactive and run agents:
 - Register `Task` as an alias whenever `Agent` is registered, unless a compatibility flag disables old Claude Code aliases.
 - Keep `Skill` registration controlled by `noSkills`.
 - If `noSkills == true`, Task still may be registered for general subagent work, but skill pipeline prompts cannot execute `/skill-name`; the child should report that skills are disabled.
-- Do not hard-code `ToolSearch` exclusion as an Axion-wide rule. Keep a provider/config default if needed, but let skill/subagent tool declarations opt in.
+- Do not hard-code `ToolSearch` exclusion as an Axion-wide rule. Keep a provider/config default if needed; skill/subagent declarations can opt in only when that policy allows it.
 
 Skill-specific lightweight agents:
 

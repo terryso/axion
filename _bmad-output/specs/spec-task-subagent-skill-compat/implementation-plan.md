@@ -2,6 +2,8 @@
 
 ## Phase 1: SDK Agent/Task Subagent Tool Alias
 
+Status: completed upstream in `open-agent-sdk-swift` 0.10.0. Axion should consume the published SDK instead of editing `.build/checkouts`.
+
 Primary files:
 
 - `.build/checkouts/open-agent-sdk-swift/Sources/OpenAgentSDK/Tools/Advanced/AgentTool.swift`
@@ -16,7 +18,7 @@ Tasks:
 3. Add `createTaskTool()` returning tool name `Task`, with the same schema and behavior. Treat `Task` as a Claude Code alias for `Agent`, not as a separate runtime abstraction.
 4. Update spawner detection so `Agent` or `Task` enables `ToolContext.agentSpawner`.
 5. Update child tool filtering so subagents remove both `Agent` and `Task`.
-6. Preserve existing enhanced Agent fields (`mcpServers`, `skills`, `run_in_background`, `isolation`, `team_name`, `resume`) in the shared schema; unsupported/deferred fields must produce diagnostics when requested instead of silently doing nothing where feasible.
+6. Preserve existing enhanced Agent fields (`mcpServers`, `skills`, `run_in_background`, `isolation`, `team_name`, `resume`) in the shared schema. In SDK 0.10.0, `skills` and resolvable MCP references are wired; unsupported runtime controls and unresolved MCP references must produce diagnostics.
 7. Export `createTaskTool()` from the SDK module surface if needed.
 
 Acceptance:
@@ -27,6 +29,8 @@ Acceptance:
 - Documentation/comments call out `Task` as alias of `Agent`.
 
 ## Phase 2: Direct Skill Package Context
+
+Status: completed upstream in `open-agent-sdk-swift` 0.10.0.
 
 Primary file:
 
@@ -75,10 +79,10 @@ Tasks:
 1. Extract tool-pool assembly from `AgentBuilder.build()` into a pure helper that can be reused by normal chat/run and `buildSkillAgent()`.
 2. Append `createAgentTool()` and `createTaskTool()` together when subagents are enabled and not dry-run.
 3. Preserve dry-run semantics by excluding side-effect tools, including `Agent`, `Task`, `Skill`, `Bash`, write/edit tools, storage execution, app uninstall execution, and non-read-only MCP tools.
-4. Replace `buildSkillAgent()`'s single-skill registry with the discovered registry when executing filesystem skills that may orchestrate other skills.
+4. Replace `buildSkillAgent()`'s single-skill registry with the discovered registry when executing filesystem skills that may orchestrate other skills, and pass that same registry through `AgentOptions.skillRegistry`.
 5. Register `Skill`, `Agent`, and `Task` in the lightweight skill path when allowed.
-6. Inherit MCP/Web/Search availability from the same build profile used by normal agents. Do not keep MCP disabled merely because this is skill execution.
-7. Convert the current hard-coded `ToolSearch` exclusion into provider/config policy. Keep the current default if needed for GLM stability, but allow skill/subagent declarations to request `ToolSearch`.
+6. Inherit MCP/Web/Search availability from the same build profile used by normal agents. Do not keep MCP disabled merely because this is skill execution; SDK 0.10.0 handles child `mcpServers` references and `{ name, tools }` filtering once Axion provides parent MCP config/tool pool.
+7. Convert the current hard-coded `ToolSearch` exclusion into provider/config policy. Keep the current default if needed for GLM stability; skill/subagent declarations may request `ToolSearch`, but cannot override user config, provider policy, dry-run, permission, or safety constraints.
 8. Add system prompt guidance for slash-form skill execution inside Task/Agent prompts when `Skill` and `Task` are both available.
 9. Ensure `AgentBuildResult.agentOptions.tools` exposes expected tool names for unit assertions.
 
@@ -158,10 +162,9 @@ Acceptance:
 Record these as follow-ups, not blockers for the BMAD pipeline MVP:
 
 1. Filesystem subagent discovery for `.claude/agents/*.md` and optionally `.agents/agents/*.md`.
-2. Subagent reference MCP server resolution instead of only inline MCP configs.
-3. Full `skills` wiring on subagent definitions.
-4. Background/resume/isolation/team semantics for Agent SDK fields.
-5. Skill listing budgets, visibility overrides, and model-invocation controls similar to Claude Code's large skill library behavior.
+2. Background/resume/isolation/team semantics for Agent SDK fields.
+3. Skill listing budgets, visibility overrides, and model-invocation controls similar to Claude Code's large skill library behavior.
+4. MCP `alwaysLoad` config and individual tool `_meta` support.
 
 ## Suggested File-Level Change Summary
 
@@ -182,7 +185,7 @@ Axion:
 
 ## Rollout Strategy
 
-1. Land SDK changes first, because Axion cannot reliably expose `Task` without SDK spawner support.
+1. Bump Axion to `open-agent-sdk-swift` 0.10.0+ first, because Axion cannot reliably expose `Task`, `skills`, or `mcpServers` wiring without SDK support.
 2. Land Axion registration behind the same non-dry-run guard as other side-effect tools.
 3. Add unit tests before any live API E2E.
 4. Run the project unit test command only.

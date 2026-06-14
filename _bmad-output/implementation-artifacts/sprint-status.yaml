@@ -1,5 +1,5 @@
 # generated: 2026-05-08
-# last_updated: 2026-06-12 (epic-39 retrospective done; all 4 stories done)
+# last_updated: 2026-06-15 (story 40-1 done via story-pipeline; epic-40 in-progress)
 # project: axion
 # project_key: NOKEY
 # tracking_system: file-system
@@ -35,7 +35,7 @@
 # - Dev moves story to 'review', then runs code-review (fresh context, different LLM recommended)
 
 generated: 2026-05-08
-last_updated: 2026-06-12
+last_updated: 2026-06-15
 
 project: axion
 project_key: NOKEY
@@ -443,3 +443,23 @@ development_status:
   39-3-app-uninstall-support-data-scan: done
   39-4-multi-surface-approval-adaptation: done
   epic-39-retrospective: done
+
+  # ============================================================
+  # Phase 18 — Claude Code 技能/子代理兼容性
+  # (readiness 2026-06-15: READY; 前置 SDK Epic 29 / 0.10.0 已发布)
+  # ============================================================
+
+  # Epic 40: Run Claude Code/BMAD Workflow Skills End-to-End
+  # 线性依赖链: 40.1 → 40.2 → 40.3 → 40.4 → 40.5 → 40.6 → 40.7 → 40.8 → 40.9 → 40.10
+  epic-40: in-progress
+  40-1-sdk-runtime-readiness-gate: done
+  40-2-shared-tool-profile-helper-with-behavior-parity: backlog
+  40-3-register-agent-task-skill-across-agent-paths: backlog
+  40-4-direct-skill-uses-discovered-skill-registry: backlog
+  40-5-mcp-web-search-tool-inheritance-policy: backlog
+  40-6-permission-allowlist-and-diagnostics-consistency: backlog
+  40-7-slash-skill-guidance-for-child-agents: backlog
+  40-8-child-task-progress-failure-and-summary-output: backlog
+  40-9-fixture-based-pipeline-acceptance: backlog
+  40-10-local-bmad-pipeline-manual-verification: backlog
+  epic-40-retrospective: optional

@@ -34,7 +34,7 @@ Cases:
 | allowed-tools MCP names | `mcp__github__list_prs` is preserved as a filterable raw tool name |
 | allowed-tools unknown names | all-unknown entries produce diagnostics and do not become unrestricted |
 | subagent tools filter | `tools: ["Read", "Grep", "Glob"]` filters from the full tool pool, not a hand-built subset |
-| deferred subagent fields | unsupported `skills` or reference `mcpServers` behavior is explicit in diagnostics or tests, not silent |
+| subagent skills/MCP fields | `skills` and resolvable `mcpServers` references are wired in SDK 0.10.0; unresolved MCP references and deferred runtime controls produce diagnostics |
 
 Mocking:
 
@@ -67,7 +67,7 @@ Cases:
 | prompt guidance | system prompt includes slash-skill guidance when Task and Skill are available |
 | direct skill registry | orchestrator skill execution path can see other discovered skills, not just itself |
 | direct skill tool profile | lightweight skill execution includes eligible WebSearch/WebFetch/MCP/ToolSearch tools when config allows |
-| ToolSearch policy | default provider policy can exclude ToolSearch, but skill/subagent explicit opt-in path is testable |
+| ToolSearch policy | default provider/config policy can exclude ToolSearch; skill/subagent opt-in is honored only when policy allows it |
 | MCP inheritance | skill agent receives the same configured MCP servers as normal agent unless disabled by config or dry-run |
 | skill package sync diagnostic | missing `/bmad-bmm-*` command preserves the exact missing name and suggests `/skills` or alias/update |
 
@@ -111,6 +111,7 @@ This E2E is not part of default validation because it needs a live model.
 Preconditions:
 
 - Updated `bmad-story-pipeline` installed.
+- Axion resolved to `open-agent-sdk-swift` 0.10.0+.
 - `~/.agents/skills/bmad-story-pipeline/SKILL.md` and `references/workflow-steps.md` both use the same current BMAD command names.
 - Project `.agents/skills` contains `bmad-create-story`, `bmad-testarch-atdd`, `bmad-dev-story`, `bmad-code-review`, `bmad-testarch-trace`.
 - API key configured.
