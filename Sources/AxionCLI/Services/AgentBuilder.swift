@@ -27,6 +27,56 @@ struct AgentBuildResult: Sendable {
     let usageStore: SkillUsageStore?
 }
 
+/// Structured tool-availability diagnostics for a skill execution path (Story 40.6).
+///
+/// Mirrors the diagnostics the SDK computes at runtime (`ToolFilterDiagnostics` /
+/// `ToolDeclarationDiagnostics`) but that `DefaultSubAgentSpawner` currently discards
+/// at the spawner boundary (SDK `DefaultSubAgentSpawner.swift:151-156`). This Axion-side
+/// recomputation runs at build/route time using SDK pure helpers, making the signal
+/// observable (CAP-8 / architecture §3 lines 104-105: unknown allowed-tools must not
+/// silently become unrestricted).
+struct ToolAvailabilityDiagnostics: Sendable, Equatable {
+    /// Allowed-tool declarations that matched NO available tool — e.g. an MCP tool that
+    /// isn't connected (`mcp__github__list_prs`) or a typo'd name. These affect availability.
+    let unmatchedDeclarations: [OpenAgentSDK.ToolDeclaration]
+    /// Explicitly-declared-but-unresolvable names (status == `.unknown`). The SDK parser
+    /// still records these (non-nil) so the skill is never silently unrestricted.
+    let unsupportedDeclarations: [OpenAgentSDK.ToolDeclaration]
+    /// Declarations carrying a `Bash(git diff:*)`-style pattern — parsed but NOT enforced
+    /// (fine-grained Bash pattern enforcement is a deferred epic item). Surfaced so the user
+    /// knows the pattern was accepted but not honored.
+    let patternDeclarations: [OpenAgentSDK.ToolDeclaration]
+    /// Declarations requesting a tool the current Axion config policy disables — e.g.
+    /// `ToolSearch` while `AxionConfig.enableToolSearch == false` (Story 40.5 config ceiling).
+    let configDisabledDeclarations: [OpenAgentSDK.ToolDeclaration]
+
+    init(
+        unmatchedDeclarations: [OpenAgentSDK.ToolDeclaration] = [],
+        unsupportedDeclarations: [OpenAgentSDK.ToolDeclaration] = [],
+        patternDeclarations: [OpenAgentSDK.ToolDeclaration] = [],
+        configDisabledDeclarations: [OpenAgentSDK.ToolDeclaration] = []
+    ) {
+        self.unmatchedDeclarations = unmatchedDeclarations
+        self.unsupportedDeclarations = unsupportedDeclarations
+        self.patternDeclarations = patternDeclarations
+        self.configDisabledDeclarations = configDisabledDeclarations
+    }
+
+    /// `true` when no diagnostics of any kind were produced.
+    var isEmpty: Bool {
+        unmatchedDeclarations.isEmpty && unsupportedDeclarations.isEmpty
+            && patternDeclarations.isEmpty && configDisabledDeclarations.isEmpty
+    }
+
+    /// `true` when any diagnostic affects actual tool availability (unmatched / unknown /
+    /// config-disabled). Pattern-only diagnostics are informational and do not by themselves
+    /// remove a tool.
+    var affectsAvailability: Bool {
+        !unmatchedDeclarations.isEmpty || !unsupportedDeclarations.isEmpty
+            || !configDisabledDeclarations.isEmpty
+    }
+}
+
 /// Single source of truth for constructing an Agent used by both CLI (RunCommand)
 /// and API (ApiRunner). Handles API key resolution, helper path, memory store,
 /// system prompt, MCP servers, safety hooks, tools, and AgentOptions — but NOT
@@ -511,6 +561,148 @@ enum AgentBuilder {
         )
     }
 
+    /// Computes tool-availability diagnostics for a skill's `allowed-tools` against an assembled
+    /// tool pool + Axion config policy (Story 40.6 AC1–AC3).
+    ///
+    /// Reuses SDK pure helpers (`OpenAgentSDK.filterToolsByDeclarations`, `skill.toolDeclarations`,
+    /// `skill.toolDeclarationDiagnostics`) — no SDK edits, no live model, no MCP connection, no API
+    /// key resolution. The SDK computes equivalent diagnostics at runtime, but
+    /// `DefaultSubAgentSpawner` discards the `ToolFilterDiagnostics` it returns (SDK
+    /// `DefaultSubAgentSpawner.swift:151-156`); this helper mirrors that logic at Axion build/route
+    /// time so the signal is observable (CAP-8).
+    ///
+    /// `enableToolSearch` is the SAME `AxionConfig.toolSearchEnabled` value that governs tool-pool
+    /// assembly (Story 40.5), so a skill requesting ToolSearch under a disabled policy surfaces as
+    /// `configDisabledDeclarations` rather than being silently dropped.
+    ///
+    /// - Parameters:
+    ///   - skill: The skill whose `allowed-tools` (via `toolDeclarations` / `toolDeclarationDiagnostics`)
+    ///     is being diagnosed. A skill with `toolDeclarations == nil` (no `allowed-tools` frontmatter)
+    ///     yields empty diagnostics.
+    ///   - availableToolNames: Lowercased names of the assembled tool pool (e.g. from
+    ///     `buildSkillToolProfile(...).map { $0.name.lowercased() }`).
+    ///   - enableToolSearch: Whether Axion config currently enables ToolSearch.
+    /// - Returns: A `ToolAvailabilityDiagnostics` describing unmatched / unsupported / pattern /
+    ///   config-disabled declarations.
+    static func diagnoseToolAvailability(
+        skill: OpenAgentSDK.Skill,
+        availableToolNames: [String],
+        enableToolSearch: Bool
+    ) -> ToolAvailabilityDiagnostics {
+        guard let declarations = skill.toolDeclarations, !declarations.isEmpty else {
+            return ToolAvailabilityDiagnostics()  // no allowed-tools → no diagnostics
+        }
+        let availableLower = Set(availableToolNames.map { $0.lowercased() })
+
+        // 1. unsupported (.unknown) — from parse-time diagnostics (SDK Story 29.4), with a filter
+        //    fallback for programmatically-constructed Skills whose `toolDeclarationDiagnostics`
+        //    is nil.
+        let unsupported = skill.toolDeclarationDiagnostics?.unsupportedDeclarations
+            ?? declarations.filter { $0.status == .unknown }
+
+        // 2. config-disabled — currently only ToolSearch is config-gated (Story 40.5). A declaration
+        //    requesting a tool that config policy disables (here: ToolSearch when enableToolSearch
+        //    is false) is separated from generic `unmatched` so the user sees the *policy* reason.
+        //    NOTE: `ToolRestriction.toolSearch.rawValue` is the camelCase enum name ("toolSearch");
+        //    it must be lowercased to match `ToolDeclaration.normalizedName` ("toolsearch"), exactly
+        //    as the SDK normalizes inside `restrictionByLowercasedName`.
+        let configDisabled: [OpenAgentSDK.ToolDeclaration]
+        if enableToolSearch {
+            configDisabled = []
+        } else {
+            let toolSearchName = OpenAgentSDK.ToolRestriction.toolSearch.rawValue.lowercased()
+            configDisabled = declarations.filter { $0.normalizedName == toolSearchName }
+        }
+
+        // 3. unmatched — a declaration whose normalizedName is in NEITHER the available pool NOR a
+        //    more-specific category (unsupported / config-disabled). Declarations already surfaced
+        //    under those categories are excluded so the same name is never reported twice: e.g.
+        //    ToolSearch under a disabled config policy is reported only as config-disabled (the
+        //    precise reason), not also as "未匹配". Mirrors SDK `filterToolsByDeclarations` →
+        //    `ToolFilterDiagnostics.unmatchedDeclarations` minus the Axion-specific config-disabled
+        //    refinement, keeping the four categories mutually exclusive.
+        let specificallyCategorized = Set(
+            unsupported.map { $0.normalizedName }
+                + configDisabled.map { $0.normalizedName }
+        )
+        let unmatched = declarations.filter {
+            !availableLower.contains($0.normalizedName)
+                && !specificallyCategorized.contains($0.normalizedName)
+        }
+
+        // 4. pattern (parsed-not-enforced) — from parse-time diagnostics, with the same fallback.
+        //    Informational and orthogonal to availability: a patterned declaration may also appear
+        //    in `unmatched` if its base tool is absent from the pool, which is correct (two distinct
+        //    facts — pattern accepted-but-not-enforced AND tool not available).
+        let patterns = skill.toolDeclarationDiagnostics?.patternDeclarations
+            ?? declarations.filter { $0.pattern != nil }
+
+        return ToolAvailabilityDiagnostics(
+            unmatchedDeclarations: unmatched,
+            unsupportedDeclarations: unsupported,
+            patternDeclarations: patterns,
+            configDisabledDeclarations: configDisabled
+        )
+    }
+
+    /// Emits `ToolAvailabilityDiagnostics` to stderr as user-visible warnings (Story 40.6).
+    ///
+    /// Shared emit point for the two skill-execution paths so the warning format stays identical:
+    /// Path B (`buildSkillAgent`, non-interactive `axion run /skill-name` / API) and Path A
+    /// (`ChatCommand` interactive `/skill-name`). Diagnostics that affect availability always emit
+    /// (not gated by `verbose`); pattern-only diagnostics emit at informational level (parsed but
+    /// not enforced). The four availability categories are mutually exclusive (see
+    /// `diagnoseToolAvailability`), so each declaration is reported exactly once with its most
+    /// specific reason — no dedup is needed here.
+    static func emitToolAvailabilityDiagnostics(
+        _ diagnostics: ToolAvailabilityDiagnostics,
+        skillName: String
+    ) {
+        if diagnostics.affectsAvailability {
+            fputs("[axion] ⚠️ skill \"\(skillName)\" 声明的部分工具当前不可用:\n", stderr)
+            for d in diagnostics.unmatchedDeclarations {
+                fputs("[axion]   - 未匹配: \(d.rawName)\n", stderr)
+            }
+            for d in diagnostics.unsupportedDeclarations {
+                fputs("[axion]   - 未知工具名: \(d.rawName)\n", stderr)
+            }
+            for d in diagnostics.configDisabledDeclarations {
+                fputs("[axion]   - 被 config 策略禁用: \(d.rawName)\n", stderr)
+            }
+        }
+        if !diagnostics.patternDeclarations.isEmpty {
+            fputs("[axion] ℹ️ skill \"\(skillName)\" 声明了 pattern 限制（已解析，暂不强制）:\n", stderr)
+            for d in diagnostics.patternDeclarations {
+                fputs("[axion]   - \(d.rawName)\n", stderr)
+            }
+        }
+    }
+
+    /// The effective tool pool after applying a skill's `allowed-tools` to the assembled pool
+    /// (Story 40.6 AC5 — filtering order: allowed-tools narrow FIRST, then session/permission
+    /// policy gates at runtime).
+    ///
+    /// Thin wrapper over SDK `filterToolsByDeclarations(available:allowed:disallowed:)` that
+    /// surfaces the build-time intersection for testability. Returns all `available` when the
+    /// skill declares no restrictions (`toolDeclarations` nil/empty AND `toolRestrictions`
+    /// nil/empty). The runtime `canUseTool` gate (inherited by child agents, AC4) further
+    /// restricts on top of this — orthogonal, not duplicated here.
+    static func effectiveSkillToolPool(
+        skill: OpenAgentSDK.Skill,
+        available: [OpenAgentSDK.ToolProtocol]
+    ) -> [OpenAgentSDK.ToolProtocol] {
+        let declarations = skill.toolDeclarations?.isEmpty == false ? skill.toolDeclarations : nil
+        // If no lossless declarations but legacy toolRestrictions exist, normalize them via
+        // ToolDeclaration.fromToolNames so both forms share one filter path (SDK Story 29.5 unification).
+        let allowed = declarations
+            ?? skill.toolRestrictions.map { OpenAgentSDK.ToolDeclaration.fromToolNames($0.map(\.rawValue)) }
+        guard let allowed, !allowed.isEmpty else { return available }
+        let (filtered, _) = OpenAgentSDK.filterToolsByDeclarations(
+            available: available, allowed: allowed, disallowed: nil
+        )
+        return filtered
+    }
+
     /// Builds a minimal agent for skill execution via SDK's `executeSkillStream()`.
     ///
     /// Unlike `build()`, this creates a lightweight agent:
@@ -542,6 +734,19 @@ enum AgentBuilder {
         // Story 40.5: pass `config.toolSearchEnabled` so the skill path shares the same ToolSearch
         // policy as normal chat (single source of truth via effectiveExcludedToolNames).
         let tools = buildSkillToolProfile(registry: registry, enableToolSearch: config.toolSearchEnabled)
+
+        // Story 40.6: surface tool-availability diagnostics so a skill requesting an unavailable tool
+        // (unknown name, unconnected MCP, config-disabled ToolSearch) is visible instead of silently
+        // lost. Mirrors the SDK diagnostics that DefaultSubAgentSpawner discards at its boundary.
+        // `diagnoseToolAvailability` is a pure helper (no side effects); the shared emit helper is the
+        // observable exit (Path B). Diagnostics that affect availability always emit (not gated by
+        // `verbose`); pattern-only diagnostics emit at informational level (parsed but not enforced).
+        let diagnostics = diagnoseToolAvailability(
+            skill: skill,
+            availableToolNames: tools.map { $0.name.lowercased() },
+            enableToolSearch: config.toolSearchEnabled
+        )
+        emitToolAvailabilityDiagnostics(diagnostics, skillName: skill.name)
 
         let effectiveMaxSteps = maxSteps ?? config.maxSteps
         let effectiveModel = skill.modelOverride ?? config.model

@@ -616,6 +616,25 @@ struct ChatCommand: AsyncParsableCommand {
 
             let messageStream: AsyncStream<SDKMessage>
             if let skillExec = matchedSkillExec {
+                // Story 40.6 Path A: surface tool-availability diagnostics for the matched skill on the
+                // interactive chat path (mirrors buildSkillAgent's Path B emit, same shared helper). The
+                // skill executes on the already-built chat agent, inheriting its permission context (AC4),
+                // so we diagnose against that agent's assembled tool pool. `enableToolSearch` is derived
+                // from pool membership — ToolSearch is assembled iff config enables it (Story 40.5 build
+                // invariant), so this is semantically equivalent to reading AxionConfig.toolSearchEnabled
+                // without threading config into the REPL turn loop.
+                if let skill = state.buildResult.skillRegistry.find(skillExec.name) {
+                    let chatToolNames = (state.buildResult.agentOptions.tools ?? []).map { $0.name.lowercased() }
+                    let toolSearchOn = chatToolNames.contains(
+                        OpenAgentSDK.ToolRestriction.toolSearch.rawValue.lowercased()
+                    )
+                    let diag = AgentBuilder.diagnoseToolAvailability(
+                        skill: skill,
+                        availableToolNames: chatToolNames,
+                        enableToolSearch: toolSearchOn
+                    )
+                    AgentBuilder.emitToolAvailabilityDiagnostics(diag, skillName: skill.name)
+                }
                 // SkillRegistry 匹配 — 使用 SDK 专用 skill 执行路径
                 messageStream = state.buildResult.agent.executeSkillStream(skillExec.name, args: skillExec.args)
             } else {
