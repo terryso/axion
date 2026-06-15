@@ -35,7 +35,7 @@
 # - Dev moves story to 'review', then runs code-review (fresh context, different LLM recommended)
 
 generated: 2026-05-08
-last_updated: 2026-06-15  # story 40-8 → done (review: 0 CRITICAL)
+last_updated: 2026-06-16  # story 40-9 → done (review: 0 CRITICAL; fixture pipeline acceptance; make test green, 40.2-40.8 zero regression)
 
 project: axion
 project_key: NOKEY
@@ -460,6 +460,6 @@ development_status:
   40-6-permission-allowlist-and-diagnostics-consistency: done
   40-7-slash-skill-guidance-for-child-agents: done
   40-8-child-task-progress-failure-and-summary-output: done
-  40-9-fixture-based-pipeline-acceptance: backlog
+  40-9-fixture-based-pipeline-acceptance: done
   40-10-local-bmad-pipeline-manual-verification: backlog
   epic-40-retrospective: optional
