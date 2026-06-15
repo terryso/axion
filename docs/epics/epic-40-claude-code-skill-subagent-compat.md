@@ -150,7 +150,9 @@ flowchart TD
 - `Skill` tool 和 `AgentOptions.skillRegistry` 需要由 Axion 填入完整 discovered registry；SDK 0.10.0 会把 child registry 继承给子代理，让 `/bmad-*` 单步 skill 可以被执行。
 - MCP server refs 和 `{ name, tools }` 子集过滤由 SDK 0.10.0 执行；Axion 负责把 normal/direct skill agent 的 MCP config 和 MCP tool pool 放进同一 tool profile。
 
-## Story 40.1: SDK Runtime Readiness Gate
+## Story 分解
+
+### Story 40.1: SDK Runtime Readiness Gate
 
 As an Axion maintainer,
 I want a deterministic gate proving SDK Epic 29 runtime support is available,
@@ -182,7 +184,7 @@ So that Axion integration work does not start on missing or unstable SDK APIs.
 **When** 评估 Epic 40 进度
 **Then** 相关 Axion stories 必须标记为 blocked/deferred，不能关闭整个 Epic
 
-## Story 40.2: Shared Tool Profile Helper With Behavior Parity
+### Story 40.2: Shared Tool Profile Helper With Behavior Parity
 
 As an Axion runtime maintainer,
 I want a shared tool profile builder that preserves current chat/run behavior,
@@ -207,7 +209,7 @@ So that later stories can add skill/subagent tooling without duplicating tool as
 **When** 使用 shared tool profile helper
 **Then** 当前 dry-run 工具过滤行为保持不回退
 
-## Story 40.3: Register `Agent` / `Task` / `Skill` Across Agent Paths
+### Story 40.3: Register `Agent` / `Task` / `Skill` Across Agent Paths
 
 As a Claude Code workflow skill user,
 I want Axion agents to expose `Agent`, `Task`, and `Skill` tools consistently,
@@ -236,7 +238,7 @@ So that workflow skills can spawn child agents and invoke other skills.
 **When** 构建普通 agent 或 skill agent
 **Then** `Skill`、`Agent`、`Task` 不出现在可用工具池中
 
-## Story 40.4: Direct Skill Uses Discovered Skill Registry
+### Story 40.4: Direct Skill Uses Discovered Skill Registry
 
 As a BMAD pipeline user,
 I want a direct skill execution to see other discovered skills,
@@ -262,7 +264,7 @@ So that a pipeline skill can delegate to `/bmad-create-story` and other single-s
 **Then** 子代理返回明确错误
 **And** 错误包含 `missing-skill` 和原始 args `demo`
 
-## Story 40.5: MCP/Web/Search Tool Inheritance Policy
+### Story 40.5: MCP/Web/Search Tool Inheritance Policy
 
 As a skill author,
 I want direct skill agents to inherit allowed MCP, Web, and search tools,
@@ -293,7 +295,7 @@ So that skill execution does not silently lose capabilities compared with normal
 **When** MCP/custom tool 不是 read-only
 **Then** 该工具不会出现在 direct skill agent 或 child agent 工具池中
 
-## Story 40.6: Permission, Allowlist, and Diagnostics Consistency
+### Story 40.6: Permission, Allowlist, and Diagnostics Consistency
 
 As an Axion user,
 I want permission decisions and diagnostics to behave consistently across parent, skill, and child agents,
@@ -321,7 +323,7 @@ So that workflow skills do not bypass approvals or hide unsupported behavior.
 **When** session allowlist 包含更多工具
 **Then** 最终工具池仍只包含 skill restriction 允许的工具
 
-## Story 40.7: Slash Skill Guidance for Child Agents
+### Story 40.7: Slash Skill Guidance for Child Agents
 
 As a BMAD pipeline skill user,
 I want child agents to call `Skill` when they see `Execute /skill-name args`,
@@ -347,7 +349,7 @@ So that pipeline steps execute corresponding skills instead of treating slash co
 **And** 父 pipeline 停止在失败 step
 **And** 输出可手动重试的命令或修复建议
 
-## Story 40.8: Child Task Progress, Failure, and Summary Output
+### Story 40.8: Child Task Progress, Failure, and Summary Output
 
 As an interactive Axion user,
 I want pipeline execution to show each child task's start, completion, failure, and summary,
@@ -397,7 +399,7 @@ So that long workflows do not look stuck and failures are actionable.
 **Then** pipeline 停止
 **And** 输出失败 step、原始错误、可手动重试命令
 
-## Story 40.9: Fixture-Based Pipeline Acceptance
+### Story 40.9: Fixture-Based Pipeline Acceptance
 
 As an Axion maintainer,
 I want a deterministic small pipeline fixture,
@@ -422,7 +424,7 @@ So that we can verify the workflow mechanics without relying on a real BMAD long
 **Then** pipeline 停止在第二步
 **And** 输出缺失 skill 名称和可重试命令
 
-## Story 40.10: Local BMAD Pipeline Manual Verification
+### Story 40.10: Local BMAD Pipeline Manual Verification
 
 As an Axion/BMAD user,
 I want the real `bmad-story-pipeline` skill package to work in my local Axion setup,
@@ -480,11 +482,13 @@ Notes:
 
 ## 默认测试策略
 
-开发完成后只运行 Axion 项目定义的单元测试范围，不运行集成测试或 E2E：
+开发完成后只运行 Axion 项目定义的单元测试范围，不运行集成测试或 E2E。统一使用 Makefile 的 `test` 目标：
 
 ```bash
-swift test --filter "AxionHelperTests.Tools" --filter "AxionHelperTests.Models" --filter "AxionHelperTests.MCP" --filter "AxionHelperTests.Services" --filter "AxionCoreTests" --filter "AxionCLITests"
+make test
 ```
+
+`make test` 等价于 `swift test --no-parallel --skip AxionHelperIntegrationTests --skip AxionCLIIntegrationTests --skip AxionE2ETests`（全部单元测试、跳过集成/E2E）。story-automator build cycle 期间一律用 `make test`，不要用 `swift test --filter ...`。
 
 如果同一 story 修改了本地 `open-agent-sdk-swift`，需要先在 SDK 仓库按 SDK 规则运行完整 test suite，并报告总测试数；再回到 Axion 运行上述单元测试。
 

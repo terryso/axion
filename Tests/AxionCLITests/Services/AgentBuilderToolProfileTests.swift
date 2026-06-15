@@ -242,9 +242,10 @@ struct AgentBuilderToolProfileTests {
         )
         let toolNames = Set(tools.map(\.name))
 
-        // dry-run 排除集沿用 build() 第 140 行字面量，此处引用同一字面量保持 parity
-        let dryrunExcludedToolNames: Set<String> = ["Bash", "Skill"]
-        for excluded in dryrunExcludedToolNames {
+        // dry-run 排除集引用 `AgentBuilder.dryrunExcludedToolNames` 真实静态常量（Story 40.3
+        // 把它从局部字面量提升为 static let，并扩展含 Agent / Task）。此处不再硬编码字面量，
+        // 与 40.3 的 `test_buildToolProfile_dryrunExcludedSet_includesAgentTask` 共用同一来源。
+        for excluded in AgentBuilder.dryrunExcludedToolNames {
             #expect(!toolNames.contains(excluded), "dry-run 不应含 \(excluded)")
         }
     }

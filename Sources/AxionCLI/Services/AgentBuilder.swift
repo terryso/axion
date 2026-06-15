@@ -39,6 +39,16 @@ enum AgentBuilder {
     /// AskUser is handled by the system prompt.
     static let excludedToolNames: Set<String> = ["ToolSearch", "AskUser"]
 
+    /// Tool names stripped from base tools in dry-run mode (side-effect tools).
+    ///
+    /// Story 40.3: extended to include `Agent`/`Task` as intent documentation. These are SDK
+    /// factory tools (`createAgentTool()`/`createTaskTool()`) and are never present in
+    /// `getAllBaseTools(tier:)`, so the dry-run filter has no actual effect on them — their
+    /// exclusion is governed by the separate `if !dryrun { ... }` registration branch in
+    /// ``buildToolProfile``. Listing them here declares the intent ("dry-run plans, never
+    /// spawns child agents") and future-proofs against the SDK adding them to a base tier.
+    static let dryrunExcludedToolNames: Set<String> = ["Bash", "Skill", "Agent", "Task"]
+
     /// Resolves the API key from config or environment, throwing if neither is available.
     static func resolveApiKey(from config: AxionConfig) throws -> String {
         let apiKey = config.apiKey
@@ -286,12 +296,22 @@ enum AgentBuilder {
         //
         // In dryrun mode, strip side-effect tools (Bash, Skill) so the agent
         // can only plan — never execute.
-        let dryrunExcludedToolNames: Set<String> = ["Bash", "Skill"]
         var agentTools: [ToolProtocol] = (getAllBaseTools(tier: .core) + getAllBaseTools(tier: .specialist))
             .filter { !excludedToolNames.contains($0.name) }
             .filter { !dryrun || !dryrunExcludedToolNames.contains($0.name) }
         if !noSkills, !dryrun {
             agentTools.append(createSkillTool(registry: skillRegistry))
+        }
+
+        // Story 40.3: Register the Agent and Task subagent launchers (Claude Code `Task`
+        // compatibility). Both names map to the same SDK SubAgentSpawner; registering both lets
+        // workflow skills emit either `Task(subagent_type:, prompt:)` or `Agent(...)` snippets.
+        // Gated by `!dryrun` ONLY (NOT `!noSkills`) — `--no-skills` controls the Skill tool and
+        // `/skill-name` routing, not generic subagent capability (Agent/Task are orthogonal to the
+        // skill system). Dry-run excludes them as side-effect tools (they launch child agents).
+        if !dryrun {
+            agentTools.append(createAgentTool())
+            agentTools.append(createTaskTool())
         }
 
         // Memory tool — Agent can actively read/write MEMORY.md and USER.md
@@ -351,11 +371,52 @@ enum AgentBuilder {
         return agentTools
     }
 
+    /// Builds the tool pool for a direct skill-execution agent (Story 40.3).
+    ///
+    /// This is the skill-path parallel of ``buildToolProfile``: a **pure function** that assembles
+    /// core-tier tools (excluding `ToolSearch`/`AskUser`) and appends the `Skill`, `Agent`, and
+    /// `Task` tools so a pipeline skill (e.g. `bmad-story-pipeline`) running via
+    /// `axion run /skill-name` or API skill execution can spawn child agents, and those children
+    /// can invoke other `/skill-name` single-step skills via the `Skill` tool.
+    ///
+    /// **Pure function contract:** no API-key resolution, no MCP connection, no Helper process.
+    /// The tool constructors (`createSkillTool`/`createAgentTool`/`createTaskTool`) are lazy —
+    /// their side effects occur only inside each tool's `perform()`, so constructing them here
+    /// does not violate the pure-function contract.
+    ///
+    /// **Scope (Story 40.3):**
+    /// - The `registry` here still contains only the current skill; `createSkillTool(registry:)`
+    ///   is still called so the `Skill` tool name is present. Story 40.4 replaces this single-skill
+    ///   registry with the discovered registry.
+    /// - This helper does NOT add MCP / ToolSearch beyond the `.core` tier (that inheritance
+    ///   policy is Story 40.5's scope). Web tools (`WebSearch`/`WebFetch`) are part of the
+    ///   `.core` tier, so they are present here exactly as before 40.3.
+    /// - `buildSkillAgent` has no `dryrun` parameter because skill execution is inherently
+    ///   side-effect-bearing (writes files, calls the LLM); all three appended tools are always
+    ///   registered.
+    ///
+    /// - Parameter registry: The already-constructed skill registry (currently single-skill).
+    /// - Returns: The assembled `[ToolProtocol]` (caller may read `.name` for assertions).
+    static func buildSkillToolProfile(registry: SkillRegistry) -> [ToolProtocol] {
+        // Core tools only — exclude ToolSearch/AskUser to avoid confusing the LLM.
+        var tools = getAllBaseTools(tier: .core).filter { !excludedToolNames.contains($0.name) }
+
+        // Story 40.3: Direct skill path registers Skill + Agent + Task so pipeline skills can
+        // spawn children and those children can invoke other /skill-name single-step skills.
+        // The registry still contains only the current skill (Story 40.4 swaps in the discovered
+        // registry); createSkillTool(registry:) is called regardless so the `Skill` tool is present.
+        tools.append(createSkillTool(registry: registry))
+        tools.append(createAgentTool())
+        tools.append(createTaskTool())
+
+        return tools
+    }
+
     /// Builds a minimal agent for skill execution via SDK's `executeSkillStream()`.
     ///
     /// Unlike `build()`, this creates a lightweight agent:
     /// - No MCP servers (no desktop automation tools)
-    /// - No SkillTool (skill is already resolved)
+    /// - Skill/Agent/Task tools registered (Story 40.3) so pipeline skills can spawn children
     /// - No memory injection
     /// - Core tools only (ToolSearch/AskUser excluded)
     /// - Model overridden by skill if specified
@@ -371,8 +432,8 @@ enum AgentBuilder {
         let registry = SkillRegistry()
         registry.register(skill)
 
-        // Core tools only — exclude ToolSearch/AskUser to avoid confusing the LLM
-        let tools = getAllBaseTools(tier: .core).filter { !excludedToolNames.contains($0.name) }
+        // Story 40.3: tools assembled via the testable pure helper (Skill + Agent + Task added).
+        let tools = buildSkillToolProfile(registry: registry)
 
         let effectiveMaxSteps = maxSteps ?? config.maxSteps
         let effectiveModel = skill.modelOverride ?? config.model
