@@ -1,5 +1,5 @@
 # generated: 2026-05-08
-# last_updated: 2026-06-15 (story 40-1 done via story-pipeline; epic-40 in-progress)
+# last_updated: 2026-06-15 (story 40-2 done via code-review; epic-40 in-progress)
 # project: axion
 # project_key: NOKEY
 # tracking_system: file-system
@@ -453,7 +453,7 @@ development_status:
   # 线性依赖链: 40.1 → 40.2 → 40.3 → 40.4 → 40.5 → 40.6 → 40.7 → 40.8 → 40.9 → 40.10
   epic-40: in-progress
   40-1-sdk-runtime-readiness-gate: done
-  40-2-shared-tool-profile-helper-with-behavior-parity: backlog
+  40-2-shared-tool-profile-helper-with-behavior-parity: done
   40-3-register-agent-task-skill-across-agent-paths: backlog
   40-4-direct-skill-uses-discovered-skill-registry: backlog
   40-5-mcp-web-search-tool-inheritance-policy: backlog

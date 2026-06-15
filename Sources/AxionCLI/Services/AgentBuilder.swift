@@ -127,68 +127,10 @@ enum AgentBuilder {
             sharedSeatMode: config.sharedSeatMode && !buildConfig.allowForeground
         )
 
-        // 8. Build tools: base SDK tools + Skill
-        // Include core + specialist base tools explicitly so the streaming path
-        // (agent.stream()) sends them in the API request. The non-streaming
-        // query() path deduplicates via assembleToolPool.
-        // Exclude ToolSearch and AskUser — GLM models get confused by ToolSearch
-        // ("No deferred tools" kills the model's reasoning), and the system prompt
-        // already lists all available tools.
-        //
-        // In dryrun mode, strip side-effect tools (Bash, Skill) so the agent
-        // can only plan — never execute.
-        let dryrunExcludedToolNames: Set<String> = ["Bash", "Skill"]
-        var agentTools: [ToolProtocol] = (getAllBaseTools(tier: .core) + getAllBaseTools(tier: .specialist))
-            .filter { !excludedToolNames.contains($0.name) }
-            .filter { !dryrun || !dryrunExcludedToolNames.contains($0.name) }
-        if !noSkills, !dryrun {
-            agentTools.append(createSkillTool(registry: skillRegistry))
-        }
-
-        // Memory tool — Agent can actively read/write MEMORY.md and USER.md
-        if !noMemory, !dryrun {
-            let universalStore = UniversalMemoryStore(memoryDir: memoryDir)
-            agentTools.append(MemoryTool(store: universalStore))
-        }
-
-        // Storage tools (Story 39.1 scan + propose [read-only]; Story 39.2 execute + undo [side-effect]).
-        // Registered under !dryrun to match the storage-ops lifecycle. Execute/undo write manifests
-        // to ~/.axion/storage-ops/ (draft-first, re-validated, recoverable via system Trash).
-        if !dryrun {
-            let storageScanner = StorageScanService()
-            agentTools.append(StorageScanTool(scanner: storageScanner, config: config.storage))
-            agentTools.append(ProposeStoragePlanTool(config: config.storage))
-
-            // Story 39.2: shared manifest store so execute + undo read/write the same operation files.
-            let manifestStore = StorageManifestStore(storageOpsDir: config.storage.storageOpsDir)
-            agentTools.append(ExecuteStoragePlanTool(
-                executor: StorageExecutor(manifestStore: manifestStore),
-                config: config.storage
-            ))
-            agentTools.append(UndoStorageOpTool(
-                undoer: StorageUndoService(manifestStore: manifestStore),
-                config: config.storage
-            ))
-
-            // Story 39.3: App uninstall (scan = read-only; execute = side-effect, draft-first manifest,
-            // re-validated bundle/support, recoverable via system Trash — never permanent delete).
-            // Shares the same manifestStore so execute + undo read/write the same operation files.
-            let appPlanBuilder = AppUninstallPlanBuilder(
-                supportDataScanner: SupportDataScanService(),
-                appDiscoverer: AppDiscoveryService(),
-                hintReader: ExternalHintReader()
-            )
-            agentTools.append(ScanAppUninstallTool(planBuilder: appPlanBuilder))
-            agentTools.append(ExecuteAppUninstallTool(
-                executor: AppUninstallExecutor(
-                    manifestStore: manifestStore,
-                    appQuitter: AppQuitter()
-                ),
-                config: config.storage
-            ))
-        }
-
         // 8b. Create review infrastructure (ReviewOrchestrator + IntelligentCurator + SkillUsageStore)
+        // NOTE (Story 40.2): buildReviewInfrastructure stays in build() — it produces usageStore,
+        // which the tool profile needs, plus reviewOrchestrator/intelligentCurator that are
+        // AgentBuildResult fields (not tools). buildToolProfile receives usageStore as a param.
         let infra = buildReviewInfrastructure(
             config: config,
             apiKey: apiKey,
@@ -202,14 +144,18 @@ enum AgentBuilder {
         let intelligentCurator = infra.intelligentCurator
         let usageStore = infra.usageStore
 
-        // save_skill tool — Agent can persist reusable skills to disk
-        if let usageStore {
-            agentTools.append(createSaveSkillTool(
-                skillRegistry: skillRegistry,
-                usageStore: usageStore,
-                skillsDir: skillsDir
-            ))
-        }
+        // 8. Build tools via the shared tool profile helper (Story 40.2 parity extraction).
+        // buildReviewInfrastructure runs first so usageStore is available to the helper.
+        let agentTools = buildToolProfile(
+            noSkills: noSkills,
+            noMemory: noMemory,
+            dryrun: dryrun,
+            skillRegistry: skillRegistry,
+            memoryDir: memoryDir,
+            config: config,
+            usageStore: usageStore,
+            skillsDir: skillsDir
+        )
 
         // 9. Build AgentOptions
         let effectiveMaxSteps = buildConfig.dryrun ? 1 : (buildConfig.maxSteps ?? config.maxSteps)
@@ -289,6 +235,120 @@ enum AgentBuilder {
             intelligentCurator: intelligentCurator,
             usageStore: usageStore
         )
+    }
+
+    /// Builds the tool pool for an ordinary chat/run agent (Story 40.2 parity extraction).
+    ///
+    /// This helper is a **parity-only** extraction: it is a line-for-line lift of the tool-assembly
+    /// logic that previously lived inline in `build()` (former lines 140–189 + 206–212). It does
+    /// NOT introduce any new tool behavior — registering `createAgentTool()`/`createTaskTool()`
+    /// belongs to Story 40.3, and `buildSkillAgent()` tool-pool parity belongs to Story 40.4/40.5.
+    ///
+    /// **Pure function contract:** this helper does not resolve API keys, connect to MCP, spawn the
+    /// Helper process, or call `buildReviewInfrastructure`. It receives already-constructed
+    /// dependencies (`skillRegistry`, `config`, `usageStore`). The Storage/Memory tool constructors
+    /// invoked below are lazy — their real side effects occur only inside each tool's `perform()`,
+    /// so constructing them here does not violate the pure-function contract.
+    ///
+    /// **`usageStore` semantics:** `build()` runs `buildReviewInfrastructure(... dryrun: dryrun)`
+    /// first and passes the resulting `usageStore` (which may be `nil`) into this helper. The
+    /// `save_skill` tool is registered only when `usageStore != nil` (`if let usageStore`), matching
+    /// the original inline behavior exactly. There is no separate `!dryrun` guard on `save_skill` —
+    /// parity is preserved by the `usageStore` nil-ness being the gating condition.
+    ///
+    /// - Parameters:
+    ///   - noSkills: When `true`, the Skill tool is omitted.
+    ///   - noMemory: When `true`, the Memory tool is omitted.
+    ///   - dryrun: When `true`, side-effect tools (Bash, Skill, Memory, Storage, save_skill) are excluded.
+    ///   - skillRegistry: The already-constructed skill registry.
+    ///   - memoryDir: Memory directory for the UniversalMemoryStore.
+    ///   - config: AxionConfig (its `.storage` drives Storage tool config).
+    ///   - usageStore: Optional SkillUsageStore produced by `buildReviewInfrastructure`; gates `save_skill`.
+    ///   - skillsDir: Root skill directory passed to `save_skill`.
+    /// - Returns: The assembled `[ToolProtocol]` (caller may read `.name` for assertions).
+    static func buildToolProfile(
+        noSkills: Bool,
+        noMemory: Bool,
+        dryrun: Bool,
+        skillRegistry: SkillRegistry,
+        memoryDir: String,
+        config: AxionConfig,
+        usageStore: SkillUsageStore?,
+        skillsDir: String
+    ) -> [ToolProtocol] {
+        // Build tools: base SDK tools + Skill
+        // Include core + specialist base tools explicitly so the streaming path
+        // (agent.stream()) sends them in the API request. The non-streaming
+        // query() path deduplicates via assembleToolPool.
+        // Exclude ToolSearch and AskUser — GLM models get confused by ToolSearch
+        // ("No deferred tools" kills the model's reasoning), and the system prompt
+        // already lists all available tools.
+        //
+        // In dryrun mode, strip side-effect tools (Bash, Skill) so the agent
+        // can only plan — never execute.
+        let dryrunExcludedToolNames: Set<String> = ["Bash", "Skill"]
+        var agentTools: [ToolProtocol] = (getAllBaseTools(tier: .core) + getAllBaseTools(tier: .specialist))
+            .filter { !excludedToolNames.contains($0.name) }
+            .filter { !dryrun || !dryrunExcludedToolNames.contains($0.name) }
+        if !noSkills, !dryrun {
+            agentTools.append(createSkillTool(registry: skillRegistry))
+        }
+
+        // Memory tool — Agent can actively read/write MEMORY.md and USER.md
+        if !noMemory, !dryrun {
+            let universalStore = UniversalMemoryStore(memoryDir: memoryDir)
+            agentTools.append(MemoryTool(store: universalStore))
+        }
+
+        // Storage tools (Story 39.1 scan + propose [read-only]; Story 39.2 execute + undo [side-effect]).
+        // Registered under !dryrun to match the storage-ops lifecycle. Execute/undo write manifests
+        // to ~/.axion/storage-ops/ (draft-first, re-validated, recoverable via system Trash).
+        if !dryrun {
+            let storageScanner = StorageScanService()
+            agentTools.append(StorageScanTool(scanner: storageScanner, config: config.storage))
+            agentTools.append(ProposeStoragePlanTool(config: config.storage))
+
+            // Story 39.2: shared manifest store so execute + undo read/write the same operation files.
+            let manifestStore = StorageManifestStore(storageOpsDir: config.storage.storageOpsDir)
+            agentTools.append(ExecuteStoragePlanTool(
+                executor: StorageExecutor(manifestStore: manifestStore),
+                config: config.storage
+            ))
+            agentTools.append(UndoStorageOpTool(
+                undoer: StorageUndoService(manifestStore: manifestStore),
+                config: config.storage
+            ))
+
+            // Story 39.3: App uninstall (scan = read-only; execute = side-effect, draft-first manifest,
+            // re-validated bundle/support, recoverable via system Trash — never permanent delete).
+            // Shares the same manifestStore so execute + undo read/write the same operation files.
+            let appPlanBuilder = AppUninstallPlanBuilder(
+                supportDataScanner: SupportDataScanService(),
+                appDiscoverer: AppDiscoveryService(),
+                hintReader: ExternalHintReader()
+            )
+            agentTools.append(ScanAppUninstallTool(planBuilder: appPlanBuilder))
+            agentTools.append(ExecuteAppUninstallTool(
+                executor: AppUninstallExecutor(
+                    manifestStore: manifestStore,
+                    appQuitter: AppQuitter()
+                ),
+                config: config.storage
+            ))
+        }
+
+        // save_skill tool — Agent can persist reusable skills to disk.
+        // Registered only when usageStore is non-nil (gated by `if let`). This preserves the
+        // original inline behavior; there is no separate !dryrun guard on save_skill.
+        if let usageStore {
+            agentTools.append(createSaveSkillTool(
+                skillRegistry: skillRegistry,
+                usageStore: usageStore,
+                skillsDir: skillsDir
+            ))
+        }
+
+        return agentTools
     }
 
     /// Builds a minimal agent for skill execution via SDK's `executeSkillStream()`.

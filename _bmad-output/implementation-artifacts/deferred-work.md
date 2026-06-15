@@ -1,5 +1,11 @@
 # Deferred Work
 
+## Deferred from: code review of story 40-2-shared-tool-profile-helper-with-behavior-parity (2026-06-15)
+
+- **`UniversalMemoryStore.init` init-时写盘 vs helper「纯函数」措辞**：`UniversalMemoryStore(memoryDir:)` 在 `init` 调 `ensureFilesExistSync`（创建目录 + 写空 MEMORY.md/USER.md），`AgentBuilder.buildToolProfile` docstring 称其「纯函数 / 构造惰性」措辞略夸大。pre-existing：原 `build()` 内联代码同样构造；本次提取行为等价。低优先级文档准确性问题——若未来 story（40.3+）在无写权限环境调用 helper 需注意。位置 `Sources/AxionCLI/Memory/UniversalMemoryStore.swift:36`、`Sources/AxionCLI/Services/AgentBuilder.swift:247-251`。
+- **`save_skill` 隐式耦合 `dryrun`/`noMemory`（经 usageStore nil 语义）**：`buildToolProfile` 的 `save_skill` 仅 `if let usageStore` 门控，无显式 `!dryrun`/`!noMemory` guard；parity 当前完全依赖 `buildReviewInfrastructure` 在 dryrun/noMemory 时返回 `usageStore: nil`。pre-existing、行为等价。建议未来 story（40.3+）复用此 helper 前补局部防御 `if let usageStore, !dryrun {`，避免新调用路径以非 review-infra 来源传入非 nil usageStore + dryrun=true 导致误注册副作用工具。位置 `Sources/AxionCLI/Services/AgentBuilder.swift:343`、`Sources/AxionCLI/Services/AgentBuilder+ReviewInfrastructure.swift:107`。
+- **`noMemory=true` 隐式连带禁用 `save_skill`**：latent 交互，helper docstring 未记录。pre-existing、提取前后一致；`AgentBuilderToolProfileTests` 未覆盖 `noMemory=true & usageStore != nil`（该组合在当前 `build()` 流程下不可达）。位置 `Sources/AxionCLI/Services/AgentBuilder.swift:261-262`。
+
 ## Deferred from: code review of 1-2-helper-mcp-server-foundation (2026-05-08)
 
 - ToolNames.swift missing constants for hotkey/scroll/list_apps/get_window_state/drag — these tools are stubs in 1.2, constants will be needed when implementing in 1.3-1.5
