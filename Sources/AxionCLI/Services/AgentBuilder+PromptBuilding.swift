@@ -88,6 +88,16 @@ extension AgentBuilder {
         )
         prompt = appendModeInstructions(to: prompt, fast: fast, dryrun: dryrun)
 
+        // Story 40.7: inject Claude Code skill/subagent compatibility guidance when both the Skill
+        // and Task tools are registered (i.e. !noSkills && !dryrun). Tells the model to execute
+        // /skill-name via the Skill tool and to call the Task tool for Task(...) snippets instead of
+        // printing them — closes CAP-1/CAP-2/CAP-3 prompt gap (architecture §4 + impl-plan Risk table).
+        // Placed after appendModeInstructions (mode-level guidance, same layer) and before CLAUDE.md
+        // (this is Axion-kernel system prompt, not user project instruction — must not be overridden).
+        if let guidance = slashSkillAndTaskGuidance(noSkills: noSkills, dryrun: dryrun) {
+            prompt += "\n\n\(guidance)"
+        }
+
         // Append CLAUDE.md project instructions — shared by run and interactive chat
         let claudeMdContent = loadClaudeMd(cwd: cwd)
         if !claudeMdContent.isEmpty {
@@ -114,6 +124,54 @@ extension AgentBuilder {
             prompt += "\n\nIMPORTANT: You are in DRYRUN mode. Generate a plan but do NOT execute any tools. Return a plan JSON with status 'done' and the steps you would execute."
         }
         return prompt
+    }
+
+    /// Claude Code skill/subagent 兼容提示块（Story 40.7）。
+    ///
+    /// 当一个 agent 同时注册了 `Skill` 与 `Task` 工具（即 `!noSkills && !dryrun`，与
+    /// `buildToolProfile`/`buildSkillToolProfile` 的注册门同源）时，返回一段系统提示，
+    /// 告诉模型两件事：
+    /// 1. **slash-skill 执行**（架构 §4 / CAP-3）：task prompt 里的 `/<skill-name> <args>`
+    ///    要用 `Skill` 工具执行，不要当普通聊天。
+    /// 2. **Task 工具调用**（implementation-plan Risk 表 / CAP-1/CAP-2）：skill 内容里的
+    ///    `Task(subagent_type:, prompt:)` 片段要用 `Task` 工具调用，不要打印成文本。
+    ///
+    /// 这闭合两个已知失败模式（implementation-plan.md 第 198/200 行）：
+    /// - 「Model still prints `Task(...)` instead of calling tool」
+    /// - 「Child agent treats `/skill` as chat」
+    ///
+    /// **纯函数**：无副作用、无外部依赖、无随机/时间——同 `(noSkills,dryrun)` 输入恒定输出，
+    /// 可直接单元测试（与 40.6 `diagnoseToolAvailability` 同族「注入 seam」helper）。
+    ///
+    /// 耦合点（单源真值）：「Skill 与 Task 同时可用」⟺ `!noSkills && !dryrun` 投影自
+    /// `buildToolProfile` 的注册门（Skill: `!noSkills && !dryrun`；Agent/Task: `!dryrun`，
+    /// `AgentBuilder.swift:376-389`）。若未来 40.3 的注册门改变，本 guard 同步更新。
+    ///
+    /// - Parameters:
+    ///   - noSkills: 是否 `--no-skills`（不注册 Skill 工具）。
+    ///   - dryrun: 是否 dry-run（不注册 Skill/Agent/Task side-effect 工具）。
+    /// - Returns: 提示块字符串（`!noSkills && !dryrun` 时非 nil），否则 nil。
+    static func slashSkillAndTaskGuidance(noSkills: Bool, dryrun: Bool) -> String? {
+        // 「Skill 与 Task 同时可用」⟺ !noSkills && !dryrun
+        // —— 与 buildToolProfile 的注册门（Skill: !noSkills && !dryrun；Agent/Task: !dryrun）
+        //    同源，是 Axion 侧判定「该 agent 能否走 Claude Code Task 子代理链路」的唯一真值。
+        guard !noSkills, !dryrun else { return nil }
+        return """
+
+        ## Skill & Subagent Execution (Claude Code Compatibility)
+
+        Some skills and workflow files use Claude Code conventions. Follow these rules exactly:
+
+        - **Slash-skill execution**: When a task prompt asks you to execute `/<skill-name> <args>`
+          (for example `Execute /bmad-create-story 1-1 yolo`), invoke the Skill tool with
+          `skill="<skill-name>"` and `args="<args>"`. Do not treat the slash command as plain chat
+          text — it is an instruction to run that skill.
+        - **Task tool calls**: When a skill's content tells you to call
+          `Task(subagent_type:, description:, prompt:)` or `Agent(...)` to spawn a child agent,
+          invoke the `Task` tool with those arguments. Do not print the `Task(...)` snippet as
+          plain text. Each Task call runs its child to completion before you continue to the
+          next step; if a child fails, stop and report the failed step.
+        """
     }
 
     /// Builds the full system prompt with memory context and skills section appended.

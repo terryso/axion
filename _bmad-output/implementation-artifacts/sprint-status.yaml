@@ -1,5 +1,5 @@
 # generated: 2026-05-08
-# last_updated: 2026-06-15 (story 40-6 → done; epic-40 in-progress)
+# last_updated: 2026-06-15 (story 40-7 → done; epic-40 in-progress)
 # project: axion
 # project_key: NOKEY
 # tracking_system: file-system
@@ -35,7 +35,7 @@
 # - Dev moves story to 'review', then runs code-review (fresh context, different LLM recommended)
 
 generated: 2026-05-08
-last_updated: 2026-06-15  # story 40-6 → done
+last_updated: 2026-06-15  # story 40-7 → done
 
 project: axion
 project_key: NOKEY
@@ -458,7 +458,7 @@ development_status:
   40-4-direct-skill-uses-discovered-skill-registry: done
   40-5-mcp-web-search-tool-inheritance-policy: done
   40-6-permission-allowlist-and-diagnostics-consistency: done
-  40-7-slash-skill-guidance-for-child-agents: backlog
+  40-7-slash-skill-guidance-for-child-agents: done
   40-8-child-task-progress-failure-and-summary-output: backlog
   40-9-fixture-based-pipeline-acceptance: backlog
   40-10-local-bmad-pipeline-manual-verification: backlog

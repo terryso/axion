@@ -752,11 +752,21 @@ enum AgentBuilder {
         let effectiveModel = skill.modelOverride ?? config.model
 
         let cwd = FileManager.default.currentDirectoryPath
+        // Story 40.7: the skill path always registers Skill + Agent + Task
+        // (`buildSkillToolProfile`:496-498, no dryrun/noSkills gating), so the Claude Code
+        // skill/subagent guidance is always injected here. This is the PARENT agent prompt for a
+        // pipeline skill (e.g. bmad-story-pipeline) running via `axion run` / API — it tells the
+        // model to call the `Task` tool for `Task(...)` snippets (CAP-1/CAP-2) and to run `/<skill>`
+        // via the `Skill` tool (CAP-3). The existing `[结果]` summary contract is preserved — the
+        // guidance is appended after, never rewritten or pre-empted.
+        let baseSkillPrompt = "All filesystem and terminal operations must use \(cwd) as the working directory. Do NOT invent or guess paths — always resolve relative paths against \(cwd).\n\n# Task Summary — MANDATORY\n\nEVERY response MUST end with exactly one summary line in this format:\n[结果] <one-line summary, max 100 chars>\nThis is NOT optional. Even if the task failed, you MUST include this line."
+        let skillSystemPrompt = baseSkillPrompt
+            + (slashSkillAndTaskGuidance(noSkills: false, dryrun: false).map { "\n\n\($0)" } ?? "")
         var agentOptions = AgentOptions(
             apiKey: apiKey,
             model: effectiveModel,
             baseURL: config.baseURL,
-            systemPrompt: "All filesystem and terminal operations must use \(cwd) as the working directory. Do NOT invent or guess paths — always resolve relative paths against \(cwd).\n\n# Task Summary — MANDATORY\n\nEVERY response MUST end with exactly one summary line in this format:\n[结果] <one-line summary, max 100 chars>\nThis is NOT optional. Even if the task failed, you MUST include this line.",
+            systemPrompt: skillSystemPrompt,
             maxTurns: effectiveMaxSteps,
             maxTokens: 16384,
             permissionMode: .bypassPermissions,
