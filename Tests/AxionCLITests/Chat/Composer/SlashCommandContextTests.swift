@@ -22,6 +22,7 @@ struct SlashCommandContextTests {
         let ctx = SlashCommandContext(isAgentBusy: true, isSideSession: false)
         let result = ctx.filter(SlashCommand.allCases)
         #expect(!result.contains(.resume))
+        #expect(!result.contains(.arch))
         #expect(!result.contains(.storage))
         #expect(result.contains(.help))
         #expect(result.contains(.cost))

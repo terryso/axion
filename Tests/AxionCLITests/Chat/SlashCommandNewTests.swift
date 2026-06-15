@@ -88,9 +88,9 @@ struct SlashCommandNewTests {
 
     // MARK: - allCases count 更新
 
-    @Test("allCases count == 18 (原 13 + skills + copy + mcp + apps + storage)")
+    @Test("allCases count == 19 (原 13 + skills + copy + mcp + apps + arch + storage)")
     func allCasesCount() {
-        #expect(SlashCommand.allCases.count == 18)
+        #expect(SlashCommand.allCases.count == 19)
     }
 
     // MARK: - /help 输出包含新命令

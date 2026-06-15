@@ -45,6 +45,10 @@ struct ChatCommandInputRouterTests {
             ChatCommandInputRouter.route(input: "/storage large", resumeSessionIds: [])
                 == .builtIn(command: .storage, argument: "large")
         )
+        #expect(
+            ChatCommandInputRouter.route(input: "/arch chrome --all", resumeSessionIds: [])
+                == .builtIn(command: .arch, argument: "chrome --all")
+        )
     }
 
     @Test("built-in command wins over same-named skill")

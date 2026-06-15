@@ -142,6 +142,7 @@ struct SlashCommandE2ETests {
         #expect(cases.contains(.newSession))
         #expect(cases.contains(.fork))
         #expect(cases.contains(.archive))
+        #expect(cases.contains(.arch))
     }
 
     @Test("/exit alias is quit")
@@ -162,6 +163,7 @@ struct SlashCommandE2ETests {
         #expect(SlashCommand.model.acceptsArgs == true)
         #expect(SlashCommand.resume.acceptsArgs == true)
         #expect(SlashCommand.mcp.acceptsArgs == true)
+        #expect(SlashCommand.arch.acceptsArgs == true)
         #expect(SlashCommand.help.acceptsArgs == false)
         #expect(SlashCommand.exit.acceptsArgs == false)
     }

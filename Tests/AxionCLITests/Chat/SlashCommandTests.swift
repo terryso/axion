@@ -144,9 +144,9 @@ struct SlashCommandTests {
 
     // MARK: - allCases + helpText
 
-    @Test("allCases count == 18")
+    @Test("allCases count == 19")
     func allCasesCount() {
-        #expect(SlashCommand.allCases.count == 18)
+        #expect(SlashCommand.allCases.count == 19)
     }
 
     @Test("每个 helpText 非空且唯一")
@@ -162,7 +162,7 @@ struct SlashCommandTests {
 
     // MARK: - SlashCommandHandler.handleHelp()
 
-    @Test("handleHelp 输出包含所有 8 个命令名和描述")
+    @Test("handleHelp 输出包含所有命令名和描述")
     func handleHelpOutput() {
         let output = SlashCommandHandler.handleHelp()
         for cmd in SlashCommand.allCases {

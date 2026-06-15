@@ -66,8 +66,9 @@ struct SlashPopupTests {
         #expect(names.contains("/cost"))
         #expect(names.contains("/config"))
         #expect(names.contains("/copy"))
+        #expect(names.contains("/arch"))
         #expect(names.contains("/mcp"))
-        #expect(items.count == 7)
+        #expect(items.count == 8)
     }
 
     @Test("/h 返回 /help")
@@ -207,9 +208,10 @@ struct SlashPopupTests {
         let items = SlashPopup.filter(query: "/", context: ctx)
         let names = items.map(\.kind.displayName)
         #expect(!names.contains("/resume"), "/resume should be filtered when agent busy")
+        #expect(!names.contains("/arch"), "/arch should be filtered when agent busy")
         #expect(!names.contains("/storage"), "/storage should be filtered when agent busy")
         #expect(names.contains("/mcp"), "/mcp should remain available when agent busy")
-        #expect(items.count == 11, "Should have 11 commands (all except /resume, /new, /fork, /archive, /skills, /apps, /storage)")
+        #expect(items.count == 11, "Should have 11 commands (all except /resume, /new, /fork, /archive, /skills, /apps, /arch, /storage)")
     }
 
     // MARK: - Filter: matchRange

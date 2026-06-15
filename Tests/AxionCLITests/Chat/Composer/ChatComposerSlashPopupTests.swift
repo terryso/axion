@@ -178,10 +178,10 @@ struct ChatComposerSlashPopupTests {
             keyReader: reader
         )
         let result = composer.readInput(prompt: "> ", continuationPrompt: "...> ")
-        // 默认排序第一个是 /apps（接受参数），第二个是 /archive
+        // 默认排序第一个是 /apps（接受参数），第二个是 /arch
         // Down 移到第二个，tab 补全
-        // 接受 args=false 的命令 → 直接提交
-        #expect(result == "/archive")
+        // 接受 args=true 的命令 → 保留编辑态并补空格
+        #expect(result == "/arch ")
     }
 
     @Test("AC6: Down 后 Enter 执行选中的命令")
@@ -200,7 +200,7 @@ struct ChatComposerSlashPopupTests {
             keyReader: reader
         )
         let result = composer.readInput(prompt: "> ", continuationPrompt: "...> ")
-        #expect(result == "/archive")
+        #expect(result == "/arch")
     }
 
     @Test("AC6: 最近使用的 skill 可用 Enter 直接执行")

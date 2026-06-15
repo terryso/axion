@@ -385,6 +385,9 @@ struct ChatCommand: AsyncParsableCommand {
                     }
                     taskText = generatedTask
                     recordUserInput(generatedTask)
+                } else if cmd == .arch {
+                    await handleArchitectureSlash(argument: argument)
+                    continue
                 } else if cmd == .mcp {
                     handleMCPSlash(argument: argument, config: config, buildConfig: state.buildConfig)
                     continue
@@ -992,5 +995,44 @@ struct ChatCommand: AsyncParsableCommand {
             .joined(separator: " ")
             .trimmingCharacters(in: .whitespacesAndNewlines)
         return (filter.isEmpty ? nil : filter, deep)
+    }
+
+    private func handleArchitectureSlash(argument: String?) async {
+        guard let options = AppArchitectureFormatter.parseOptions(argument: argument) else {
+            fputs(AppArchitectureFormatter.helpText() + "\n", stderr)
+            return
+        }
+
+        guard let result = await scanArchitectureForSlash(
+            scanner: AppArchitectureScanService(),
+            options: options
+        ) else {
+            return
+        }
+        fputs(AppArchitectureFormatter.render(result), stderr)
+    }
+
+    private func scanArchitectureForSlash(
+        scanner: any AppArchitectureScanning,
+        options: AppArchitectureScanOptions
+    ) async -> AppArchitectureScanResult? {
+        let spinner = SpinnerRenderer()
+        spinner.start(message: "正在扫描软件架构", delayMs: 200)
+        defer { spinner.stop() }
+
+        let scanTask: _Concurrency.Task<AppArchitectureScanResult, Never> = _Concurrency.Task {
+            await scanner.scan(options: options)
+        }
+        let listener = EscapeInterruptListener(
+            onEscape: { scanTask.cancel() },
+            interruptBytes: [0x1B, 0x03]
+        )
+        defer { listener.cancel() }
+
+        let result = await scanTask.value
+        if scanTask.isCancelled { return nil }
+
+        spinner.stop()
+        return result
     }
 }

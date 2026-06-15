@@ -111,6 +111,8 @@ struct SlashCommandHandler {
             fputs(handleMCPStatus(config: config, buildConfig: buildConfig), stderr)
         case .apps:
             return .none
+        case .arch:
+            return .none
         case .storage:
             return .none
         }
