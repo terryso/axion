@@ -35,9 +35,31 @@ enum AgentBuilder {
 
     // MARK: - Shared Helpers
 
-    /// Tool names excluded from all agent builds — ToolSearch confuses GLM models,
-    /// AskUser is handled by the system prompt.
+    /// The default ToolSearch-off tool-name exclusion set (Story 40.5).
+    ///
+    /// `AskUser` is always excluded (the system prompt handles user-confirmation prompts).
+    /// `ToolSearch` is excluded here because, historically, it confuses GLM-class models'
+    /// reasoning. As of Story 40.5 this constant is the **ToolSearch-off default** set — the
+    /// live exclusion at build time is computed by ``effectiveExcludedToolNames(allowingToolSearch:)``
+    /// driven by `AxionConfig.enableToolSearch`, so providers/users where ToolSearch degrades
+    /// reasoning keep it off by default while others can opt in. The two are related by the
+    /// identity `effectiveExcludedToolNames(allowingToolSearch: false) == excludedToolNames`.
     static let excludedToolNames: Set<String> = ["ToolSearch", "AskUser"]
+
+    /// Returns the tool-name exclusion set honoring the ToolSearch config policy (Story 40.5).
+    ///
+    /// `AskUser` is always excluded (the system prompt handles user-confirmation prompts). `ToolSearch`
+    /// is excluded only when the ToolSearch policy is OFF — previously this was a hard-coded global
+    /// exclusion (``excludedToolNames``); it is now driven by `AxionConfig.enableToolSearch` so
+    /// providers/users where ToolSearch degrades reasoning (e.g. GLM) keep it off by default, while
+    /// others can opt in. Both ``buildToolProfile`` and ``buildSkillToolProfile`` call this helper so the
+    /// two paths share a single source of truth (CAP-8).
+    ///
+    /// ``excludedToolNames`` (the no-arg constant) is preserved as the legacy "ToolSearch-off default"
+    /// set — tests that iterate it (Story 40.2/40.3) keep passing under the default config.
+    static func effectiveExcludedToolNames(allowingToolSearch: Bool) -> Set<String> {
+        allowingToolSearch ? ["AskUser"] : excludedToolNames
+    }
 
     /// Tool names stripped from base tools in dry-run mode (side-effect tools).
     ///
@@ -290,14 +312,16 @@ enum AgentBuilder {
         // Include core + specialist base tools explicitly so the streaming path
         // (agent.stream()) sends them in the API request. The non-streaming
         // query() path deduplicates via assembleToolPool.
-        // Exclude ToolSearch and AskUser — GLM models get confused by ToolSearch
-        // ("No deferred tools" kills the model's reasoning), and the system prompt
-        // already lists all available tools.
+        // Exclude AskUser always (system prompt handles user-confirmation prompts), and
+        // ToolSearch unless the config policy opts in — Story 40.5 makes the ToolSearch
+        // exclusion config-driven via `AxionConfig.enableToolSearch` (default off keeps GLM
+        // stable) instead of a hard-coded global exclusion.
         //
         // In dryrun mode, strip side-effect tools (Bash, Skill) so the agent
         // can only plan — never execute.
+        let excluded = effectiveExcludedToolNames(allowingToolSearch: config.toolSearchEnabled)
         var agentTools: [ToolProtocol] = (getAllBaseTools(tier: .core) + getAllBaseTools(tier: .specialist))
-            .filter { !excludedToolNames.contains($0.name) }
+            .filter { !excluded.contains($0.name) }
             .filter { !dryrun || !dryrunExcludedToolNames.contains($0.name) }
         if !noSkills, !dryrun {
             agentTools.append(createSkillTool(registry: skillRegistry))
@@ -374,34 +398,45 @@ enum AgentBuilder {
     /// Builds the tool pool for a direct skill-execution agent (Story 40.3).
     ///
     /// This is the skill-path parallel of ``buildToolProfile``: a **pure function** that assembles
-    /// core-tier tools (excluding `ToolSearch`/`AskUser`) and appends the `Skill`, `Agent`, and
-    /// `Task` tools so a pipeline skill (e.g. `bmad-story-pipeline`) running via
-    /// `axion run /skill-name` or API skill execution can spawn child agents, and those children
-    /// can invoke other `/skill-name` single-step skills via the `Skill` tool.
+    /// core-tier tools and appends the `Skill`, `Agent`, and `Task` tools so a pipeline skill
+    /// (e.g. `bmad-story-pipeline`) running via `axion run /skill-name` or API skill execution
+    /// can spawn child agents, and those children can invoke other `/skill-name` single-step
+    /// skills via the `Skill` tool.
     ///
     /// **Pure function contract:** no API-key resolution, no MCP connection, no Helper process.
     /// The tool constructors (`createSkillTool`/`createAgentTool`/`createTaskTool`) are lazy —
     /// their side effects occur only inside each tool's `perform()`, so constructing them here
     /// does not violate the pure-function contract.
     ///
-    /// **Scope (Stories 40.3 / 40.4):**
+    /// **Scope (Stories 40.3 / 40.4 / 40.5):**
     /// - The `registry` passed in is the **full discovered registry** (Story 40.4): built-in skills
     ///   + filesystem discovery + the ensured current skill. `buildSkillAgent` builds it via
     ///   ``makeDiscoveredSkillRegistry(ensuring:discoveryDirectories:)`` and passes the SAME
     ///   instance to both this helper and `AgentOptions.skillRegistry`, so SDK
     ///   `DefaultSubAgentSpawner` inherits the full registry to child agents.
-    /// - This helper does NOT add MCP / ToolSearch beyond the `.core` tier (that inheritance
-    ///   policy is Story 40.5's scope). Web tools (`WebSearch`/`WebFetch`) are part of the
-    ///   `.core` tier, so they are present here exactly as before 40.3.
+    /// - `AskUser` is always excluded (system-prompt-handled). `ToolSearch` is excluded unless
+    ///   `enableToolSearch` is `true` (Story 40.5) — both paths share the single
+    ///   ``effectiveExcludedToolNames(allowingToolSearch:)`` source of truth. `buildSkillAgent`
+    ///   passes `config.toolSearchEnabled` so the skill path inherits the same ToolSearch policy as
+    ///   normal chat. Web tools (`WebSearch`/`WebFetch`) are part of the `.core` tier and are
+    ///   always present regardless of the ToolSearch policy.
+    /// - MCP inheritance is handled in ``buildSkillAgent`` via ``resolveSkillMcpServers(from:)``
+    ///   (Story 40.5) — this tool-pool helper stays scoped to base + Skill/Agent/Task tools.
     /// - `buildSkillAgent` has no `dryrun` parameter because skill execution is inherently
     ///   side-effect-bearing (writes files, calls the LLM); all three appended tools are always
     ///   registered.
     ///
-    /// - Parameter registry: The already-constructed skill registry (the full discovered set).
+    /// - Parameters:
+    ///   - registry: The already-constructed skill registry (the full discovered set).
+    ///   - enableToolSearch: Whether to keep `ToolSearch` in the pool (Story 40.5). Defaults to
+    ///     `false` so existing `buildSkillToolProfile(registry:)` callers keep the ToolSearch-off
+    ///     behavior; `buildSkillAgent` passes `config.toolSearchEnabled`.
     /// - Returns: The assembled `[ToolProtocol]` (caller may read `.name` for assertions).
-    static func buildSkillToolProfile(registry: SkillRegistry) -> [ToolProtocol] {
-        // Core tools only — exclude ToolSearch/AskUser to avoid confusing the LLM.
-        var tools = getAllBaseTools(tier: .core).filter { !excludedToolNames.contains($0.name) }
+    static func buildSkillToolProfile(registry: SkillRegistry, enableToolSearch: Bool = false) -> [ToolProtocol] {
+        // Core tools only — exclude AskUser always, ToolSearch unless the config policy opts in
+        // (Story 40.5: single source of truth via effectiveExcludedToolNames).
+        let excluded = effectiveExcludedToolNames(allowingToolSearch: enableToolSearch)
+        var tools = getAllBaseTools(tier: .core).filter { !excluded.contains($0.name) }
 
         // Story 40.3: Direct skill path registers Skill + Agent + Task so pipeline skills can
         // spawn children and those children can invoke other /skill-name single-step skills.
@@ -444,13 +479,48 @@ enum AgentBuilder {
         return registry
     }
 
+    /// Resolves the MCP server config for the direct skill-execution path (Story 40.5).
+    ///
+    /// Mirrors `build()`'s MCP step so a skill agent inherits the SAME configured MCP servers as a
+    /// normal chat/run agent (CAP-8 / architecture §6) — previously `buildSkillAgent` hard-coded
+    /// `mcpServers: nil`, silently dropping MCP tools that a Claude Code skill may require. Falls
+    /// back to "/usr/bin/true" when AxionHelper isn't installed: skill execution does NOT throw on
+    /// a missing helper (unlike `build()`), so the MCP config is always buildable; real connection
+    /// (and any failure) happens lazily at agent run, same as the normal path.
+    ///
+    /// **Pure-ish contract (mirrors ``makeDiscoveredSkillRegistry``):** no API-key resolution, no MCP
+    /// connection, no Helper process spawn. `helperPath` defaults to a real `HelperPathResolver`
+    /// lookup (read-only FS check); tests inject a stub path for determinism. `MCPConfigResolver.resolveMCPServers`
+    /// only builds the config dict — it does not connect.
+    ///
+    /// - Parameters:
+    ///   - config: AxionConfig (its `.mcpServers` carries the user-configured MCP servers).
+    ///   - helperPath: Optional resolved AxionHelper path. Defaults to `HelperPathResolver.resolveHelperPath()`;
+    ///     falls back to "/usr/bin/true" when nil so the helper baseline key is always buildable.
+    /// - Returns: A `[String: McpServerConfig]` containing the `axion-helper` baseline plus any
+    ///   user-configured servers (same output shape as `build()`'s MCP step).
+    static func resolveSkillMcpServers(
+        from config: AxionConfig,
+        helperPath: String? = HelperPathResolver.resolveHelperPath()
+    ) -> [String: McpServerConfig] {
+        let resolvedHelperPath = helperPath ?? "/usr/bin/true"
+        return MCPConfigResolver.resolveMCPServers(
+            helperPath: resolvedHelperPath,
+            includePlaywright: false,
+            userServers: config.mcpServers
+        )
+    }
+
     /// Builds a minimal agent for skill execution via SDK's `executeSkillStream()`.
     ///
     /// Unlike `build()`, this creates a lightweight agent:
-    /// - No MCP servers (no desktop automation tools)
+    /// - MCP servers inherited from config (Story 40.5) — was hard-coded `nil`; now resolves via
+    ///   ``resolveSkillMcpServers(from:)`` so a skill declaring MCP tools receives them. Connection
+    ///   is lazy (happens at agent run, not here), so this stays side-effect-free.
     /// - Skill/Agent/Task tools registered (Story 40.3) so pipeline skills can spawn children
     /// - No memory injection
-    /// - Core tools only (ToolSearch/AskUser excluded)
+    /// - Core tools only; AskUser always excluded, ToolSearch driven by `config.enableToolSearch`
+    ///   (Story 40.5)
     /// - Model overridden by skill if specified
     static func buildSkillAgent(
         config: AxionConfig,
@@ -469,7 +539,9 @@ enum AgentBuilder {
         let registry = AgentBuilder.makeDiscoveredSkillRegistry(ensuring: skill)
 
         // Story 40.3: tools assembled via the testable pure helper (Skill + Agent + Task added).
-        let tools = buildSkillToolProfile(registry: registry)
+        // Story 40.5: pass `config.toolSearchEnabled` so the skill path shares the same ToolSearch
+        // policy as normal chat (single source of truth via effectiveExcludedToolNames).
+        let tools = buildSkillToolProfile(registry: registry, enableToolSearch: config.toolSearchEnabled)
 
         let effectiveMaxSteps = maxSteps ?? config.maxSteps
         let effectiveModel = skill.modelOverride ?? config.model
@@ -484,7 +556,10 @@ enum AgentBuilder {
             maxTokens: 16384,
             permissionMode: .bypassPermissions,
             tools: tools,
-            mcpServers: nil,
+            // Story 40.5: inherit configured MCP servers (was nil) so skill agents that need MCP tools
+            // (e.g. a skill declaring mcp__github__list_prs) get them. Mirrors build()'s MCP step via the
+            // testable resolveSkillMcpServers helper. Connection is lazy (happens at agent run, not here).
+            mcpServers: resolveSkillMcpServers(from: config),
             skillRegistry: registry,
             logLevel: verbose ? .debug : .info
         )

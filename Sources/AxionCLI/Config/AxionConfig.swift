@@ -106,6 +106,16 @@ public struct AxionConfig: Equatable, Sendable {
     public var storage: StorageConfig
     public var mcpServers: [String: AxionMcpServerConfig]?
 
+    /// 是否启用 ToolSearch 工具（Story 40.5）。`nil`（默认）= 关闭——ToolSearch 会混淆 GLM
+    /// 类模型的推理（参见 GLM ToolSearch issue），默认保持关闭以稳定提示。设为 `true` 时，
+    /// 普通 chat 与 direct skill 两条路径都会纳入 ToolSearch（单一策略来源，CAP-8）。
+    /// skill/subagent 在 allowed-tools 中声明 ToolSearch 只能在该策略允许时生效（opt-in 不能
+    /// 覆盖用户 config / dry-run / permission——见 Story 40.6）。
+    public var enableToolSearch: Bool?
+
+    /// ToolSearch 是否启用（nil → false，保持 GLM 稳定的默认行为）。
+    public var toolSearchEnabled: Bool { enableToolSearch ?? false }
+
     public static let `default` = AxionConfig(
         apiKey: nil,
         provider: .anthropic,
@@ -141,7 +151,8 @@ public struct AxionConfig: Equatable, Sendable {
         env: nil,
         promptDisplay: nil,
         storage: .default,
-        mcpServers: nil
+        mcpServers: nil,
+        enableToolSearch: nil
     )
 
     public init(
@@ -179,7 +190,8 @@ public struct AxionConfig: Equatable, Sendable {
         env: [String: String]? = nil,
         promptDisplay: PromptDisplayConfig? = nil,
         storage: StorageConfig = .default,
-        mcpServers: [String: AxionMcpServerConfig]? = nil
+        mcpServers: [String: AxionMcpServerConfig]? = nil,
+        enableToolSearch: Bool? = nil
     ) {
         self.apiKey = apiKey
         self.provider = provider
@@ -216,6 +228,7 @@ public struct AxionConfig: Equatable, Sendable {
         self.promptDisplay = promptDisplay
         self.storage = storage
         self.mcpServers = mcpServers
+        self.enableToolSearch = enableToolSearch
     }
 
     public var tgTypingEnabled: Bool { telegramTypingEnabled ?? true }
@@ -231,7 +244,7 @@ extension AxionConfig: Codable {
         case gatewayEnabled, gatewayCuratorIdleHours, gatewayCuratorIntervalHours, gatewayTaskTimeoutMinutes, gatewayNotifyCuratorResults, gatewayMemoryNudgeInterval
         case telegramBotToken, telegramChatId, telegramAllowedUsers, telegramTypingEnabled, telegramTypingInterval
         case env, promptDisplay
-        case storage, mcpServers
+        case storage, mcpServers, enableToolSearch
     }
 
     public init(from decoder: Decoder) throws {
@@ -280,5 +293,6 @@ extension AxionConfig: Codable {
         } else {
             mcpServers = nil
         }
+        enableToolSearch = try c.decodeIfPresent(Bool.self, forKey: .enableToolSearch)
     }
 }
