@@ -1,5 +1,5 @@
 # generated: 2026-05-08
-# last_updated: 2026-06-15 (story 40-3 done via story-automator-review; epic-40 in-progress)
+# last_updated: 2026-06-15 (story 40-4 → done; epic-40 in-progress)
 # project: axion
 # project_key: NOKEY
 # tracking_system: file-system
@@ -455,7 +455,7 @@ development_status:
   40-1-sdk-runtime-readiness-gate: done
   40-2-shared-tool-profile-helper-with-behavior-parity: done
   40-3-register-agent-task-skill-across-agent-paths: done
-  40-4-direct-skill-uses-discovered-skill-registry: backlog
+  40-4-direct-skill-uses-discovered-skill-registry: done
   40-5-mcp-web-search-tool-inheritance-policy: backlog
   40-6-permission-allowlist-and-diagnostics-consistency: backlog
   40-7-slash-skill-guidance-for-child-agents: backlog

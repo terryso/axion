@@ -384,10 +384,12 @@ enum AgentBuilder {
     /// their side effects occur only inside each tool's `perform()`, so constructing them here
     /// does not violate the pure-function contract.
     ///
-    /// **Scope (Story 40.3):**
-    /// - The `registry` here still contains only the current skill; `createSkillTool(registry:)`
-    ///   is still called so the `Skill` tool name is present. Story 40.4 replaces this single-skill
-    ///   registry with the discovered registry.
+    /// **Scope (Stories 40.3 / 40.4):**
+    /// - The `registry` passed in is the **full discovered registry** (Story 40.4): built-in skills
+    ///   + filesystem discovery + the ensured current skill. `buildSkillAgent` builds it via
+    ///   ``makeDiscoveredSkillRegistry(ensuring:discoveryDirectories:)`` and passes the SAME
+    ///   instance to both this helper and `AgentOptions.skillRegistry`, so SDK
+    ///   `DefaultSubAgentSpawner` inherits the full registry to child agents.
     /// - This helper does NOT add MCP / ToolSearch beyond the `.core` tier (that inheritance
     ///   policy is Story 40.5's scope). Web tools (`WebSearch`/`WebFetch`) are part of the
     ///   `.core` tier, so they are present here exactly as before 40.3.
@@ -395,7 +397,7 @@ enum AgentBuilder {
     ///   side-effect-bearing (writes files, calls the LLM); all three appended tools are always
     ///   registered.
     ///
-    /// - Parameter registry: The already-constructed skill registry (currently single-skill).
+    /// - Parameter registry: The already-constructed skill registry (the full discovered set).
     /// - Returns: The assembled `[ToolProtocol]` (caller may read `.name` for assertions).
     static func buildSkillToolProfile(registry: SkillRegistry) -> [ToolProtocol] {
         // Core tools only — exclude ToolSearch/AskUser to avoid confusing the LLM.
@@ -403,13 +405,43 @@ enum AgentBuilder {
 
         // Story 40.3: Direct skill path registers Skill + Agent + Task so pipeline skills can
         // spawn children and those children can invoke other /skill-name single-step skills.
-        // The registry still contains only the current skill (Story 40.4 swaps in the discovered
-        // registry); createSkillTool(registry:) is called regardless so the `Skill` tool is present.
+        // Story 40.4: the registry is now the full discovered set (built by
+        // `makeDiscoveredSkillRegistry`), so a pipeline skill's child agents can resolve sibling
+        // skills like /bmad-create-story via the inherited registry.
         tools.append(createSkillTool(registry: registry))
         tools.append(createAgentTool())
         tools.append(createTaskTool())
 
         return tools
+    }
+
+    /// Builds the full discovered `SkillRegistry` used by both normal chat/run (`build()`) and
+    /// direct skill execution (`buildSkillAgent()`). This is the registry the `Skill` tool and
+    /// `AgentOptions.skillRegistry` must share so that (a) an orchestrator skill can invoke
+    /// sub-skills, and (b) SDK `DefaultSubAgentSpawner` inherits the full registry to child agents.
+    ///
+    /// Mirrors the registry construction in `build()` (lines 96-102): built-in skills + filesystem
+    /// discovery, then ensures the currently-executing `skill` is present (idempotent `register` —
+    /// `SkillRegistry.register` replaces in place if the name already exists, so re-registering a
+    /// discovered skill is safe and uses the exact passed instance).
+    ///
+    /// **Pure-ish contract:** no API-key resolution, no MCP, no Helper. `registerDiscoveredSkills`
+    /// does filesystem discovery on `discoveryDirectories` (read-only scan). Tests inject a temp
+    /// fixture dir for determinism; production passes `ConfigManager.skillDiscoveryDirectories`.
+    ///
+    /// - Parameters:
+    ///   - skill: The skill currently being executed; guaranteed present in the returned registry.
+    ///   - discoveryDirectories: Directories scanned by `SkillLoader`. Defaults to the configured set.
+    /// - Returns: A `SkillRegistry` containing built-ins + discovered skills + the ensured skill.
+    static func makeDiscoveredSkillRegistry(
+        ensuring skill: OpenAgentSDK.Skill,
+        discoveryDirectories: [String] = ConfigManager.skillDiscoveryDirectories
+    ) -> SkillRegistry {
+        let registry = SkillRegistry()
+        AxionBuiltInSkills.registerAll(into: registry)
+        _ = registry.registerDiscoveredSkills(from: discoveryDirectories)
+        registry.register(skill) // ensure the currently-executing skill is present (idempotent)
+        return registry
     }
 
     /// Builds a minimal agent for skill execution via SDK's `executeSkillStream()`.
@@ -429,8 +461,12 @@ enum AgentBuilder {
     ) async throws -> (agent: Agent, runCompleteBox: RunCompleteContextBox) {
         let apiKey = try resolveApiKey(from: config)
 
-        let registry = SkillRegistry()
-        registry.register(skill)
+        // Story 40.4: use the full discovered registry (built-in + filesystem discovery + ensured
+        // current skill), not a single-skill registry. This same registry feeds both
+        // `buildSkillToolProfile(registry:)` and `agentOptions.skillRegistry`, so SDK
+        // `DefaultSubAgentSpawner` inherits the full registry to child agents (CAP-3) — letting a
+        // pipeline skill's Task children resolve sub-skills like /bmad-create-story.
+        let registry = AgentBuilder.makeDiscoveredSkillRegistry(ensuring: skill)
 
         // Story 40.3: tools assembled via the testable pure helper (Skill + Agent + Task added).
         let tools = buildSkillToolProfile(registry: registry)
