@@ -4,7 +4,7 @@ import AxionCore
 import OpenAgentSDK
 @testable import AxionCLI
 
-@Suite("TaskSerialQueue")
+@Suite("TaskSerialQueue", .serialized)
 struct TaskSerialQueueTests {
 
     // MARK: - Mocks
@@ -243,9 +243,10 @@ struct TaskSerialQueueTests {
 
         await queue.enqueue(task: "slow-task", chatId: 100, userId: 100)
 
-        // Wait for timeout reply to appear
-        await waitUntil {
-            await collector.messages(for: 100).contains { $0.contains("超时已取消") || $0.contains("任务执行失败") }
+        // This test exercises timeout scheduling under the full unit suite. Keep the
+        // assertion focused on the target timeout reply and allow scheduler headroom.
+        await waitUntil(timeout: .seconds(10)) {
+            await collector.messages(for: 100).contains { $0.contains("超时已取消") }
         }
         await queue.cancelAll()
         processingTask.cancel()

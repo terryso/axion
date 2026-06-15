@@ -8,7 +8,7 @@
 [![DeepWiki](https://img.shields.io/badge/DeepWiki-_.svg?style=flat&color=00b0aa&labelColor=000000&logo=data:image/svg%2Bxml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIxNiIgaGVpZ2h0PSIxNiIgdmlld0JveD0iMCAwIDI0IDI0IiBmaWxsPSJub25lIiBzdHJva2U9IiNmZmYiIHN0cm9rZS13aWR0aD0iMiIgc3Ryb2tlLWxpbmVjYXA9InJvdW5kIiBzdHJva2UtbGluZWpvaW49InJvdW5kIj48cGF0aCBkPSJNMiAzaDZhMTAgMTAgMCAwIDEgMTAgMTB2MiIvPjxwYXRoIGQ9Ik0yIDEzaDYxMCAxMCAwIDAgMSAxMCAxMHYyIi8+PC9zdmc+)](https://deepwiki.com/terryso/axion)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue)](./LICENSE)
 
-A full-spectrum AI agent for macOS — interactive coding, file editing, web search, shell commands, safe storage cleanup, app uninstall, and 21 native desktop automation tools. All in one terminal.
+A full-spectrum AI agent for macOS — interactive coding, file editing, web search, shell commands, safe storage cleanup, app uninstall, software architecture audits, and 21 native desktop automation tools. All in one terminal.
 
 [English](#english) | [中文](./README.zh-CN.md) | [Changelog](./CHANGELOG.md)
 
@@ -20,7 +20,7 @@ A full-spectrum AI agent for macOS — interactive coding, file editing, web sea
 
 ## Overview
 
-Axion is a Swift-based AI agent that lives in your terminal. Type `axion` and start a conversation — it writes code, edits files, runs shell commands, searches the web, reads documentation, safely organizes local storage, uninstalls macOS apps with reviewable support-data cleanup, and when needed, takes control of desktop apps via native accessibility APIs. Think of it as Claude Code with superpowers for your Mac.
+Axion is a Swift-based AI agent that lives in your terminal. Type `axion` and start a conversation — it writes code, edits files, runs shell commands, searches the web, reads documentation, safely organizes local storage, audits Intel-only macOS software, uninstalls apps with reviewable support-data cleanup, and when needed, takes control of desktop apps via native accessibility APIs. Think of it as Claude Code with superpowers for your Mac.
 
 <p align="center">
   <img src="docs/demo.gif" alt="Axion Demo" width="700">
@@ -28,7 +28,7 @@ Axion is a Swift-based AI agent that lives in your terminal. Type `axion` and st
 
 **Key highlights:**
 
-- **Interactive Coding Agent** — `axion` launches a Claude Code–like REPL with streaming output, 18 slash commands (`/help`, `/clear`, `/diff`, `/model`, `/cost`, `/copy`, `/mcp`, `/storage`, `/apps`, …), file edit approval diffs, multiline input with CJK support, and session resume
+- **Interactive Coding Agent** — `axion` launches a Claude Code–like REPL with streaming output, 19 slash commands (`/help`, `/clear`, `/diff`, `/model`, `/cost`, `/copy`, `/mcp`, `/storage`, `/apps`, `/arch`, …), file edit approval diffs, multiline input with CJK support, and session resume
 - **Full Tool Spectrum** — Bash execution, file read/write/edit, code search (Grep/Glob), web search & fetch, LSP code intelligence — plus 21 native macOS desktop tools via MCP when you need GUI
 - **Safe Storage & App Cleanup** — Find large files, collapse rebuildable caches such as `node_modules` and `DerivedData`, organize folders through approval-backed plans, uninstall apps with support-data review, and undo storage operations
 - **Rich Terminal Rendering** — Streaming Unicode tables, 16-language syntax highlighting, diff-colored code blocks, Markdown extensions (strikethrough, task lists, clickable links, image placeholders), file change summaries, and context progress bars
@@ -53,7 +53,7 @@ Axion is a Swift-based AI agent that lives in your terminal. Type `axion` and st
 │   ├── Streaming Markdown             ├── axion run "task"      │
 │   ├── Syntax Highlight (16 langs)    ├── MCP Tools (21)        │
 │   ├── Unicode Tables                 ├── Record & Replay       │
-│   ├── Slash Commands (18)            └── User Takeover         │
+│   ├── Slash Commands (19)            └── User Takeover         │
 │   ├── File Edit Approval                                       │
 │   ├── Clipboard (/copy)                                        │
 │   ├── Session Resume + Transcript                               │
@@ -135,6 +135,7 @@ axion
 > /storage scan ~/Projects
 > /storage organize ~/Downloads
 > /apps
+> /arch          # find Intel-only apps and packages
 
 # Check what changed
 > /diff          # git diff summary for this session
@@ -175,7 +176,7 @@ axion run --no-review "Open Calculator"          # skip post-run review
 | **Storage & Cleanup** | `storage_scan`, `propose_storage_plan`, `execute_storage_plan`, `undo_storage_op`, `scan_app_uninstall`, `execute_app_uninstall` | Safely organize folders, find large files, uninstall apps (trash by default, undoable, requires confirmation before acting) |
 | **Desktop** | 21 MCP tools | Native macOS automation (see below) |
 
-### Mac Storage & App Cleanup
+### Mac Storage, App Cleanup & Architecture Audit
 
 Axion treats cleanup as a reviewable Mac workflow, not a blind delete command. Scans read file metadata only, plans are shown before execution, cleanup uses the system Trash by default, and storage operations write manifests so they can be undone.
 
@@ -183,6 +184,7 @@ Axion treats cleanup as a reviewable Mac workflow, not a blind delete command. S
 - **Clean rebuildable developer caches** — `storage_scan` returns collapsed `developer_cache` roots such as `node_modules`, `.build`, `DerivedData`, `.venv`, `Pods`, and `.gradle` so the agent can suggest safe cleanup without enumerating millions of dependency files.
 - **Organize folders interactively** — `/storage organize ~/Downloads` scans, proposes a small high-confidence plan, shows risks, then executes only after explicit approval.
 - **Uninstall apps with support-data review** — `/apps` lists uninstall candidates with sizes, filters by app name, shows the app detail before handoff, and uses `scan_app_uninstall` / `execute_app_uninstall` for app bundle plus related support data.
+- **Audit Intel-only software** — `/arch` or `axion arch` scans installed apps plus Homebrew/MacPorts executables, resolves package symlinks, and reads Mach-O headers to find Intel-only binaries.
 
 ```bash
 axion
@@ -193,6 +195,7 @@ axion
 > /storage organize ~/Downloads
 > /storage undo
 > /apps
+> /arch --all
 ```
 
 ### Desktop Automation (21 MCP Tools)
@@ -262,7 +265,7 @@ The default `axion` command opens a REPL with rich terminal UX:
 - **System events** — Codex-style rendering for context compression, rate limits, and task completion notifications
 - **Context compaction** — Visual before/after progress bars when context is compressed (auto or `/compact`)
 - **File edit approval** — Shows a color-coded diff preview before applying changes; approve, reject, or edit
-- **18 slash commands** — `/help`, `/clear`, `/compact`, `/model`, `/cost`, `/diff`, `/status`, `/resume`, `/config`, `/new`, `/fork`, `/archive`, `/skills`, `/copy`, `/mcp`, `/storage`, `/apps`, `/exit`
+- **19 slash commands** — `/help`, `/clear`, `/compact`, `/model`, `/cost`, `/diff`, `/status`, `/resume`, `/config`, `/new`, `/fork`, `/archive`, `/skills`, `/copy`, `/mcp`, `/storage`, `/apps`, `/arch`, `/exit`
 - **Slash popup completion** — Type `/` for popup menu with Tab to complete; `@` for file search
 - **Multiline input** — Paste or compose multi-line prompts naturally; `\` continuation for manual line breaks
 - **Cross-session history** — Up/Down navigation works across sessions; history persisted to `~/.axion/history.jsonl`
@@ -286,6 +289,10 @@ axion resume
 
 # List all sessions
 axion sessions
+
+# Find Intel-only apps and command-line packages
+axion arch
+axion arch --all
 ```
 
 ### Cross-run Memory

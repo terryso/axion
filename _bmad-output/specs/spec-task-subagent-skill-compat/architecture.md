@@ -117,6 +117,8 @@ skill="<skill-name>" and args="<args>". Do not treat the slash command as plain 
 
 This instruction should be added to the parent agent system prompt when `Skill` and `Task` are both registered, or to the child agent system prompt in the subagent tool factory.
 
+> **实现约束（Story 40.7 回顾确认）：** 在 SDK 0.10.0 当前形状下，**child 侧注入不可达**——子代理 system prompt 由 SDK `DefaultSubAgentSpawner` 决定，而 `SubAgentInheritanceContext` 没有 `systemPrompt` 字段，且 `BUILTIN_AGENTS` 仅含 `"Explore"`/`"Plan"`（`subagent_type:"general-purpose"` → `agentDef == nil` → `systemPrompt: nil`）。因此 40.7 仅实现 **parent 侧**注入（`slashSkillAndTaskGuidance(noSkills:dryrun:)`，注入于 `buildSystemPrompt`/`buildSkillAgent`）。child 侧分支归类为 **SDK follow-up**（需 SDK 为 `SubAgentInheritanceContext` 增加 `systemPrompt` 字段，或在 Axion 侧实现 subagent factory）——在 SDK 形状改变前，不应将 child 侧视为可自由选择的等价方案。
+
 The child agent must inherit a working `Skill` tool from the parent tool pool. That is already true when:
 
 - Axion registers `createSkillTool(registry:)` in the parent tool pool.

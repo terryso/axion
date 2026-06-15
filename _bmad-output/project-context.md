@@ -601,7 +601,7 @@ Axion 作为 OpenAgentSDK 的旗舰参考实现。ScaffoldCLI（位于 OpenAgent
 - `Sources/AxionCLI/Commands/RunCommand.swift` — CLI 入口（参数解析 + AxionRuntime 执行，Epic 26）
 - `Sources/AxionCLI/Services/AxionRuntime.swift` — 统一执行入口 actor（session lifecycle + EventBus + EventHandler 注册 + executeSkill for skill path）
 - `Sources/AxionCLI/Services/Protocols/AxionRuntimeRunning.swift` — AxionRuntime DI 协议（测试用）
-- `Sources/AxionCLI/Services/AgentBuilder.swift` — BuildResult 工厂（build() 返回 agent + options + helper manager，不执行；buildSkillAgent() 为技能执行独立路径，Epic 27 增加 eventBus 参数）
+- `Sources/AxionCLI/Services/AgentBuilder.swift` — BuildResult 工厂（build() 返回 agent + options + helper manager，不执行；buildSkillAgent() 为技能执行独立路径，Epic 27 增加 eventBus 参数）。**Epic 40** 新增纯可注入 helper 家族作为工具组装的可测性骨架（均为 `static func`、带可注入 default-arg seam、被直接单测，从不调用真实 `build()`）：`buildToolProfile`（普通 chat/run，字节级 Parity 提取）、`buildSkillToolProfile(registry:)`（direct skill 路径）、`makeDiscoveredSkillRegistry(ensuring:discoveryDirectories:)`（完整 discovered registry）、`effectiveExcludedToolNames(allowingToolSearch:)`、`resolveSkillMcpServers(from:helperPath:)`、`diagnoseToolAvailability(...)`（四类工具诊断）、`slashSkillAndTaskGuidance(noSkills:dryrun:)`（父侧 slash 提示注入）。普通 chat/run（非 dry-run）与 direct skill 路径均注册 SDK `Agent`/`Task`/`Skill` 工具（Claude Code 子代理/技能兼容，SDK 0.10.0）；dry-run 移除 `Skill`/`Agent`/`Task`，`--no-skills` 仅禁 `Skill`
 - `Sources/AxionCLI/Services/RunOrchestrator.swift` — Stream processing layer（review/curator execution, takeover; skill fast-path moved to AxionRuntime in Epic 27; cross-cutting concerns moved to EventHandlers in Epic 26）
 - `Sources/AxionCLI/Services/DaemonRuntimeManager.swift` — [Epic 27] Daemon 模式运行时协调器（per-request AxionRuntime，session tracking）
 - `Sources/AxionCLI/Commands/SessionsCommand.swift` — [Epic 27] axion sessions CLI 命令（--active, --limit）
@@ -787,7 +787,7 @@ AxionRuntime.execute(buildConfig, runOverrides) → AgentBuilder.build() → age
 | `maxReplanRetries` | `3` | 最大重规划次数 |
 | `traceEnabled` | `true` | 默认开启 trace |
 | `sharedSeatMode` | `true` | 默认开启共享座椅安全模式 |
-| `gatewayEnabled` | `false` | 是否启用 gateway |
+| `enableToolSearch` | `nil`（→ `toolSearchEnabled` 解析为 `false`） | ToolSearch 工具可见性开关（Epic 40）。默认关——GLM 模型在工具列表含 ToolSearch 时会困惑、无法直接用 Bash。设为 `true` 可显式开启 |
 | `gatewayCuratorIdleHours` | `2.0` | Curator 空闲触发阈值（小时） |
 | `gatewayCuratorIntervalHours` | `168.0` | Curator 间隔（小时，默认 7 天） |
 | `gatewayTaskTimeoutMinutes` | `10.0` | 单任务超时（分钟） |

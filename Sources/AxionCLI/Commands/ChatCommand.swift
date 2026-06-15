@@ -1009,7 +1009,11 @@ struct ChatCommand: AsyncParsableCommand {
         ) else {
             return
         }
-        fputs(AppArchitectureFormatter.render(result), stderr)
+        let prompt = AppArchitectureSelectionPrompt(
+            isTTY: isatty(STDIN_FILENO) != 0,
+            writeOutput: { fputs($0, stderr) }
+        )
+        _ = prompt.run(result: result)
     }
 
     private func scanArchitectureForSlash(
