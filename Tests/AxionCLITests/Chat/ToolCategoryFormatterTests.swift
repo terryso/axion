@@ -746,4 +746,148 @@ struct ToolCategoryFormatterTests {
         )
         #expect(result.count < 500)  // Should be truncated
     }
+
+    // MARK: - Subagent Category (Story 40.8)
+
+    @Test("Task/Agent tools are categorized as .subagent (AC1)")
+    func test_categorize_subagent() {
+        #expect(ToolCategoryFormatter.categorize(toolName: "Task") == .subagent)
+        #expect(ToolCategoryFormatter.categorize(toolName: "Agent") == .subagent)
+        #expect(ToolCategoryFormatter.categorize(toolName: "task") == .subagent)
+        #expect(ToolCategoryFormatter.categorize(toolName: "AGENT") == .subagent)
+    }
+
+    @Test(".subagent mapping does not misclassify axion-helper desktop tools (AC1 range guard)")
+    func test_categorize_subagent_doesNotAffectAxionHelper() {
+        // mcp__axion-helper__* desktop tools must keep their original categories
+        // (diverted by the MCP parse before the agent/task branch).
+        #expect(ToolCategoryFormatter.categorize(toolName: "mcp__axion-helper__click") == .shell)
+        #expect(ToolCategoryFormatter.categorize(toolName: "mcp__axion-helper__screenshot") == .fileRead)
+        #expect(ToolCategoryFormatter.categorize(toolName: "mcp__axion-helper__type_text") == .shell)
+        // Other categories unchanged
+        #expect(ToolCategoryFormatter.categorize(toolName: "skill") == .memory)
+        #expect(ToolCategoryFormatter.categorize(toolName: "bash") == .shell)
+        #expect(ToolCategoryFormatter.categorize(toolName: "unknown_tool") == .default)
+    }
+
+    @Test(".subagent has a dedicated, distinct CategoryStyle")
+    func test_subagent_hasStyle() {
+        let style = ToolCategoryFormatter.categoryStyles[.subagent]
+        #expect(style != nil)
+        #expect(!(style?.icon.isEmpty ?? true))
+        #expect(style?.label == "task")
+        // Icon must differ from .default's ⚡
+        #expect(style?.icon != ToolCategoryFormatter.categoryStyles[.default]?.icon)
+    }
+
+    @Test("extractSlashSkillCommand extracts the /command from an Execute form (AC2/AC4)")
+    func test_extractSlashSkillCommand_extractsExecuteForm() {
+        let cmd = ToolCategoryFormatter.extractSlashSkillCommand(from: "Execute /bmad-create-story 1-1 yolo now")
+        #expect(cmd != nil)
+        #expect(cmd?.contains("/bmad-create-story 1-1 yolo") == true)
+    }
+
+    @Test("extractSlashSkillCommand extracts a bare /command without Execute prefix")
+    func test_extractSlashSkillCommand_extractsBareForm() {
+        let cmd = ToolCategoryFormatter.extractSlashSkillCommand(from: "run /missing-skill demo please")
+        #expect(cmd != nil)
+        #expect(cmd?.contains("/missing-skill demo") == true)
+    }
+
+    @Test("extractSlashSkillCommand returns nil when no slash command is present")
+    func test_extractSlashSkillCommand_returnsNilWhenAbsent() {
+        #expect(ToolCategoryFormatter.extractSlashSkillCommand(from: "just analyze the codebase") == nil)
+        #expect(ToolCategoryFormatter.extractSlashSkillCommand(from: "") == nil)
+    }
+
+    @Test("formatStarted subagent shows description + command, never dumps prompt (AC2)")
+    func test_formatStarted_subagent_showsDescriptionAndCommand() {
+        // Prompt holds prose + a slash command; description is the human-readable summary.
+        let input = """
+        {"prompt": "Please draft the story by running /bmad-create-story 1-1 yolo", "description": "Create story"}
+        """
+        let result = ToolCategoryFormatter.formatStarted(
+            toolName: "Task",
+            input: input,
+            isTTY: false
+        )
+        #expect(result.contains("Create story"))               // description surfaced
+        #expect(result.contains("/bmad-create-story 1-1 yolo")) // extracted command surfaced
+        #expect(result.contains("task"))                        // .subagent label
+        // The prompt prose must NOT be dumped verbatim (AC2 compact constraint).
+        #expect(!result.contains("Please draft the story by running"))
+        // Compact: start line is shorter than the raw input.
+        #expect(result.count < input.count)
+    }
+
+    @Test("formatStarted subagent degrades gracefully without a slash command (AC2)")
+    func test_formatStarted_subagent_degradesWithoutSlashCommand() {
+        let input = """
+        {"prompt": "Analyze the codebase and report findings", "description": "Review code"}
+        """
+        let result = ToolCategoryFormatter.formatStarted(
+            toolName: "Task",
+            input: input,
+            isTTY: false
+        )
+        #expect(result.contains("Review code"))  // description still shown
+        #expect(!result.contains(" — "))         // no command appended
+        #expect(!result.contains("command:"))
+    }
+
+    @Test("formatCompleted subagent success shows completion status + compact summary (AC3)")
+    func test_formatCompleted_subagent_success_showsSummary() {
+        let result = ToolCategoryFormatter.formatCompleted(
+            toolName: "Task",
+            content: "Story draft created and saved.",
+            isError: false,
+            durationMs: 350,
+            toolInput: nil,
+            isTTY: false
+        )
+        #expect(result.contains("✓"))
+        #expect(result.contains("completed"))
+        #expect(result.contains("Story draft created"))
+        #expect(result.contains("[350ms]"))
+        // Compact: not dumping excessive text
+        #expect(result.count < 200)
+    }
+
+    @Test("formatCompleted subagent failure preserves error text + retry command (AC4)")
+    func test_formatCompleted_subagent_failure_preservesErrorAndRetry() {
+        let toolInput = """
+        {"prompt": "Please run /missing-skill demo now", "description": "Demo missing"}
+        """
+        let result = ToolCategoryFormatter.formatCompleted(
+            toolName: "Task",
+            content: #"Skill "missing-skill" not found or not registered"#,
+            isError: true,
+            durationMs: 100,
+            toolInput: toolInput,
+            isTTY: false
+        )
+        #expect(result.contains("✗"))
+        #expect(result.contains("failed"))
+        #expect(result.contains("not found or not registered"))  // original error preserved
+        #expect(result.contains("missing-skill"))
+        #expect(result.contains("retry:"))                       // retry surfaced
+        #expect(result.contains("/missing-skill demo"))           // canonical command
+    }
+
+    @Test("formatCompleted subagent failure omits retry line when prompt has no slash command (AC4)")
+    func test_formatCompleted_subagent_failure_noRetryWithoutSlashCommand() {
+        let toolInput = """
+        {"prompt": "Investigate the build failure", "description": "Debug build"}
+        """
+        let result = ToolCategoryFormatter.formatCompleted(
+            toolName: "Task",
+            content: "Subagent encountered an unexpected error",
+            isError: true,
+            durationMs: 50,
+            toolInput: toolInput,
+            isTTY: false
+        )
+        #expect(result.contains("unexpected error"))  // error text preserved
+        #expect(!result.contains("retry:"))            // no empty retry line
+    }
 }

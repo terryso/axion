@@ -14,6 +14,10 @@ final class ChatOutputFormatter: OpenAgentSDK.SDKMessageOutputHandler, @unchecke
     private let spinner: SpinnerRenderer
     private var toolStartTimes: [String: ContinuousClock.Instant] = [:]
     private var toolNames: [String: String] = [:]  // toolUseId → toolName lookup
+    // Story 40.8 (AC5): toolUseId → original input JSON, tracked ONLY for Task/Agent
+    // subagent tools so the failure result line can extract a `retry:` command.
+    // Same lifecycle as toolNames/toolStartTimes (stored on .toolUse, removed on .toolResult).
+    private var toolInputs: [String: String] = [:]
     private var hasOutputText = false  // 跟踪是否已输出 LLM 文本（用于空行分隔）
 
     // AC1/AC2/AC3: 角色视觉语义层
@@ -170,6 +174,12 @@ final class ChatOutputFormatter: OpenAgentSDK.SDKMessageOutputHandler, @unchecke
 
             toolStartTimes[data.toolUseId] = .now
             toolNames[data.toolUseId] = data.toolName
+            // Story 40.8 (AC5): only Task/Agent subagent tools need their input retained
+            // (for retry-command extraction on failure). Other tools skip this to save
+            // memory and preserve their existing behavior.
+            if ToolCategoryFormatter.categorize(toolName: data.toolName) == .subagent {
+                toolInputs[data.toolUseId] = data.input
+            }
 
             // Codex-inspired: 按工具类别使用不同的视觉样式
             let startedLine = ToolCategoryFormatter.formatStarted(
@@ -204,13 +214,17 @@ final class ChatOutputFormatter: OpenAgentSDK.SDKMessageOutputHandler, @unchecke
                 durationToMs(ContinuousClock.now - $0)
             }
             let resolvedToolName = toolNames.removeValue(forKey: data.toolUseId) ?? "unknown"
+            // Story 40.8 (AC5): pair-clear the subagent input (always removeValue so the
+            // dict never leaks across turns, mirroring toolNames/toolStartTimes).
+            let resolvedToolInput = toolInputs.removeValue(forKey: data.toolUseId)
 
             // Codex-inspired: 按工具类别使用不同的结果格式化
             let completedLine = ToolCategoryFormatter.formatCompleted(
                 toolName: resolvedToolName,
                 content: data.content,
                 isError: data.isError,
-                durationMs: toolDurationMs
+                durationMs: toolDurationMs,
+                toolInput: resolvedToolInput
             )
             if data.isError {
                 writeToolLine(role: .warning, content: "\r\(completedLine)")

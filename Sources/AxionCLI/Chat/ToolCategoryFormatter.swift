@@ -24,6 +24,7 @@ struct ToolCategoryFormatter {
         case fileRead    // file reading (Read, cat, head, tail)
         case search      // searching (grep, glob, search, find)
         case memory      // memory/skill operations
+        case subagent    // Claude Code Task/Agent subagent launchers (SDK createTaskTool()/createAgentTool(), Epic 40)
         case mcp         // external MCP server tools
         case `default`   // uncategorized tools
     }
@@ -112,6 +113,15 @@ struct ToolCategoryFormatter {
                 ansi16: "\u{1B}[36m"
             )
         ),
+        .subagent: CategoryStyle(
+            icon: "🚀",
+            label: "task",
+            labelColorANSI: (
+                trueColor: "\u{1B}[38;2;96;165;250m",   // sky-blue (distinct from .mcp/.fileRead)
+                ansi256: "\u{1B}[38;5;75m",
+                ansi16: "\u{1B}[34m"
+            )
+        ),
         .default: CategoryStyle(
             icon: "⚡",
             label: "tool",
@@ -181,6 +191,14 @@ struct ToolCategoryFormatter {
             return .memory
         }
 
+        // Subagent launchers — Claude Code `Task`/`Agent` tools (Epic 40).
+        // Placed AFTER MCP parse (so `mcp__axion-helper__*` desktop tools are already
+        // diverted) and BEFORE desktop tool names. `Task`/`Agent` are non-`mcp__` names,
+        // so they never collide with the axion-helper desktop tools.
+        if name == "agent" || name == "task" {
+            return .subagent
+        }
+
         // Desktop automation (AX) — treat interaction tools as shell
         if name == "click" || name == "type_text" || name == "press_key"
             || name == "scroll" || name == "launch_app" || name == "drag"
@@ -195,6 +213,43 @@ struct ToolCategoryFormatter {
         }
 
         return .default
+    }
+
+    // MARK: - Slash Skill Command Extraction (Story 40.8)
+
+    /// Extracts the first `/<skill-name> <args>` slash command embedded in a child
+    /// agent prompt.
+    ///
+    /// Story 40.8 (AC2/AC4): the `Task`/`Agent` tool's `prompt` field (e.g.
+    /// `"Execute /bmad-create-story 1-1 yolo"`) is never dumped verbatim — instead
+    /// this helper surfaces just the runnable `/skill-name args` so the start line can
+    /// show `command:` and the failure line can show `retry:`.
+    ///
+    /// The leading optional `Execute\s+` is tolerated so prompts phrased as
+    /// "Execute /foo bar" or "run /foo bar" both yield `/foo bar`.
+    ///
+    /// Pure function — no I/O, no `SkillRegistry` lookup, no Skill tool invocation.
+    /// Same input always yields the same output, so it is directly unit-testable.
+    ///
+    /// - Parameter prompt: The child agent prompt text (typically `AgentToolInput.prompt`).
+    /// - Returns: The captured `/name args` (truncated to 80 chars), or `nil` if no
+    ///   slash command is present.
+    static func extractSlashSkillCommand(from prompt: String) -> String? {
+        guard let regex = try? NSRegularExpression(
+            pattern: #"(?:Execute\s+)?(/[A-Za-z0-9][A-Za-z0-9_-]*(?:[ \t]+[^\n\r]*)?)"#,
+            options: []
+        ) else { return nil }
+
+        let fullRange = NSRange(prompt.startIndex..., in: prompt)
+        guard let match = regex.firstMatch(in: prompt, options: [], range: fullRange),
+              match.numberOfRanges >= 2,
+              let commandRange = Range(match.range(at: 1), in: prompt) else {
+            return nil
+        }
+
+        let captured = String(prompt[commandRange]).trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !captured.isEmpty else { return nil }
+        return ToolOutputFormatter.truncateText(captured, maxLength: 80)
     }
 
     // MARK: - Started Formatting
@@ -247,6 +302,9 @@ struct ToolCategoryFormatter {
     ///   - content: Result content string
     ///   - isError: Whether the tool returned an error
     ///   - durationMs: Tool execution duration in milliseconds (nil if unknown)
+    ///   - toolInput: Original tool-use input JSON (Story 40.8 AC4 — only `Task`/`Agent`
+    ///     subagent tools use this to extract a `retry:` command on failure). Defaults
+    ///     to nil so existing call sites are unchanged.
     ///   - isTTY: Whether output is to a TTY
     ///   - colorProfile: Terminal color capability
     /// - Returns: Formatted completion line (including newline)
@@ -255,6 +313,7 @@ struct ToolCategoryFormatter {
         content: String,
         isError: Bool,
         durationMs: Int?,
+        toolInput: String? = nil,
         isTTY: Bool = isatty(STDOUT_FILENO) != 0,
         colorProfile: TerminalColorProfile = .detect()
     ) -> String {
@@ -276,8 +335,20 @@ struct ToolCategoryFormatter {
             outputPreview = extractSuccessPreview(content: content, category: category)
         }
 
+        // Story 40.8 (AC4): subagent failure — surface a retryable `/skill args`
+        // command extracted from the original tool-use input. Ignored for all
+        // other categories and for successes.
+        let retryCommand: String?
+        if category == .subagent, isError, let toolInput = toolInput {
+            retryCommand = extractRetryCommand(from: toolInput)
+        } else {
+            retryCommand = nil
+        }
+
         guard isTTY else {
-            let parts = [statusIcon, statusLabel, outputPreview].filter { !$0.isEmpty }
+            var parts = [statusIcon, statusLabel, outputPreview]
+            if let retry = retryCommand { parts.append("retry: \(retry)") }
+            parts = parts.filter { !$0.isEmpty }
             return "\(parts.joined(separator: " "))\(durationSuffix)\n"
         }
 
@@ -308,6 +379,11 @@ struct ToolCategoryFormatter {
         if !outputPreview.isEmpty {
             result += " \(dimCode)\(outputPreview)\(reset)"
         }
+        // Story 40.8 (AC4): append the retry command plainly (not dimmed) so the
+        // actionable instruction stands out from the dimmed error preview.
+        if let retry = retryCommand {
+            result += " retry: \(retry)"
+        }
         result += "\(durationSuffix)\n"
 
         return result
@@ -325,6 +401,10 @@ struct ToolCategoryFormatter {
             if category == .mcp, let displayName = formatMCPDisplayName(toolName) {
                 let raw = ToolOutputFormatter.truncateText(input, maxLength: 80)
                 return raw.isEmpty ? displayName : "\(displayName) \(raw)"
+            }
+            if category == .subagent {
+                // Non-JSON subagent input — defensive fallback (SDK schema guarantees JSON).
+                return ToolOutputFormatter.truncateText(input, maxLength: 60)
             }
             return ToolOutputFormatter.truncateText(input, maxLength: 80)
         }
@@ -413,6 +493,22 @@ struct ToolCategoryFormatter {
             }
             return "\(displayName) \(extractFirstValue(json: json))"
 
+        case .subagent:
+            // Story 40.8 (AC2): show the human-readable `description` as the primary
+            // identifier, plus an extracted `/skill args` command when present.
+            // The `prompt` is NEVER returned verbatim — it only feeds
+            // `extractSlashSkillCommand`.
+            let prompt = json["prompt"] as? String ?? ""
+            let rawDescription = (json["description"] as? String)?
+                .trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+            let baseSummary = rawDescription.isEmpty
+                ? "subagent task"
+                : ToolOutputFormatter.truncateText(rawDescription, maxLength: 60)
+            if let command = extractSlashSkillCommand(from: prompt) {
+                return "\(baseSummary) — \(command)"
+            }
+            return baseSummary
+
         case .default:
             // Use existing summarizeInput logic
             if let filePath = json["file_path"] as? String {
@@ -452,6 +548,8 @@ struct ToolCategoryFormatter {
             return "completed"
         case .memory:
             return "ok"
+        case .subagent:
+            return "completed"
         case .mcp:
             return "completed"
         case .default:
@@ -476,6 +574,8 @@ struct ToolCategoryFormatter {
             return "search failed"
         case .memory:
             return "memory error"
+        case .subagent:
+            return "failed"
         case .mcp:
             return "mcp failed"
         case .default:
@@ -497,14 +597,39 @@ struct ToolCategoryFormatter {
             return lineCount > 1 ? "\(lineCount) lines" : ""
         case .search:
             return ""  // Match count shown in label
+        case .subagent:
+            // Story 40.8 (AC3): compact child-agent summary — first non-empty line,
+            // truncated. Multi-line diagnostics blocks ([Tools used:...]) beyond the
+            // first line are elided in compact single-line mode (start/result stay
+            // single-line, consistent with non-shell categories).
+            let firstLine = content.components(separatedBy: "\n").first?
+                .trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+            return ToolOutputFormatter.truncateText(firstLine, maxLength: 80)
         case .memory, .mcp, .default:
             return ToolOutputFormatter.truncateText(content, maxLength: 60)
         }
     }
 
     private static func extractErrorPreview(content: String, category: ToolCategory) -> String {
-        let summary = ToolOutputFormatter.truncateText(content, maxLength: 100)
-        return summary
+        // Story 40.8 (AC4): subagent errors are actionable — preserve more of the
+        // original child error text than the default 100-char ceiling.
+        let maxLength = category == .subagent ? 200 : 100
+        return ToolOutputFormatter.truncateText(content, maxLength: maxLength)
+    }
+
+    /// Parses a `Task`/`Agent` tool-use input JSON and extracts a retryable
+    /// `/skill args` command from its `prompt` field.
+    ///
+    /// Story 40.8 (AC4): on subagent failure, the result line appends
+    /// `retry: /skill args` so the user can re-run the failed step manually.
+    /// Returns nil when the input is not JSON or the prompt holds no slash command
+    /// (graceful degradation — no empty `retry:` line).
+    private static func extractRetryCommand(from toolInput: String) -> String? {
+        guard let json = parseJSONDict(from: toolInput),
+              let prompt = json["prompt"] as? String else {
+            return nil
+        }
+        return extractSlashSkillCommand(from: prompt)
     }
 
     // MARK: - Shell Output Rendering (Codex-inspired)
