@@ -35,7 +35,7 @@
 # - Dev moves story to 'review', then runs code-review (fresh context, different LLM recommended)
 
 generated: 2026-05-08
-last_updated: 2026-06-16  # story 40-10 → done (automated review: 0 CRITICAL; deterministic parts independently re-verified — command-name consistency, grep bmad-bmm|bmad-tea Sources/ = empty, metadata, make test 4067/272 Epic-40 zero-regression; manual LLM AC1/AC2 runs recorded as pending human sign-off)
+last_updated: 2026-06-16  # epic-40-retrospective → done (#YOLO retro: 10/10 stories done, 0 CRITICAL/0 HIGH across epic; mid-tier GLM-5.2[1m] on 9/10 stories refines Epic-39 model-selection rule — decomposition+adversarial-review is the real lever; SDK 0.10.0 non-breaking; TD1/TD2 CRITICAL debt carried 3rd epic)
 
 project: axion
 project_key: NOKEY
@@ -451,7 +451,7 @@ development_status:
 
   # Epic 40: Run Claude Code/BMAD Workflow Skills End-to-End
   # 线性依赖链: 40.1 → 40.2 → 40.3 → 40.4 → 40.5 → 40.6 → 40.7 → 40.8 → 40.9 → 40.10
-  epic-40: in-progress
+  epic-40: done
   40-1-sdk-runtime-readiness-gate: done
   40-2-shared-tool-profile-helper-with-behavior-parity: done
   40-3-register-agent-task-skill-across-agent-paths: done
@@ -462,4 +462,4 @@ development_status:
   40-8-child-task-progress-failure-and-summary-output: done
   40-9-fixture-based-pipeline-acceptance: done
   40-10-local-bmad-pipeline-manual-verification: done
-  epic-40-retrospective: optional
+  epic-40-retrospective: done
