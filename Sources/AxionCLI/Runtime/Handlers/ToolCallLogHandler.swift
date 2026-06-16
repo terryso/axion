@@ -25,16 +25,28 @@ actor ToolCallLogHandler: EventHandler {
     let identifier = "tool-call-log"
     let subscribedEventTypes: [any AgentEvent.Type] = [ToolStartedEvent.self]
 
-    private let enabled: Bool
-
-    init() {
-        let flag = ProcessInfo.processInfo.environment["AXION_LOG_TOOL_CALLS"]
-        self.enabled = !(flag?.isEmpty ?? true)
-    }
+    init() {}
 
     func handle(_ event: any AgentEvent, context: EventHandlerContext) async {
-        guard enabled, let e = event as? ToolStartedEvent else { return }
-        let raw = (e.input ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+        guard let e = event as? ToolStartedEvent else { return }
+        Self.log(e)
+    }
+
+    // MARK: - Static logging (shared with non-handler callers, e.g. the chat REPL)
+
+    /// Whether `AXION_LOG_TOOL_CALLS` is set (any non-empty value). Read once per process.
+    static let isEnabled: Bool = {
+        let flag = ProcessInfo.processInfo.environment["AXION_LOG_TOOL_CALLS"]
+        return !(flag?.isEmpty ?? true)
+    }()
+
+    /// Emits a `[tool] <name>: <input>` line to stderr. No-op when ``isEnabled`` is false.
+    /// Shared between the EventHandler path (runtime runs) and the chat REPL, which builds
+    /// its agent directly (no runtime/handler registration) and so subscribes the typed
+    /// `ToolStartedEvent` stream itself.
+    static func log(_ event: ToolStartedEvent) {
+        guard isEnabled else { return }
+        let raw = (event.input ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
         let truncated: String
         if raw.isEmpty {
             truncated = ""
@@ -43,8 +55,8 @@ actor ToolCallLogHandler: EventHandler {
         } else {
             truncated = raw
         }
-        let sid = e.sessionId.map { "[\($0)] " } ?? "[subagent] "
+        let sid = event.sessionId.map { "[\($0)] " } ?? "[subagent] "
         let detail = truncated.isEmpty ? "" : ": \(truncated)"
-        fputs("[tool] \(sid)\(e.toolName)\(detail)\n", stderr)
+        fputs("[tool] \(sid)\(event.toolName)\(detail)\n", stderr)
     }
 }

@@ -121,9 +121,25 @@ struct ChatCommand: AsyncParsableCommand {
 
         var buildResult: AgentBuildResult
         let buildMs: Int
+        // Chat builds its agent directly (no runtime/handler registration), so by default it
+        // has no EventBus — meaning subagent tool calls (e.g. a bmad-create-story child reading
+        // project-context.md during activation) are never published and thus invisible. Create a
+        // bus, pass it to the agent (inherited by spawned children), and — when
+        // AXION_LOG_TOOL_CALLS is set — log each ToolStartedEvent to stderr so the child's
+        // reads become visible. Mirrors the runtime-registered ToolCallLogHandler used by
+        // `axion run`/API/gateway.
+        let chatEventBus = EventBus()
+        if ToolCallLogHandler.isEnabled {
+            _Concurrency.Task {
+                let stream = await chatEventBus.subscribe(ToolStartedEvent.self)
+                for await event in stream {
+                    ToolCallLogHandler.log(event)
+                }
+            }
+        }
         do {
             let buildStart = ContinuousClock.now
-            buildResult = try await AgentBuilder.build(buildConfig)
+            buildResult = try await AgentBuilder.build(buildConfig, eventBus: chatEventBus)
             let buildElapsed = ContinuousClock.now - buildStart
             buildMs = durationToMs(buildElapsed)
         } catch {
