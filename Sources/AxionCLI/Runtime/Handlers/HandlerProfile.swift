@@ -30,6 +30,8 @@ struct HandlerProfile: Sendable {
 
         // All contexts: trace + memory
         handlers.append(TraceEventHandler(traceDir: traceDir))
+        // Opt-in stderr logging of every tool call (incl. subagent reads) via AXION_LOG_TOOL_CALLS.
+        handlers.append(ToolCallLogHandler())
 
         if context != .api {
             handlers.append(MemoryProcessingHandler(noMemory: noMemory, memoryDir: memoryDir))
