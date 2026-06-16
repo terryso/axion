@@ -262,6 +262,7 @@ enum AgentBuilder {
         agentOptions.todoStore = TodoStore()
         agentOptions.maxModelCalls = config.maxModelCalls
         agentOptions.env = config.env
+        agentOptions.subAgentMaxTurns = config.subAgentMaxTurns
         agentOptions.runId = buildConfig.runId
         agentOptions.traceEnabled = true
         agentOptions.traceBaseURL = ConfigManager.traceDirectory
@@ -781,6 +782,7 @@ enum AgentBuilder {
         )
         agentOptions.eventBus = eventBus
         agentOptions.env = config.env
+        agentOptions.subAgentMaxTurns = config.subAgentMaxTurns
 
         let runCompleteBox = RunCompleteContextBox()
         agentOptions.onRunComplete = { context in

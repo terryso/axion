@@ -74,6 +74,9 @@ public struct AxionConfig: Equatable, Sendable {
     public var baseURL: String?
     public var model: String
     public var maxSteps: Int
+    /// 子代理(Task/Agent 工具 spawn)的默认 turn 上限。`nil`(默认)走 SDK 内置默认(50)。
+    /// 仅当 launcher 调用未显式传 maxTurns 时生效;优先级:显式 > 此处 > SDK 默认。
+    public var subAgentMaxTurns: Int?
     public var maxBatches: Int
     public var maxReplanRetries: Int
     public var traceEnabled: Bool
@@ -122,6 +125,7 @@ public struct AxionConfig: Equatable, Sendable {
         baseURL: nil,
         model: "claude-sonnet-4-20250514",
         maxSteps: 20,
+        subAgentMaxTurns: nil,
         maxBatches: 6,
         maxReplanRetries: 3,
         traceEnabled: true,
@@ -161,6 +165,7 @@ public struct AxionConfig: Equatable, Sendable {
         baseURL: String? = nil,
         model: String = "claude-sonnet-4-20250514",
         maxSteps: Int = 20,
+        subAgentMaxTurns: Int? = nil,
         maxBatches: Int = 6,
         maxReplanRetries: Int = 3,
         traceEnabled: Bool = true,
@@ -198,6 +203,7 @@ public struct AxionConfig: Equatable, Sendable {
         self.baseURL = baseURL
         self.model = model
         self.maxSteps = maxSteps
+        self.subAgentMaxTurns = subAgentMaxTurns
         self.maxBatches = maxBatches
         self.maxReplanRetries = maxReplanRetries
         self.traceEnabled = traceEnabled
@@ -238,7 +244,7 @@ public struct AxionConfig: Equatable, Sendable {
 
 extension AxionConfig: Codable {
     public enum CodingKeys: String, CodingKey {
-        case apiKey, provider, baseURL, model, maxSteps, maxBatches, maxReplanRetries, traceEnabled, sharedSeatMode, maxModelCalls, maxScreenshots
+        case apiKey, provider, baseURL, model, maxSteps, subAgentMaxTurns, maxBatches, maxReplanRetries, traceEnabled, sharedSeatMode, maxModelCalls, maxScreenshots
         case reviewMemoryInterval, reviewSkillInterval, reviewMinMessages, reviewModel
         case curatorEnabled, curatorDryRun, curatorIntervalHours, curatorStaleAfterDays, curatorArchiveAfterDays
         case gatewayEnabled, gatewayCuratorIdleHours, gatewayCuratorIntervalHours, gatewayTaskTimeoutMinutes, gatewayNotifyCuratorResults, gatewayMemoryNudgeInterval
@@ -254,6 +260,7 @@ extension AxionConfig: Codable {
         baseURL = try c.decodeIfPresent(String.self, forKey: .baseURL)
         model = try c.decodeIfPresent(String.self, forKey: .model) ?? Self.default.model
         maxSteps = try c.decodeIfPresent(Int.self, forKey: .maxSteps) ?? Self.default.maxSteps
+        subAgentMaxTurns = try c.decodeIfPresent(Int.self, forKey: .subAgentMaxTurns)
         maxBatches = try c.decodeIfPresent(Int.self, forKey: .maxBatches) ?? Self.default.maxBatches
         maxReplanRetries = try c.decodeIfPresent(Int.self, forKey: .maxReplanRetries) ?? Self.default.maxReplanRetries
         traceEnabled = try c.decodeIfPresent(Bool.self, forKey: .traceEnabled) ?? Self.default.traceEnabled

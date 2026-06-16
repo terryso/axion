@@ -45,6 +45,7 @@ struct AxionConfigTests {
             apiKey: "sk-test-key",
             model: "claude-opus-4-20250514",
             maxSteps: 30,
+            subAgentMaxTurns: 42,
             maxBatches: 10,
             maxReplanRetries: 5,
             traceEnabled: false,
@@ -57,10 +58,19 @@ struct AxionConfigTests {
         #expect(decoded.apiKey == "sk-test-key")
         #expect(decoded.model == "claude-opus-4-20250514")
         #expect(decoded.maxSteps == 30)
+        #expect(decoded.subAgentMaxTurns == 42)
         #expect(decoded.maxBatches == 10)
         #expect(decoded.maxReplanRetries == 5)
         #expect(!decoded.traceEnabled)
         #expect(!decoded.sharedSeatMode)
+    }
+
+    @Test("config subAgentMaxTurns absent decodes to nil")
+    func configSubAgentMaxTurnsAbsentDecodesNil() throws {
+        // Omitting the key entirely (legacy configs) must yield nil → SDK default applies.
+        let json = #"{"maxSteps": 20}"#.data(using: .utf8)!
+        let decoded = try JSONDecoder().decode(AxionConfig.self, from: json)
+        #expect(decoded.subAgentMaxTurns == nil)
     }
 
     // MARK: - Default Values
