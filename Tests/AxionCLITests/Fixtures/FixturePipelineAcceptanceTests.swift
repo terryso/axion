@@ -14,7 +14,7 @@ import OpenAgentSDK
 // 在单元层做端到端验收。
 //
 // 关键约束（CLAUDE.md 强制）：
-// - 全部使用 Swift Testing（`import Testing` / `@Suite` / `@Test` / `#expect`），**禁止** `import XCTest`
+// - 全部使用 Swift Testing（`import Testing` / `@Suite` / `@Test` / `#expect`），**禁止导入 XCTest**
 // - 单元测试必须 Mock：**禁止**真实 `AgentBuilder.build()` / `buildSkillAgent()`（会 resolveApiKey +
 //   起 Helper + 真实 MCP resolve）。本套件只调用纯函数 helper（`buildToolProfile` /
 //   `buildSkillToolProfile` / `diagnoseToolAvailability`）+ 40.8 输出格式化 helper

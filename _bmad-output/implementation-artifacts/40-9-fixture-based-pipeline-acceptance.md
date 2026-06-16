@@ -1,5 +1,5 @@
 ---
-baseline_commit: 2f65cb4209802e57db09651cc5542a5bd582ce0a
+baseline_commit: 55c00ee531ca103afc6e2872fd27641627810817
 ---
 
 # Story 40.9: Fixture-Based Pipeline Acceptance

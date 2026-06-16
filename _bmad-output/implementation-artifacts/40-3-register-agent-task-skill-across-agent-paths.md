@@ -1,5 +1,5 @@
 ---
-baseline_commit: e267f41e9f2e4a06ecbb5fdeba3ef3e8c0c4ad12
+baseline_commit: e267f419dd62a0d6fe091f122edfb6ef150f5380
 ---
 
 # Story 40.3: Register `Agent` / `Task` / `Skill` Across Agent Paths
@@ -384,4 +384,3 @@ glm-5.2[1m]
 
 - 2026-06-15：Story 40.3 实现完成。在普通 chat/run 路径（`buildToolProfile`）注册 `Agent`/`Task`，在 direct skill 路径（新增 `buildSkillToolProfile` 纯函数，由 `buildSkillAgent` 调用）注册 `Skill`/`Agent`/`Task`；`dryrunExcludedToolNames` 提升为 static 常量并扩展含 `Agent`/`Task`。新增 5 个单元测试，40.2 套件零回归。状态 → review。
 - 2026-06-15：story-automator-review（autonomous）通过。0 CRITICAL / 0 HIGH / 1 MEDIUM / 2 LOW，全部已自动修复：补档 drive-by 改动（TaskSerialQueueTests.swift 稳定化、epic-40 文档重排）入 File List；修复 40.2 测试 stale 字面量改为引用 `AgentBuilder.dryrunExcludedToolNames` 常量。`make test` 复跑：40.3 套件 5/5、40.2 套件 7/7、TaskSerialQueue 套件均绿；7 个失败均为 DesktopNotifier tmux 环境性失败（非本 story 引入）。0 CRITICAL → 状态 → done。
-

@@ -15,7 +15,7 @@ import OpenAgentSDK
 // 在 skill 路径可见性锁定；(5) ToolSearch policy 与 dry-run 正交（read-only，不受 side-effect 过滤）。
 //
 // 设计依据（CLAUDE.md 强制约束）：
-// - 全部使用 Swift Testing（`import Testing` / `@Suite` / `@Test` / `#expect`），禁止 `import XCTest`
+// - 全部使用 Swift Testing（`import Testing` / `@Suite` / `@Test` / `#expect`），禁止导入 XCTest
 // - 单元测试必须 Mock：**禁止**调用真实 `AgentBuilder.build()`（会 resolveApiKey + 起 Helper 进程
 //   + 真实 MCP resolve）。本测试直接调用纯函数 helper（`buildToolProfile` / `buildSkillToolProfile`
 //   / `resolveSkillMcpServers` / `effectiveExcludedToolNames`）—— 不连真实 MCP、不起 Helper、不

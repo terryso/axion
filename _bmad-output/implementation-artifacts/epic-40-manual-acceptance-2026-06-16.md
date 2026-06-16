@@ -30,6 +30,13 @@ related_stories: [40.3, 40.4, 40.5, 40.6, 40.7, 40.8, 40.9, 40.10]
 
 > ⚠️ **必须用 `swift run AxionCLI`**，不要用 homebrew 旧版 `axion`（项目反模式：homebrew 版滞后，测不到当前改动）。
 
+> **本次回归基线（2026-06-16，执行人 Claude）**：
+> - Axion commit `073ab7b`（分支 `spec/task-subagent-skill-compat`，较文档创建时 `d0997be` 多 1 commit「app architecture upgrade workflow + chat input history buffer」）。
+> - Axion runtime `v0.13.5`；SDK commit `4285aac`（`0.7.9-15-g4285aac`，0.10.0 开发版）—— 与首次一致。
+> - `make test`：**4107 tests / 274 suites 全绿，EXIT=0**（首次 4067/272 含 7 个 DesktopNotifier 失败；本次非 tmux 环境 DesktopNotifier 亦绿，+40 tests/+2 suites 来自后续 commit）。
+> - 模型：config.json `glm-5.1`（provider anthropic，baseURL 智谱 anthropic 兼容；4 个 MCP server web-search-prime/zai-mcp-server/web-reader/zread 已配）。
+> - GLM 本次持续限流（见 §caveat），M8 真实运行多次在前置阶段中断（本次真实证据见 §4.5）。
+
 ---
 
 ## 1. 前置条件
@@ -220,6 +227,22 @@ git status --short
 
 **诚实性边界**：AC1「step-1 成功 → 进入 step-2」的**正向端到端**未在真实 LLM 运行中完整捕获（为遵守「不对真实活跃 sprint 跑全 5 步」红线，刻意用安全 id / broken 副本，导致 step-1 要么前置停止、要么走缺失-skill 失败路径）。该正向完成路径的**确定性证明**由 40.9 fixture（7/7 绿）提供——这是 Epic 设计的「确定性证据 + 真实性证据并存」。真实运行已覆盖：pipeline 加载、包上下文解析、顺序派生 Task 子代理、缺失-skill 失败 + 保留名 + 可重试命令、零硬编码。
 
+### §4.5 本次回归真实运行补充（2026-06-16，执行人 Claude）
+
+本次回归用 `swift run AxionCLI run "/bmad-story-pipeline …"`（非交互 skill 直执行入口，`RunCommand.swift:83` `parseSkillName` 路由 → `runtime.executeSkill`）真实跑了 M8a / M8b，**fresh 真实证据**（在首次之外）：
+
+| 能力 | 本次真实证据 | 结论 |
+|------|------|------|
+| skill 非交互路由 | `执行: Skill (via AxionRuntime)`，加载 70 技能，run-id `20260616-nglvga` | ✅ |
+| MCP 真实连接（M3） | `[MCPClientManager] Connecting to 'zai-mcp-server'` + `'axion-helper'`，未被 direct skill path 静默移除 | ✅ |
+| 包上下文 baseDir 解析（M2） | 父 agent Read `…/bmad-story-pipeline/references/workflow-steps.md`（内容正确，路径来自包 baseDir，**非 cwd**） | ✅ |
+| pipeline 父 agent 前置工作 | 读 workflow-steps → 查 sprint-status → 定位 story（M8a：`docs/sprint/sprint-status.yaml` not found；M8b：找到 `33-1-notification-silent-mode` backlog + epic-33 + story 文档） | ✅ |
+| 不硬编码（AC2，运行时） | M8b broken 副本 step-1 改旧名 `/bmad-bmm-create-story`，父 agent 未将其改写为 `/bmad-create-story`；`grep -rnE "bmad-bmm\|bmad-tea" Sources/` = 空（M8c） | ✅ |
+| 零污染（M8d） | M8a/M8b 后 `git status` 干净，broken 副本已删，无 33-1 产物，sprint-status 未改 | ✅ |
+| ⚠️ 完整派生 / 缺失-skill 失败路径 | **本次未捕获**：M8a 第 2 步、M8b 第 9 步均被 GLM 限流 `[1305][该模型当前访问量过大，请您稍后再试]` 中断在前置阶段 | ⚠️ 限流（环境性） |
+
+完整派生 / 缺失-skill 失败路径的**确定性证明**（M7 Fixture 7/7 + M6 retry 格式 + M8c 不硬编码）与**首次真实证据**（§4，commit `3a17830`）已覆盖；本次 GLM 限流不构成验收缺口，符合 §5 caveat「GLM API 限流/超时…M8 真实运行时如遇，重试或换时段」。
+
 ---
 
 ## 5. 已知环境性 caveat
@@ -242,13 +265,16 @@ git status --short
 
 ---
 
-## 7. 结论栏（本次验收）
+## 7. 结论栏（本次验收 — 2026-06-16 回归）
 
-- **总体结论**：☐ 全部通过　☐ 部分通过（见下）　☐ 阻塞
-- **未通过项**：__
-- **回归风险**：__
-- **建议**：__
-- **执行人 / 日期**：__
+- **总体结论**：☑ 全部通过（含诚实 caveat）　☐ 部分通过　☐ 阻塞
+  - **M0–M7 确定性证据全部通过**：命令名一致（M0）；工具注册/MCP 继承/permission/diagnostics/slash guidance/child 输出/fixture 全绿（M1–M7，**4107 tests / 274 suites / 0 failed / EXIT=0**）；不硬编码（M8c）；零污染（M8d）。
+  - **M8 真实运行（本次）**：捕获 skill 非交互路由（`axion run "/bmad-story-pipeline …"`）、MCP 真实连接（M3，`zai-mcp-server`+`axion-helper`）、包上下文从 skill 包 baseDir 解析（M2，非 cwd）、pipeline 父 agent 完整前置工作（读 workflow-steps / sprint-status / epic / story）。**但 GLM 持续限流**（§caveat）导致 M8a（99-1）在第 2 步、M8b（broken 33-1）在第 9 步均中断，未复跑「按序派生 Task 子代理」与「缺失-skill 失败保留原名 + retry」的完整端到端。
+  - **M8 完整路径证据**：确定性证明 = M7 Fixture 7/7（顺序派生）+ M6 retry 格式单元测试 + M8c `grep Sources/` 空（不硬编码）；首次真实证据 = §4（commit `3a17830` dev 会话已捕获派生 + 失败 + `retry:` 可重试命令）。符合 §4 诚实性边界「确定性证据 + 真实性证据并存」设计。
+- **未通过项**：无。M8 完整真实复跑受 GLM 限流阻塞，但确定性 + 首次真实证据已覆盖，不构成 Epic 验收缺口。
+- **回归风险**：① GLM 限流使 M8 真实复跑不稳定（环境性，非代码缺陷）；② 测试数 4067→4107（+40 tests/+2 suites）增量来自非 Epic-40 的后续 commit（`073ab7b` app architecture upgrade + chat history），已核 Epic-40 套件（40.2–40.10）名均在、全绿，无静默改动。
+- **建议**：① 发版前在非限流时段（或临时切 Anthropic/OpenAI provider）至少复跑一次 M8a 完整派生 + M8b 失败路径，补齐本次缺失的 fresh 真实证据；② GLM 限流的运行时重试/降级策略超出 Epic 40 范围，建议单列后续 epic。
+- **执行人 / 日期**：Claude（回归验收）/ 2026-06-16
 
 ---
 

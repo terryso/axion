@@ -4,6 +4,7 @@ import OpenAgentSDK
 /// Tool that submits a desktop automation task for async execution.
 /// Returns a run ID immediately while the task executes in the background.
 struct RunTaskTool: ToolProtocol {
+    typealias TaskExecutor = @Sendable (String) async -> QueryResult
 
     // MARK: - ToolProtocol
 
@@ -23,7 +24,7 @@ struct RunTaskTool: ToolProtocol {
 
     // MARK: - Dependencies
 
-    private let agent: Agent
+    private let executeTask: TaskExecutor
     private let runTracker: RunCoordinator
     private let taskQueue: TaskQueue
     private let runLockService: RunLockService?
@@ -31,7 +32,23 @@ struct RunTaskTool: ToolProtocol {
     // MARK: - Init
 
     init(agent: Agent, runTracker: RunCoordinator, taskQueue: TaskQueue, runLockService: RunLockService? = nil) {
-        self.agent = agent
+        self.init(
+            runTracker: runTracker,
+            taskQueue: taskQueue,
+            runLockService: runLockService,
+            executeTask: { task in
+                await agent.prompt(task)
+            }
+        )
+    }
+
+    init(
+        runTracker: RunCoordinator,
+        taskQueue: TaskQueue,
+        runLockService: RunLockService? = nil,
+        executeTask: @escaping TaskExecutor
+    ) {
+        self.executeTask = executeTask
         self.runTracker = runTracker
         self.taskQueue = taskQueue
         self.runLockService = runLockService
@@ -67,11 +84,11 @@ struct RunTaskTool: ToolProtocol {
             )
         }
 
-        let capturedAgent = agent
+        let capturedExecuteTask = executeTask
         let capturedTracker = runTracker
 
         await taskQueue.enqueue {
-            let result = await capturedAgent.prompt(task)
+            let result = await capturedExecuteTask(task)
             let status: APIRunStatus = result.status == .success ? .completed : .failed
             await capturedTracker.updateRun(
                 runId: runId, status: status, steps: [], durationMs: nil, replanCount: 0

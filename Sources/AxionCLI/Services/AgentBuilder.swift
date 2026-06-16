@@ -334,9 +334,10 @@ enum AgentBuilder {
     ///
     /// **`usageStore` semantics:** `build()` runs `buildReviewInfrastructure(... dryrun: dryrun)`
     /// first and passes the resulting `usageStore` (which may be `nil`) into this helper. The
-    /// `save_skill` tool is registered only when `usageStore != nil` (`if let usageStore`), matching
-    /// the original inline behavior exactly. There is no separate `!dryrun` guard on `save_skill` —
-    /// parity is preserved by the `usageStore` nil-ness being the gating condition.
+    /// `save_skill` tool is registered only when `usageStore != nil` and `!dryrun`. The `build()`
+    /// path still passes `usageStore: nil` in dry-run via `buildReviewInfrastructure`, while the
+    /// explicit `!dryrun` guard protects direct helper callers from accidentally registering a
+    /// side-effecting persistence tool.
     ///
     /// - Parameters:
     ///   - noSkills: When `true`, the Skill tool is omitted.
@@ -432,9 +433,9 @@ enum AgentBuilder {
         }
 
         // save_skill tool — Agent can persist reusable skills to disk.
-        // Registered only when usageStore is non-nil (gated by `if let`). This preserves the
-        // original inline behavior; there is no separate !dryrun guard on save_skill.
-        if let usageStore {
+        // Requires both usageStore and non-dry-run mode. build() already passes nil usageStore in
+        // dry-run; the explicit guard protects direct helper callers from widening side effects.
+        if let usageStore, !dryrun {
             agentTools.append(createSaveSkillTool(
                 skillRegistry: skillRegistry,
                 usageStore: usageStore,

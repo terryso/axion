@@ -17,7 +17,7 @@ import OpenAgentSDK
 //     （AC5）。
 //
 // 设计依据（CLAUDE.md 强制约束）：
-// - 全部使用 Swift Testing（`import Testing` / `@Suite` / `@Test` / `#expect`），禁止 `import XCTest`
+// - 全部使用 Swift Testing（`import Testing` / `@Suite` / `@Test` / `#expect`），禁止导入 XCTest
 // - 单元测试必须 Mock：**禁止**调用真实 `AgentBuilder.build()` / `buildSkillAgent()`（会 resolveApiKey +
 //   起 Helper 进程 + 真实 MCP resolve）。本测试只调用纯函数 helper（`diagnoseToolAvailability` /
 //   `effectiveSkillToolPool`）+ 纯 struct 构造（`BuildConfig.forChat` / `forSkillExecution`）+ 直接构造

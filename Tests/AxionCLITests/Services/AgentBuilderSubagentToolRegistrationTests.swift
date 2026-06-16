@@ -13,7 +13,7 @@ import OpenAgentSDK
 // 含 `Agent`/`Task`；`--no-skills` 只禁 `Skill` 不禁 `Agent`/`Task`；dry-run 排除三者。
 //
 // 设计依据（CLAUDE.md 强制约束）：
-// - 全部使用 Swift Testing（`import Testing` / `@Suite` / `@Test` / `#expect`），禁止 `import XCTest`
+// - 全部使用 Swift Testing（`import Testing` / `@Suite` / `@Test` / `#expect`），禁止导入 XCTest
 // - 单元测试必须 Mock：**禁止**调用真实 `AgentBuilder.build()` / `buildSkillAgent`（会
 //   resolveApiKey + 起 Helper 进程 + 真实 MCP resolve）。本测试直接调用纯函数
 //   `AgentBuilder.buildToolProfile(...)` / `AgentBuilder.buildSkillToolProfile(...)`

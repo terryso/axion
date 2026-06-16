@@ -337,7 +337,7 @@ glm-5.2[1m] (via Claude Code harness)
 ### Debug Log References
 
 - `make test`（等价 `swift test --no-parallel --skip AxionHelperIntegrationTests --skip AxionCLIIntegrationTests --skip AxionE2ETests`）运行结果：**4027 tests / 266 suites，7 issues**——7 个 issue **全部**位于 `DesktopNotifier` 套件（OSC 9 / DCS `Ptmux;` passthrough），属本会话在 tmux 内（`TMUX=/private/tmp/tmux-501/default,97339,0`）的**环境性失败**，与本 story 代码改动**无关**（story Task 5.3 已预先记录该已知现象，40.5/40.6 Debug Log 同样命中）。**注意 `make` 退出码**：因这 7 个 DesktopNotifier 环境性失败，`make test` 退出码为非零（`Error 1` / 退出码 2）——这是**预先存在的环境性**退出，**非本 story 引入、非回归**。所有 in-scope 套件（40.2–40.6 + 40.7 + TaskSerialQueue）全部转绿。
-- **drive-by 修复（已记入 File List）**：跑 `make test` 时发现 `TaskSerialQueueTests` 的超时用例在全量单测并发下偶发 flaky，已加 `.serialized` trait + 10s 超时 + 收窄断言条件修复；Review 复跑确认该 suite 通过（3.009s）。该改动**不涉及** 40.7 的 prompt 注入逻辑。
+- **范围校正（2026-06-16 checkpoint）**：此前 review 记录曾把 `TaskSerialQueueTests.swift` 的 flaky 修复写入 File List；复核 `fec2c963..df5ec07` 后确认 40.7 实现提交**未修改**该文件。该项保留为后续/工作树观察，不再计入 40.7 File List。
 - **RED→GREEN 迭代**：首次 `make test` 我的套件有 2 个 @Test 失败——发现 Task 1.1 模板写 `` invoke the `Skill` tool ``（带反引号），与 Task 1.2 锁定的 canonical 短语 `"invoke the Skill tool"`（无反引号）冲突；同时 `"plain chat"` 被 wrap 拆行。按「措辞锁定——五个短语必须逐字保留」原则修正**实现**（去掉 `Skill` 外层反引号、把 `plain chat` 挪到同一行），二次 `make test` 全部 8 个 @Test 转绿。
 - 验证零回归：40.2 `AgentBuilder.buildToolProfile`（7 @Test）、40.3 `AgentBuilder subagent tool registration`（5 @Test）、40.4 `AgentBuilder discovered skill registry`（6 @Test）、40.5 `AgentBuilder ToolSearch & MCP inheritance`（7 @Test）、40.6 `AgentBuilder permission & diagnostics consistency`（7 @Test）**全部 passed**——本 story 仅在 `buildSystemPrompt`/`buildSkillAgent` 的 systemPrompt **字符串**追加指引，不触工具池/注册/permission/diagnostics 逻辑，故这些断言（不读 systemPrompt）零影响。
 
@@ -356,7 +356,8 @@ glm-5.2[1m] (via Claude Code harness)
 - `Sources/AxionCLI/Services/AgentBuilder+PromptBuilding.swift`（修改：新增 `slashSkillAndTaskGuidance(noSkills:dryrun:)` static 纯函数 helper；`buildSystemPrompt` 在 `appendModeInstructions` 后、`loadClaudeMd` 前注入该块）
 - `Sources/AxionCLI/Services/AgentBuilder.swift`（修改：`buildSkillAgent` 内联 `systemPrompt:` 字面量提取为 `baseSkillPrompt` + 追加 `slashSkillAndTaskGuidance(noSkills:false, dryrun:false)` → `skillSystemPrompt`）
 - `Tests/AxionCLITests/Services/AgentBuilderSlashSkillGuidanceTests.swift`（新增：AC1–AC5 的 Swift Testing @Test，8 个用例）
-- `Tests/AxionCLITests/Services/Gateway/TaskSerialQueueTests.swift`（修改——**drive-by 测试稳定性修复，非 40.7 功能范围**：为 `@Suite` 加 `.serialized` trait、把超时断言的 `waitUntil` 提升到 10s、并将条件从 `超时已取消 || 任务执行失败` 收窄为只匹配 `超时已取消`。**为何在此 PR**：跑本 story 的 `make test` 时发现该超时用例在全量单测并发调度下偶发抢不到 scheduler 时间片而 flaky；此修复让 `make test` 在本 story 验证期间稳定转绿。该套件**不读 systemPrompt**、与本 story 的 prompt 注入**无逻辑耦合**——纯测试侧鲁棒性改进。Review 复跑确认该 suite 通过（3.009s）。）
+
+**范围说明（2026-06-16 checkpoint）**：`Tests/AxionCLITests/Services/Gateway/TaskSerialQueueTests.swift` 曾在 review 记录中作为 drive-by flaky 修复出现，但 `df5ec07` / `fec2c963..df5ec07` 未包含该文件改动，因此不属于 Story 40.7 实现 File List。
 
 ### Senior Developer Review (AI)
 
@@ -374,15 +375,15 @@ glm-5.2[1m] (via Claude Code harness)
 
 #### Git vs Story 一致性
 
-- 三个 File List 主张（两个 Source 修改 + 一个新增测试）与 `git status` 完全吻合。
-- **发现 1 个未文档化改动**（M1，已修复）：`TaskSerialQueueTests.swift` 在 git 中 modified 但原 File List 未列；已补入 File List + Debug Log + Change Log，标注为 drive-by 测试稳定性修复。
+- 三个 File List 主张（两个 Source 修改 + 一个新增测试）与 40.7 实现提交 `df5ec07` / diff `fec2c963..df5ec07` 完全吻合。
+- **2026-06-16 checkpoint 校正**：`TaskSerialQueueTests.swift` 属于此前 review/工作树观察，不属于 `df5ec07`；已从 40.7 File List 移出，避免把非本 story 提交内容误归因到 40.7。
 
 #### Findings 与处置
 
 - **🔴 CRITICAL：0**。所有 `[x]` task 经核验确已实现；无虚假主张。
 - **🟠 HIGH：0**。AC1–AC5 全部实现；签名零改动；40.2–40.6 零回归。
 - **🟡 MEDIUM：2（已 auto-fix）**
-  - **M1 — 未文档化改动**（`TaskSerialQueueTests.swift`）：已补入 File List / Debug Log / Change Log（drive-by flaky 修复，非 40.7 范围，复跑通过）。不回滚——回滚会重新引入 flakiness。
+  - **M1 — 文档范围误归因（`TaskSerialQueueTests.swift`）**：2026-06-16 checkpoint 复核确认该文件不在 `df5ec07` / `fec2c963..df5ec07` 中，已从 40.7 File List 移出；作为后续/工作树观察保留，不计入本 story 实现范围。
   - **M2 — Debug Log 措辞不精确**（"`make test` 通过"）：实际 `make test` 因 7 个 DesktopNotifier 环境性失败而退出码非零。已把 Debug Log / AC5 Completion Notes 改写为「in-scope 全绿；退出码非零仅因 DesktopNotifier 环境性失败，非回归」，使记录与实际退出码一致（避免误导 sprint automator 的 pass/fail 信号）。
 - **🟢 LOW：2（informational，不阻塞）**
   - **L1** — `grep -rl "import XCTest" Tests/` 返回 6 个文件，但**全部**是同一条 `禁止 \`import XCTest\`` 文档注释（40.2–40.7 套件共有），无真实 `import XCTest` 语句（`grep -E '^\s*import XCTest' Tests/` 为空）。CLAUDE.md 实质要求满足；注释使 proxy grep 噪音化属可接受代价（保留有益文档）。
@@ -408,4 +409,5 @@ glm-5.2[1m] (via Claude Code harness)
 
 - 2026-06-15 — Story 40.7 创建：新增 `slashSkillAndTaskGuidance(noSkills:dryrun:)` 纯函数 helper（架构 §4 slash-skill 执行指引 + implementation-plan Risk 表 Task 工具调用指引，`!noSkills && !dryrun` 时返回提示块）；`buildSystemPrompt`（Path A / run）与 `buildSkillAgent`（Path B）父 agent 系统提示注入该块（闭合 CAP-1/CAP-2/CAP-3 提示缺口）。子代理系统提示注入属 SDK follow-up（架构 §4「或」另一支），本 story 不编辑 SDK。状态 → ready-for-dev。
 - 2026-06-15 — Story 40.7 实现完成（dev）：三处代码改动 + 8 个 Swift Testing @Test 全绿；`make test` 4027 测试仅余 7 个 DesktopNotifier 环境性失败（tmux OSC passthrough，非回归）。修正了 Task 1.1 模板（`` `Skill` `` 带反引号）与 Task 1.2 锁定短语（`Skill` 无反引号）的冲突——以锁定短语为唯一真源。状态 → review。
-- 2026-06-15 — Story 40.7 adversarial review（story-automator-review，autonomous）：核验 AC1–AC5 全部实现、五个 canonical 短语逐字保留、签名零改动、40.2–40.6 零回归；**0 CRITICAL / 0 HIGH**。修复 2 个 MEDIUM 文档准确性问题——(M1) 把未文档化的 drive-by 改动 `TaskSerialQueueTests.swift`（`.serialized` + 10s 超时 + 收窄断言，纯 flaky 修复）补入 File List / Debug Log / Change Log；(M2) 把 Debug Log / AC5 Notes 的「`make test` 通过」改写为与实际退出码一致（in-scope 全绿；退出码非零仅因 DesktopNotifier 环境性失败）。Review 独立复跑 `make test` 确认 40.7 套件 + 40.2–40.6 + TaskSerialQueue 全绿，仅 DesktopNotifier 7 个环境性失败。状态 → done。
+- 2026-06-15 — Story 40.7 adversarial review（story-automator-review，autonomous）：核验 AC1–AC5 全部实现、五个 canonical 短语逐字保留、签名零改动、40.2–40.6 零回归；**0 CRITICAL / 0 HIGH**。修复 Debug Log / AC5 Notes 的「`make test` 通过」措辞，使其与实际退出码一致（in-scope 全绿；退出码非零仅因 DesktopNotifier 环境性失败）。Review 独立复跑 `make test` 确认 40.7 套件 + 40.2–40.6 + TaskSerialQueue 全绿，仅 DesktopNotifier 7 个环境性失败。状态 → done。
+- 2026-06-16 — Checkpoint 文档范围校正：复核 40.7 实现提交 `df5ec07` 与 baseline diff `fec2c963..df5ec07`，确认 `TaskSerialQueueTests.swift` 不属于 Story 40.7 提交内容；从 File List 移除，仅作为后续/工作树观察保留，避免审计追溯误归因。

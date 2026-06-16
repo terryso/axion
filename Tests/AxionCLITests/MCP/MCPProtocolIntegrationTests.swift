@@ -30,15 +30,12 @@ struct MCPProtocolIntegrationTests {
 
         let tracker = RunCoordinator()
         let queue = TaskQueue()
-        let agent = createAgent(options: AgentOptions(
-            apiKey: "test-key",
-            model: "test-model",
-            systemPrompt: "test",
-            maxTurns: 1,
-            maxTokens: 100,
-            permissionMode: .bypassPermissions
-        ))
-        let tool = RunTaskTool(agent: agent, runTracker: tracker, taskQueue: queue, runLockService: testRunLockService)
+        let tool = RunTaskTool(
+            runTracker: tracker,
+            taskQueue: queue,
+            runLockService: testRunLockService,
+            executeTask: { _ in Self.successfulQueryResult() }
+        )
         return (tool, queue)
     }
 
@@ -153,15 +150,12 @@ struct MCPProtocolIntegrationTests {
 
         let tracker = RunCoordinator()
         let queue = TaskQueue()
-        let agent = createAgent(options: AgentOptions(
-            apiKey: "test-key",
-            model: "test-model",
-            systemPrompt: "test",
-            maxTurns: 1,
-            maxTokens: 100,
-            permissionMode: .bypassPermissions
-        ))
-        let runTask = RunTaskTool(agent: agent, runTracker: tracker, taskQueue: queue, runLockService: testRunLockService)
+        let runTask = RunTaskTool(
+            runTracker: tracker,
+            taskQueue: queue,
+            runLockService: testRunLockService,
+            executeTask: { _ in Self.successfulQueryResult() }
+        )
         let queryTool = QueryTaskStatusTool(runTracker: tracker)
         let (_, mcpServer, client) = try await createTestServer(tools: [runTask, queryTool])
 
@@ -256,5 +250,16 @@ struct MCPProtocolIntegrationTests {
             }
             return nil
         }.joined()
+    }
+
+    private static func successfulQueryResult() -> QueryResult {
+        QueryResult(
+            text: "ok",
+            usage: TokenUsage(inputTokens: 0, outputTokens: 0),
+            numTurns: 1,
+            durationMs: 0,
+            messages: [],
+            status: .success
+        )
     }
 }

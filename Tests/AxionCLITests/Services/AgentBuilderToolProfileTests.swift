@@ -14,7 +14,7 @@ import OpenAgentSDK
 // 逻辑提取为 `buildToolProfile(...)` 后，本套件转 GREEN。
 //
 // 设计依据（CLAUDE.md 强制约束）：
-// - 全部使用 Swift Testing（`import Testing` / `@Suite` / `@Test` / `#expect`），禁止 `import XCTest`
+// - 全部使用 Swift Testing（`import Testing` / `@Suite` / `@Test` / `#expect`），禁止导入 XCTest
 // - 单元测试必须 Mock：**禁止**调用真实 `AgentBuilder.build()`（会 resolveApiKey + 起 Helper
 //   进程 + 真实 MCP resolve）。本测试直接调用纯函数 `AgentBuilder.buildToolProfile(...)`
 // - 工具名 **不硬编码**（CLAUDE.md 反模式 #10）：期望的工具名一律从真实工具实例的 `.name`
@@ -51,7 +51,7 @@ struct AgentBuilderToolProfileTests {
     /// 这些构造本身无副作用（工具的副作用只在 `perform()` 时发生）。
     /// 注意：`createSaveSkillTool` 的入参 `usageStore` 是**非可选** `SkillUsageStore`
     /// （SDK SaveSkillTool.swift:27），且 `save_skill` 工具只在 `usageStore != nil`
-    /// 时注册。故 saveSkill 名单独按需读取，其它工具名在此统一构造。
+    /// 且非 dry-run 时注册。故 saveSkill 名单独按需读取，其它工具名在此统一构造。
     private func expectedNames(
         memoryDir: String,
         skillRegistry: SkillRegistry,
@@ -261,9 +261,10 @@ struct AgentBuilderToolProfileTests {
 
         let config = makeConfig()
         let registry = SkillRegistry()
-        // 注意：dry-run 路径 usageStore 传 nil（模拟 build() 在 dry-run 时 review infra
-        // 产出 nil 的等价入参），save_skill 不应注册
+        let usageStore = SkillUsageStore(skillsDir: skillsDir)
+        // 防御性覆盖：即使直接调用 helper 时误传了非 nil usageStore，dry-run 仍不得注册 save_skill。
         let names = expectedNames(memoryDir: memoryDir, skillRegistry: registry, config: config)
+        let saveSkill = saveSkillName(skillRegistry: registry, usageStore: usageStore, skillsDir: skillsDir)
 
         let tools = AgentBuilder.buildToolProfile(
             noSkills: false,
@@ -272,7 +273,7 @@ struct AgentBuilderToolProfileTests {
             skillRegistry: registry,
             memoryDir: memoryDir,
             config: config,
-            usageStore: nil,
+            usageStore: usageStore,
             skillsDir: skillsDir
         )
         let toolNames = Set(tools.map(\.name))
@@ -284,10 +285,7 @@ struct AgentBuilderToolProfileTests {
         #expect(!toolNames.contains(names.undoStorageOp))
         #expect(!toolNames.contains(names.scanAppUninstall))
         #expect(!toolNames.contains(names.executeAppUninstall))
-        // save_skill 在 dry-run + usageStore == nil 时不应注册；save_skill 名本身只在
-        // usageStore 非 nil 时可读取，故 dry-run 用固定字面量 "save_skill" 断言（这是
-        // 唯一一个无法从真实实例读取的场景，因为 createSaveSkillTool 要求非可选 usageStore）。
-        #expect(!toolNames.contains("save_skill"), "dry-run usageStore == nil 不应含 save_skill")
+        #expect(!toolNames.contains(saveSkill), "dry-run 即使 usageStore 非 nil 也不应含 save_skill")
     }
 
     // MARK: - AC1: noSkills 开关仅控 Skill 工具

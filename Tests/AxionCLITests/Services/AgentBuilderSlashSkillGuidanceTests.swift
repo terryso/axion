@@ -16,7 +16,7 @@ import OpenAgentSDK
 // (5) 40.2–40.6 零回归。
 //
 // 设计依据（CLAUDE.md 强制约束）：
-// - 全部使用 Swift Testing（`import Testing` / `@Suite` / `@Test` / `#expect`），禁止 `import XCTest`
+// - 全部使用 Swift Testing（`import Testing` / `@Suite` / `@Test` / `#expect`），禁止导入 XCTest
 // - 单元测试必须 Mock：**禁止**调用真实 `AgentBuilder.build()` / `buildSkillAgent()`（会 resolveApiKey +
 //   Helper + MCP）。4.2.1–4.2.7 只调纯函数 `slashSkillAndTaskGuidance`（零外部依赖）；4.2.8 调
 //   `buildSystemPrompt`（注入空 `SkillRegistry()` + `noMemory:true` + 临时 memoryDir，无网络 / 无 Helper / 无 MCP）
