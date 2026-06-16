@@ -239,9 +239,17 @@ git status --short
 | pipeline 父 agent 前置工作 | 读 workflow-steps → 查 sprint-status → 定位 story（M8a：`docs/sprint/sprint-status.yaml` not found；M8b：找到 `33-1-notification-silent-mode` backlog + epic-33 + story 文档） | ✅ |
 | 不硬编码（AC2，运行时） | M8b broken 副本 step-1 改旧名 `/bmad-bmm-create-story`，父 agent 未将其改写为 `/bmad-create-story`；`grep -rnE "bmad-bmm\|bmad-tea" Sources/` = 空（M8c） | ✅ |
 | 零污染（M8d） | M8a/M8b 后 `git status` 干净，broken 副本已删，无 33-1 产物，sprint-status 未改 | ✅ |
-| ⚠️ 完整派生 / 缺失-skill 失败路径 | **本次未捕获**：M8a 第 2 步、M8b 第 9 步均被 GLM 限流 `[1305][该模型当前访问量过大，请您稍后再试]` 中断在前置阶段 | ⚠️ 限流（环境性） |
+| **顺序派生 Task 子代理（M8a AC1）** | 父 agent 读 workflow-steps → **建 5 步 Todo**（Step 1–5 + Post-pipeline，每步带 33-1）→ "Now let's start Step 1 … launch a subagent" → `执行: Task` **派生子代理** | ✅ **完整捕获（重跑补齐）** |
+| **缺失-skill 失败保留原名 + retry（M8b AC2）** | ⚠️ 真实行为发现：父 agent 派生 `Task` 用**任务描述语义**（"Create User Story 33-1"），**非** slash 命令直传子代理 `Skill` tool → 子代理当普通任务执行（读源文件 88.7s）→ 失败后父 agent 继续自尝试 → `EXIT=124`（285s timeout）。**broken 副本改 `Command` 字段不足以触发 skill-not-found + retry** | ⚠️ 未按手册预期触发（见下） |
 
-完整派生 / 缺失-skill 失败路径的**确定性证明**（M7 Fixture 7/7 + M6 retry 格式 + M8c 不硬编码）与**首次真实证据**（§4，commit `3a17830`）已覆盖；本次 GLM 限流不构成验收缺口，符合 §5 caveat「GLM API 限流/超时…M8 真实运行时如遇，重试或换时段」。
+**重跑说明（2026-06-16，GLM 限流缓解后第二次真实运行，日志 `/tmp/axion-m8b-broken-r2.log`）**：
+
+- **M8a AC1 补齐**：本次重跑完整捕获了第一轮缺失的核心证据——父 agent **建 5 步 Todo**（Step 1–5 + Post-pipeline）后**派生 `Task` 子代理**执行 step-1，证明 40.3/40.4/40.8（工具注册 + discovered registry 继承 + child task 渲染）在真实 pipeline 中端到端工作。
+- **M8b AC2 真实行为发现**：真实 `bmad-story-pipeline` 的 `Task` 派生是**「任务描述 → 子代理作为普通 agent 完成」**，而非手册 M8b 假设的**「slash 命令 → 子代理 `Skill` tool 执行」**。因此改 broken 副本 `workflow-steps.md` 的 step-1 `Command`（→ `/bmad-bmm-create-story`）**不会**触发子代理 skill-not-found，因为父 agent 派生时用的是 step `Description` 语义。子代理转而读源文件尝试自己创建 story（88.7s），失败后父 agent 也未在 step-1 停止 pipeline（继续自尝试），最终 timeout。
+- **AC2 的「不硬编码」**仍由 M8c（`grep Sources/` 空）确定性证明；本次重跑亦无任何旧→新命令改写迹象（grep 0 行）。「retry 格式」由 M6（`ChatOutputFormatter` Child-Task Wiring）确定性覆盖。
+- **可执行的后续**：M8b 的 broken 副本测试方法需重新设计——要触发 AC2 的 skill-not-found + retry，应在**子代理 prompt 直接注入** `/bmad-bmm-create-story 33-1 yolo`（绕过父 agent 的任务语义派生），或用 fixture skill（M7 已覆盖）。这是**验收方法改进**，非 Epic 40 代码缺陷。
+
+完整派生（M8a AC1）本次真实补齐；缺失-skill 失败路径的**确定性证明**（M7 Fixture 7/7 + M6 retry 格式 + M8c 不硬编码）与**首次真实证据**（§4，commit `3a17830`）已覆盖。
 
 ---
 
@@ -269,11 +277,11 @@ git status --short
 
 - **总体结论**：☑ 全部通过（含诚实 caveat）　☐ 部分通过　☐ 阻塞
   - **M0–M7 确定性证据全部通过**：命令名一致（M0）；工具注册/MCP 继承/permission/diagnostics/slash guidance/child 输出/fixture 全绿（M1–M7，**4107 tests / 274 suites / 0 failed / EXIT=0**）；不硬编码（M8c）；零污染（M8d）。
-  - **M8 真实运行（本次）**：捕获 skill 非交互路由（`axion run "/bmad-story-pipeline …"`）、MCP 真实连接（M3，`zai-mcp-server`+`axion-helper`）、包上下文从 skill 包 baseDir 解析（M2，非 cwd）、pipeline 父 agent 完整前置工作（读 workflow-steps / sprint-status / epic / story）。**但 GLM 持续限流**（§caveat）导致 M8a（99-1）在第 2 步、M8b（broken 33-1）在第 9 步均中断，未复跑「按序派生 Task 子代理」与「缺失-skill 失败保留原名 + retry」的完整端到端。
-  - **M8 完整路径证据**：确定性证明 = M7 Fixture 7/7（顺序派生）+ M6 retry 格式单元测试 + M8c `grep Sources/` 空（不硬编码）；首次真实证据 = §4（commit `3a17830` dev 会话已捕获派生 + 失败 + `retry:` 可重试命令）。符合 §4 诚实性边界「确定性证据 + 真实性证据并存」设计。
-- **未通过项**：无。M8 完整真实复跑受 GLM 限流阻塞，但确定性 + 首次真实证据已覆盖，不构成 Epic 验收缺口。
+  - **M8 真实运行**：① 第一轮（M8a 99-1 + M8b broken 33-1）受 GLM 限流中断在前置阶段，但仍捕获 skill 非交互路由、MCP 真实连接（M3）、包上下文 baseDir 解析（M2）、父 agent 前置链路。② **重跑（GLM 缓解后）完整捕获 M8a AC1**：父 agent 建 5 步 Todo → 派生 `Task` 子代理执行 step-1（40.3/40.4/40.8 端到端，详见 §4.5）。③ **M8b AC2 发现真实行为**：`Task` 派生为任务描述语义（非 slash 命令直传 `Skill` tool），broken 副本改 `Command` 不足以触发 skill-not-found + retry——属验收方法局限，非代码缺陷。
+  - **M8 完整路径证据**：派生（M8a AC1）本次真实捕获 ✅；确定性证明 = M7 Fixture 7/7（派生）+ M6 retry 格式 + M8c 不硬编码；首次真实证据 = §4（commit `3a17830`）。符合 §4 诚实性边界「确定性证据 + 真实性证据并存」设计。
+- **未通过项**：无（确定性意义上）。M8a AC1 已真实补齐；M8b AC2 真实触发受验收方法局限（非代码缺陷），确定性（M6 retry / M8c 不硬编码）+ 首次真实证据（§4）已覆盖。
 - **回归风险**：① GLM 限流使 M8 真实复跑不稳定（环境性，非代码缺陷）；② 测试数 4067→4107（+40 tests/+2 suites）增量来自非 Epic-40 的后续 commit（`073ab7b` app architecture upgrade + chat history），已核 Epic-40 套件（40.2–40.10）名均在、全绿，无静默改动。
-- **建议**：① 发版前在非限流时段（或临时切 Anthropic/OpenAI provider）至少复跑一次 M8a 完整派生 + M8b 失败路径，补齐本次缺失的 fresh 真实证据；② GLM 限流的运行时重试/降级策略超出 Epic 40 范围，建议单列后续 epic。
+- **建议**：① **M8b AC2 验收方法需改进**：broken 副本改 `Command` 字段不足以触发（父 agent 用任务描述语义派生 `Task`）；应改为子代理 prompt 直接注入 slash 命令，或复用 M7 fixture skill。② 真实 pipeline 观察到「子代理失败后父 agent 继续自尝试而非硬停止」行为（本次 timeout 124），值得评估是否在 40.8 增加可选「step 失败硬停止」策略（超出本 Epic）。③ GLM 限流的运行时重试/降级策略超出 Epic 40 范围，建议单列后续 epic。
 - **执行人 / 日期**：Claude（回归验收）/ 2026-06-16
 
 ---
