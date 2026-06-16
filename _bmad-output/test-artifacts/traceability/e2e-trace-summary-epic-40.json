@@ -1,0 +1,85 @@
+{
+  "schema_version": "0.1.0",
+  "snapshot_at": "2026-06-16T21:50:00Z",
+  "repo": "axion",
+  "collection_mode": "contract_static",
+  "collection_status": "COLLECTED",
+  "inventory_basis": "acceptance_criteria",
+  "gate_basis": "priority_thresholds",
+  "source_sha": "2d89b31",
+  "target": { "type": "epic", "id": "epic-40", "label": "Claude Code skill/subagent compat" },
+  "decision_mode": "deterministic",
+  "evaluator": "Nick",
+  "confidence": "high",
+  "oracle": {
+    "resolution_mode": "formal_requirements",
+    "confidence": "high",
+    "sources": [
+      "_bmad-output/specs/spec-task-subagent-skill-compat/SPEC.md",
+      "_bmad-output/specs/spec-task-subagent-skill-compat/test-plan.md"
+    ],
+    "external_pointer_status": "not_used",
+    "synthetic": false
+  },
+  "gate_status": "PASS",
+  "gate_criteria": {
+    "p0_coverage_required": "100%",
+    "p0_coverage_actual": "100%",
+    "p0_status": "MET",
+    "p1_coverage_target": "90%",
+    "p1_coverage_minimum": "80%",
+    "p1_coverage_actual": "100%",
+    "p1_status": "MET",
+    "overall_coverage_minimum": "80%",
+    "overall_coverage_actual": "100%",
+    "overall_status": "MET"
+  },
+  "coverage": {
+    "inventory": { "covered": 8, "total": 8, "pct": 100 },
+    "priority_breakdown": {
+      "P0": { "total": 2, "covered": 2, "pct": 100 },
+      "P1": { "total": 4, "covered": 4, "pct": 100 },
+      "P2": { "total": 2, "covered": 2, "pct": 100 },
+      "P3": { "total": 0, "covered": 0, "pct": 100 }
+    },
+    "by_level": {
+      "e2e": { "tests": 0, "criteria_covered": 0 },
+      "api": { "tests": 0, "criteria_covered": 0 },
+      "component": { "tests": 0, "criteria_covered": 0 },
+      "unit": { "tests": 70, "criteria_covered": 8 },
+      "other": { "tests": 0, "criteria_covered": 0 }
+    }
+  },
+  "tests": {
+    "files": 10,
+    "cases": 70,
+    "skipped_cases": 0,
+    "fixme_cases": 0,
+    "pending_cases": 0
+  },
+  "risk_summary": {
+    "critical_open": 0,
+    "high_open": 0,
+    "medium_open": 0,
+    "low_open": 0
+  },
+  "heuristics": {
+    "endpoint_gaps": 0,
+    "auth_negative_path_status": "present",
+    "error_path_status": "present",
+    "ui_journey_status": "not_applicable",
+    "ui_state_status": "not_applicable"
+  },
+  "blockers": [],
+  "recommendations": [
+    { "priority": "DONE", "action": "Verified SDK-side coverage on 2026-06-16 in open-agent-sdk-swift@0.10.0 (clean tree): suggested suite names are not literal files, but the behaviors are covered by TaskToolsTests(57)+AgentToolTests(30)+AgentSpawnerDetectionTests(8)+DefaultSubAgentSpawnerTests(39)+ExecuteSkillTests(16)+ExecuteSkillStreamTests(15)+SkillLoaderTests(61)+SkillToolTests(21)+SubagentSystemCompatTests(42) = 289 tests, 0 failures", "requirements": ["CAP-2", "CAP-4", "CAP-5", "CAP-8"] },
+    { "priority": "LOW", "action": "CAP-6 live streaming timing is manual-only; add optional E2E fixture if streaming robustness becomes critical", "requirements": ["CAP-6"] },
+    { "priority": "LOW", "action": "Run /bmad-testarch-test-review to assess test quality of the Epic 40 unit suite", "requirements": [] }
+  ],
+  "links": {
+    "trace_report_path": "_bmad-output/test-artifacts/traceability-matrix.md",
+    "trace_report_url": "",
+    "artifact_url": "",
+    "journey_evidence_url": ""
+  }
+}

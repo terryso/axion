@@ -1,731 +1,267 @@
 ---
 stepsCompleted: ['step-01-preflight-and-context', 'step-02-identify-targets', 'step-03-generate-tests', 'step-03c-aggregate', 'step-04-validate-and-summarize']
 lastStep: 'step-04-validate-and-summarize'
-lastSaved: '2026-06-14'
+lastSaved: '2026-06-16'
 inputDocuments:
-  - '.agents/skills/bmad-testarch-automate/SKILL.md'
-  - '.agents/skills/bmad-testarch-automate/steps-c/step-01-preflight-and-context.md'
-  - '.agents/skills/bmad-testarch-automate/resources/tea-index.csv'
+  - '.claude/skills/bmad-testarch-automate/SKILL.md'
+  - '.claude/skills/bmad-testarch-automate/steps-c/step-01-preflight-and-context.md'
+  - '.claude/skills/bmad-testarch-automate/resources/tea-index.csv'
   - '_bmad/tea/config.yaml'
   - '_bmad-output/project-context.md'
-  - '.build/checkouts/open-agent-sdk-swift/_bmad-output/project-context.md'
-  - '.build/index-build/checkouts/open-agent-sdk-swift/_bmad-output/project-context.md'
+  - '_bmad-output/specs/spec-task-subagent-skill-compat/test-plan.md'
+  - 'CLAUDE.md'
+scope: 'incremental — code landed since prior run (automation-summary-2026-06-14.md)'
 ---
 
 # Test Automation Summary
+
+> 本轮为 **Create / 增量** 运行：聚焦上次（2026-06-14）通用全库扫描之后落地的新代码，定位其中**测试缺口**，而非重复已覆盖逻辑。上一轮完整摘要已备份至 `automation-summary-2026-06-14.md`。
 
 ## Step 1: Preflight and Context
 
 ### Confirmed Inputs
 
-- Mode: Create (`c`)
-- Project root: `/Users/nick/CascadeProjects/axion`
-- Output file: `_bmad-output/test-artifacts/automation-summary.md`
-- Communication language: Mandarin
-- Requested scope: expand test automation coverage for the current Axion codebase
+- **模式**: Create (`C`)，范围 = **增量**（上次以来的新代码）
+- **Project root**: `/Users/nick/CascadeProjects/axion`
+- **Output file**: `_bmad-output/test-artifacts/automation-summary.md`
+- **Communication language**: Mandarin
+- **当前分支**: `spec/task-subagent-skill-compat`（Epic 40 + App Architecture 架构升级）
 
 ### Stack and Framework Detection
 
-- Detected stack: backend/CLI-style Swift package using SwiftPM.
-- Primary manifest: `Package.swift`.
-- Test framework verified: Swift Testing (`import Testing`, `@Suite`, `@Test`, `#expect`).
-- Existing test targets include `AxionCoreTests`, `AxionCLITests`, `AxionHelperTests`, plus integration/E2E targets.
-- Project rule: after development, run unit tests only and avoid integration/E2E suites that require macOS app or AX permissions.
-- Browser/E2E tooling indicators: no existing browser test manifest or Playwright/Cypress test files were detected in the project test tree.
-- Pact/contract tooling indicators: no Pact package, Pact broker, or contract-test setup was detected.
+- **Detected stack**: `backend` — 纯 Swift，唯一清单 `Package.swift`。无 `package.json` / Web 框架 / Playwright / Cypress / Pact 痕迹。
+- **Test framework verified**: ✅ Swift Testing —— **282** 个文件 `import Testing`，**0** 个 `import XCTest`（完全符合项目规则）。
+- **Test targets**: `AxionCoreTests`、`AxionCLITests`、`AxionHelperTests`（单元）；`AxionCLIIntegrationTests`、`AxionHelperIntegrationTests`、`AxionE2ETests`（集成/E2E，CI 不跑）。
+- **单元测试目录**: `Tests/**/Tools/`、`Models/`、`MCP/`、`Services/`、`Memory/`、`Storage/`、`Chat/`、`Commands/` 等。
+- **默认验证命令**: `swift test --filter "AxionHelperTests.Tools" --filter "AxionHelperTests.Models" --filter "AxionHelperTests.MCP" --filter "AxionHelperTests.Services" --filter "AxionCoreTests" --filter "AxionCLITests"`
+
+### TEA Config Flags (read & adapted for Swift)
+
+| Flag | 值 | 适配决定 |
+|------|----|---------|
+| `tea_use_playwright_utils` | `true` | **N/A** —— Swift 桌面项目无 Playwright；跳过所有 Playwright Utils 片段 |
+| `tea_use_pactjs_utils` | `false` | 无契约测试需求，跳过 |
+| `tea_pact_mcp` | `none` | 跳过 |
+| `tea_browser_automation` | `auto` | **N/A** —— Axion 的「浏览器自动化」指它自身用 MCP 操控浏览器，而非用 Playwright 测试 Axion |
+| `test_stack_type` | `auto` | 自动探测 → `backend` |
 
 ### Execution Mode
 
-- BMad execution mode: BMad-Integrated.
-- Reason: `_bmad-output` contains implementation, planning, and test artifacts for prior work.
-- Current target is not tied to a single provided story; Step 2 must identify a focused automation target from code, recent artifacts, and risk.
+- **BMad-Integrated**。当前分支存在完整 spec：`_bmad-output/specs/spec-task-subagent-skill-compat/`（`SPEC.md` / `architecture.md` / `implementation-plan.md` / **`test-plan.md`** / `brownfield-analysis.md`）。
+- `test-plan.md` 已列出 Epic 40 的建议测试套件与 case 矩阵（CAP-1…CAP-8），本轮以该矩阵 + 实际新增源码为锚点定位缺口。
 
-### Relevant Project Context
+### Loaded Knowledge Fragments (stack-agnostic core only)
 
-- Main context loaded from `_bmad-output/project-context.md`.
-- SDK context loaded from checked-out `open-agent-sdk-swift` project-context files under `.build/checkouts` and `.build/index-build/checkouts`.
-- Existing test layout has broad unit coverage across CLI chat, commands, services, storage, helper tools, MCP, and core models.
-- Current test suite scale observed during preflight: 261 Swift test files and 352 Swift source files.
+TEA 知识库默认偏 Web（Playwright/Pact）。对 Swift 项目，仅加载与测试设计正交的核心片段，跳过全部 Web 专属片段（Playwright Utils、Pact、selector-resilience、network-first、component-tdd、email-auth 等），以节省 ~50% context。
 
-### Loaded Knowledge Fragments
+- ✅ `test-levels-framework.md` —— 单元/集成/E2E 选型（与本项目 unit-only 默认验证强相关）
+- ✅ `test-priorities-matrix.md` —— P0–P3 优先级（项目已用 P0/P1 ATDD 标注）
+- ✅ `test-quality.md` —— 测试 DoD、隔离、green 判据
+- ✅ `selective-testing.md` —— 基于 filter 的选择性执行（`swift test --filter`）
 
-- Core TEA fragments:
-  - `test-levels-framework.md`
-  - `test-priorities-matrix.md`
-  - `data-factories.md`
-  - `selective-testing.md`
-  - `ci-burn-in.md`
-  - `test-quality.md`
-- API/backend utility fragments loaded for transferable principles:
-  - `overview.md`
-  - `api-request.md`
-  - `auth-session.md`
-  - `recurse.md`
-- Browser automation reference loaded due TEA auto mode:
-  - `playwright-cli.md`
+> **权威来源**：Swift 专属测试纪律以 `CLAUDE.md`（强制 Mock、Protocol+注入、禁真实外部依赖）与 `project-context.md`（测试规则章节）为准。
 
-### Local Adaptation Notes
+### Branch Delta vs master — 增量范围界定
 
-- Playwright/browser material is reference-only for this repo unless a web target is later identified.
-- Repository instructions require browser automation through the `browser-use` skill, not `playwright-cli`.
-- For Axion, selective execution should map to SwiftPM filters and the established unit-test-only command rather than Node/Playwright commands.
-- Unit automation must mock external effects such as AgentBuilder, RunOrchestrator, MCP connections, helper processes, and desktop notifications.
-- High-value test additions should preserve local conventions: Swift Testing syntax, explicit assertions in test bodies, deterministic setup, and focused tests under the existing target directories.
+本分支相对 `master` 的 Swift 改动（本轮聚焦对象）：
 
-### Step 1 Status
+**生产代码（+3191 行，18 文件）—— Epic 40 + App Architecture：**
 
-Step 1 is complete. Next step is `step-02-identify-targets`.
+| 文件 | ±行 | 功能 |
+|------|----|------|
+| `Services/AgentBuilder.swift` | +610 | Epic 40 工具组装（tool profile / subagent / slash 引导 / 诊断） |
+| `Services/AppArchitecture/AppArchitectureFormatter.swift` | +732 | 架构扫描结果格式化（**大文件，待核覆盖**） |
+| `Services/AppArchitecture/AppArchitectureScanService.swift` | +457 | 架构扫描服务 |
+| `Chat/AppArchitectureSelectionPrompt.swift` | +488 | 架构选项 prompt 构建 |
+| `Services/AppArchitecture/AppArchitectureUpgradeExecution.swift` | +254 | 升级执行（**副作用型，待核覆盖**） |
+| `Services/AppArchitecture/AppArchitectureUpgradePlanning.swift` | +215 | 升级规划 |
+| `Services/AppArchitecture/AppArchitectureDetailAnalysisService.swift` | +114 | 详细分析（**待核覆盖**） |
+| `Services/AgentBuilder+PromptBuilding.swift` | +58 | prompt 构建提取 |
+| `Commands/ArchitectureCommand.swift` | +62 | `/architecture` 命令 |
+| `Chat/ToolCategoryFormatter.swift` | +131 | 工具分类格式化 |
+| `MCP/RunTaskTool.swift` | +25 | RunTaskTool 注入 TaskExecutor |
+| `Commands/ChatCommand.swift`、`Config/AxionConfig.swift`、`Chat/*` 等 | 小改 | 配套改动 |
+
+**测试代码（+4270 行，~14 新文件）—— 已有投入：**
+
+- Epic 40 工具组装：`AgentBuilderToolProfileTests`(360)、`AgentBuilderSubagentToolRegistrationTests`(229)、`AgentBuilderDiscoveredSkillRegistryTests`(228)、`AgentBuilderPermissionAndDiagnosticsConsistencyTests`(260)、`AgentBuilderSlashSkillGuidanceTests`(188)、`AgentBuilderToolSearchAndMcpInheritanceTests`(242)
+- SDK 就绪：`SDKRuntimeReadinessGateTests`(190)
+- RunTask：`RunTaskToolTests`(+26)
+- App Architecture：`AppArchitectureScanServiceTests`(452)、`AppArchitectureUpgradePlanningTests`(488)、`ArchitectureCommandTests`(111)、`AppArchitectureSelectionPromptTests`(634)、`ToolCategoryFormatterTests`(144)、`ChatOutputFormatterChildTaskTests`(148)
+- Pipeline 验收：`FixturePipelineAcceptanceTests`(300) + `PipelineFixtureSkills`(164)
+
+### Step 1 结论 → 喂给 Step 2
+
+Epic 40 与 App Architecture **已有大量单元测试**。本轮增量价值在于定位这些新增代码中**仍未被单测覆盖的子集**。初步可疑缺口（Step 2 将逐个确认）：
+
+1. `AppArchitectureFormatter.swift`（732 行）—— 是否有专门的单测？
+2. `AppArchitectureUpgradeExecution.swift`（254 行，副作用型）—— 是否通过 protocol/mock 覆盖？
+3. `AppArchitectureDetailAnalysisService.swift`（114 行）—— 覆盖度？
+4. `RunTaskTool.swift` 注入 `TaskExecutor` 的新分支 —— 是否新增了对应 mock 注入测试？
+5. Epic 40 `test-plan.md` 列出但**落在 SDK 仓库**（`open-agent-sdk-swift`）的套件 —— 本仓库 `swift test` 不可达，需明确标注为「外部依赖、本仓库不覆盖」。
+
+### Next
+
+→ 加载 `step-02-identify-targets.md`，将上述可疑缺口逐一验证并收敛为本轮明确的自动化目标清单。
+
+---
 
 ## Step 2: Identify Automation Targets
 
-### Target Discovery
+### 审计方法（backend / Swift，无浏览器探索）
 
-Recent repository activity and user-reported acceptance criteria are concentrated in interactive slash-command UX:
+逐一**验证**而非假设每个可疑缺口：交叉比对 18 个新增/改动源文件与 `Tests/` 引用数，读取每个被测类型的 `@Test` case 清单，核对真实分支覆盖。
 
-- fuzzy command matching instead of prefix-only filtering
-- `/` candidates sorted by recent 7-day usage
-- Up/Down selection with Enter execution
-- visible candidate numbering starts at `1`
-- candidate list expanded to 20 rows
-- `/he` Enter visibly completes to `/help` before submission
-- Ctrl+R reverse-search UI removed
+### 审计结论：增量代码已被充分测试 ✅
 
-Existing unit coverage already exercises most direct happy paths:
+Epic 40（工具组装/subagent/skill）+ App Architecture（扫描/格式化/规划/执行/prompt）**整体覆盖良好**，且遵循项目 Mock 纪律（protocol + 注入）：
 
-- `SlashPopupTests` covers fuzzy contains/subsequence matching, case-insensitive matching, command aliases, empty-query sorting, recent usage ranking, first-page 20-row rendering, skill rendering, and busy-context filtering.
-- `ChatComposerSlashPopupTests` covers slash popup entry, filtered queries, Tab/Enter completion, Down/Up basic selection, recent skill Enter submission, Esc/backspace/Ctrl+C behavior, and non-TTY fallback.
-- `CommandHistoryStoreTests` covers raw recent usage counting and `/quit` alias normalization.
-- `ChatComposerTests` and `KeyHintsFormatterTests` cover the Ctrl+R removal behavior at the input and hint layers.
+| 模块 | 状态 | 证据 |
+|------|------|------|
+| `AgentBuilder` 工具组装（+610） | ✅ 已覆盖 | 6 个新测试文件：ToolProfile(360)、SubagentRegistration(229)、DiscoveredRegistry(228)、Permission/Diagnostics(260)、SlashSkillGuidance(188)、ToolSearch/McpInheritance(242) |
+| `save_skill` dry-run 守卫（最新 commit） | ✅ 已覆盖 | `AgentBuilderToolProfileTests` 有显式断言：非 dry-run 含 save_skill、dry-run 排除 Bash/Skill |
+| `+PromptBuilding` 纯函数 | ✅ 已覆盖 | slashSkillAndTaskGuidance(1)、appendModeInstructions(1)、buildFullSystemPrompt(7)、loadClaudeMd(1) 各有测试 |
+| App Architecture 全链路 | ✅ 已覆盖 | ScanServiceTests(12 cases)、UpgradePlanningTests(16 cases，含执行器 mock/失败/sudo-skip)、SelectionPromptTests(16 cases，含 Homebrew/Intel 升级执行)、ArchitectureCommandTests |
+| `SDKRuntimeReadinessGate` | ✅ 已覆盖 | SDKRuntimeReadinessGateTests(190) |
+| `ToolCategoryFormatter` / `ChatOutputFormatter` 子任务 | ✅ 已覆盖 | ToolCategoryFormatterTests(144)、ChatOutputFormatterChildTaskTests(148) |
 
-Backend/API scan:
+### 真实缺口（经核验，本轮目标）
 
-- Hummingbird API routes exist under `Sources/AxionCLI/API/` and are already heavily tested under `Tests/AxionCLITests/API/`.
-- No first-party OpenAPI/Swagger spec was found in the project source tree; matches are dependency build artifacts only.
-- Pact/contract tooling is not enabled and no Pact setup was detected.
-- No database migration layer was detected for the current target area.
+| # | 目标 | 文件/分支 | 测试层级 | 优先级 | 可测性 | 缺口说明 |
+|---|------|----------|---------|--------|--------|---------|
+| **T1** | RunTaskTool `run_locked` 排他锁错误路径 | `MCP/RunTaskTool.swift:54-62`（`if !lockAcquired`） | Unit | **P1** | ✅ 预置 lock 文件 + `processAliveChecker: { _ in true }` 使 acquire 返回 false | 桌面级排他安全机制（防并发 live run），错误分支完全未测 |
+| **T2** | RunTaskTool 失败 → 状态 `.failed` | `MCP/RunTaskTool.swift:65-70`（`result.status != .success`） | Unit | **P2** | ✅ 注入 `executeTask: { _ in failingQueryResult() }`，断言 `updateRun(.failed)` | 测试恒注入成功结果，`.failed` 分支未测 |
+| **T3** | RunTaskTool 成功 → 状态 `.completed` + 锁释放 | `MCP/RunTaskTool.swift:64-71`（enqueue 闭包） | Unit | **P2** | ✅ 排空 TaskQueue 后断言最终 status==.completed、lock 文件已清除 | 当前测试只验证 run 存在，未断言最终状态迁移与锁释放 |
+| **T4** | `buildMemoryContexts` async 编排器 | `Services/AgentBuilder+PromptBuilding.swift:11-37` | Unit | **P3** | ⚠️ 依赖 FileBasedMemoryStore + AxionFactStore，需 temp dir / no-op store | 0 直接测试；部分经 buildSystemPrompt 间接覆盖。低优先，本轮可不做 |
 
-### Selected Coverage Scope
+### 范围外（明确排除，避免误导）
 
-Coverage scope: selective unit automation for the recently changed interactive command path. This avoids duplicate API/E2E coverage and stays within the project rule to use Swift Testing unit tests with mocked/no external dependencies.
+| 项 | 原因 |
+|----|------|
+| Epic 40 SDK 侧套件：`SubAgentToolAliasTests`、`DefaultSubAgentSpawnerToolFilteringTests`、`SkillExecutionPromptContextTests`、`SkillToolDeclarationCompatibilityTests` | 位于 **`open-agent-sdk-swift`** 远程仓库，本仓库 `swift test` 不可达。属外部依赖，需在 SDK 仓库单独运行（`test-plan.md` 已注明） |
+| 集成/E2E（真实 Helper 进程、AX 权限、live model） | 项目规则：开发验证只跑单元测试；CI 无 AX 权限 |
 
-| Priority | Test Level | Target | Scenario | Justification |
-| --- | --- | --- | --- | --- |
-| P0 | Unit | `SlashPopup.render` | Scrolled 20-item window uses absolute numbering and does not reset/window-offset incorrectly | Directly protects the user-reported "候选序号不是从 1/显示 49" class of bugs. |
-| P0 | Unit | `ChatComposer` slash popup | Moving selection beyond the first visible page and pressing Enter submits the selected absolute item | Covers the end-user Up/Down + Enter flow beyond the existing one-step selection test. |
-| P1 | Unit | `SlashPopup.filter` | Recent usage via a skill alias boosts that skill in empty-query ranking | Protects the 7-day usage sorting behavior for skill aliases, not just canonical command names. |
-| P1 | Unit | `CommandHistoryStore.recentSlashUsageCounts` | Counts exclude future entries and entries older than the 7-day cutoff while preserving exact cutoff inclusion | Hardens the time-window logic behind slash popup ranking. |
-| P2 | Unit | Ctrl+R removal | Keep existing negative tests; no additional automation needed now | Existing input and hint tests already cover the user-visible removal. |
+### 覆盖计划（Coverage Plan）
 
-### Non-Targets
+- **覆盖范围**: 选择性（selective）—— 增量代码主体已覆盖，仅补 RunTaskTool 错误/状态分支缺口集群
+- **测试层级**: 全部 **Unit**（与项目「开发只跑单元测试」规则一致；通过既有可注入 init 实现 mock，无真实依赖）
+- **目标产出**: 在既有 `Tests/AxionCLITests/MCP/RunTaskToolTests.swift` 中新增 T1/T2/T3 三个 case（扩展现有 `@Suite`），T4 列为延后
+- **优先级依据**: P1 = 安全机制关键路径（run_locked 防并发 live run）；P2 = 重要状态迁移正确性；P3 = 次要编排逻辑
+- **Mock 合规**: 全部通过 RunTaskTool 的 `executeTask:` 闭包 init + `RunLockService(lockDirectory:processAliveChecker:)` 注入，不触达真实 Agent/Helper/LLM（符合 CLAUDE.md 单元测试强制 Mock 规则）
+- **验证命令**: `swift test --filter "AxionCLITests.MCP.RunTaskToolTests"`
 
-- No browser exploration or E2E generation: detected stack for this target is terminal/backend Swift, and repository rules require browser automation through `browser-use` only when needed.
-- No Pact/provider endpoint mapping: disabled in config and no contract-test indicators were detected.
-- No new HTTP API route tests in this pass: existing API router tests are mature and unrelated to the recent user-facing regression report.
+### Next
 
-### Step 2 Status
+→ 加载 `step-03-generate-tests.md`，针对 T1/T2/T3 生成 Swift Testing 单元测试（扩展现有 RunTaskToolTests 套件）。
 
-Step 2 is complete. Next step is `step-03-generate-tests`.
+---
 
-## Step 3: Generate Tests
+## Step 3: Generate Tests (sequential)
 
 ### Execution Mode Resolution
 
-- Requested: `auto`
-- Capability probe: enabled
-- Runtime note: subagent tooling is available, but this run did not include an explicit user request to delegate or spawn parallel agents, so worker execution was resolved to sequential mode.
-- Resolved mode: `sequential`
-- Backend stack dispatch:
-  - API worker: completed with zero generated tests because no API endpoint target was selected in Step 2.
-  - E2E worker: skipped because detected stack for the target is backend/terminal.
-  - Backend worker: completed with Swift Testing unit-test candidates.
-
-### Worker Outputs
-
-- API worker output: `_bmad-output/test-artifacts/tea-automate-2026-06-13T04-07-34-389750000Z/api-tests.json`
-- Backend worker output: `_bmad-output/test-artifacts/tea-automate-2026-06-13T04-07-34-389750000Z/backend-tests.json`
-- Aggregate summary output: `_bmad-output/test-artifacts/tea-automate-2026-06-13T04-07-34-389750000Z/summary.json`
-
-## Step 3C: Aggregate Test Generation Results
-
-### Generated Files
-
-- `Tests/AxionCLITests/Chat/Composer/SlashPopupWindowTests.swift`
-- `Tests/AxionCLITests/Chat/Composer/ChatComposerSlashPopupPagingTests.swift`
-- `Tests/AxionCLITests/Chat/CommandHistoryStoreRecentUsageWindowTests.swift`
-
-### Summary
-
-- Stack type: backend
-- Total tests generated: 4
-- API tests: 0
-- E2E tests: 0
-- Backend tests: 4 across 3 files
-- Fixtures created: 0
-- Existing helper fixtures reused: `OutputCapture`, `MockKeyReader`, injected in-memory `CommandHistoryStore` file I/O
-- Priority coverage: P0 = 2, P1 = 2, P2 = 0, P3 = 0
-
-### Step 3C Status
-
-Step 3C is complete. Next step is `step-04-validate-and-summarize`.
-
-## Step 4: Validate and Summarize
-
-### Validation Results
-
-- Targeted generated-test run:
-  - Command: `swift test --filter "SlashPopupWindowTests" --filter "ChatComposerSlashPopupPagingTests" --filter "CommandHistoryStoreRecentUsageWindowTests"`
-  - Result: passed, 4 tests in 3 suites.
-- Project unit-test command:
-  - Command: `swift test --filter "AxionHelperTests.Tools" --filter "AxionHelperTests.Models" --filter "AxionHelperTests.MCP" --filter "AxionHelperTests.Services" --filter "AxionCoreTests" --filter "AxionCLITests"`
-  - Result: passed, 3616 tests in 236 suites.
-- Swift Testing rule:
-  - `rg -l "import XCTest" Tests` returned no matches.
-- Browser/CLI session hygiene:
-  - No browser automation was used.
-  - No Playwright CLI session was opened.
-- Temporary artifact hygiene:
-  - Worker outputs were archived under `_bmad-output/test-artifacts/tea-automate-2026-06-13T04-07-34-389750000Z/`.
-  - The `/tmp/tea-automate-*` files created during worker orchestration were removed after archival.
-
-### Checklist Adaptation
-
-- The generic TEA checklist expects Web test scaffolding such as Playwright/Cypress config and package.json scripts. For this project, those items are not applicable because Axion is a SwiftPM CLI/backend codebase and the repository rule requires Swift Testing.
-- No fixture files were generated. The new tests intentionally reuse existing in-target helpers (`OutputCapture`, `MockKeyReader`) and injected in-memory `CommandHistoryStore` file I/O.
-- No API, E2E, Pact, browser, or integration tests were generated in this pass.
-
-### Final Coverage Summary
-
-- Test level: unit
-- Total tests generated: 4
-- Priority coverage: P0 = 2, P1 = 2, P2 = 0, P3 = 0
-- Files created:
-  - `Tests/AxionCLITests/Chat/Composer/SlashPopupWindowTests.swift`
-  - `Tests/AxionCLITests/Chat/Composer/ChatComposerSlashPopupPagingTests.swift`
-  - `Tests/AxionCLITests/Chat/CommandHistoryStoreRecentUsageWindowTests.swift`
-
-### Key Assumptions and Risks
-
-- The selected target is the recent slash-command interaction work, inferred from the current session and the latest commit.
-- The tests avoid real terminal, browser, filesystem, network, SDK build, MCP connection, helper process, and notification side effects.
-- Remaining risk is limited to real terminal rendering differences that unit tests cannot fully prove; existing composer tests and these new paging/window tests cover the deterministic state transitions and rendered text content.
-
-### Recommended Next Workflow
-
-- `bmad-testarch-test-review` if a formal test quality review is needed.
-- Otherwise, no additional TEA workflow is required for this focused unit automation pass.
-
-## Coverage Improvement Pass: 2026-06-13
-
-### Scope
-
-- Goal: raise unit-test coverage with focused, deterministic Swift Testing tests.
-- Starting region coverage: 70.08%.
-- Target selection used current llvm-cov gaps, prioritizing pure logic and injected services over real terminal, helper, MCP, network, or AX-dependent paths.
-
-### Added Coverage
-
-- `Tests/AxionCLITests/Chat/Composer/KeyEventTests.swift`
-  - Added CSI tilde, CSI-u, SS3, and unknown escape sequence parsing coverage.
-- `Tests/AxionCLITests/Chat/ToolCategoryFormatterTests.swift`
-  - Added status, duration, TTY profile, shell output, JSON stdout, search count, category label, memory/default, and edit summary coverage.
-- `Tests/AxionCLITests/Services/Telegram/TGMessageFormatterTableTests.swift`
-  - Added box-drawing table parsing, border/separator skipping, CJK width, and HTML escaping coverage.
-- `Tests/AxionCLITests/Services/AppListServiceTests.swift`
-  - Added app-detail analysis parse/failure behavior, prompt sanitization, Homebrew provider prefix, and metadata fallback coverage.
-- `Tests/AxionCLITests/Chat/StreamingTableRendererTests.swift`
-  - Added detail-list wrapping and ANSI/OSC visible-width truncation coverage.
-- `Tests/AxionCLITests/Services/Telegram/TGStreamingControllerTests.swift`
-  - Added tool preview emoji, JSON field extraction, invalid-input fallback, argument formatting, and empty-argument coverage.
-
-### Validation Results
-
-- Targeted affected-suite run:
-  - Command: `swift test --filter "KeyEventReaderEscapeParsingTests" --filter "ToolCategoryFormatterTests" --filter "TGMessageFormatterTableTests" --filter "AppListServiceTests"`
-  - Result: passed, 106 tests in 4 suites.
-- Second targeted affected-suite run:
-  - Command: `swift test --filter "StreamingTableRendererTests" --filter "TGStreamingController"`
-  - Result: passed, 63 tests in 2 suites.
-- Full unit coverage run:
-  - Command: `swift test --no-parallel --enable-code-coverage --skip AxionHelperIntegrationTests --skip AxionCLIIntegrationTests --skip AxionE2ETests`
-  - Result: passed, 3833 tests in 251 suites.
-- Coverage extraction:
-  - Command: `xcrun llvm-cov report ... | tail -1`
-  - Result: region coverage 72.39%, line coverage 73.49%.
-
-### Coverage Delta
-
-- Region coverage: 70.08% -> 72.39% (+2.31 percentage points).
-- Missed regions: 3917 -> 3615 (302 fewer missed regions).
-- Distance to 80% region coverage: about 997 additional covered regions.
-
-### Remaining High-Impact Gaps
-
-- `AxionCLI/Commands/ChatCommand.swift`: 207 missed regions.
-- `AxionCLI/Chat/CJKInputHandler.swift`: 99 missed regions, mostly raw terminal behavior.
-- `AxionHelper/Services/AccessibilityEngine.swift`: 90 missed regions, AX-dependent paths.
-- `AxionCLI/Commands/GatewayStartCommand+TelegramSetup.swift`: 71 missed regions.
-- `AxionCLI/Services/RunOrchestrator.swift`: 63 missed regions.
-- `AxionHelper/Services/AppLauncher.swift`: 59 missed regions.
-
-### Recommendation
-
-Reaching 80% is possible, but it should be handled as a separate coverage hardening pass that either extracts more pure seams from the largest interactive/system-bound files or explicitly expands safe mock boundaries around terminal, gateway, orchestration, Telegram, and helper services.
-
-## Coverage Continuation Pass: 2026-06-13
-
-### Pre-Work Commit
-
-- User request: commit all current code before continuing coverage work.
-- Commit created: `51357bb test: improve unit coverage`.
-- Commit-time coverage baseline for the continuation pass: region coverage 72.39%, function coverage 74.18%, line coverage 73.49%.
-
-### Added Coverage
-
-- `Tests/AxionCLITests/Services/Telegram/TGEventHandlerTests.swift`
-  - Added MCP stripping edge cases for input-only starts, long prefixes, output separators, scalar payload lines, and fenced payload lines.
-- `Tests/AxionCLITests/Services/Telegram/TGAPIClientTests.swift`
-  - Added in-memory URLSession tests for update polling, send/edit message payload encoding, inline keyboards, callback answers, file metadata, file downloads, chat actions, and Telegram API error fallbacks.
-- `Tests/AxionCLITests/Services/AppListServiceTests.swift`
-  - Added pure/temp-directory coverage for Caskroom discovery, deep-list warnings, deterministic sorting, default roots, fast URL scanning, regular-file sizing, managed-app detection, and non-bundle metadata reads.
-- `Tests/AxionCLITests/Services/Telegram/TGMessageFormatterTests.swift`
-  - Added plain-format coverage for fenced code blocks, unclosed fences, markdown lists, markdown tables, and box-drawing tables.
-- `Tests/AxionCLITests/Services/AppDiscoveryTests.swift`
-  - Added temp `.app` bundle discovery coverage for plist reads, filtering, match-confidence sorting, version, and team identifier extraction.
-
-### Validation Results
-
-- Targeted Telegram API/event run:
-  - Command: `swift test --filter "TGEventHandler" --filter "TGAPIClientTests"`
-  - Result: passed, 56 tests in 2 suites.
-- Targeted app list run:
-  - Command: `swift test --filter AppListServiceTests`
-  - Result: passed, 31 tests in 1 suite.
-- Targeted formatter/discovery run:
-  - Command: `swift test --filter TGMessageFormatterTests --filter AppDiscoveryTests`
-  - Result: passed, 44 tests in 2 suites.
-- Full unit coverage run:
-  - Command: `swift test --no-parallel --enable-code-coverage --skip AxionHelperIntegrationTests --skip AxionCLIIntegrationTests --skip AxionE2ETests`
-  - Result: passed, 3865 tests in 251 suites.
-- Coverage extraction:
-  - Command: `xcrun llvm-cov report ... | tail -1`
-  - Result: region coverage 73.23%, function coverage 74.95%, line coverage 74.15%.
-
-### Coverage Delta
-
-- Continuation-pass region coverage: 72.39% -> 73.23% (+0.84 percentage points).
-- Continuation-pass line coverage: 73.49% -> 74.15% (+0.66 percentage points).
-- Overall region coverage from the original baseline: 70.08% -> 73.23% (+3.15 percentage points).
-- New tests added in this continuation pass: 32.
-
-### Remaining High-Impact Gaps
-
-- `AxionCLI/Commands/ChatCommand.swift`: 207 missed regions.
-- `AxionCLI/Chat/CJKInputHandler.swift`: 99 missed regions.
-- `AxionHelper/Services/AccessibilityEngine.swift`: 90 missed regions.
-- `AxionCLI/Commands/GatewayStartCommand+TelegramSetup.swift`: 71 missed regions.
-- `AxionCLI/Services/RunOrchestrator.swift`: 63 missed regions.
-- `AxionHelper/Services/AppLauncher.swift`: 59 missed regions.
-
-### Recommendation
-
-The codebase can still move toward 80%, but the next meaningful gains are no longer cheap pure-test additions. The remaining largest files cross terminal raw input, AX/helper behavior, gateway setup, and orchestration boundaries, so a responsible 80% push should first extract injectable collaborators or add explicit mock boundaries rather than exercising real system effects in unit tests.
-
-## Dependency Extraction Coverage Pass: 2026-06-13
-
-### Pre-Work Commit
-
-- User request: commit current work before dependency extraction.
-- Commit created: `4f32d33 test: extend coverage for telegram and app services`.
-- Commit-time coverage baseline for this pass: region coverage 73.23%, function coverage 74.95%, line coverage 74.15%.
-
-### Refactoring Scope
-
-- `Sources/AxionCLI/Chat/CJKInputHandler.swift`
-  - Extracted raw-mode byte handling into `CJKRawLineProcessor`.
-  - `readRawLine` now handles terminal setup/stdin reads while delegating Enter, Ctrl-C/Ctrl-D, UTF-8 echoing, backspace, unknown escape sequences, bracket paste, and max-length behavior to the pure processor.
-  - This keeps terminal I/O at the boundary and makes the state machine testable without entering raw mode or reading real stdin.
-- `Sources/AxionCLI/Commands/GatewayStartCommand+TelegramSetup.swift`
-  - Extracted Telegram allowed-user parsing, chat-id conversion, curator notification formatting, and review notification formatting into pure static helpers.
-  - The asynchronous Telegram adapter callbacks now only select a message and send it through the adapter.
-
-### Added Coverage
-
-- `Tests/AxionCLITests/Chat/CJKInputHandlerTests.swift`
-  - Added in-memory byte-stream coverage for ASCII completion, UTF-8 echo timing, full-character backspace, bracket paste start/end, unknown escape handling, Ctrl-D, and max line length.
-- `Tests/AxionCLITests/Commands/GatewayCommandTests.swift`
-  - Added pure helper coverage for Telegram whitelist parsing, numeric chat-id filtering/sorting, curator success/failure/no-change messages, and review success/failure/no-change messages.
-
-### Validation Results
-
-- Targeted CJK run:
-  - Command: `swift test --filter CJKInputHandlerTests`
-  - Result: passed, 23 tests in 1 suite.
-- Targeted Gateway run:
-  - Command: `swift test --filter GatewayCommandTests`
-  - Result: passed, 31 tests in 1 suite.
-- Full unit coverage run:
-  - Command: `swift test --no-parallel --enable-code-coverage --skip AxionHelperIntegrationTests --skip AxionCLIIntegrationTests --skip AxionE2ETests`
-  - Result: passed, 3880 tests in 251 suites.
-- Swift Testing rule:
-  - `rg -l "import XCTest" Tests` returned no matches.
-- Coverage extraction:
-  - Command: `xcrun llvm-cov report ... | tail -1`
-  - Result: region coverage 73.86%, function coverage 75.37%, line coverage 74.67%.
-
-### Coverage Delta
-
-- Dependency-extraction pass region coverage: 73.23% -> 73.86% (+0.63 percentage points).
-- Dependency-extraction pass line coverage: 74.15% -> 74.67% (+0.52 percentage points).
-- Overall region coverage from the original baseline: 70.08% -> 73.86% (+3.78 percentage points).
-- `CJKInputHandler.swift` missed regions: 99 -> 45.
-- `GatewayStartCommand+TelegramSetup.swift` missed regions: 71 -> 49.
-
-### Remaining High-Impact Gaps
-
-- `AxionCLI/Commands/ChatCommand.swift`: 207 missed regions.
-- `AxionHelper/Services/AccessibilityEngine.swift`: 90 missed regions.
-- `AxionCLI/Services/RunOrchestrator.swift`: 63 missed regions.
-- `AxionHelper/Services/AppLauncher.swift`: 59 missed regions.
-- `AxionHelper/Services/AccessibilityEngine+AXTree.swift`: 56 missed regions.
-- `AxionCLI/Commands/GatewayStartCommand+TelegramSetup.swift`: 49 missed regions.
-- `AxionCLI/Chat/CJKInputHandler.swift`: 45 missed regions.
-
-### Recommendation
-
-The next useful coverage move is to continue extracting boundary-free collaborators from `ChatCommand` and `RunOrchestrator`, then add mock-backed tests around those collaborators. The AX helper files remain high-impact, but they need protocol seams around system APIs before they can be expanded safely under the unit-test rules.
-
-## Chat Routing and App Launcher Dependency Pass: 2026-06-13
-
-### Pre-Work Commit
-
-- User request: commit current work before continuing.
-- Commit created: `6ee1863 test: extract coverage seams`.
-- Commit-time baseline for this continuation: region coverage 72.93%, function coverage 74.53%, line coverage 73.96%.
-
-### Refactoring Scope
-
-- `Sources/AxionCLI/Chat/ChatCommandInputRouter.swift`
-  - Extracted slash command, resume-index, and skill fallback routing from the interactive `ChatCommand` loop into a pure router.
-  - Preserves built-in command precedence over matching skill names and keeps unknown `/xxx` inputs flowing to the agent task path.
-- `Sources/AxionCLI/Commands/ChatCommand.swift`
-  - Rewired the REPL loop to consume `ChatCommandInputRoute` decisions while leaving session, command-handler, and streaming behavior unchanged.
-- `Sources/AxionHelper/Services/AppLauncher.swift`
-  - Added injectable workspace and filesystem seams around `NSWorkspace`, `FileManager`, and app bundle display-name lookup.
-  - Keeps default runtime behavior backed by `NSWorkspace.shared` and `FileManager.default`.
-- `Tests/AxionCLITests/Chat/ToolCategoryFormatterTests.swift`
-  - Added coverage for fallback summary and shell/TTY output formatting branches.
-
-### Added Coverage
-
-- `Tests/AxionCLITests/Chat/ChatCommandInputRouterTests.swift`
-  - Added pure routing coverage for empty inputs, built-ins, generated task slashes, built-in-vs-skill precedence, one-based resume selection, invalid resume indexes, unknown slashes, and skill argument parsing.
-- `Tests/AxionHelperTests/Services/AppLauncherServiceTests.swift`
-  - Added mock-backed coverage for already-running apps, bundle-id lookup, exact and case-insensitive filename lookup, localized display name lookup, app-not-found, launch failure wrapping, and running-app filtering.
-- `Tests/AxionHelperTests/Services/ServicesTests.swift`
-  - Added a `Services` root suite so `--filter "AxionHelperTests.Services"` includes AppLauncher service coverage in the project-standard unit command.
-- `Tests/AxionCLITests/Chat/ToolCategoryFormatterTests.swift`
-  - Added fallback and shell/TTY branch assertions.
-
-### Validation Results
-
-- Pre-change commit:
-  - Command: `git commit -m "test: extract coverage seams"`.
-  - Result: created `6ee1863`.
-- Targeted chat router run:
-  - Command: `swift test --filter ChatCommandInputRouterTests`.
-  - Result: passed, 15 tests in 1 suite.
-- Targeted slash-regression run:
-  - Command: `swift test --filter SlashCommandTests --filter SlashCommandSkillsTests --filter SignalHandlerTests`.
-  - Result: passed, 73 tests in 4 suites.
-- Targeted app launcher run:
-  - Command: `swift test --filter AppLauncherServiceTests`.
-  - Result: passed, 16 tests in 1 suite.
-- Services filter run:
-  - Command: `swift test --filter "AxionHelperTests.Services"`.
-  - Result: passed, 16 tests in 2 suites.
-- Targeted formatter run:
-  - Command: `swift test --filter ToolCategoryFormatterTests`.
-  - Result: passed, 45 tests in 1 suite.
-- Full unit coverage run:
-  - Command: `swift test --no-parallel --enable-code-coverage --filter "AxionHelperTests.Tools" --filter "AxionHelperTests.Models" --filter "AxionHelperTests.MCP" --filter "AxionHelperTests.Services" --filter "AxionCoreTests" --filter "AxionCLITests"`.
-  - Result: passed, 3732 tests in 239 suites.
-- Swift Testing rule:
-  - `rg -l "import XCTest" Tests` returned no matches.
-- Whitespace check:
-  - `git diff --check` passed.
-
-### Coverage Delta
-
-- Continuation-pass region coverage: 72.93% -> 73.48% (+0.55 percentage points).
-- Continuation-pass line coverage: 73.96% -> 74.38% (+0.42 percentage points).
-- `ChatCommandInputRouter.swift`: 95.45% region coverage, 98.04% line coverage.
-- `ToolCategoryFormatter.swift`: 92.13% region coverage, 96.75% line coverage.
-- `AppLauncher.swift`: 80.00% region coverage, 76.84% line coverage under the combined project-standard unit coverage command.
-
-### Remaining High-Impact Gaps
-
-- `AxionCLI/Commands/ChatCommand.swift`: still the largest uncovered surface after extracting the first pure router.
-- `AxionCLI/Services/RunOrchestrator.swift`: still a high-value dependency extraction target.
-- AX/helper services remain high-impact but need deeper protocol seams before adding more unit tests under the no-real-system-dependency rule.
-
-### Recommendation
-
-Continue by carving `ChatCommand` into more pure collaborators for session workflow decisions, command side effects, and stream-result handling. After that, move to `RunOrchestrator` with explicit protocols around agent execution, notifications, and persistence so tests can assert orchestration behavior without invoking SDK or OS boundaries.
-
-## MCP Coverage Pass: 2026-06-14 — Step 1 Preflight
-
-### Confirmed Inputs
-
-- Mode: Create (`c`)
-- Project root: `/Users/nick/CascadeProjects/axion`
-- Output file: `_bmad-output/test-artifacts/automation-summary.md`
-- Communication language: Mandarin
-- Requested scope: expand test automation coverage for the recent MCP feature work (interactive MCP browser, `/mcp` slash status command, auth headers on remote sse/http servers).
-
-### Stack and Framework Detection
-
-- Detected stack: `backend` — pure Swift / SwiftPM package, no frontend or browser test manifest.
-- Primary manifest: `Package.swift`.
-- Test framework verified: Swift Testing (`import Testing`, `@Suite`, `@Test`, `#expect`).
-- XCTest residue check: `grep -rl "import XCTest" Tests/` → empty. ✅
-- Test targets: `AxionCoreTests`, `AxionCLITests`, `AxionHelperTests` (unit) + `AxionCLIIntegrationTests`, `AxionHelperIntegrationTests`, `AxionE2ETests` (integration/E2E, require real macOS app + AX permissions — excluded from the unit command).
-- Test file counts: AxionCLITests 203, AxionCoreTests 14, AxionE2ETests 20, AxionHelperTests 35 (272 total).
-- Browser/E2E tooling: no `package.json`, no Playwright/Cypress config — irrelevant for this repo.
-- Pact/contract tooling: no Pact package, broker, or contract setup — irrelevant.
-
-### Execution Mode
-
-- BMad execution mode: **BMad-Integrated**.
-- Reason: `_bmad-output` contains the spec for this exact work (`implementation-artifacts/spec-mcp-config.md`, `implementation-artifacts/spec-mcp-config-manual-acceptance.md`) plus PRD/epics/architecture and a mature test-artifacts tree.
-- Focus is not a single new story; it is test-coverage hardening for recently merged MCP features, inferred from the last 4 commits and an in-flight E2E test edit.
-
-### Recent MCP Feature Work (target surface)
-
-Last 4 commits are all MCP-related:
-
-- `d41bcd3` feat(mcp): support auth headers on remote sse/http servers → `Sources/AxionCLI/Models/AxionMcpServerConfig.swift` (76 lines; `.sse`/`.http` now carry `headers`).
-- `f156a83` feat(chat): categorize external MCP tools and improve wide-table layout.
-- `58828ac` feat: add mcp slash status command → `Sources/AxionCLI/Chat/SlashCommandHandler+MCP.swift` (252 lines).
-- `c0cba6e` feat: add interactive mcp browser → `Sources/AxionCLI/Chat/MCPSelectionPrompt.swift` (146), `Sources/AxionCLI/Chat/MCPStatusFormatter.swift` (179).
-
-In-flight (uncommitted): `Tests/AxionE2ETests/MCPConfigE2ETests.swift` — new E2E cases asserting `/mcp` status redacts `Authorization`/`Z_AI_API_KEY` secrets and the interactive list opens redacted detail. This is an E2E target (real app/AX), so it does NOT run in the unit command — a clear signal that the same logic needs fast unit coverage.
-
-### Existing Coverage of the MCP Surface
-
-Unit tests present:
-
-- `Tests/AxionCLITests/Chat/MCPStatusFormatterTests.swift` (107 lines)
-- `Tests/AxionCLITests/Chat/MCPSelectionPromptTests.swift` (99 lines)
-- `Tests/AxionCLITests/Models/AxionMcpServerConfigTests.swift` (113 lines)
-- `Tests/AxionCLITests/Services/MCPConfigResolverTests.swift` (142 lines)
-- `Tests/AxionCLITests/Commands/McpCommandTests.swift`
-
-E2E only (no fast unit path):
-
-- `Tests/AxionE2ETests/MCPConfigE2ETests.swift` (332+ lines, in-flight)
-
-### Loaded Knowledge Fragments
-
-Core TEA fragments (applicable to this Swift backend target):
-
-- `test-levels-framework.md` — unit vs integration vs E2E choice.
-- `test-priorities-matrix.md` — P0–P3 risk-based ordering.
-- `data-factories.md` — fixture/override discipline (mapped to in-memory `AxionConfig` construction).
-- `selective-testing.md` — `swift test --filter` selection.
-- `test-quality.md` — isolation, no external effects, deterministic setup.
-- `risk-governance.md` + `probability-impact.md` — risk scoring for gate decisions.
-
-Local adaptation (Master Test Architect judgment):
-
-- The config flags `tea_use_playwright_utils: true`, `tea_browser_automation: auto`, `test_stack_type: auto` were generated by a generic installer for web stacks. For this pure-Swift repo, the Playwright/Cypress/Pact fragments (overview, api-request, network-recorder, auth-session, playwright-cli, pactjs-*, contract-testing) are **reference-only and NOT loaded** — they describe JS/TS web tooling that does not apply.
-- The operative testing knowledge is the project's own conventions in `CLAUDE.md` and `_bmad-output/project-context.md`: Swift Testing syntax, Protocol+Mock injection, no real system calls in unit tests, Codable round-trip pattern, ATDD priority tags, the unit-only test command.
-- Repo rule: browser automation (when actually needed) goes through the `browser-use` skill, not `playwright-cli`. Not needed for this target.
-
-### TEA Config Flags Read
-
-- `tea_use_playwright_utils`: true → overruled for Swift target (reference-only).
-- `tea_use_pactjs_utils`: false.
-- `tea_pact_mcp`: none.
-- `tea_browser_automation`: auto → resolves to none for this backend target.
-- `test_stack_type`: auto → resolved to `backend`.
-
-### Step 1 Status
-
-Step 1 is complete. Next step is `step-02-identify-targets`.
-
-## MCP Coverage Pass: 2026-06-14 — Step 2 Identify Targets
-
-### Target Discovery (backend source analysis, no browser)
-
-The recent MCP feature work spans four files. Mapping each to its existing coverage:
-
-| Source file | Role | Existing unit coverage |
-| --- | --- | --- |
-| `Sources/AxionCLI/Models/AxionMcpServerConfig.swift` | MCP server config model (stdio/sse/http, headers/env) | ✅ Mature — `AxionMcpServerConfigTests.swift` covers encode/round-trip/optional/SDK-mapping for sse+http headers |
-| `Sources/AxionCLI/Chat/MCPStatusFormatter.swift` | Render entries → status/list/detail strings | ✅ `MCPStatusFormatterTests.swift` (5 tests) covers renderList first/shifted window, renderDetail redacted, renderAll redacted. Gaps: empty list, namespace `-`, truncate, sanitize |
-| `Sources/AxionCLI/Chat/MCPSelectionPrompt.swift` | Interactive up/down/enter browser | ✅ `MCPSelectionPromptTests.swift` (4 tests) covers down-past-page→detail, `b` back, `q` cancel, non-TTY. Gaps: `up` nav, `left` back, empty entries, invalid-enter cancel |
-| `Sources/AxionCLI/Chat/SlashCommandHandler+MCP.swift` | **AxionConfig → `[MCPStatusEntry]`** + redaction + reserved/invalid name handling | ⚠️ Only 2 tests in `SlashCommandTests.swift` (http+stdio redaction, dryrun). **`.sse` type has zero coverage.** `mcpStatusEntries` branch logic largely untested |
-
-### The Highest-Value Gap
-
-`SlashCommandHandler.mcpStatusEntries(config:buildConfig:helperPath:playwrightResolver:)` is the bridge that turns an `AxionConfig` into `[MCPStatusEntry]`. It is a pure, static, `internal` function returning an `Equatable` array — ideal for fast unit tests with injected `helperPath` and `playwrightResolver` (no Helper/MCP/LLM/AX contact). Currently its many branches are only exercised through:
-
-- 2 unit tests (`SlashCommandTests.handleMCPStatus*`) — cover http+stdio happy path + dryrun
-- E2E tests (`MCPConfigE2ETests`) — do NOT run in the unit command
-
-Critical untested branches (line refs to `SlashCommandHandler+MCP.swift`):
-
-- **`.sse` server redaction** (lines 167-178) — the new auth-headers feature (`d41bcd3`) for the `.sse` type has **zero** unit coverage. Remote SSE servers typically carry `Authorization` headers; redaction is NFR9-critical.
-- **`redactedKeys` multi-key sorting** (lines 249-251) — sorts keys and joins. Existing tests use single-key dicts, so the sort + multi-redact path is unproven.
-- **reserved `axion-helper` in user config → ignored** (lines 81-91).
-- **playwright user-config branches**: `.sse`/`.http` → ignored "must use stdio" (97-107); `.stdio` → ready (95-96); auto-resolved via `playwrightResolver()` returning non-nil → ready (109-110).
-- **invalid server name → ignored** (lines 130-141, depends on `MCPConfigResolver.isValidServerName`).
-- **`axion-helper` missing** when `helperPath == nil` (lines 73-75).
-- **optional-field-absent branches**: stdio without `env`, sse/http without `headers`.
-
-### Non-Targets
-
-- `AxionMcpServerConfig` model layer — already mature; do not duplicate.
-- `MCPStatusFormatter` happy paths — already covered; only cheap edge cases added.
-- `MCPSelectionPrompt` main flows — already covered; only missing interaction branches added.
-- `MCPConfigResolver`, `McpCommand` (`axion mcp`) — out of this pass's MCP-slash-status scope.
-- No browser/E2E/Pact generation — backend Swift target, repo rules forbid real system deps in unit tests.
-
-### Coverage Plan (selective, risk-based)
-
-Scope justification: **selective unit automation** for the entry-construction + redaction bridge — the least-covered, highest-risk slice of the recent MCP work. One new dedicated suite plus small extensions to the two adjacent suites.
-
-| Priority | Test Level | Target | Scenario | Justification |
-| --- | --- | --- | --- | --- |
-| P0 | Unit | `mcpStatusEntries` / `handleMCPStatus` | `.sse` server with `Authorization` header is rendered with `headers: Authorization=<redacted>` and the secret never appears | New auth-headers feature (`d41bcd3`); `.sse` type currently has zero unit coverage; NFR9 secret-leak prevention |
-| P0 | Unit | `redactedKeys` (via `mcpStatusEntries`) | Multiple header keys AND multiple env keys are all redacted, deterministically sorted, comma-joined; no value leaks | Security-critical deterministic redaction; existing tests only use single-key dicts |
-| P1 | Unit | `mcpStatusEntries` | Reserved `axion-helper` in user config yields an `ignored` entry with "reserved server name" reason, not a duplicate ready entry | Correctness of reserved-name handling; prevents double-registration confusion |
-| P1 | Unit | `mcpStatusEntries` | playwright in user config: `.sse`/`.http` → ignored "must use stdio"; `.stdio` → ready config entry; auto-resolved (resolver non-nil) → ready auto entry | Three reserved-playwright branches currently untested |
-| P2 | Unit | `mcpStatusEntries` | Invalid server name → `ignored` "invalid server name"; `helperPath == nil` → axion-helper `missing` | Validation + state-transition edge coverage |
-| P2 | Unit | `mcpStatusEntries` | stdio without `env`, sse/http without `headers` produce no env/headers detail line | Optional-field-absent branch coverage |
-| P2 | Unit | `MCPStatusFormatter.renderList` | Empty entries → "未找到 MCP server"; no item rows | Empty-input branch currently untested |
-| P2 | Unit | `MCPStatusFormatter.renderDetail` | Empty details → "详情: -"; non-ready/`__` name → namespace "-" | Detail edge branches currently untested |
-| P2 | Unit | `MCPSelectionPrompt.run` | `up` scrolls selection backward past page start; `left` returns from detail to list | Interaction branches currently only covered via `down`/`b` |
-| P3 | Unit | `MCPSelectionPrompt.run` | Empty entries → `.cancelled`; Enter on invalid index → `.cancelled` | Rare-path robustness |
-
-### Files Planned
-
-- NEW: `Tests/AxionCLITests/Chat/SlashCommandHandlerMCPStatusTests.swift` — dedicated suite mirroring `SlashCommandHandler+MCP.swift` (P0 + P1 + P2 entry-construction/redaction tests). Asserts on `[MCPStatusEntry]` (Equatable) for precision and on rendered output for secret-leak checks.
-- EXTEND: `Tests/AxionCLITests/Chat/MCPStatusFormatterTests.swift` — empty-list + empty-details + namespace `-` edge cases.
-- EXTEND: `Tests/AxionCLITests/Chat/MCPSelectionPromptTests.swift` — `up` + `left` + empty-entries branches.
-
-### Step 2 Status
-
-Step 2 is complete. Next step is `step-03-generate-tests`.
-
-## MCP Coverage Pass: 2026-06-14 — Step 3 Generate Tests
-
-### Execution Mode Resolution
-
-- Requested: `auto` (config `tea_execution_mode: auto`).
-- Probe enabled; no explicit user request to spawn subagents this run → resolved to **`sequential`**.
-- Backend stack dispatch:
-  - API worker: skipped (no HTTP API endpoint target selected for this MCP slash-status scope).
-  - E2E worker: skipped (backend Swift target; repo rules forbid real system deps in unit tests).
-  - Backend worker: executed inline (Swift Testing unit-test generation).
-
-### Generated Tests (18 new)
-
-NEW — `Tests/AxionCLITests/Chat/SlashCommandHandlerMCPStatusTests.swift` (11 tests, dedicated suite mirroring `SlashCommandHandler+MCP.swift`):
-
-- P0 `sseServerHeadersAreRedactedInEntries` — `.sse` headers redacted to `Authorization=<redacted>`, secret absent from entry details.
-- P0 `sseServerSecretsDoNotLeakInRenderedOutput` — `handleMCPStatus` rendered output never contains the sse header secret (NFR9).
-- P0 `multipleKeysAreSortedAndRedacted` — multi-key headers + multi-key env all redacted, deterministically sorted, comma-joined.
-- P1 `reservedAxionHelperInConfigYieldsIgnoredEntry` — user-config `axion-helper` → `ignored` "reserved server name", not a duplicate ready entry.
-- P1 `playwrightUserConfigHttpOrSseIsIgnoredAsMustUseStdio` — user-config playwright `.http`/`.sse` → `ignored` "must use stdio".
-- P1 `playwrightUserConfigStdioIsReadyConfigEntry` — user-config playwright `.stdio` → ready config entry.
-- P1 `playwrightAutoResolvedIsReadyAutoEntry` — auto-resolved (resolver non-nil) playwright → ready `auto` entry.
-- P2 `invalidServerNameWithDoubleUnderscoreIsIgnored` — `bad__name` → `ignored` "invalid server name".
-- P2 `helperPathNilMarksAxionHelperMissing` — `helperPath == nil` → axion-helper `missing` + `command: (not found)`.
-- P2 `stdioWithoutEnvOmitsEnvDetail` — stdio without `env` omits the `env:` detail line.
-- P2 `sseAndHttpWithoutHeadersOmitHeadersDetail` — sse/http without `headers` omit the `headers:` detail line.
-
-EXTEND — `Tests/AxionCLITests/Chat/MCPStatusFormatterTests.swift` (+4 tests):
-
-- P2 `renderListEmptyEntriesShowsNotFound` — empty list → "未找到 MCP server", no header rows.
-- P2 `renderDetailEmptyDetailsShowsDash` — empty details → "详情: -".
-- P2 `renderDetailNamespaceDashForNonReadyAndDoubleUnderscore` — non-ready / `__` name → namespace `-`.
-- P2 `renderListTruncatesLongServerName` — name > max width → truncated with `…`.
-
-EXTEND — `Tests/AxionCLITests/Chat/MCPSelectionPromptTests.swift` (+3 tests):
-
-- P2 `upMovesSelectionBackward` — `up` decrements selection (down×2 → up → lands on server-2).
-- P2 `leftReturnsFromDetailToList` — `left` exits detail so subsequent `down`/`enter` work.
-- P3 `emptyEntriesCancelAndShowNotFound` — empty entries + Enter → `.cancelled`, shows "未找到 MCP server".
-
-### Fixture / Mock Discipline
-
-- No new fixtures. Tests inject `helperPath: "/usr/bin/true"` (or `nil`) and `playwrightResolver: { nil }` / `{ .stdio(...) }` to avoid the real `HelperPathResolver` (filesystem) and `MCPConfigResolver.resolvePlaywrightConfig` (nvm/Node subprocess).
-- `MCPSelectionPromptTests` reuses the existing in-file `OutputCapture` + shared `MockKeyReader` + `KeyEvent.up/.left`.
-- Assertions target `[MCPStatusEntry]` (Equatable) for branch precision and the rendered `String` only for secret-leak checks — no real terminal, Helper, MCP, LLM, network, or AX contact.
-
-### Stack / Priority Summary
-
-- Stack type: backend (Swift Testing).
-- Total tests generated: 18 (across 1 new file + 2 extensions).
-- API tests: 0 · E2E tests: 0 · Backend tests: 18.
-- Priority coverage: P0 = 3, P1 = 4, P2 = 10, P3 = 1.
-
-## MCP Coverage Pass: 2026-06-14 — Step 4 Validate & Summarize
-
-### Validation Results
-
-Targeted affected-suite run (compiles whole AxionCLITests target, runs the 3 suites):
-
-- Command: `swift test --filter SlashCommandHandlerMCPStatusTests --filter MCPStatusFormatterTests --filter MCPSelectionPromptTests`
-- Result: **passed, 26 tests in 3 suites** (9 formatter + 7 selection + 11 handler-status, all 18 new tests green).
-
-Full project-standard unit run:
-
-- Command: `swift test --filter "AxionHelperTests.Tools" --filter "AxionHelperTests.Models" --filter "AxionHelperTests.MCP" --filter "AxionHelperTests.Services" --filter "AxionCoreTests" --filter "AxionCLITests"`
-- Result: 3806 tests in 245 suites — **18 new tests pass**; a small number of **pre-existing flaky / environment-sensitive failures** appear under full parallel load in files unrelated to this pass.
-
-Swift Testing rule:
-
-- `grep -rl "import XCTest" Tests/` → empty. ✅
-
-### Pre-existing Flake Characterization (not caused by this pass)
-
-The full-suite failures are confined to three files untouched by this pass and are timing/environment-sensitive, not logic regressions:
-
-- `Tests/AxionCLITests/Services/Gateway/ReviewSchedulerTests.swift` — async callback/event assertions (`received → nil` after ~3.95s); fail under parallel load.
-- `Tests/AxionCLITests/Services/Telegram/TaskSerialQueueTests.swift` — timeout/resume race assertions (`超时已取消`, `resumeCount`).
-- `Tests/AxionCLITests/Helper/HelperProcessManagerTests.swift` — `"start() throws when helper path not found"` depends on the built helper binary's presence at the expected path (environment-dependent).
-
-Proof of flakiness: re-running just these three suites in isolation (`--no-parallel`) drops the failure count from ~8 (full parallel run) to 1 (the helper-path environment test). Failure counts vary run-to-run under the full command. None of these files were modified by this pass; the new tests are purely additive and assert only on pure entry-construction / formatter / mock-key-reader paths.
-
-### Checklist Adaptation
-
-- Generic TEA checklist expects Playwright/Cypress config + `package.json` scripts — N/A for this SwiftPM backend target (Swift Testing).
-- No fixture files generated; existing in-target helpers (`OutputCapture`, `MockKeyReader`, injected closures) reused.
-- No API / E2E / Pact / browser / integration tests generated this pass.
-- No browser automation used; no Playwright CLI session opened; no orphaned sessions.
-- Temp artifacts: none created outside `_bmad-output/test-artifacts/`.
-
-### Final Coverage Summary
-
-- Test level: unit (Swift Testing).
-- Total tests generated: 18.
-- Priority coverage: P0 = 3, P1 = 4, P2 = 10, P3 = 1.
-- Files:
-  - NEW: `Tests/AxionCLITests/Chat/SlashCommandHandlerMCPStatusTests.swift`
-  - EXTENDED: `Tests/AxionCLITests/Chat/MCPStatusFormatterTests.swift`
-  - EXTENDED: `Tests/AxionCLITests/Chat/MCPSelectionPromptTests.swift`
-- Key win: the new auth-headers feature (`.sse`/`.http` `headers`) for the `/mcp` slash-status path now has fast unit-level redaction coverage (previously E2E-only), directly guarding NFR9 (API key / Authorization secrets never leak).
-
-### Key Assumptions and Risks
-
-- `AgentBuilder.BuildConfig.forChat(config:)` sets `includePlaywright: true` (verified in `Sources/AxionCLI/Services/AgentBuilder+Config.swift:96`), so the playwright auto/missing branches are reachable without a custom BuildConfig.
-- Tests assume `MCPConfigResolver.isValidServerName` rejects only empty/whitespace names and names containing `__` (verified in source); the invalid-name test uses `bad__name`.
-- Risk: the pre-existing parallel-load flakes in ReviewScheduler/TaskSerialQueue/HelperProcessManager are a separate code-health issue worth a dedicated stabilization pass — out of scope here.
-
-### Recommended Next Workflow
-
-- `bmad-testarch-test-review` for a formal quality review of the new suite.
-- `bmad-testarch-trace` to regenerate the traceability matrix if these MCP scenarios should be linked to the `spec-mcp-config` acceptance criteria.
-- Separate: a flake-stabilization pass for the ReviewScheduler/TaskSerialQueue timing tests and the helper-path environment test.
+```
+⚙️ Execution Mode Resolution:
+- Requested: auto  (tea_execution_mode: auto)
+- Probe Enabled: true (tea_capability_probe: true)
+- Supports agent-team / subagent: 本环境可启动 subagent，但本工作实际范围 = 单文件 3 紧耦合 case
+- Resolved: sequential   ← 确定性正确选择：subagent/agent-team 编排开销 >> 收益
+```
+
+**理由**：Step 2 收敛出的全部目标（T1/T2/T3）位于**同一文件** `Tests/AxionCLITests/MCP/RunTaskToolTests.swift`、针对**同一类型** `RunTaskTool`。此范围下并行 fan-out 是纯开销；sequential 模式直接生成、上下文完整、模式复用零损耗。工作流「自适应」框架的本意正是按工作规模选模式。
+
+### 生成产出（直接落盘，扩展现有套件）
+
+**文件**：`Tests/AxionCLITests/MCP/RunTaskToolTests.swift`（原 9 case → 现 12 case）
+
+| Case | 优先级 | 覆盖分支 | 实现要点 |
+|------|--------|---------|---------|
+| `callReturnsRunLockedWhenLockHeldByLiveRun` | **P1** | `if !lockAcquired` 错误路径 | 预置 `RunLockData` lock 文件 + `processAliveChecker: { _ in true }` 使 `acquire()` 返回 false；断言 `run_locked` 错误且消息含冲突 runId |
+| `callMarksRunFailedWhenExecuteTaskFails` | P2 | `result.status != .success → .failed` | 注入 `executeTask` 返回 `.errorDuringExecution`；有界轮询 tracker 断言最终 `.failed` |
+| `callMarksRunCompletedAndReleasesLock` | P2 | `.success → .completed` + `release()` | 注入 success 闭包；轮询断言 `.completed` 且 `run.lock` 已删除 |
+
+**新增 helpers**（复用既有注入模式，零新 fixture）：
+- `createTool(executeTask:)` —— 原 `createTool()` 重构为带默认闭包参数（既有 9 case 零改动）
+- `createToolInLockDir(executeTask:)` —— 返回 lockDir，供 T3 校验锁释放
+- `extractRunId(from:)` —— 从结果内容正则提取 runId（去重既有内联正则）
+- `waitForRunStatus(tracker:runId:expected:timeoutMs:)` —— 有界轮询状态迁移（eventual-consistency 模式，500ms 预算）
+- `waitForCondition(timeoutMs:check:)` —— 通用条件轮询
+- `failingQueryResult()` —— 非 success QueryResult 工厂
+
+**关键工程决策**：
+- `_Concurrency.Task.sleep` 而非 `Task.sleep` —— OpenAgentSDK `Task` 类型名冲突（project-context.md 反模式 #19），首次编译报错后按既有约束修正
+- 轮询而非硬等待 —— TaskQueue.enqueue 是 fire-and-forget（spawn detached Task），T2/T3 用「轮询真实条件 + 立即退出」替代任意 sleep，符合 checklist「explicit waits only」；工作本身微秒级，500ms 预算永不误超时
+- `--filter "RunTaskToolTests"` 而非 `"AxionCLITests.MCP.RunTaskToolTests"` —— Swift Testing filter 按测试 ID（`Module.Type`）匹配，`.MCP` 是目录非类型名
+
+---
+
+## Step 3C: Aggregate
+
+- **Test files written**: 1（`RunTaskToolTests.swift` 更新）
+- **Fixtures created**: 0（复用既有注入模式：`executeTask:` 闭包 init + `RunLockService(lockDirectory:processAliveChecker:)`）
+- **Summary stats**:
+  - Stack: backend (Swift)
+  - Total tests generated: **3**（T1/T2/T3）
+  - Priority coverage: P0=0, **P1=1**, **P2=2**, P3=0
+  - Test levels: unit=3, integration=0, e2e=0
+  - Subagent execution: SEQUENTIAL（baseline，无并行加速——范围所限）
+- **临时工件**: 无 `/tmp/tea-automate-*.json`（sequential 直接落盘，未走 subagent JSON 中转）
+
+---
+
+## Step 4: Validate & Summarize
+
+### Checklist 校验（Web 项映射为 Swift / 标 N/A）
+
+| 类别 | 校验项 | 结果 | 证据 |
+|------|--------|------|------|
+| 框架就绪 | Swift Testing（非 XCTest） | ✅ | 282 文件 `import Testing`，0 XCTest |
+| Mock 合规 | 无真实外部依赖 | ✅ | 闭包注入 + RunLockService temp dir；无真实 Agent/Helper/LLM（符合 CLAUDE.md） |
+| 隔离性 | 无共享状态 | ✅ | 每个 test 用 UUID temp lock dir |
+| 确定性 | 无 flaky | ✅ | T1 完全确定；T2/T3 轮询真实条件、μs 级收敛 |
+| 等待合规 | 显式等待非硬等待 | ✅ | `waitForRunStatus`/`waitForCondition` 轮询真实条件（checklist 推荐的 `waitFor` helper 模式） |
+| 优先级标注 | [P1]/[P2] | ✅ | 每个 @Test 注释含优先级 |
+| Given-When-Then | 结构清晰 | ✅ | 注释说明场景/意图 |
+| 测试验证 | 本地运行通过 | ✅ | `swift test --filter "RunTaskToolTests"` → **12/12 pass**（9 既有 + 3 新增），0 回归，0.022s |
+| 文件归属 | 单元测试目录 | ✅ | `Tests/AxionCLITests/MCP/`（镜像 `Sources/AxionCLI/MCP/`） |
+| data-testid / page.route / faker | — | N/A | Web 专属，Swift 桌面项目不适用 |
+| Playwright fixtures / package.json scripts | — | N/A | 同上 |
+| Network-first / E2E / Component | — | N/A | 同上 |
+| CDC / Pact provider scrutiny | — | N/A | 无契约测试 |
+| Healing | — | N/A | `auto_heal` 默认关；测试首次即全绿 |
+
+### Files Created/Updated
+
+| 文件 | 动作 | 变化 |
+|------|------|------|
+| `Tests/AxionCLITests/MCP/RunTaskToolTests.swift` | **更新** | +3 case（T1/T2/T3）+5 helper，9→12 case |
+| `_bmad-output/test-artifacts/automation-summary.md` | **更新** | 本轮运行记录（旧版备份为 `automation-summary-2026-06-14.md`） |
+
+### Key Assumptions & Risks
+
+- **假设**：增量范围＝上次（6/14）以来的新代码（Epic 40 + App Architecture）。该范围主体已被充分测试，本轮价值集中在 RunTaskTool 错误/状态分支。
+- **风险 1（低）**：T2/T3 依赖 TaskQueue 的 fire-and-forget 时序，用有界轮询（500ms）消解。工作 μs 级完成，实际 1-3 次迭代即收敛，CI 上无 flaky 风险。若未来 TaskQueue 重构为更长延迟，需调大预算。
+- **风险 2（范围外）**：Epic 40 的 4 个 SDK 侧套件（SubAgentToolAliasTests 等）位于 `open-agent-sdk-swift` 远程仓库，本仓库 `swift test` 不可达。需在 SDK 仓库单独验证（`test-plan.md` 已注明）。
+- **未做（T4，延后）**：`buildMemoryContexts` async 编排器无直接单测（依赖 FileBasedMemoryStore/AxionFactStore 较重），部分经 `buildSystemPrompt` 间接覆盖。优先级 P3，本轮明确不做。
+
+### 推荐下一步工作流
+
+1. **`/bmad-testarch-trace`** —— 生成可追溯矩阵，把新增 T1/T2/T3 关联到 Epic 40 CAP 能力（尤其 CAP-5 dry-run/lock 相关），量化覆盖决策。
+2. **`/bmad-testarch-test-review`** —— 对本轮新增 case 做测试质量复核（隔离性、确定性、断言精度）。
+3. （可选）SDK 仓库侧：在 `open-agent-sdk-swift` 补 `test-plan.md` 列出的 4 个 SDK 套件，闭合 Epic 40 全部 CAP。
+
+---
+
+## 运行命令备忘
+
+```bash
+# 仅跑本轮新增/影响套件
+swift test --filter "RunTaskToolTests"
+
+# 项目默认单元测试全集（开发验证）
+swift test --filter "AxionHelperTests.Tools" --filter "AxionHelperTests.Models" \
+  --filter "AxionHelperTests.MCP" --filter "AxionHelperTests.Services" \
+  --filter "AxionCoreTests" --filter "AxionCLITests"
+```
+
+> 集成/E2E（`Tests/**/Integration/`、`Tests/**/AxionE2ETests/`）需真实 macOS 应用与 AX 权限，CI 不跑——按项目规则不在开发验证范围内。

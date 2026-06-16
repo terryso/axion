@@ -1,0 +1,20 @@
+{
+  "schema_version": "0.1.0",
+  "evaluated_at": "2026-06-16T21:50:00Z",
+  "repo": "axion",
+  "target": { "type": "epic", "id": "epic-40", "label": "Claude Code skill/subagent compat" },
+  "collection_status": "COLLECTED",
+  "gate_basis": "priority_thresholds",
+  "gate_status": "PASS",
+  "rationale": "P0 coverage is 100%, P1 coverage is 100% (target: 90%), and overall coverage is 100% (minimum: 80%). All 8 CAPs have in-repo unit evidence (70 cases) for Axion-side logic plus documented Manual acceptance. SDK-side external coverage for CAP-2/4/5/8 was VERIFIED on 2026-06-16 in open-agent-sdk-swift@0.10.0 (289 tests, 0 failures across TaskTools/AgentTool/AgentSpawnerDetection/DefaultSubAgentSpawner/ExecuteSkill/ExecuteSkillStream/SkillLoader/SkillTool/SubagentSystemCompat suites). Note: the test-plan.md suggested suite names are not literal files but their behaviors are covered by the real suites above.",
+  "p0_status": "MET",
+  "p1_status": "MET",
+  "overall_status": "MET",
+  "critical_open": 0,
+  "links": {
+    "trace_report_path": "_bmad-output/test-artifacts/traceability-matrix.md",
+    "trace_report_url": "",
+    "artifact_url": "",
+    "journey_evidence_url": ""
+  }
+}
