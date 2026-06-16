@@ -83,7 +83,7 @@ final class CuratorResultBox: @unchecked Sendable {
 
 // MARK: - Tests
 
-@Suite("CuratorScheduler")
+@Suite("CuratorScheduler", .serialized)
 struct CuratorSchedulerTests {
 
     private func makeContext(

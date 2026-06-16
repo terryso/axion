@@ -199,6 +199,7 @@ struct ChatCommand: AsyncParsableCommand {
         let historyStore = CommandHistoryStore.live()
         let historyPath = ConfigManager.historyFilePath
         let persistentHistory = historyStore.load(filePath: historyPath)
+        var currentInputHistory = ChatInputHistoryBuffer()
 
         // Compact history file on startup if it's grown too large
         historyStore.compact(filePath: historyPath)
@@ -294,7 +295,7 @@ struct ChatCommand: AsyncParsableCommand {
             }
 
             // AC1/AC2: 注入会话历史到 composer（跨会话持久化 + 当前会话）
-            composer.history = persistentHistory + state.sessionUserMessages
+            composer.history = currentInputHistory.merged(with: persistentHistory)
 
             // Story 38.5 AC2: 优先消费队列
             let trimmed: String
@@ -350,13 +351,8 @@ struct ChatCommand: AsyncParsableCommand {
                 continue
             }
 
-            let isGeneratedTaskSlash: Bool = {
-                guard case .builtIn(let command, _) = route else {
-                    return false
-                }
-                return command == .apps || command == .storage
-            }()
             let recordUserInput: (String) -> Void = { text in
+                currentInputHistory.record(text)
                 state.sessionUserMessages.append(text)
                 // Persist to cross-session history file (Codex-inspired)
                 historyStore.append(text: text, filePath: historyPath)
@@ -364,9 +360,7 @@ struct ChatCommand: AsyncParsableCommand {
                 // Persist to session transcript (Codex-inspired session_log.rs)
                 transcriptLogger.logUserInput(text, sessionId: sessionId, dirPath: sessionsDir)
             }
-            if !isGeneratedTaskSlash {
-                recordUserInput(trimmed)
-            }
+            recordUserInput(trimmed)
 
             // ── Slash command handling ──────────────────────────────────
 
@@ -384,10 +378,11 @@ struct ChatCommand: AsyncParsableCommand {
                         continue
                     }
                     taskText = generatedTask
-                    recordUserInput(generatedTask)
                 } else if cmd == .arch {
-                    await handleArchitectureSlash(argument: argument)
-                    continue
+                    guard let generatedTask = await handleArchitectureSlash(argument: argument, config: config) else {
+                        continue
+                    }
+                    taskText = generatedTask
                 } else if cmd == .mcp {
                     handleMCPSlash(argument: argument, config: config, buildConfig: state.buildConfig)
                     continue
@@ -397,7 +392,6 @@ struct ChatCommand: AsyncParsableCommand {
                         continue
                     }
                     taskText = generatedTask
-                    recordUserInput(generatedTask)
                 } else {
                     // AC1 (/resume 无参数): 在 REPL 中直接列出会话
                     if cmd == .resume && (argument == nil || argument!.isEmpty) {
@@ -997,23 +991,34 @@ struct ChatCommand: AsyncParsableCommand {
         return (filter.isEmpty ? nil : filter, deep)
     }
 
-    private func handleArchitectureSlash(argument: String?) async {
+    private func handleArchitectureSlash(argument: String?, config: AxionConfig) async -> String? {
         guard let options = AppArchitectureFormatter.parseOptions(argument: argument) else {
             fputs(AppArchitectureFormatter.helpText() + "\n", stderr)
-            return
+            return nil
         }
 
+        let architectureScanner = AppArchitectureScanService()
         guard let result = await scanArchitectureForSlash(
-            scanner: AppArchitectureScanService(),
+            scanner: architectureScanner,
             options: options
         ) else {
-            return
+            return nil
         }
         let prompt = AppArchitectureSelectionPrompt(
             isTTY: isatty(STDIN_FILENO) != 0,
-            writeOutput: { fputs($0, stderr) }
+            writeOutput: { fputs($0, stderr) },
+            upgradePlanner: DefaultAppArchitectureUpgradePlanner(),
+            upgradeExecutor: DefaultAppArchitectureUpgradeExecutor(),
+            postUpgradeScanner: DefaultAppArchitecturePostUpgradeScanner(),
+            listScanner: architectureScanner,
+            detailProvider: AppArchitectureDetailAnalysisService(config: config)
         )
-        _ = prompt.run(result: result)
+        switch await prompt.run(result: result) {
+        case .requestAppUninstall(let item):
+            return AppArchitectureFormatter.appUninstallRequest(for: item)
+        case .cancelled, .nonTTYListOnly:
+            return nil
+        }
     }
 
     private func scanArchitectureForSlash(

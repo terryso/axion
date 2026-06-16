@@ -94,7 +94,7 @@ final class MockCallTracker: @unchecked Sendable {
 
 // MARK: - Tests
 
-@Suite("ReviewScheduler")
+@Suite("ReviewScheduler", .serialized)
 struct ReviewSchedulerTests {
     private func makeTempDirectory(prefix: String) throws -> URL {
         let dir = URL(fileURLWithPath: NSTemporaryDirectory())

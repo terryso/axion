@@ -153,6 +153,250 @@ struct AppArchitectureScanServiceTests {
         #expect(output.contains("Old"))
         #expect(!output.contains("Native.app"))
         #expect(output.contains("--all"))
+        #expect(!output.contains("升级状态"))
+        #expect(!output.contains("brew upgrade"))
+    }
+
+    @Test("formatter renders upgrade plan only in detail")
+    func formatterRendersUpgradePlanOnlyInDetail() {
+        let item = AppArchitectureItem(
+            name: "legacy",
+            displayPath: "/opt/homebrew/Cellar/legacy/1.0/bin/legacy",
+            executablePath: "/opt/homebrew/Cellar/legacy/1.0/bin/legacy",
+            architectures: [.x86_64],
+            isSystemApp: false,
+            source: .homebrew
+        )
+        let plan = AppArchitectureUpgradePlan(
+            status: .upgradeAvailable,
+            source: .homebrew,
+            packageIdentity: "legacy",
+            displayCommands: ["brew upgrade legacy", "brew test legacy"],
+            executableCommands: [["brew", "upgrade", "legacy"]],
+            requiresSudo: false,
+            confidence: .high,
+            postCheckPath: item.executablePath,
+            notes: ["按 u 确认后会执行 Homebrew 升级。"]
+        )
+
+        let detail = AppArchitectureFormatter.renderDetail(item, upgradePlan: plan)
+        let table = AppArchitectureFormatter.render(AppArchitectureScanResult(
+            options: AppArchitectureScanOptions(),
+            items: [item],
+            warnings: []
+        ))
+
+        #expect(detail.contains("升级状态: 可生成升级计划"))
+        #expect(detail.contains("包身份: legacy"))
+        #expect(detail.contains("升级命令: brew upgrade legacy"))
+        #expect(detail.contains("            brew test legacy"))
+        #expect(!detail.contains("        : brew test legacy"))
+        #expect(detail.contains("需要 sudo: 否"))
+        #expect(detail.contains("可用操作:"))
+        #expect(detail.contains("架构详情  u 升级"))
+        #expect(detail.contains("升级: 按 u 确认并执行 brew upgrade legacy"))
+        #expect(detail.contains("卸载: 当前 /arch 不执行包卸载"))
+        #expect(!table.contains("升级状态"))
+        #expect(!table.contains("brew upgrade"))
+    }
+
+    @Test("formatter renders Intel Homebrew migration confirmation")
+    func formatterRendersIntelHomebrewMigrationConfirmation() {
+        let item = AppArchitectureItem(
+            name: "aliyun-cli",
+            displayPath: "/usr/local/Cellar/aliyun-cli/3.0.90/bin/aliyun",
+            executablePath: "/usr/local/Cellar/aliyun-cli/3.0.90/bin/aliyun",
+            architectures: [.x86_64],
+            isSystemApp: false,
+            source: .homebrew
+        )
+        let plan = AppArchitectureUpgradePlan(
+            status: .upgradeAvailable,
+            source: .homebrew,
+            packageIdentity: "aliyun-cli",
+            displayCommands: [
+                "/opt/homebrew/bin/brew install aliyun-cli",
+                "/usr/local/bin/brew uninstall aliyun-cli",
+            ],
+            executableCommands: [
+                ["/opt/homebrew/bin/brew", "install", "aliyun-cli"],
+                ["/usr/local/bin/brew", "uninstall", "aliyun-cli"],
+            ],
+            requiresSudo: false,
+            confidence: .high,
+            postCheckPath: item.executablePath,
+            notes: ["安装成功后才卸载 /usr/local 的 Intel formula。"]
+        )
+
+        let detail = AppArchitectureFormatter.renderDetail(item, upgradePlan: plan)
+        let confirmation = AppArchitectureFormatter.renderUpgradeConfirmation(item: item, plan: plan)
+
+        #expect(detail.contains("架构详情  u 升级"))
+        #expect(detail.contains("升级命令: /opt/homebrew/bin/brew install aliyun-cli"))
+        #expect(detail.contains("            /usr/local/bin/brew uninstall aliyun-cli"))
+        #expect(detail.contains("升级: 按 u 确认并按顺序执行上方 Homebrew 命令"))
+        #expect(confirmation.contains("将执行: /opt/homebrew/bin/brew install aliyun-cli"))
+        #expect(confirmation.contains("          /usr/local/bin/brew uninstall aliyun-cli"))
+        #expect(confirmation.contains("安装 Apple Silicon Homebrew formula"))
+        #expect(confirmation.contains("成功后才卸载 /usr/local Intel formula"))
+        #expect(confirmation.contains("不会执行 sudo、port、mas 或手动删除文件"))
+        #expect(!confirmation.contains("不会执行 sudo、port、mas 或卸载"))
+    }
+
+    @Test("formatter renders app uninstall route in architecture detail")
+    func formatterRendersAppUninstallRouteInDetail() {
+        let item = AppArchitectureItem(
+            name: "LegacyApp",
+            displayPath: "/Applications/LegacyApp.app",
+            executablePath: "/Applications/LegacyApp.app/Contents/MacOS/LegacyApp",
+            architectures: [.x86_64],
+            isSystemApp: false,
+            source: .application
+        )
+        let plan = AppArchitectureUpgradePlan(
+            status: .manualOnly,
+            source: .application,
+            confidence: .medium,
+            postCheckPath: item.executablePath,
+            notes: ["直接安装的 App 需要通过厂商更新器处理。"]
+        )
+
+        let detail = AppArchitectureFormatter.renderDetail(item, upgradePlan: plan)
+
+        #expect(detail.contains("可用操作:"))
+        #expect(detail.contains("升级: 需手动处理"))
+        #expect(detail.contains("架构详情  Enter 卸载审核"))
+        #expect(detail.contains("卸载: 按 Enter 直接进入现有卸载审核流程"))
+    }
+
+    @Test("formatter reports command success but architecture not fixed")
+    func formatterReportsCommandSuccessButArchitectureNotFixed() {
+        let before = AppArchitectureItem(
+            name: "aliyun-cli",
+            displayPath: "/usr/local/Cellar/aliyun-cli/3.0.89/bin/aliyun",
+            executablePath: "/usr/local/Cellar/aliyun-cli/3.0.89/bin/aliyun",
+            architectures: [.x86_64],
+            isSystemApp: false,
+            source: .homebrew
+        )
+        let after = AppArchitectureItem(
+            name: "aliyun-cli",
+            displayPath: "/usr/local/Cellar/aliyun-cli/3.0.90/bin/aliyun",
+            executablePath: "/usr/local/Cellar/aliyun-cli/3.0.90/bin/aliyun",
+            architectures: [.x86_64],
+            isSystemApp: false,
+            source: .homebrew
+        )
+        let result = AppArchitectureUpgradeExecutionResult(
+            status: .succeeded,
+            commands: ["brew upgrade aliyun-cli"],
+            stdoutSummary: "upgraded",
+            stderrSummary: "-"
+        )
+
+        let output = AppArchitectureFormatter.renderUpgradeResult(
+            item: before,
+            before: before,
+            after: after,
+            result: result
+        )
+
+        #expect(output.contains("命令状态: 成功"))
+        #expect(output.contains("架构结果: 未达成目标（仍为 Intel-only）"))
+        #expect(output.contains("brew 命令成功不等于架构已修复"))
+        #expect(output.contains("/usr/local Intel Homebrew 前缀"))
+    }
+
+    @Test("formatter reports architecture upgrade target achieved")
+    func formatterReportsArchitectureUpgradeTargetAchieved() {
+        let before = AppArchitectureItem(
+            name: "legacy",
+            displayPath: "/opt/homebrew/Cellar/legacy/1.0/bin/legacy",
+            executablePath: "/opt/homebrew/Cellar/legacy/1.0/bin/legacy",
+            architectures: [.x86_64],
+            isSystemApp: false,
+            source: .homebrew
+        )
+        let after = AppArchitectureItem(
+            name: "legacy",
+            displayPath: "/opt/homebrew/Cellar/legacy/2.0/bin/legacy",
+            executablePath: "/opt/homebrew/Cellar/legacy/2.0/bin/legacy",
+            architectures: [.arm64],
+            isSystemApp: false,
+            source: .homebrew
+        )
+        let result = AppArchitectureUpgradeExecutionResult(
+            status: .succeeded,
+            commands: ["brew upgrade legacy"],
+            stdoutSummary: "upgraded",
+            stderrSummary: "-"
+        )
+
+        let output = AppArchitectureFormatter.renderUpgradeResult(
+            item: before,
+            before: before,
+            after: after,
+            result: result
+        )
+
+        #expect(output.contains("命令状态: 成功"))
+        #expect(output.contains("架构结果: 已达成目标（arm64）"))
+        #expect(!output.contains("brew 命令成功不等于架构已修复"))
+    }
+
+    @Test("formatter builds app uninstall review request from architecture detail")
+    func formatterBuildsAppUninstallReviewRequestFromArchitectureDetail() throws {
+        let item = AppArchitectureItem(
+            name: "Bad\nApp\u{1B}[31m",
+            displayPath: "/opt/apps/Bad.app",
+            executablePath: "/opt/apps/Bad.app/Contents/MacOS/Bad",
+            architectures: [.x86_64],
+            isSystemApp: false,
+            source: .application
+        )
+
+        let request = try #require(AppArchitectureFormatter.appUninstallRequest(for: item))
+        let jsonPrefix = "scan_app_uninstall 参数 JSON: "
+        let json = try #require(request.components(separatedBy: jsonPrefix).last)
+        let data = try #require(json.data(using: .utf8))
+        let payload = try #require(JSONSerialization.jsonObject(with: data) as? [String: Any])
+        let roots = try #require(payload["search_roots"] as? [String])
+        let selected = try #require(payload["selected_app"] as? [String: String])
+
+        #expect(request.contains("不可信 /arch 元数据"))
+        #expect(request.contains("不要直接调用 execute_app_uninstall"))
+        #expect(payload["query"] as? String == "Bad App")
+        #expect(payload["mode"] as? String == "uninstall_with_support_review")
+        #expect(roots.contains("/Applications"))
+        #expect(roots.contains("~/Applications"))
+        #expect(roots.contains("/opt/apps"))
+        #expect(selected["bundle_path"] == "/opt/apps/Bad.app")
+        #expect(!request.contains("\u{1B}"))
+        #expect(!request.contains("[31m"))
+        #expect(!request.contains("Bad\nApp"))
+    }
+
+    @Test("formatter does not build uninstall request for system apps or packages")
+    func formatterDoesNotBuildUninstallRequestForSystemAppsOrPackages() {
+        let systemApp = AppArchitectureItem(
+            name: "System Settings",
+            displayPath: "/System/Applications/System Settings.app",
+            executablePath: "/System/Applications/System Settings.app/Contents/MacOS/System Settings",
+            architectures: [.arm64],
+            isSystemApp: true,
+            source: .application
+        )
+        let package = AppArchitectureItem(
+            name: "legacy",
+            displayPath: "/opt/homebrew/Cellar/legacy/1.0/bin/legacy",
+            executablePath: "/opt/homebrew/Cellar/legacy/1.0/bin/legacy",
+            architectures: [.x86_64],
+            isSystemApp: false,
+            source: .homebrew
+        )
+
+        #expect(AppArchitectureFormatter.appUninstallRequest(for: systemApp) == nil)
+        #expect(AppArchitectureFormatter.appUninstallRequest(for: package) == nil)
     }
 
     @Test("slash option parser accepts filter and flags")
