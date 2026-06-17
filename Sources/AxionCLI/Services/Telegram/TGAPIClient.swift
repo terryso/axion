@@ -220,8 +220,7 @@ struct TGAPIClient: TGAPIClientProtocol {
     private func classifyHTTPError(statusCode: Int, body: String, httpResponse: HTTPURLResponse) -> TGAPIError {
         switch statusCode {
         case 429:
-            let retryAfter = TimeInterval(httpResponse.value(forHTTPHeaderField: "Retry-After") ?? "") ?? 5
-            return .rateLimited(body, retryAfter: retryAfter)
+            return .rateLimited(body, retryAfter: retryAfterSeconds(from: httpResponse))
         case 401, 403:
             return .authFailed(body)
         case 409:
@@ -237,6 +236,18 @@ struct TGAPIClient: TGAPIClientProtocol {
             }
             return .permanentTelegramError(body)
         }
+    }
+
+    private func retryAfterSeconds(from httpResponse: HTTPURLResponse) -> TimeInterval {
+        guard
+            let rawValue = httpResponse.value(forHTTPHeaderField: "Retry-After"),
+            let parsed = TimeInterval(rawValue.trimmingCharacters(in: .whitespacesAndNewlines)),
+            parsed.isFinite,
+            parsed > 0
+        else {
+            return 5
+        }
+        return parsed
     }
 }
 

@@ -679,6 +679,31 @@ struct TGAPIClientTests {
         }
     }
 
+    @Test("429 with invalid Retry-After header defaults to 5 second wait")
+    func http429InvalidRetryAfterDefaultsTo5Seconds() async {
+        for headerValue in ["0", "-5", "nan"] {
+            let session = MockHTTPErrorURLSession(
+                statusCode: 429,
+                body: "{\"ok\":false,\"description\":\"Too Many Requests\"}",
+                headers: ["Retry-After": headerValue]
+            )
+            let client = TGAPIClient(token: "test_token", session: session, maxRetries: 1)
+
+            do {
+                _ = try await client.getUpdates(offset: nil, timeout: 1)
+                #expect(Bool(false), "Should have thrown")
+            } catch let error as TGAPIError {
+                if case .rateLimited(_, let retryAfter) = error {
+                    #expect(retryAfter == 5.0, "Invalid Retry-After should default to 5 seconds")
+                } else {
+                    #expect(Bool(false), "Expected rateLimited with default retryAfter=5, got \(error)")
+                }
+            } catch {
+                #expect(Bool(false), "Unexpected error type for header \(headerValue)")
+            }
+        }
+    }
+
     // MARK: - AC #3: 401/403 Authentication Failure (Permanent, No Retry)
 
     @Test("401 does not retry (permanent error)")

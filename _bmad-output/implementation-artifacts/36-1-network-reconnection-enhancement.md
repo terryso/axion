@@ -349,7 +349,7 @@ Claude Sonnet 4.5 (BMAD dev-story workflow, yolo mode)
 
 **Review date:** 2026-06-17 — 3 layers (Blind Hunter + Edge Case Hunter + Acceptance Auditor)
 
-- [x] [Review][Defer] `Retry-After: 0` 或负值会导致 zero/negative sleep [TGAPIClient.swift:195] — deferred, pre-existing risk but low probability from TG API
+- [x] [Review][Patch] `Retry-After: 0`、负值或非有限值会导致无等待或 runtime trap [TGAPIClient.swift:195] — ✅ Fixed: invalid/non-positive/non-finite `Retry-After` now defaults to 5s before sleep conversion; regression test added
 - [x] [Review][Patch] `consecutiveConflicts` 重置不完整 — `.authFailed` case 不会重置 `consecutiveConflicts`，虽然 `isRunning = false` 会退出循环，但逻辑上应在停止前保持状态一致性 [TelegramAdapter.swift:84-87] — ✅ Fixed
 - [ ] [Review][Patch] `Retry-After` HTTP-date 格式未处理 — RFC 7231 允许 HTTP-date 格式，当前 `TimeInterval(_:)` 会 fallback 到 5s，TG API 实际只发秒数所以影响低 [TGAPIClient.swift:223] — Left as-is: TG API only sends seconds
 - [x] [Review][Patch] `noRetryOnClientError` 测试名称过时 [TGAPIClientTests.swift:50] — ✅ Fixed: renamed to "does not retry on 401 auth failure"

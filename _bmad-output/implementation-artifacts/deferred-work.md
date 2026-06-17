@@ -70,4 +70,4 @@
 
 ## Deferred from: code review of story 36-1 (2026-06-17)
 
-- `Retry-After: 0` 或负值会导致 zero/negative sleep — `TimeInterval("0") ?? 5` 返回 `0.0`，`UInt64(0.0 * 1_000_000_000)` = 0 nanoseconds sleep（即不等待直接重试）。同样负值如 `-5` 也会解析成功并产生巨大 nanosecond 值。TG API 实际不会发这些值所以风险极低，但可考虑加 `max(retryAfter, 1.0)` 保护。
+- ~~`Retry-After: 0` 或负值会导致 zero/negative sleep — `TimeInterval("0") ?? 5` 返回 `0.0`，`UInt64(0.0 * 1_000_000_000)` = 0 nanoseconds sleep（即不等待直接重试）。同样负值如 `-5` 也会解析成功并产生巨大 nanosecond 值。TG API 实际不会发这些值所以风险极低，但可考虑加 `max(retryAfter, 1.0)` 保护。~~ **【已解决 2026-06-17：无效、非正数或非有限 `Retry-After` 统一回退 5 秒；负数实际会触发 Swift runtime trap，已补回归测试】**
