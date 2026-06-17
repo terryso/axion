@@ -784,6 +784,51 @@ struct TelegramAdapterTests {
             },
         ])
     }
+    // MARK: - pollLoop error orchestration (AC #3, #4)
+
+    @Test("pollLoop stops after 3 consecutive 409 conflicts (AC #4)")
+    func pollLoopStopsAfterThreeConflicts() async {
+        let mock = MockTGAPIClient()
+        await mock.setGetUpdatesError(TGAPIError.pollingConflict("Conflict: another getUpdates instance"))
+        let adapter = TelegramAdapter(apiClient: mock, allowedUsers: [], sleep: { _ in }, log: { _ in })
+
+        // Run the loop detached; statusValue is nonisolated so we poll it. Correct logic stops in
+        // <1ms; the bounded poll makes a broken stop fail the test instead of hanging the suite.
+        let loop = _Concurrency.Task { await adapter.start() }
+
+        var stopped = false
+        for _ in 0..<100 {
+            if adapter.statusValue == "conflict_stopped" { stopped = true; break }
+            try? await _Concurrency.Task.sleep(nanoseconds: 10_000_000)  // 10ms
+        }
+        #expect(stopped, "pollLoop should reach conflict_stopped after 3 consecutive 409 conflicts")
+        #expect(adapter.statusValue == "conflict_stopped")
+        let calls = await mock.getUpdatesCallCount
+        #expect(calls == 3, "should stop after exactly 3 conflicts (got \(calls))")
+
+        loop.cancel()
+    }
+
+    @Test("pollLoop stops immediately on 401/403 auth failure (AC #3)")
+    func pollLoopStopsOnAuthFailure() async {
+        let mock = MockTGAPIClient()
+        await mock.setGetUpdatesError(TGAPIError.authFailed("Unauthorized"))
+        let adapter = TelegramAdapter(apiClient: mock, allowedUsers: [], sleep: { _ in }, log: { _ in })
+
+        let loop = _Concurrency.Task { await adapter.start() }
+
+        var stopped = false
+        for _ in 0..<100 {
+            if adapter.statusValue == "auth_failed" { stopped = true; break }
+            try? await _Concurrency.Task.sleep(nanoseconds: 10_000_000)
+        }
+        #expect(stopped, "pollLoop should reach auth_failed on 401/403")
+        #expect(adapter.statusValue == "auth_failed")
+        let calls = await mock.getUpdatesCallCount
+        #expect(calls == 1, "auth failure should stop on first getUpdates (got \(calls))")
+
+        loop.cancel()
+    }
 }
 
 // MARK: - Fallback Mock

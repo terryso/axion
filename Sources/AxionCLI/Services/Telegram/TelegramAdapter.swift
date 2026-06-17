@@ -16,17 +16,21 @@ actor TelegramAdapter {
     private var lastUpdateId: Int64 = 0
     private var isRunning = false
     let log: @Sendable (String) -> Void
+    /// Suspends for the given duration (seconds). Injectable so pollLoop's backoff/retry
+    /// timing is testable without real sleeps — tests pass an instant closure.
+    let sleep: @Sendable (TimeInterval) async -> Void
     let sessionStore: TGInteractiveSessionStore?
 
     nonisolated(unsafe) private(set) var statusValue: String = "disabled"
 
-    init(apiClient: any TGAPIClientProtocol, allowedUsers: Set<String>, taskQueue: (any TaskSerialQueueProtocol)? = nil, commandRouter: TGCommandRouter? = nil, sessionStore: TGInteractiveSessionStore? = nil, skillsProvider: (@Sendable () -> [Skill])? = nil, log: @Sendable @escaping (String) -> Void = { fputs($0 + "\n", stderr) }) {
+    init(apiClient: any TGAPIClientProtocol, allowedUsers: Set<String>, taskQueue: (any TaskSerialQueueProtocol)? = nil, commandRouter: TGCommandRouter? = nil, sessionStore: TGInteractiveSessionStore? = nil, skillsProvider: (@Sendable () -> [Skill])? = nil, sleep: @Sendable @escaping (TimeInterval) async -> Void = { seconds in try? await _Concurrency.Task.sleep(nanoseconds: UInt64(seconds * 1_000_000_000)) }, log: @Sendable @escaping (String) -> Void = { fputs($0 + "\n", stderr) }) {
         self.apiClient = apiClient
         self.allowedUsers = allowedUsers
         self.taskQueue = taskQueue
         self.commandRouter = commandRouter
         self.sessionStore = sessionStore
         self.skillsProvider = skillsProvider
+        self.sleep = sleep
         self.log = log
     }
 
@@ -80,7 +84,7 @@ actor TelegramAdapter {
                     }
                     statusValue = "conflict:\(consecutiveConflicts)"
                     log("[axion] Telegram 409 conflict, waiting 30s before retry (\(consecutiveConflicts)/3)")
-                    try? await _Concurrency.Task.sleep(nanoseconds: 30_000_000_000)
+                    await sleep(30)
                 case .authFailed:
                     consecutiveConflicts = 0
                     statusValue = "auth_failed"
@@ -91,7 +95,7 @@ actor TelegramAdapter {
                     log("[axion] Telegram getUpdates failed: \(error.localizedDescription)")
                     consecutiveErrors += 1
                     let delay = min(5.0 * Double(consecutiveErrors), 30.0)
-                    try? await _Concurrency.Task.sleep(nanoseconds: UInt64(delay * 1_000_000_000))
+                    await sleep(delay)
                 }
             } catch {
                 statusValue = "error:\(error.localizedDescription)"
