@@ -760,7 +760,7 @@ struct TelegramAdapterTests {
     @Test("editMessage returns false on rate limited error")
     func editMessageReturnsFalseOnRateLimited() async {
         let mock = MockTGAPIClient()
-        await mock.setEditMessageError(TGAPIError.rateLimited("too many requests"))
+        await mock.setEditMessageError(TGAPIError.rateLimited("too many requests", retryAfter: 5))
         let adapter = TelegramAdapter(apiClient: mock, allowedUsers: ["123"], log: { _ in })
 
         let result = await adapter.editMessage(chatId: 123, messageId: 1, text: "retry")

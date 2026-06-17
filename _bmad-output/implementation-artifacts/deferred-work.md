@@ -67,3 +67,7 @@
 ## Deferred from: MCP Server 用户可配置化 review (2026-06-13)
 
 - ~~Remote MCP auth headers — `AxionMcpServerConfig.sse/http` currently accept only `url`, so authenticated SSE/HTTP MCP servers cannot be declared in `~/.axion/config.json`. Add optional `headers: [String: String]` to remote config cases and docs in a focused follow-up.~~ **【已解决 2026-06-13：remote `sse`/`http` 配置支持 `headers` 并透传到 SDK `McpTransportConfig`】**
+
+## Deferred from: code review of story 36-1 (2026-06-17)
+
+- `Retry-After: 0` 或负值会导致 zero/negative sleep — `TimeInterval("0") ?? 5` 返回 `0.0`，`UInt64(0.0 * 1_000_000_000)` = 0 nanoseconds sleep（即不等待直接重试）。同样负值如 `-5` 也会解析成功并产生巨大 nanosecond 值。TG API 实际不会发这些值所以风险极低，但可考虑加 `max(retryAfter, 1.0)` 保护。

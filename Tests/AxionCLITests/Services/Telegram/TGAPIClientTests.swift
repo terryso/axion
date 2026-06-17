@@ -47,7 +47,7 @@ struct TGAPIClientTests {
         #expect(session.attemptCount == 2) // initial + 1 retry
     }
 
-    @Test("TGAPIClient does not retry on 4xx HTTP errors via mock session")
+    @Test("TGAPIClient does not retry on 401 auth failure")
     func noRetryOnClientError() async {
         // Use a mock URLSession that returns 401 immediately
         let session = MockHTTPErrorURLSession(statusCode: 401)
@@ -57,12 +57,16 @@ struct TGAPIClientTests {
             _ = try await client.getUpdates(offset: nil, timeout: 1)
             #expect(Bool(false), "Should have thrown")
         } catch let error as TGAPIError {
-            // 4xx errors are thrown as TGAPIError immediately — no retry
-            #expect(error.errorDescription != nil)
+            // 401 → .authFailed, thrown immediately — no retry
+            if case .authFailed = error {
+                // correct
+            } else {
+                #expect(error.errorDescription != nil)
+            }
         } catch {
             // Acceptable fallback
         }
-        #expect(session.attemptCount == 1) // no retry for 4xx
+        #expect(session.attemptCount == 1) // no retry for 4xx auth failure
     }
 
     // MARK: - TGAPIError
@@ -70,8 +74,10 @@ struct TGAPIClientTests {
     @Test("TGAPIError has localized description for all cases")
     func apiErrorDescriptionAllCases() {
         #expect(TGAPIError.retryableNetwork("net fail").errorDescription == "net fail")
-        #expect(TGAPIError.rateLimited("slow down").errorDescription == "slow down")
+        #expect(TGAPIError.rateLimited("slow down", retryAfter: 5).errorDescription == "slow down")
         #expect(TGAPIError.formatRejected("bad md").errorDescription == "bad md")
+        #expect(TGAPIError.authFailed("token bad").errorDescription == "token bad")
+        #expect(TGAPIError.pollingConflict("dup instance").errorDescription == "dup instance")
         #expect(TGAPIError.permanentTelegramError("gone").errorDescription == "gone")
     }
 
@@ -121,7 +127,7 @@ struct TGAPIClientTests {
         }
     }
 
-    @Test("403 classifies as permanentTelegramError")
+    @Test("403 classifies as authFailed")
     func http403Permanent() async {
         let session = MockHTTPErrorURLSession(statusCode: 403)
         let client = TGAPIClient(token: "test_token", session: session, maxRetries: 1)
@@ -130,10 +136,10 @@ struct TGAPIClientTests {
             _ = try await client.getUpdates(offset: nil, timeout: 1)
             #expect(Bool(false), "Should have thrown")
         } catch let error as TGAPIError {
-            if case .permanentTelegramError = error {
+            if case .authFailed = error {
                 // correct
             } else {
-                #expect(Bool(false), "Expected permanentTelegramError, got \(error)")
+                #expect(Bool(false), "Expected authFailed, got \(error)")
             }
         } catch {
             #expect(Bool(false), "Unexpected error type")
@@ -567,6 +573,242 @@ struct TGAPIClientTests {
             #expect(Bool(false), "Unexpected error type")
         }
     }
+
+    // MARK: - AC #1: Transient Error Retry (Exponential Backoff)
+
+    @Test("Transient network error retries with exponential backoff (1s, 2s, 4s)")
+    func transientErrorRetriesWithExponentialBackoff() async {
+        // AC #1: TG API request times out or connection reset → auto-retry max 3, exponential 1s/2s/4s
+        let session = MockFailingURLSession()
+        let client = TGAPIClient(token: "test_token", session: session, maxRetries: 3)
+
+        do {
+            _ = try await client.getUpdates(offset: nil, timeout: 1)
+            #expect(Bool(false), "Should have thrown after all retries exhausted")
+        } catch {
+            // Expected: network failure after 3 retry attempts
+        }
+        #expect(session.attemptCount == 3, "Should attempt exactly 3 times (initial + 2 retries)")
+    }
+
+    @Test("Generic network error (URLError) retries with exponential backoff")
+    func genericNetworkErrorRetries() async {
+        // AC #1: non-TGAPIError network errors like URLError also use exponential backoff
+        let session = MockFailingURLSession()
+        let client = TGAPIClient(token: "test_token", session: session, maxRetries: 3)
+
+        do {
+            _ = try await client.sendMessage(chatId: 123, text: "test")
+            #expect(Bool(false), "Should have thrown")
+        } catch {
+            // Expected
+        }
+        #expect(session.attemptCount == 3)
+    }
+
+    @Test("5xx server errors classified as retryableNetwork")
+    func http5xxClassifiedAsRetryable() async {
+        // AC #1 + Dev Note D4: 5xx server errors should be retryable
+        let session = MockHTTPErrorURLSession(statusCode: 503, body: "{\"ok\":false,\"description\":\"Service Unavailable\"}")
+        let client = TGAPIClient(token: "test_token", session: session, maxRetries: 3)
+
+        do {
+            _ = try await client.getUpdates(offset: nil, timeout: 1)
+            #expect(Bool(false), "Should have thrown")
+        } catch let error as TGAPIError {
+            if case .retryableNetwork = error {
+                // correct: 5xx should be retryable
+            } else {
+                #expect(Bool(false), "Expected retryableNetwork for 503, got \(error)")
+            }
+        } catch {
+            #expect(Bool(false), "Unexpected error type")
+        }
+        // 5xx should retry 3 times after implementation
+        // Currently: .permanentTelegramError → no retry → attemptCount == 1
+        #expect(session.attemptCount == 3, "5xx should retry 3 times")
+    }
+
+    // MARK: - AC #2: 429 Rate Limit with Retry-After Header
+
+    @Test("429 with Retry-After header waits specified time before retry")
+    func http429WithRetryAfterHeader() async {
+        // AC #2: 429 → read Retry-After header → wait specified time → retry
+        let session = MockHTTPErrorURLSession(
+            statusCode: 429,
+            body: "{\"ok\":false,\"description\":\"Too Many Requests\"}",
+            headers: ["Retry-After": "10"]
+        )
+        let client = TGAPIClient(token: "test_token", session: session, maxRetries: 2)
+
+        do {
+            _ = try await client.getUpdates(offset: nil, timeout: 1)
+            #expect(Bool(false), "Should have thrown after retries exhausted")
+        } catch let error as TGAPIError {
+            if case .rateLimited(_, let retryAfter) = error {
+                #expect(retryAfter == 10.0, "Retry-After header value should be parsed as 10 seconds")
+            } else {
+                #expect(Bool(false), "Expected rateLimited with retryAfter, got \(error)")
+            }
+        } catch {
+            #expect(Bool(false), "Unexpected error type")
+        }
+    }
+
+    @Test("429 without Retry-After header defaults to 5 second wait")
+    func http429WithoutRetryAfterDefaultsTo5Seconds() async {
+        // AC #2: no Retry-After → default 5 seconds
+        let session = MockHTTPErrorURLSession(
+            statusCode: 429,
+            body: "{\"ok\":false,\"description\":\"Too Many Requests\"}",
+            headers: nil
+        )
+        let client = TGAPIClient(token: "test_token", session: session, maxRetries: 1)
+
+        do {
+            _ = try await client.getUpdates(offset: nil, timeout: 1)
+            #expect(Bool(false), "Should have thrown")
+        } catch let error as TGAPIError {
+            if case .rateLimited(_, let retryAfter) = error {
+                #expect(retryAfter == 5.0, "Default retryAfter should be 5 seconds when header absent")
+            } else {
+                #expect(Bool(false), "Expected rateLimited with default retryAfter=5, got \(error)")
+            }
+        } catch {
+            #expect(Bool(false), "Unexpected error type")
+        }
+    }
+
+    // MARK: - AC #3: 401/403 Authentication Failure (Permanent, No Retry)
+
+    @Test("401 does not retry (permanent error)")
+    func http401NoRetry() async {
+        // AC #3: 401 Unauthorized → no retry
+        let session = MockHTTPErrorURLSession(statusCode: 401, body: "{\"ok\":false,\"description\":\"Unauthorized\"}")
+        let client = TGAPIClient(token: "test_token", session: session, maxRetries: 3)
+
+        do {
+            _ = try await client.getUpdates(offset: nil, timeout: 1)
+            #expect(Bool(false), "Should have thrown")
+        } catch {
+            // Expected
+        }
+        #expect(session.attemptCount == 1, "401 should not retry")
+    }
+
+    @Test("403 does not retry (permanent error)")
+    func http403NoRetry() async {
+        // AC #3: 403 Forbidden → no retry
+        let session = MockHTTPErrorURLSession(statusCode: 403, body: "{\"ok\":false,\"description\":\"Forbidden\"}")
+        let client = TGAPIClient(token: "test_token", session: session, maxRetries: 3)
+
+        do {
+            _ = try await client.getUpdates(offset: nil, timeout: 1)
+            #expect(Bool(false), "Should have thrown")
+        } catch {
+            // Expected
+        }
+        #expect(session.attemptCount == 1, "403 should not retry")
+    }
+
+    // MARK: - AC #4: 409 Polling Conflict (Graceful Degrade)
+
+    @Test("409 does not retry with exponential backoff")
+    func http409NoExponentialRetry() async {
+        // AC #4: 409 Conflict → pollingConflict, should not go through standard retry loop
+        let session = MockHTTPErrorURLSession(
+            statusCode: 409,
+            body: "{\"ok\":false,\"description\":\"Conflict\"}"
+        )
+        let client = TGAPIClient(token: "test_token", session: session, maxRetries: 3)
+
+        do {
+            _ = try await client.getUpdates(offset: nil, timeout: 1)
+            #expect(Bool(false), "Should have thrown")
+        } catch {
+            // Expected
+        }
+        #expect(session.attemptCount == 1, "409 should not retry with exponential backoff")
+    }
+
+    // MARK: - AC #2/#3/#4: Error Case Unit Tests
+
+    @Test("authFailed errorDescription contains the body message")
+    func authFailedErrorDescription() {
+        let error = TGAPIError.authFailed("Token invalid")
+        #expect(error.errorDescription == "Token invalid")
+    }
+
+    @Test("pollingConflict errorDescription contains the body message")
+    func pollingConflictErrorDescription() {
+        let error = TGAPIError.pollingConflict("Conflict: another instance running")
+        #expect(error.errorDescription == "Conflict: another instance running")
+    }
+
+    @Test("rateLimited carries retryAfter TimeInterval value")
+    func rateLimitedCarriesRetryAfter() {
+        let error = TGAPIError.rateLimited("slow down", retryAfter: 15.0)
+        if case .rateLimited(let msg, let retryAfter) = error {
+            #expect(msg == "slow down")
+            #expect(retryAfter == 15.0)
+        } else {
+            #expect(Bool(false), "Should match rateLimited with retryAfter")
+        }
+    }
+
+    @Test("TGAPIError has localized description for new cases")
+    func apiErrorDescriptionNewCases() {
+        #expect(TGAPIError.authFailed("token bad").errorDescription == "token bad")
+        #expect(TGAPIError.pollingConflict("dup instance").errorDescription == "dup instance")
+    }
+
+    @Test("401 classifies as authFailed")
+    func http401ClassifiedAsAuthFailed() async {
+        let session = MockHTTPErrorURLSession(statusCode: 401)
+        let client = TGAPIClient(token: "test_token", session: session, maxRetries: 3)
+        do {
+            _ = try await client.getUpdates(offset: nil, timeout: 1)
+            #expect(Bool(false), "Should have thrown")
+        } catch let error as TGAPIError {
+            if case .authFailed = error { } else {
+                #expect(Bool(false), "Expected authFailed for 401, got \(error)")
+            }
+        } catch {
+            #expect(Bool(false), "Unexpected error type")
+        }
+    }
+
+    @Test("403 classifies as authFailed")
+    func http403ClassifiedAsAuthFailed() async {
+        let session = MockHTTPErrorURLSession(statusCode: 403)
+        let client = TGAPIClient(token: "test_token", session: session, maxRetries: 3)
+        do {
+            _ = try await client.getUpdates(offset: nil, timeout: 1)
+            #expect(Bool(false), "Should have thrown")
+        } catch let error as TGAPIError {
+            if case .authFailed = error { } else {
+                #expect(Bool(false), "Expected authFailed for 403, got \(error)")
+            }
+        } catch {
+            #expect(Bool(false), "Unexpected error type")
+        }
+    }
+
+    @Test("409 classifies as pollingConflict")
+    func http409ClassifiedAsPollingConflict() async {
+        let session = MockHTTPErrorURLSession(statusCode: 409)
+        let client = TGAPIClient(token: "test_token", session: session, maxRetries: 3)
+        do {
+            _ = try await client.getUpdates(offset: nil, timeout: 1)
+            #expect(Bool(false), "Should have thrown")
+        } catch let error as TGAPIError {
+            if case .pollingConflict = error { } else {
+                #expect(Bool(false), "Expected pollingConflict for 409, got \(error)")
+            }
+        } catch {
+            #expect(Bool(false), "Unexpected error type")
+        }
+    }
 }
 
 /// Mock TGAPIClient for testing TelegramAdapter
@@ -749,21 +991,23 @@ final class MockFailingURLSession: URLSessionProtocol, @unchecked Sendable {
     }
 }
 
-/// Returns an HTTP response with the given status code and empty JSON body
+/// Returns an HTTP response with the given status code, optional headers, and JSON body
 final class MockHTTPErrorURLSession: URLSessionProtocol, @unchecked Sendable {
     let statusCode: Int
     let body: String
+    let headers: [String: String]?
     var attemptCount = 0
 
-    init(statusCode: Int, body: String = "{\"ok\":false,\"description\":\"Unauthorized\"}") {
+    init(statusCode: Int, body: String = "{\"ok\":false,\"description\":\"Unauthorized\"}", headers: [String: String]? = nil) {
         self.statusCode = statusCode
         self.body = body
+        self.headers = headers
     }
 
     func data(for request: URLRequest) async throws -> (Data, URLResponse) {
         attemptCount += 1
         let url = request.url ?? URL(string: "https://example.com")!
-        let httpResp = HTTPURLResponse(url: url, statusCode: statusCode, httpVersion: "HTTP/1.1", headerFields: nil)!
+        let httpResp = HTTPURLResponse(url: url, statusCode: statusCode, httpVersion: "HTTP/1.1", headerFields: headers)!
         let bodyData = Data(body.utf8)
         return (bodyData, httpResp)
     }

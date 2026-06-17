@@ -35,7 +35,7 @@
 # - Dev moves story to 'review', then runs code-review (fresh context, different LLM recommended)
 
 generated: 2026-05-08
-last_updated: 2026-06-16  # epic-40-retrospective → done (#YOLO retro: 10/10 stories done, 0 CRITICAL/0 HIGH across epic; mid-tier GLM-5.2[1m] on 9/10 stories refines Epic-39 model-selection rule — decomposition+adversarial-review is the real lever; SDK 0.10.0 non-breaking; TD1/TD2 CRITICAL debt carried 3rd epic)
+last_updated: 2026-06-17  # story 36-1 → done (code review passed, 3 patches applied, 1 deferred)
 
 project: axion
 project_key: NOKEY
@@ -374,7 +374,7 @@ development_status:
 
   # Epic 36: TG 网络容错与 Markdown 增强（可选，P3）
   epic-36: in-progress
-  36-1-network-reconnection-enhancement: backlog
+  36-1-network-reconnection-enhancement: done
   36-2-markdownv2-formatting-pipeline-hermes-parity: done
   36-3-reasoning-verbose-commands: backlog
   epic-36-retrospective: optional

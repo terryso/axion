@@ -185,14 +185,14 @@ struct TGAPIClient: TGAPIClientProtocol {
                 let (data, httpResponse) = try await session.data(for: request)
                 if let http = httpResponse as? HTTPURLResponse, !(200...299).contains(http.statusCode) {
                     let body = String(data: data, encoding: .utf8) ?? "HTTP \(http.statusCode)"
-                    throw classifyHTTPError(statusCode: http.statusCode, body: body)
+                    throw classifyHTTPError(statusCode: http.statusCode, body: body, httpResponse: http)
                 }
                 return try JSONDecoder().decode(T.self, from: data)
             } catch let error as TGAPIError {
                 switch error {
-                case .rateLimited:
+                case .rateLimited(_, let retryAfter):
                     if attempt < retries - 1 {
-                        try? await _Concurrency.Task.sleep(nanoseconds: 1_000_000_000)
+                        try? await _Concurrency.Task.sleep(nanoseconds: UInt64(retryAfter * 1_000_000_000))
                         continue
                     }
                     throw error
@@ -203,7 +203,7 @@ struct TGAPIClient: TGAPIClientProtocol {
                         continue
                     }
                     throw error
-                case .formatRejected, .permanentTelegramError:
+                case .formatRejected, .permanentTelegramError, .authFailed, .pollingConflict:
                     throw error
                 }
             } catch {
@@ -217,16 +217,24 @@ struct TGAPIClient: TGAPIClientProtocol {
         throw lastError!
     }
 
-    private func classifyHTTPError(statusCode: Int, body: String) -> TGAPIError {
+    private func classifyHTTPError(statusCode: Int, body: String, httpResponse: HTTPURLResponse) -> TGAPIError {
         switch statusCode {
         case 429:
-            return .rateLimited(body)
+            let retryAfter = TimeInterval(httpResponse.value(forHTTPHeaderField: "Retry-After") ?? "") ?? 5
+            return .rateLimited(body, retryAfter: retryAfter)
+        case 401, 403:
+            return .authFailed(body)
+        case 409:
+            return .pollingConflict(body)
         case 400:
             if body.contains("can't parse entities") || body.contains("Bad Request") {
                 return .formatRejected(body)
             }
             return .permanentTelegramError(body)
         default:
+            if (500...599).contains(statusCode) {
+                return .retryableNetwork("HTTP \(statusCode): \(body)")
+            }
             return .permanentTelegramError(body)
         }
     }
@@ -236,15 +244,19 @@ struct TGAPIClient: TGAPIClientProtocol {
 
 enum TGAPIError: Error, LocalizedError {
     case retryableNetwork(String)
-    case rateLimited(String)
+    case rateLimited(String, retryAfter: TimeInterval)
     case formatRejected(String)
+    case authFailed(String)
+    case pollingConflict(String)
     case permanentTelegramError(String)
 
     var errorDescription: String? {
         switch self {
         case .retryableNetwork(let msg): return msg
-        case .rateLimited(let msg): return msg
+        case .rateLimited(let msg, _): return msg
         case .formatRejected(let msg): return msg
+        case .authFailed(let msg): return msg
+        case .pollingConflict(let msg): return msg
         case .permanentTelegramError(let msg): return msg
         }
     }

@@ -60,12 +60,39 @@ actor TelegramAdapter {
 
     private func pollLoop() async {
         var consecutiveErrors = 0
+        var consecutiveConflicts = 0
         while isRunning {
             do {
                 let updates = try await apiClient.getUpdates(offset: lastUpdateId + 1, timeout: 30)
                 statusValue = "connected"
                 consecutiveErrors = 0
+                consecutiveConflicts = 0
                 await processUpdates(updates)
+            } catch let error as TGAPIError {
+                switch error {
+                case .pollingConflict:
+                    consecutiveConflicts += 1
+                    if consecutiveConflicts >= 3 {
+                        statusValue = "conflict_stopped"
+                        log("[axion] Telegram polling stopped: 3 consecutive 409 conflicts (another instance may be running)")
+                        isRunning = false
+                        break
+                    }
+                    statusValue = "conflict:\(consecutiveConflicts)"
+                    log("[axion] Telegram 409 conflict, waiting 30s before retry (\(consecutiveConflicts)/3)")
+                    try? await _Concurrency.Task.sleep(nanoseconds: 30_000_000_000)
+                case .authFailed:
+                    consecutiveConflicts = 0
+                    statusValue = "auth_failed"
+                    log("[axion] TG Bot 认证失败，请检查 token 配置 (AXION_TELEGRAM_BOT_TOKEN)")
+                    isRunning = false
+                default:
+                    statusValue = "error:\(error.localizedDescription)"
+                    log("[axion] Telegram getUpdates failed: \(error.localizedDescription)")
+                    consecutiveErrors += 1
+                    let delay = min(5.0 * Double(consecutiveErrors), 30.0)
+                    try? await _Concurrency.Task.sleep(nanoseconds: UInt64(delay * 1_000_000_000))
+                }
             } catch {
                 statusValue = "error:\(error.localizedDescription)"
                 log("[axion] Telegram getUpdates failed: \(error.localizedDescription)")
@@ -187,7 +214,7 @@ actor TelegramAdapter {
             switch error {
             case .permanentTelegramError:
                 return false
-            case .rateLimited, .retryableNetwork, .formatRejected:
+            case .rateLimited, .retryableNetwork, .formatRejected, .authFailed, .pollingConflict:
                 return false
             }
         } catch {
