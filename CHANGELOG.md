@@ -5,6 +5,28 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.13.6] - 2026-06-17
+
+### Added
+
+- **Claude Code-compatible subagent/skill tool chain** — registers Agent, Task, and Skill tools consistently across chat, run, and direct skill paths
+- **Software architecture audit workflow** — adds `/arch` and `axion arch` to find Intel-only macOS apps and command-line packages across installed apps, Homebrew, and MacPorts
+- **Task/subagent observability** — renders child task progress, failures, summaries, and tool-call categories in interactive chat
+- **Telegram network resilience** — classifies transient TG failures, 429 rate limits, auth failures, and polling conflicts with targeted retry/degrade behavior
+
+### Changed
+
+- Upgraded OpenAgentSDK resolution through the subagent compatibility line, including SDK 0.12.0 tool-event support
+- Improved tool inheritance, permission diagnostics, and slash-skill guidance for child agents and direct skill execution
+- Added project-level BMAD story creation customization so Epic 24+ stories load authoritative specs from `docs/epics/`
+
+### Fixed
+
+- 5xx Telegram API responses now retry as transient failures instead of being treated as permanent errors
+- 401/403 Telegram auth failures now stop polling immediately with a local token-configuration hint
+- 409 Telegram polling conflicts now degrade gracefully and stop after repeated conflicts
+- Invalid, non-positive, or non-finite `Retry-After` header values now fall back to 5 seconds instead of causing no-delay retry or runtime traps
+
 ## [0.13.5] - 2026-06-14
 
 ### Added
