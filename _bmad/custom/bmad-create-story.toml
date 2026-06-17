@@ -1,0 +1,14 @@
+# Project-level customization for bmad-create-story (committed / team-shared).
+# Only *.user.toml is gitignored here — see _bmad/custom/.gitignore.
+#
+# Why this exists: this project's authoritative epic specs (BDD acceptance criteria +
+# file-change hints) live in `docs/epics/` (e.g. docs/epics/epic-36-tg-network-markdown.md).
+# The skill's default epic input source is `_bmad-output/planning-artifacts/epics.md`, which
+# only covers Epic 1–23 and is stale — so create-story was writing stories for Epic 24+
+# (e.g. 36-1) from source-code inference instead of the real epic BDD. This prepend forces
+# create-story to load the real epic from docs/epics/ before its artifact analysis.
+
+[workflow]
+activation_steps_prepend = [
+  "Epic source override (project-specific): the authoritative epic spec for the story you are creating lives in `docs/epics/` (e.g. docs/epics/epic-36-tg-network-markdown.md), NOT in `_bmad-output/planning-artifacts/epics.md` (that file only covers Epic 1–23 and is stale). Before the workflow's artifact analysis: derive the epic number from the story id (story X-Y → Epic X), glob `docs/epics/*epic-<X>*`, read the matching file FULLY, and treat it as the PRIMARY source for that epic's acceptance criteria and developer guardrails. If the discover-inputs step later loads planning-artifacts/epics.md, prefer the docs/epics/ content for this epic's AC — do NOT fall back to inferring requirements from source code.",
+]
